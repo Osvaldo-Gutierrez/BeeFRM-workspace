@@ -1,0 +1,278 @@
+       IDENTIFICATION DIVISION.
+      *========================
+       PROGRAM-ID.     SUPPGP16.
+       AUTHOR.         CONSIST.
+      *DAD ini
+       DATE-WRITTEN.   18-MAR-92 16:00 PM.
+      *DAD fin
+
+      * GENERA ARCHIVO P16 EN FORMA BATCH A PARTIR DEL D00 SORTEADO.
+
+       ENVIRONMENT DIVISION.
+      *=====================
+       INPUT-OUTPUT SECTION.
+      *---------------------
+       FILE-CONTROL.
+      *DAD ini  30-DEC-1991
+      *DOS SELECT  SRTD00  ASSIGN TO SYS001-DA-3330-S-SORTWK1.
+      *MVS SELECT  SRTD00  ASSIGN TO        DA-S-SORTWK1.
+           SELECT  SRTD00  ASSIGN TO        DA-S-SORTWK1.
+      *DAD fin  30-DEC-1991
+
+       DATA DIVISION.
+      *==============
+       FILE SECTION.
+       SD  SRTD00.
+       01  SRT.
+           03 SRT-COD-PROD                        PIC X(04).
+           03 SRT-IND-TMON                        PIC X(03).
+      *DAD ini  18-MAR-1992
+           03 SRT-VAL-SCON                        PIC S9(11)V9(02).
+      *DAD fin  18-MAR-1992
+           03 SRT-VAL-VMES                        PIC 9(11)V9(02).
+           03 SRT-VAL-PMES                        PIC 9(11)V9(02).
+           03 SRT-VAL-RMES                        PIC 9(11)V9(02).
+
+       WORKING-STORAGE SECTION.
+      *------------------------
+       COPY GNSWGRQA.
+       COPY GNSWGUIB.
+       COPY GNSWGELS.
+       COPY GNSWCFIO.
+       COPY GNSWVFIO.
+       COPY GNSWVIDD.
+       COPY GNSWGSYS.
+       COPY SUPBRP16.
+       COPY SUPBRD00.
+       COPY GNSBRTAB.
+       COPY GNSBRMSC.
+       COPY GNSBRMSG.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-MSC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-MSG-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-TAB-REQA==.
+
+       01  WSS-VARI.
+           03 WSS-KOLD.
+              05 WSS-COD-PROD                     PIC X(04).
+              05 WSS-IND-TMON                     PIC X(03).
+           03 WSS-KNEW.
+              05 WSS-COD-PROD                     PIC X(04).
+              05 WSS-IND-TMON                     PIC X(03).
+      *DAD ini  30-DEC-1991
+           03 WSS-VAL-PASO        VALUE 0         PIC 9(13).
+      *DAD fin  30-DEC-1991
+      *DAD ini  18-MAR-1992
+           03 WSS-VAL-SCON        VALUE 0         PIC S9(11)V9(02).
+      *DAD fin  18-MAR-1992
+           03 WSS-VAL-VMES        VALUE 0         PIC 9(11)V9(02).
+           03 WSS-VAL-PMES        VALUE 0         PIC 9(11)V9(02).
+           03 WSS-VAL-RMES        VALUE 0         PIC 9(11)V9(02).
+           03 WSS-IND-ICOL        VALUE SPACES    PIC X(02).
+      *DAD ini  29-MAY-1991
+           03 WSS-IND                             PIC 9(02).
+           03 WSS-GLS-DATA.
+              05 WSS-COD-CCTB     OCCURS 6        PIC X(10).
+      *DAD fin  29-MAY-1991
+
+
+       PROCEDURE DIVISION.
+      *===================
+       MAIN SECTION.
+       INI-MAIN.
+           ENTRY 'DBMSCBL'.
+           MOVE 'SUPPGP16' TO FIO-PROG.
+           PERFORM GNS-BUS-IDD.
+           SORT SRTD00
+                      ON ASCENDING KEY SRT-COD-PROD IN SRT
+                      ON ASCENDING KEY SRT-IND-TMON IN SRT
+           INPUT  PROCEDURE IS INP-SRT
+           OUTPUT PROCEDURE IS OUT-SRT.
+           STOP RUN.
+       FIN-MAIN.
+           EXIT.
+
+       INP-SRT SECTION.
+       INI-INP-SRT.
+      *    MOVE FIO-INP TO FIO-CMND.
+      *    PERFORM SUP-FIO-TAB.
+           MOVE FIO-INP TO FIO-CMND.
+           PERFORM SUP-FIO-D00.
+           IF NOT FIO-STAT-OKS
+               DISPLAY 'ERROR DE APERTURA  D00 ' FIO-STAT
+               STOP RUN.
+           DISPLAY 'APERTURA OK  ' FIO-STAT.
+
+      *DAD ini  29-MAY-1991
+      * Obtiene Cuentas Contables a Operaciones Castigadas en Tabla PRM
+           MOVE 'SUP'     TO TAB-COD-SIST FIO-SIST.
+           MOVE 'PRM'     TO TAB-COD-TTAB IN TAB.
+           MOVE 'GP16CAS' TO TAB-COD-CTAB IN TAB.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM GNS-FIO-TAB.
+           IF NOT FIO-STAT-OKS
+               DISPLAY 'FALTA EL CODIGO "GP16CAS" EN LA TABLA "PRM" DEL'
+                       ' SISTEMA SUPER, QUE CONTIENE LAS CUENTAS '
+                       'CONTABLES CASTIGADAS'
+               STOP RUN.
+           MOVE TAB-GLS-DATA IN TAB TO WSS-GLS-DATA IN WSS-VARI.
+      *DAD fin  29-MAY-1991
+
+           MOVE FIO-GET-FST TO FIO-CMND.
+       LUP-INP-SRT.
+           PERFORM SUP-FIO-D00.
+           IF NOT FIO-STAT-OKS
+               MOVE FIO-CLO TO FIO-CMND
+               PERFORM SUP-FIO-D00
+               GO TO FIN-INP-SRT.
+
+      *DAD ini  29-MAY-1991
+      * Excluye Situacion de la Operacion en Cartera Vendida
+           IF D00-IND-SOPE IN D00 = '2'
+               MOVE FIO-GET-NXT TO FIO-CMND
+               GO TO LUP-INP-SRT.
+
+      * Excluye Operaciones Castigadas por Cuenta Contable en Tabla PRM
+           MOVE  1  TO WSS-IND IN WSS-VARI.
+       LUP-CCTB-CAS.
+           IF D00-COD-CCTB IN D00 = WSS-COD-CCTB IN WSS-VARI(WSS-IND)
+               MOVE FIO-GET-NXT TO FIO-CMND
+               GO TO LUP-INP-SRT.
+           ADD  1  TO WSS-IND IN WSS-VARI.
+           IF WSS-IND IN WSS-VARI NOT > 6
+               GO TO LUP-CCTB-CAS.
+      *DAD fin  29-MAY-1991
+
+           MOVE 'SUP'               TO TAB-COD-SIST.
+           MOVE 'PRD'               TO TAB-COD-TTAB IN TAB.
+           MOVE D00-COD-TCCO IN D00 TO TAB-COD-CTAB IN TAB.
+      *ISP
+           MOVE TAB-COD-SIST TO FIO-SIST.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM GNS-FIO-TAB.
+           IF NOT FIO-STAT-OKS
+               MOVE FIO-GET-NXT TO FIO-CMND
+               GO TO LUP-INP-SRT.
+           MOVE TAB-GLS-DATA IN TAB TO WSS-IND-ICOL IN WSS-VARI
+           IF WSS-IND-ICOL IN WSS-VARI NOT = 'CE'
+               MOVE FIO-GET-NXT TO FIO-CMND
+               GO TO LUP-INP-SRT.
+
+           MOVE D00-COD-TCCO IN D00 TO SRT-COD-PROD IN SRT.
+           MOVE 'TAB'               TO TAB-COD-SIST.
+           MOVE 'VLR'               TO TAB-EXT-TTAB IN TAB.
+           MOVE D00-COD-MONE IN D00 TO TAB-EXT-CTAB IN TAB.
+      *JJV
+           MOVE 'TAB-EXT-TABL' TO FIO-AKEY.
+      *
+           PERFORM BUS-TAB.
+      *DAD
+           MOVE TAB-COD-DAT3 IN TAB(1) TO SRT-IND-TMON IN SRT.
+      *
+           DIVIDE D00-VAL-SCON IN D00 BY 1000
+                                      GIVING SRT-VAL-SCON IN SRT.
+      *DAD ini  30-DEC-1991
+      * El Saldo Contable debe INCLUIR los Intereses Devengados
+           ADD D00-VAL-IPCO IN D00
+               D00-VAL-IPCV IN D00 GIVING WSS-VAL-PASO IN WSS-VARI.
+           DIVIDE WSS-VAL-PASO IN WSS-VARI BY 1000
+                                       GIVING WSS-VAL-SCON IN WSS-VARI.
+           ADD WSS-VAL-SCON IN WSS-VARI TO SRT-VAL-SCON IN SRT.
+      *DAD fin  30-DEC-1991
+      *DAD ini  29-MAY-1991
+      * Acumula Reajuste Devengado al Saldo Contable
+           DIVIDE D00-VAL-RDEV IN D00 BY 1000
+                                      GIVING WSS-VAL-SCON IN WSS-VARI.
+           ADD WSS-VAL-SCON IN WSS-VARI TO SRT-VAL-SCON IN SRT.
+      *DAD fin  29-MAY-1991
+
+           DIVIDE D00-VAL-VMES IN D00 BY 1000
+                                      GIVING SRT-VAL-VMES IN SRT.
+           DIVIDE D00-VAL-PMES IN D00 BY 1000
+                                      GIVING SRT-VAL-PMES IN SRT.
+           DIVIDE D00-VAL-RMES IN D00 BY 1000
+                                      GIVING SRT-VAL-RMES IN SRT.
+           RELEASE SRT.
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           GO TO LUP-INP-SRT.
+      *    MOVE FIO-CLO TO FIO-CMND.
+      *    PERFORM SUP-FIO-TAB.
+      *    MOVE FIO-CLO TO FIO-CMND.
+      *    PERFORM GNS-FIO-TAB.
+       FIN-INP-SRT.
+           EXIT.
+
+       OUT-SRT SECTION.
+       INI-OUT-SRT.
+           MOVE FIO-OUT TO FIO-CMND.
+           PERFORM SUP-FIO-P16.
+           IF NOT FIO-STAT-OKS
+               DISPLAY 'ERROR DE APERTURA  P16 ' FIO-STAT
+               STOP RUN.
+           RETURN SRTD00 AT END
+               GO TO CON-OUT-SRT.
+           PERFORM PUT-KNW.
+      *DAD ini  29-MAY-1991
+           MOVE SRT-VAL-SCON IN SRT TO WSS-VAL-SCON IN WSS-VARI.
+           MOVE SRT-VAL-VMES IN SRT TO WSS-VAL-VMES IN WSS-VARI.
+           MOVE SRT-VAL-PMES IN SRT TO WSS-VAL-PMES IN WSS-VARI.
+           MOVE SRT-VAL-RMES IN SRT TO WSS-VAL-RMES IN WSS-VARI.
+      *DAD fin  29-MAY-1991
+       LUP-OUT-SRT.
+           MOVE WSS-KNEW TO WSS-KOLD.
+           RETURN SRTD00 AT END
+               GO TO CON-OUT-SRT.
+           PERFORM PUT-KNW.
+           IF WSS-KNEW = WSS-KOLD
+               ADD SRT-VAL-SCON IN SRT TO WSS-VAL-SCON IN WSS-VARI
+               ADD SRT-VAL-VMES IN SRT TO WSS-VAL-VMES IN WSS-VARI
+               ADD SRT-VAL-PMES IN SRT TO WSS-VAL-PMES IN WSS-VARI
+               ADD SRT-VAL-RMES IN SRT TO WSS-VAL-RMES IN WSS-VARI
+           ELSE
+               PERFORM PUT-P16
+               MOVE SRT-VAL-SCON IN SRT TO WSS-VAL-SCON IN WSS-VARI
+               MOVE SRT-VAL-VMES IN SRT TO WSS-VAL-VMES IN WSS-VARI
+               MOVE SRT-VAL-PMES IN SRT TO WSS-VAL-PMES IN WSS-VARI
+               MOVE SRT-VAL-RMES IN SRT TO WSS-VAL-RMES IN WSS-VARI.
+           GO TO LUP-OUT-SRT.
+       CON-OUT-SRT.
+           PERFORM PUT-P16.
+           MOVE FIO-CLO TO FIO-CMND.
+           PERFORM SUP-FIO-P16.
+       FIN-OUT-SRT.
+           EXIT.
+
+       PUT-KNW SECTION.
+       INI-PUT-KNW.
+           MOVE SRT-COD-PROD IN SRT TO WSS-COD-PROD IN WSS-KNEW.
+           MOVE SRT-IND-TMON IN SRT TO WSS-IND-TMON IN WSS-KNEW.
+       FIN-PUT-KNW.
+           EXIT.
+
+       PUT-P16 SECTION.
+       INI-PUT-P16.
+           MOVE WSS-COD-PROD IN WSS-KOLD TO P16-COD-PROD.
+           MOVE WSS-IND-TMON IN WSS-KOLD TO P16-IND-TMON.
+           MOVE WSS-VAL-SCON IN WSS-VARI TO P16-VAL-SCON.
+           MOVE WSS-VAL-VMES IN WSS-VARI TO P16-VAL-VMES.
+           MOVE WSS-VAL-PMES IN WSS-VARI TO P16-VAL-PMES.
+           MOVE WSS-VAL-RMES IN WSS-VARI TO P16-VAL-RMES.
+           MOVE FIO-PUT TO FIO-CMND.
+           PERFORM SUP-FIO-P16.
+           IF NOT FIO-STAT-OKS
+               DISPLAY 'ERROR DE ESCRITURA  P16 ' FIO-STAT.
+       FIN-PUT-P16.
+           EXIT.
+
+       COPY GNSBGDTC.
+       COPY GNSBGIDD.
+       COPY GNSBTABT.
+       COPY GNSBBSYS.
+       COPY GNSBBTAB.
+       COPY GNSBFTAB.
+       COPY GNSBBMSC.
+       COPY GNSBFMSC.
+       COPY GNSBBMSG.
+       COPY GNSBFMSG.
+       COPY SUPIOD00.
+       COPY SUPIOP16.
+

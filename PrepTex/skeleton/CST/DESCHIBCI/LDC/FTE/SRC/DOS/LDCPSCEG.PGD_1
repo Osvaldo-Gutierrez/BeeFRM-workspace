@@ -1,0 +1,1039 @@
+       IDENTIFICATION DIVISION.
+      *=======================
+       PROGRAM-ID.     LDCPSCEG.
+       AUTHOR.          CONSIST.
+       DATE-WRITTEN.    04-SEP-96 (RVM ULTIMA MODIFICACION).
+
+      * CALCULA CUPO DISPONIBLE CEM PARA GRUPO DE CLIENTES
+      * RECIBE
+      *    CIC CLF
+      *    CODIGO DE MONEDA NACIONAL
+      *    SI CONSULTA OPERACIONES ANTIGUAS SOLAMENTE
+      *        ARREGLO DE OPC's DEBE TENER LIMPIO EL 1er ELEMENTO
+      *        ARREGLO DE DLC's NO SE UTILIZA
+
+      *    SI INGRESA 1 OPERACION RENOVADORA EN CURSE
+      *        ARREGLO DE OPC's DEBE CONTENER LA OPERACION RENOVADORA
+      *            EN EL 1er ELEMENTO Y LIMPIO EL ELEMENTOS SIGUIENTE
+      *            (SI SON MENOS QUE EL MAXIMO DEL ARREGLO)
+      *        ARREGLO DE DLC's CANCELADOS DEBE CONTENER LOS VALORES
+      *            RESULTANTES DE LA RENOVACION (>= CERO)
+      *            Y TENER LIMPIO EL ELEMENTO SIGUIENTE
+      *            (SI SON MENOS QUE EL MAXIMO DEL ARREGLO)
+
+      *    SI INGRESA MULTIPLES OPERACIONES NOVADORAS
+      *        ARREGLO DE OPC's DEBE CONTENER LAS OPERACION NOVADORAS
+      *            Y TENER LIMPIO EL ELEMENTO SIGUIENTE
+      *            (SI SON MENOS QUE EL MAXIMO DEL ARREGLO)
+      *        ARREGLO DE DLC's CANCELADOS DEBE CONTENER LOS VALORES
+      *            RESULTANTES DE LA RENOVACION (>= CERO)
+
+      *    INDICADORES DE OPEN O NO DE ARCHIVOS (VMS O BATCH)
+      *        SEALAN QUE ARCHIVOS SE ABREN Y CIERRAN EN LA RUTINA O
+      *        ESTAN ABIERTOS EN EL PROGRAMA LLAMADOR
+
+      * DEVUELVE
+
+      * SI HAY UN ERROR :
+      *    DEVUELVE CEG-COD-MENS PARA TODO EL PROCESO
+      *    DEVUELVE CEG-NUM-MENS PARA TODO EL PROCESO:
+      *      00 : CUPO MAXIMO DE LA CLF DEL GRUPO NO HA SIDO EXCEDIDA
+      *      01 : CLF DEL GRUPO NO EXISTE
+      *      02 A 20 : ANOMALIAS DEL PROCESO (NO INCLUYE EL 15)
+      *      15 : PROBLEMAS EN INTERFASES
+      *      21 : CLF DEL GRUPO HA SIDO EXCEDIDA
+      *    EL ERROR SE MANEJA EN PROGRAMA LLAMADOR
+
+       ENVIRONMENT DIVISION.
+      *====================
+       CONFIGURATION SECTION.
+      *---------------------
+       SPECIAL-NAMES.
+               DECIMAL-POINT IS COMMA.
+
+       DATA DIVISION.
+      *=============
+
+       WORKING-STORAGE SECTION.
+      *-----------------------
+       COPY LDCWGCEG.
+       01 WSS-FIN-CEG    VALUE '%%%%' PIC X(04).
+       COPY GNSWCFIO.
+       COPY GNSWVFIO.
+       COPY GNSWGHOY.
+       COPY GNSWGSYS.
+      *<<<< PGM_CHI AND PGM_BCI AND SUB_CICS
+      *>>>>
+       COPY GNSWVIDD.
+       COPY TABWGCTE.
+       COPY TABWGXRA.
+       COPY TABWGOSC.
+
+       01  SCR-VARI.
+           03 SCR-SIST             VALUE 'DEU' PIC X(03).
+           03 SCR-QIDD                         PIC X(08).
+           03 SCR-LIDD                    COMP PIC S9(04).
+
+       COPY COLBRRDC.
+       COPY COLBROPC.
+       COPY COLBRDLC.
+
+       COPY LDCBRCLF.
+       COPY LDCBRRDC REPLACING RDC BY RDL.
+
+       COPY SGCBROPE.
+       COPY SGCBRRCO.
+       COPY SGCBRREC.
+
+
+       COPY TABBRCAM.
+       COPY TABBRTIO.
+       COPY GNSBRMSG.
+       COPY GNSBRTAB.
+
+       COPY GNSWGRQA.
+       COPY GNSWGUIB.
+       COPY GNSWGELS.
+
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-CAM-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-MSG-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-TAB-REQA==.
+
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-RDC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-OPC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-DLC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-CLF-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-RDL-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-OPE-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-RCO-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-REC-REQA==.
+
+       01  WSS-VARI.
+           03 FRM-MENS                              PIC X(40).
+      * Indicadores
+           03 WSS-1-VEZ        VALUE ZEROES         PIC 9(01).
+           03 WSS-OPC-EN-CURSE                      PIC X(01).
+      * Contadores
+           03 WSS-D         COMP   VALUE ZEROES     PIC S9(04).
+           03 WSS-E         COMP   VALUE ZEROES     PIC S9(04).
+           03 WSS-F         COMP   VALUE ZEROES     PIC S9(04).
+      * Variables auxiliares
+      *<<<< NOT PGM_ARG
+           03 WSS-VAL-MONE    COMP-3                PIC S9(11)V9(4).
+           03 WSS-VAL-MNAC    COMP-3                PIC S9(11)V9(4).
+           03 WSS-VAL-SCRE    COMP-3 VALUE ZEROES   PIC S9(11)V9(4).
+      *>>>>
+           03 WSS-VCAM                              PIC X(06).
+           03 WSS-CIC-GRUPO.
+              05 WSS-CAI-ICLI                       PIC X(04).
+              05 WSS-IIC-ICLI                       PIC X(08).
+      *FLB CST  18-APR-1994
+           03 WSS-NUM-MENS                          PIC 9(02).
+              88 OK-OPCS-ANTIGUAS             VALUE 0.
+              88 NO-CALC-ERROR-OPCS-ANTIGUAS  VALUE 1 THRU 20.
+              88 NO-CALCULO-POR-NO-EXISTIR    VALUE 1.
+              88 EXCESO-OPCS-ANTIGUAS         VALUE 21 THRU 50.
+              88 OK-CON-MENSAJE-OPCS-ANTIGUAS VALUE 51.
+           03 WSS-COD-MENS                          PIC X(12).
+           03 WSS-NUM-MEN2                          PIC 9(02).
+              88 OK-OPC-EN-CURSE VALUE 0.
+              88 NO-CALC-ERROR-OPC-EN-CURSE   VALUE  1 THRU 20.
+              88 EXCESO-OPC-EN-CURSE          VALUE 21 THRU 50.
+              88 OK-CON-MENSAJE-OPC-EN-CURSE  VALUE 51.
+           03 WSS-COD-MEN2                          PIC X(12).
+      *FLB CST  25-MAY-1994
+           03 WSS-COD-AUXM                          PIC X(12).
+           03 WSS-NUM-AUXM                          PIC 9(02).
+           03 WSS-CLI-GRUP                          PIC X(01).
+           03 WSS-IND-MULT                          PIC X(04).
+      *AMP BCP  02-JUN-1994
+           03 WSS-COOC.
+              05 WSS-TOOC                           PIC X(03).
+              05 WSS-AOOC                           PIC X(03).
+           03 WSS-VCOC                              PIC X(06).
+      *FLB CST  27-SEP-1994
+      *    03 WSS-VAL-VCTE         COMP-3           PIC S9(13)V9(02).
+      *    03  WSS-CEX-FIRST                        PIC X(01).
+      *    03  WSS-VAL-CTE                          PIC X(01).
+      *FLB CST  27-SEP-1994
+           03  WSS-VSN-VCTE                         PIC X(01).
+               88  USA-CTE       VALUE 'N'.
+           03  WSS-VSN-VCEX                         PIC X(01).
+               88  USA-CEX       VALUE 'N'.
+           03  WSS-VSN-VTCR                         PIC X(01).
+               88  USA-TCR       VALUE 'N'.
+
+       LINKAGE SECTION.
+      *---------------
+       01  DFHCOMMAREA.
+           02 FILLER                                PIC X(3000).
+       COPY GNSLGFIO.
+
+       PROCEDURE DIVISION.
+      *===================
+       MAIN SECTION.
+      *------------
+       INI-MAIN.
+           PERFORM INI.
+
+      *    CASO: Viene CIC de cliente y no viene CLF del Grupo
+      *        Obtiene el CIC del Grupo
+      *           Obtiene el CLF del Grupo
+      *    CASO: No viene CIC de Cliente o Viene CLF del Grupo
+      *        Valida el CLF
+      *           Obtiene el CIC de cliente
+      *               Obtiene el CIC del Grupo
+      *                   Obtiene la CLF del Grupo
+
+           IF CEG-IIC-ICLI IN CEG-VARI > ZEROES AND
+              CEG-IIC-ICLF IN CEG-VARI NOT > ZEROES
+
+      * Salva Variables de Retorno de Ejecucion LDCPSCCU
+               MOVE CEG-NUM-MENS TO WSS-NUM-MENS
+               MOVE CEG-COD-MENS TO WSS-COD-MENS
+               MOVE CEG-NUM-MEN2 TO WSS-NUM-MEN2
+               MOVE CEG-COD-MEN2 TO WSS-COD-MEN2
+
+      * Inicializa Variables de Retorno para Ejecucion LDCPSCEG
+
+               MOVE 99     TO CEG-NUM-MENS
+               MOVE 99     TO CEG-NUM-MEN2
+               MOVE SPACES TO CEG-COD-MENS
+                              CEG-COD-MEN2
+                              CEG-COD-SIST
+               PERFORM BUS-GRUPO
+               IF CEG-NUM-MENS < 21
+                   GO TO FIN-MAIN
+               ELSE
+                   PERFORM BUS-CLI-CLF
+                   IF CEG-NUM-MENS < 21
+                       GO TO FIN-MAIN
+                   ELSE
+                       NEXT SENTENCE
+           ELSE
+      * Inicializa Variables de Retorno para Ejecucion LDCPSCEG
+      * sin haberse precedido de ejecucion LDCPSCCU
+               MOVE 99     TO CEG-NUM-MENS
+               MOVE 99     TO CEG-NUM-MEN2
+               MOVE SPACES TO CEG-COD-MENS
+                              CEG-COD-MEN2
+                              CEG-COD-SIST
+               MOVE CEG-CIC-ICLF IN CEG-VARI TO CLF-KEY-ICLF IN CLF
+               PERFORM BUS-CLF
+               IF CEG-NUM-MENS < 21
+                   GO TO FIN-MAIN
+               ELSE
+                  PERFORM BUS-CLF-CLI
+                  IF CEG-NUM-MENS < 21
+                      GO TO FIN-MAIN.
+
+      * Convierte el Cupo Maximo del Grupo a Moneda Corriente del dia
+           MOVE CLF-VAL-CMAX IN CLF TO WSS-VAL-MONE.
+           MOVE CLF-COD-VCCF IN CLF TO WSS-VCAM.
+           PERFORM OBT-VAL-MNAC.
+           IF CEG-NUM-MENS < 21
+               GO TO FIN-MAIN.
+           MOVE WSS-VAL-MNAC TO CEG-VAL-CTOT IN CEG-VARI.
+
+      * Setea el Cupo Utilizado por el Grupo
+           MOVE ZEROES TO CEG-VAL-CUTI.
+
+      * Lee todos los clientes del Grupo
+           PERFORM BARRE-CLIENTES.
+           IF CEG-NUM-MENS < 21
+               GO TO FIN-MAIN.
+
+      *FLB CST  5-JUL-1994 distingue exceso OPCS-ANTIGUAS/OPC-CURSE
+      * Conversion de cupo utilizado
+      *RVM-CST-INI 4-SEP-1996
+      *
+      *SE INHIBE ESTE CODIGO YA QUE LOS VALORES SON PROCESADOS EN PESOS
+      *
+      *     PERFORM CNV-VAL-CEG.
+      *     IF CEG-NUM-MENS < 21
+      *         GO TO FIN-MAIN.
+      *RVM-CST-FIN 4-SEP-1996
+
+           IF CEG-VAL-CUTI > CEG-VAL-CTOT
+               MOVE 'CLFGRUPOEXC' TO CEG-COD-MENS
+               MOVE 21            TO CEG-NUM-MENS
+               GO TO FIN-MAIN.
+
+      * Procesa OPC's en curse
+           PERFORM PRO-OPC-CURSE.
+
+      * Se rebaja monto de documentos cancelados en renovaciones
+           PERFORM ACT-VAL-SCRE.
+
+      * Conversion final de cupos
+           SUBTRACT CEG-VAL-CUTI FROM CEG-VAL-CTOT
+             GIVING CEG-VAL-CDIS.
+      * MHM ini 6-MAR-1996
+      *     PERFORM CNV-VAL-CEG.
+      *     IF CEG-NUM-MENS < 21
+      *         GO TO FIN-MAIN.
+      * MHM fin 6-MAR-1996
+
+           IF CEG-VAL-CUTI > CEG-VAL-CTOT
+               MOVE 'OPCEXCCLFGRU' TO CEG-COD-MEN2
+               MOVE 21             TO CEG-NUM-MEN2.
+
+       FIN-MAIN.
+      *<<<< PGM_CHI AND PGM_BCI AND SUB_CICS
+      *RVM-CST-INI 4-SEP-1996
+           PERFORM CNV-VAL-CEG.
+      *RVM-CST-FIN 4-SEP-1996
+      *>>>>
+      * Termina
+           PERFORM FIN.
+
+      * A partir del CIC de un cliente busca el CIC de su Grupo
+       BUS-GRUPO SECTION.
+       INI-BUS-GRUPO.
+           MOVE CEG-COD-MENS  TO WSS-COD-AUXM.
+           MOVE CEG-NUM-MENS  TO WSS-NUM-AUXM.
+           MOVE 'RECGRUPONEX' TO CEG-COD-MENS.
+           MOVE 1             TO CEG-NUM-MENS.
+
+           MOVE CEG-CIC-ICLI IN CEG-VARI TO REC-CIC-ICLI IN REC.
+           MOVE 'PG'                     TO REC-COD-TREC IN REC.
+           MOVE SPACES                   TO REC-CIC-IREL IN REC.
+           MOVE ZEROES                   TO REC-NUM-TREC IN REC.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM SGC-FIO-REC.
+
+       LUP-BUS-GRUPO.
+           IF NOT ( FIO-STAT-OKS AND
+                    REC-CIC-ICLI IN REC = CEG-CIC-ICLI IN CEG-VARI AND
+                    REC-COD-TREC IN REC = 'PG' )
+               GO TO FIN-BUS-GRUPO.
+           IF REC-IND-VIGE = 'S'
+               MOVE REC-CIC-IREL IN REC TO WSS-CIC-GRUPO
+               MOVE WSS-COD-AUXM TO CEG-COD-MENS
+               MOVE WSS-NUM-AUXM TO CEG-NUM-MENS
+               GO TO FIN-BUS-GRUPO.
+
+           MOVE 'RECGRUPONVG' TO CEG-COD-MENS.
+           MOVE 1             TO CEG-NUM-MENS.
+
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM SGC-FIO-REC.
+           GO TO LUP-BUS-GRUPO.
+       FIN-BUS-GRUPO.
+           EXIT.
+
+       BUS-CLI-CLF SECTION.
+      * Con el CIC del Grupo obtiene su CLF
+       INI-BUS-CLI-CLF.
+           MOVE WSS-CIC-GRUPO          TO RDC-CIC-ICLI IN RDL.
+           MOVE SPACES                 TO RDC-KEY-ICLF IN RDL.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM LDC-FIO-RDC.
+           IF NOT ( FIO-STAT-OKS AND
+                    RDC-CIC-ICLI IN RDL = WSS-CIC-GRUPO )
+               MOVE 'RDLGRUPONEX' TO CEG-COD-MENS
+               MOVE 1             TO CEG-NUM-MENS
+               GO TO FIN-BUS-CLI-CLF.
+       LUP-BUS-CLI-CLF.
+           MOVE RDC-KEY-ICLF IN RDL TO CLF-KEY-ICLF IN CLF.
+           PERFORM BUS-CLF.
+           IF CEG-NUM-MENS > ZEROES
+               GO TO FIN-BUS-CLI-CLF.
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM LDC-FIO-RDC.
+           IF FIO-STAT-OKS AND
+               RDC-CIC-ICLI IN RDL = WSS-CIC-GRUPO
+               MOVE 'RDLGRUPO>1' TO CEG-COD-MENS
+               MOVE 2            TO CEG-NUM-MENS.
+       FIN-BUS-CLI-CLF.
+           EXIT.
+
+       BUS-CLF SECTION.
+      * La CLF debe estar "V"erificada o "A"ctivada y no vencida
+       INI-BUS-CLF.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM LDC-FIO-CLF.
+           IF NOT FIO-STAT-OKS AND
+              CEG-IIC-IOPC(1) > ZEROES
+               MOVE 'CLF    NEX'  TO CEG-COD-MENS
+               MOVE 3             TO CEG-NUM-MENS
+               GO TO FIN-BUS-CLF.
+
+           IF NOT FIO-STAT-OKS AND
+              CEG-IIC-IOPC(1) NOT > ZEROES
+               MOVE 'CLF    NEX'  TO CEG-COD-MENS
+               MOVE 1             TO CEG-NUM-MENS
+               GO TO FIN-BUS-CLF.
+
+      *FLB CST  21-JAN-1995 CEG FUNCIONE LUEGO MCA/MSI/CMX Y ANTES ACA
+           IF CLF-COD-STAT IN CLF = 'M' OR 'X'
+               MOVE CLF-CIC-CREN IN CLF TO CLF-KEY-ICLF IN CLF
+               MOVE FIO-GET-KEY TO FIO-CMND
+               PERFORM LDC-FIO-CLF
+               IF NOT FIO-STAT-OKS
+                   MOVE 'CLF    NEX' TO CEG-COD-MENS
+                   MOVE 1            TO CEG-NUM-MENS
+                   GO TO FIN-BUS-CLF
+               ELSE
+                   MOVE 'A' TO CLF-MSC-STAT IN CLF
+                   MOVE 'CLFREN-' TO CEG-COD-TMSG
+                   MOVE 'M'       TO CEG-COD-CMSG
+                   MOVE 51        TO CEG-NUM-MENS.
+      *FLB CST  21-SEP-1994
+
+           IF CLF-FEC-FVEN IN CLF NOT > HOY-FHOY
+               MOVE 'CLFGRUPONOVI' TO CEG-COD-MENS
+               MOVE 4              TO CEG-NUM-MENS
+               GO TO FIN-BUS-CLF.
+
+      *FLB CST  15-ABR-1994 LLAMADA DESDE LDC, CONSULTA
+           IF CLF-MSC-STAT IN CLF = 'V' AND
+              CEG-IIC-IOPC(1) NOT > ZEROES
+               MOVE 'CLF    NOACA' TO CEG-COD-MENS
+               MOVE 51             TO CEG-NUM-MENS
+               GO TO FIN-BUS-CLF.
+
+      *FLB CST  15-ABR-1994 PARA PROCESAR CLF's CERRADAS Y RENOVADAS
+           IF CLF-MSC-STAT IN CLF NOT = 'A'
+               AND CEG-ESTA NOT > SPACES
+               MOVE 'CLF    NOVIG' TO CEG-COD-MENS
+               MOVE 1              TO CEG-NUM-MENS
+               GO TO FIN-BUS-CLF.
+
+      *FLB CST  15-APR-1994 PARA PROCESAR CLF's CERRADAS Y RENOVADAS
+           IF CEG-ESTA > SPACES AND
+              CLF-MSC-STAT IN CLF NOT = CEG-ESTA
+               MOVE 'CLFSTATNOVAL' TO CEG-COD-MENS
+               MOVE 1              TO CEG-NUM-MENS
+               GO TO FIN-BUS-CLF.
+
+      *FLB CST  15-APR-1994
+           MOVE 99 TO CEG-NUM-MENS.
+      *    MOVE ZEROES TO CEG-NUM-MENS.
+           MOVE SPACES TO CEG-COD-MENS.
+       FIN-BUS-CLF.
+           EXIT.
+
+       BUS-CLF-CLI SECTION.
+      * Con la CLF se obtiene el CIC del Grupo
+       INI-BUS-CLF-CLI.
+           MOVE CEG-CIC-ICLF IN CEG-VARI TO RDC-KEY-ICLF IN RDL.
+           MOVE 'RDC-KEY-ICLF'           TO FIO-AKEY.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM LDC-FIO-RDC.
+           IF NOT ( FIO-STAT-OKS AND
+                    RDC-CIC-ICLF IN RDL = CEG-CIC-ICLF IN CEG-VARI )
+               MOVE 'RDC    NEX' TO CEG-COD-MENS
+               MOVE 3            TO CEG-NUM-MENS
+               GO TO FIN-BUS-CLF-CLI.
+           MOVE RDC-CIC-ICLI IN RDL TO WSS-CIC-GRUPO.
+       FIN-BUS-CLF-CLI.
+           EXIT.
+
+       OBT-VAL-MNAC SECTION.
+      * Transforma monto a moneda corriente del dia
+       INI-OBT-VAL-MNAC.
+           MOVE WSS-VAL-MONE TO WSS-VAL-MNAC.
+           IF WSS-VCAM > SPACES AND
+              WSS-VCAM NOT = CEG-COD-PESO IN CEG-VARI AND
+              WSS-VAL-MONE > ZEROES
+               MOVE WSS-VCAM TO CAM-COD-VCAM IN CAM(1)
+               MOVE FIO-GET-KEY TO FIO-CMND
+               PERFORM TAB-FIO-CAM
+               IF NOT ( FIO-STAT-OKS AND CAM-IND-VIGE IN CAM = 'S' )
+                   MOVE 'CAM    NEX' TO CEG-COD-MENS
+                   MOVE 11           TO CEG-NUM-MENS
+                   MOVE CAM-KEY-CAMB IN CAM TO CEG-CAMB
+               ELSE
+                   MULTIPLY CAM-SGV-VCAM IN CAM BY
+                            WSS-VAL-MONE GIVING
+                            WSS-VAL-MNAC ROUNDED.
+       FIN-OBT-VAL-MNAC.
+           EXIT.
+
+       BARRE-CLIENTES SECTION.
+       INI-BARRE-CLIENTES.
+      * Barre cada cliente perteneciente al grupo
+           MOVE WSS-CIC-GRUPO TO REC-CIC-ICLI IN REC.
+           MOVE 'GC'          TO REC-COD-TREC IN REC.
+           MOVE SPACES        TO REC-CIC-IREL IN REC.
+           MOVE ZEROES        TO REC-NUM-TREC IN REC.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+       LU1-BARRE-CLIENTES.
+           PERFORM SGC-FIO-REC.
+           IF NOT ( FIO-STAT-OKS AND
+                    REC-CIC-ICLI IN REC = WSS-CIC-GRUPO AND
+                    REC-COD-TREC IN REC = 'GC' )
+               MOVE 'GRUPOSINCLI' TO CEG-COD-MENS
+               MOVE 5             TO CEG-NUM-MENS
+               GO TO FIN-BARRE-CLIENTES.
+           IF REC-IND-VIGE IN REC NOT = 'S'
+               MOVE FIO-GET-NXT TO FIO-CMND
+               GO TO LU1-BARRE-CLIENTES.
+
+       LUP-BARRE-CLIENTES.
+      * Lee Creditos
+           PERFORM LEE-CRE.
+           IF CEG-NUM-MENS < 21
+               GO TO FIN-BARRE-CLIENTES.
+
+      *AMP BCP  01-JUN-1994 DEJADO COHERENTE CON LDCPSCCU POR FLB
+      *Busca las deudas del cliente para los siguientes tipos de
+      *operaciones CTE : Ctas Ctes.
+      *            CEX : Comercio Exterior.
+      *            TCR : Tarjetas de credito.
+           MOVE REC-CIC-IREL IN REC TO OSC-CIC-ICLI IN OSC-VARI.
+           PERFORM SGC-OBT-OSC.
+           IF NOT OSC-STAT-OKS
+               MOVE OSC-NUM-MENS IN OSC-VARI TO CEG-NUM-MENS
+               MOVE OSC-COD-MENS IN OSC-VARI TO CEG-COD-MENS
+               GO TO FIN-BARRE-CLIENTES.
+      *AMP BCP  01-JUN-1994
+
+       NXT-BARRE-CLIENTES.
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM SGC-FIO-REC.
+           IF NOT ( FIO-STAT-OKS AND
+                    REC-CIC-ICLI IN REC = WSS-CIC-GRUPO AND
+                    REC-COD-TREC IN REC = 'GC' )
+               GO TO FIN-BARRE-CLIENTES.
+           IF REC-IND-VIGE IN REC = 'S'
+               GO TO LUP-BARRE-CLIENTES
+           ELSE
+               GO TO NXT-BARRE-CLIENTES.
+       FIN-BARRE-CLIENTES.
+           EXIT.
+
+      * Lee los creditos de un cliente via el RDC de COL
+       LEE-CRE SECTION.
+       INI-LEE-CRE.
+           MOVE REC-CIC-IREL IN REC TO RDC-CIC-ICLI IN RDC.
+           MOVE SPACES              TO RDC-CAI-IOPC IN RDC.
+           MOVE ZEROES              TO RDC-IIC-IOPC IN RDC.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM COL-FIO-RDC.
+           IF NOT ( FIO-STAT-OKS AND
+      *             RDC-CIC-ICLI IN RDC = RDC-CIC-ICLI IN RDL )
+                    RDC-CIC-ICLI IN RDC = REC-CIC-IREL IN REC )
+               GO TO FIN-LEE-CRE.
+
+       LUP-LEE-CRE.
+      * Omite deudas indirectas
+           IF RDC-NUM-IDLC IN RDC > ZEROES
+               GO TO NXT-LEE-CRE.
+
+      *FLB CST  25-MAY-1994
+           MOVE RDC-CIC-IOPC IN RDC TO OPC-KEY-IOPC IN OPC.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM COL-FIO-OPC.
+           IF NOT FIO-STAT-OKS OR
+              OPC-VAL-SCRE IN OPC NOT > ZEROES OR
+              OPC-MSC-STAT IN OPC NOT = 'A'
+               GO TO NXT-LEE-CRE.
+
+      * Acumula cupo utilizado de la CLF, con las operaciones antiguas
+
+      * Se ajusta el valor de la OPC segun % de ese CLI
+           IF RDC-VAL-LIMD IN RDC < 100
+               COMPUTE WSS-VAL-MONE ROUNDED =
+                       OPC-VAL-SCRE IN OPC *
+                       RDC-VAL-LIMD IN RDC / 100
+           ELSE
+               MOVE OPC-VAL-SCRE IN OPC TO WSS-VAL-MONE.
+      *FLB CST  25-MAY-1994
+
+           MOVE OPC-COD-VCOC IN OPC TO WSS-VCAM.
+           PERFORM OBT-VAL-MNAC.
+      *FLB CST 9-MAR-1994
+           IF CEG-NUM-MENS < 21
+               GO TO FIN-LEE-CRE.
+      *FLB CST 9-MAR-1994
+           ADD WSS-VAL-MNAC TO CEG-VAL-CUTI.
+
+       NXT-LEE-CRE.
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM COL-FIO-RDC.
+           IF FIO-STAT-OKS AND
+      *       RDC-CIC-ICLI IN RDC = RDC-CIC-ICLI IN RDL
+              RDC-CIC-ICLI IN RDC = REC-CIC-IREL IN REC
+               GO TO LUP-LEE-CRE.
+       FIN-LEE-CRE.
+           EXIT.
+
+      *FLB CST  25-MAY-1994
+       PRO-OPC-CURSE  SECTION.
+       INI-PRO-OPC-CURSE.
+      * Procesa las OPC en curse
+
+           MOVE ZEROES TO WSS-F.
+       LUP-PRO-OPC-CURSE.
+           ADD 1 TO WSS-F.
+           IF WSS-F > CEG-TOPC OR
+              CEG-IIC-IOPC(WSS-F) NOT > ZEROES
+               GO TO FIN-PRO-OPC-CURSE.
+
+           MOVE CEG-CIC-IOPC(WSS-F) TO OPC-KEY-IOPC IN OPC.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM COL-FIO-OPC.
+           IF NOT FIO-STAT-OKS
+               MOVE 'OPC    NEX' TO CEG-COD-MENS
+               MOVE 6            TO CEG-NUM-MENS
+               GO TO FIN-PRO-OPC-CURSE.
+
+      * Acumula cupo utilizado de la CLF, con las OPC's en curse
+
+           MOVE OPC-KEY-IOPC IN OPC TO RDC-CIC-IOPC IN RDC.
+           MOVE ZEROES              TO RDC-NUM-IDLC IN RDC.
+           MOVE 'RDC-KEY-IDLC' TO FIO-AKEY.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM COL-FIO-RDC.
+           IF NOT ( FIO-STAT-OKS AND
+                    RDC-CIC-IOPC IN RDC = OPC-KEY-IOPC IN OPC AND
+                    RDC-NUM-IDLC IN RDC = ZEROES )
+               MOVE 'COLRDCNEX'  TO CEG-COD-MENS
+               MOVE 7            TO CEG-NUM-MENS
+               GO TO FIN-PRO-OPC-CURSE.
+
+      * Se ajusta el valor de la OPC segun % de ese CLI
+           IF RDC-VAL-LIMD IN RDC < 100
+               MOVE 'OPC' TO WSS-IND-MULT
+               PERFORM PRO-MULTIPLES-DEUDORES
+               IF CEG-NUM-MENS < 21
+                   GO TO FIN-PRO-OPC-CURSE
+               ELSE
+                   GO TO LUP-PRO-OPC-CURSE.
+
+           MOVE OPC-VAL-SCRE IN OPC TO WSS-VAL-MONE.
+           MOVE OPC-COD-VCOC IN OPC TO WSS-VCAM.
+
+           PERFORM OBT-VAL-MNAC.
+           IF CEG-NUM-MENS < 21
+               GO TO FIN-PRO-OPC-CURSE.
+           ADD WSS-VAL-MNAC TO CEG-VAL-CUTI.
+
+           GO TO LUP-PRO-OPC-CURSE.
+       FIN-PRO-OPC-CURSE.
+           EXIT.
+
+      * Se ajusta el valor de la OPC segun % de ese CLI
+       PRO-MULTIPLES-DEUDORES SECTION.
+       INI-PRO-MULTIPLES-DEUDORES.
+
+       LUP-PRO-MULTIPLES-DEUDORES.
+           PERFORM VE-SI-RDC-ES-DEL-GRUPO.
+           IF WSS-CLI-GRUP NOT = 'S'
+               GO TO NXT-PRO-MULTIPLES-DEUDORES.
+
+           COMPUTE WSS-VAL-MONE ROUNDED =
+                       OPC-VAL-SCRE IN OPC *
+                       RDC-VAL-LIMD IN RDC / 100.
+
+           MOVE OPC-COD-VCOC IN OPC TO WSS-VCAM.
+
+           PERFORM OBT-VAL-MNAC.
+           IF CEG-NUM-MENS < 21
+               GO TO FIN-PRO-MULTIPLES-DEUDORES.
+
+           IF WSS-IND-MULT = 'OPC'
+               ADD WSS-VAL-MNAC TO CEG-VAL-CUTI
+               GO TO NXT-PRO-MULTIPLES-DEUDORES.
+
+      * Resta cupo utilizado por las OPC de los eventuales DLC's
+      * cancelados
+           SUBTRACT WSS-VAL-MNAC FROM CEG-VAL-CUTI.
+
+      * Acumula cupo utilizado por las OPC de los eventuales DLC's
+      * cancelados
+           ADD CEG-VAL-SDLC(WSS-E) TO CEG-VAL-CUTI.
+
+       NXT-PRO-MULTIPLES-DEUDORES.
+           MOVE 'RDC-KEY-IDLC' TO FIO-AKEY.
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM COL-FIO-RDC.
+           IF FIO-STAT-OKS AND
+              RDC-CIC-IOPC IN RDC = OPC-KEY-IOPC IN OPC
+               IF RDC-NUM-IDLC IN RDC > ZEROES
+                   GO TO NXT-PRO-MULTIPLES-DEUDORES
+               ELSE
+                   GO TO LUP-PRO-MULTIPLES-DEUDORES.
+       FIN-PRO-MULTIPLES-DEUDORES.
+           EXIT.
+
+       VE-SI-RDC-ES-DEL-GRUPO SECTION.
+       INI-VE-SI-RDC-ES-DEL-GRUPO.
+           MOVE 'N' TO WSS-CLI-GRUP.
+           MOVE RDC-CIC-ICLI IN RDC TO REC-CIC-ICLI IN REC.
+           MOVE 'PG'                TO REC-COD-TREC IN REC.
+           MOVE SPACES              TO REC-CIC-IREL IN REC.
+           MOVE ZEROES              TO REC-NUM-TREC IN REC.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM SGC-FIO-REC.
+
+       LUP-VE-SI-RDC-ES-DEL-GRUPO.
+           IF NOT ( FIO-STAT-OKS AND
+                    REC-CIC-ICLI IN REC = RDC-CIC-ICLI IN RDC AND
+                    REC-COD-TREC IN REC = 'PG' )
+               GO TO FIN-VE-SI-RDC-ES-DEL-GRUPO.
+           IF REC-IND-VIGE = 'S' AND
+              REC-CIC-IREL IN REC = WSS-CIC-GRUPO
+               MOVE 'S' TO WSS-CLI-GRUP
+               GO TO FIN-VE-SI-RDC-ES-DEL-GRUPO.
+
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM SGC-FIO-REC.
+           GO TO LUP-VE-SI-RDC-ES-DEL-GRUPO.
+       FIN-VE-SI-RDC-ES-DEL-GRUPO.
+           EXIT.
+
+      *FLB CST  25-MAY-1994
+       ACT-VAL-SCRE SECTION.
+       INI-ACT-VAL-SCRE.
+           MOVE ZEROES TO WSS-E.
+       LUP-ACT-VAL-SCRE.
+           ADD 1 TO WSS-E.
+
+           IF WSS-E > CEG-TCAN OR
+              CEG-IIC-DCAN(WSS-E) NOT > ZEROES
+               GO TO FIN-ACT-VAL-SCRE.
+
+           MOVE CEG-CAI-DCAN(WSS-E) TO OPC-CAI-IOPC IN OPC.
+           MOVE CEG-IIC-DCAN(WSS-E) TO OPC-IIC-IOPC IN OPC.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM COL-FIO-OPC.
+           IF NOT FIO-STAT-OKS
+               MOVE 12          TO CEG-NUM-MENS
+               MOVE 'DCANNODLC' TO CEG-COD-MENS
+               GO TO FIN-ACT-VAL-SCRE.
+
+      *FLB CST  25-MAY-1994 Solo debe considerarse el primer DCAN
+      * cuando hay 2 para la misma OPC (ver COLBGCCU)
+           PERFORM BUS-DCAN-ANT.
+           IF WSS-D < WSS-E
+               GO TO LUP-ACT-VAL-SCRE.
+
+      * Deja el cupo utilizado correcto por los eventuales DLC's
+      * cancelados
+
+           MOVE OPC-KEY-IOPC IN OPC TO RDC-CIC-IOPC IN RDC.
+           MOVE ZEROES              TO RDC-NUM-IDLC IN RDC.
+           MOVE 'RDC-KEY-IDLC' TO FIO-AKEY.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM COL-FIO-RDC.
+           IF NOT ( FIO-STAT-OKS AND
+                    RDC-CIC-IOPC IN RDC = OPC-KEY-IOPC IN OPC AND
+                    RDC-NUM-IDLC IN RDC = ZEROES )
+               MOVE 'COLRDCNEX'  TO CEG-COD-MENS
+               MOVE 7            TO CEG-NUM-MENS
+               GO TO FIN-ACT-VAL-SCRE.
+
+      *FLB CST 9-jun-1994 ARREGLO POR NOVACIONES
+      * Por si DCAN no pertenece al Grupo (Novaciones) y
+      * Se ajusta el valor de la OPC segun % de ese CLI para multiples
+           MOVE 'DCAN' TO WSS-IND-MULT.
+           PERFORM PRO-MULTIPLES-DEUDORES.
+           IF CEG-NUM-MENS < 21
+               GO TO FIN-ACT-VAL-SCRE.
+
+           GO TO LUP-ACT-VAL-SCRE.
+       FIN-ACT-VAL-SCRE.
+           EXIT.
+
+       BUS-DCAN-ANT SECTION.
+       INI-BUS-DCAN-ANT.
+           MOVE ZEROES TO WSS-D.
+       LUP-BUS-DCAN-ANT.
+           ADD 1 TO WSS-D.
+           IF WSS-D = WSS-E
+               GO TO FIN-BUS-DCAN-ANT.
+           IF CEG-CAI-DCAN(WSS-D) = CEG-CAI-DCAN(WSS-E) AND
+              CEG-IIC-DCAN(WSS-D) = CEG-IIC-DCAN(WSS-E)
+               GO TO FIN-BUS-DCAN-ANT.
+           GO TO LUP-BUS-DCAN-ANT.
+       FIN-BUS-DCAN-ANT.
+           EXIT.
+
+       CNV-VAL-CEG SECTION.
+       INI-CNV-VAL-CEG.
+      * Convierte valores CEG a moneda CLF
+           IF CLF-COD-VCCF IN CLF = CEG-COD-PESO IN CEG-VARI
+               GO TO FIN-CNV-VAL-CEG.
+           MOVE CLF-COD-VCCF IN CLF TO WSS-VCAM.
+
+           MOVE CEG-VAL-CTOT IN CEG-VARI TO WSS-VAL-MNAC.
+           PERFORM OBT-VAL-MONE.
+      *FLB CST 9-MAR-1994
+           IF CEG-NUM-MENS < 21
+               GO TO FIN-CNV-VAL-CEG.
+           MOVE WSS-VAL-MONE    TO CEG-VAL-CTOT IN CEG-VARI.
+
+           MOVE CEG-VAL-CUTI IN CEG-VARI TO WSS-VAL-MNAC.
+           PERFORM OBT-VAL-MONE.
+           MOVE WSS-VAL-MONE    TO CEG-VAL-CUTI IN CEG-VARI.
+
+           MOVE CEG-VAL-CDIS IN CEG-VARI TO WSS-VAL-MNAC.
+           PERFORM OBT-VAL-MONE.
+           MOVE WSS-VAL-MONE    TO CEG-VAL-CDIS IN CEG-VARI.
+
+       FIN-CNV-VAL-CEG.
+           EXIT.
+
+       OBT-VAL-MONE SECTION.
+       INI-OBT-VAL-MONE.
+      * Transforma monto de pesos del dia a moneda
+           MOVE WSS-VAL-MNAC TO WSS-VAL-MONE.
+           IF WSS-VCAM NOT = CEG-COD-PESO IN CEG-VARI AND
+              WSS-VAL-MNAC > ZEROES
+               MOVE WSS-VCAM TO CAM-COD-VCAM IN CAM(1)
+               MOVE FIO-GET-KEY TO FIO-CMND
+               PERFORM TAB-FIO-CAM
+               IF NOT ( FIO-STAT-OKS AND CAM-IND-VIGE IN CAM = 'S' )
+                   MOVE 'CAM    NEX' TO CEG-COD-MENS
+                   MOVE 11           TO CEG-NUM-MENS
+                   MOVE CAM-KEY-CAMB IN CAM TO CEG-CAMB
+               ELSE
+                   DIVIDE WSS-VAL-MNAC BY CAM-SGV-VCAM IN CAM GIVING
+                            WSS-VAL-MONE ROUNDED.
+       FIN-OBT-VAL-MONE.
+           EXIT.
+
+       INI SECTION.
+       INI-INI.
+       COPY GNSBGEDB.
+      *Handler para manejar VSAM
+           PERFORM GNS-HDL-VSM.
+           MOVE DFHCOMMAREA(1:EIBCALEN) TO CEG-CMMA IN CEG-VARI.
+      *LAV-BCP INI 03-AUG-1995
+           MOVE ZEROES TO CEG-VAL-CTOT IN CEG-VARI
+                          CEG-VAL-CUTI IN CEG-VARI
+                          CEG-VAL-CDIS IN CEG-VARI.
+      *LAV-BCP FIN 03-AUG-1995
+      *JSS 15-SEP-1993, para pasar en COMMAREA las variables que indican
+      *los start-browse para los distintos archivos
+      *( Version VSAM compatible)
+           MOVE CEG-MSFL TO FIO-MSFL.
+      *
+           MOVE 'LDCPSCEG' TO FIO-PROG.
+      *Buscar Independencia de Datos
+           MOVE CEG-QIDD TO SCR-QIDD.
+           MOVE CEG-LIDD TO SCR-LIDD.
+           PERFORM GNS-BUS-IDD.
+
+           PERFORM GET-FHOY.
+           MOVE HOY-SHOY                 TO CAM-NUM-SCAM IN CAM(1).
+           MOVE HOY-AHOY                 TO CAM-NUM-ACAM IN CAM(1).
+           MOVE HOY-MHOY                 TO CAM-NUM-MCAM IN CAM(1).
+           MOVE HOY-DHOY                 TO CAM-NUM-DCAM IN CAM(1).
+           MOVE CAM-FEC-FCAM IN CAM(1)   TO CAM-FEC-FCAM IN CAM(2).
+           MOVE CEG-COD-PESO IN CEG-VARI TO CAM-COD-VCAM IN CAM(2).
+           IF CEG-IIC-ICLI IN CEG-VARI NOT NUMERIC
+               MOVE ZEROES TO CEG-IIC-ICLI IN CEG-VARI.
+
+      *AMP-INI 02-06-1993 LEE TABLA VSN PARA DETERMINAR SI SE HACE
+      *                   USO DE FUNCIONALIDADES DE CTE, CEX, TCR
+      * BUSCA REGISTRO CTE.
+           MOVE 'TAB'                TO FIO-SIST
+           MOVE 'DEU'                TO TAB-COD-SIST
+           MOVE 'VSN '               TO TAB-COD-TTAB IN TAB
+           MOVE 'LDCCTE      '       TO TAB-COD-CTAB IN TAB
+           MOVE FIO-GET-KEY TO FIO-CMND
+           PERFORM GNS-FIO-TAB
+           IF FIO-STAT-OKS
+              MOVE TAB-IND-VIGE IN TAB  TO WSS-VSN-VCTE IN WSS-VARI
+           ELSE
+              MOVE  'N'                 TO WSS-VSN-VCTE IN WSS-VARI.
+
+      * BUSCA REGISTRO CEX.
+           MOVE 'TAB'                TO FIO-SIST
+           MOVE 'DEU'                TO TAB-COD-SIST
+           MOVE 'VSN '               TO TAB-COD-TTAB IN TAB
+           MOVE 'LDCCEX      '       TO TAB-COD-CTAB IN TAB
+           MOVE FIO-GET-KEY TO FIO-CMND
+           PERFORM GNS-FIO-TAB
+           IF FIO-STAT-OKS
+              MOVE TAB-IND-VIGE IN TAB  TO WSS-VSN-VCEX IN WSS-VARI
+           ELSE
+              MOVE  'N'                 TO WSS-VSN-VCEX IN WSS-VARI.
+
+      * BUSCA REGISTRO TCR.
+           MOVE 'TAB'                TO FIO-SIST
+           MOVE 'DEU'                TO TAB-COD-SIST
+           MOVE 'VSN '               TO TAB-COD-TTAB IN TAB
+           MOVE  'LDCTCR      '      TO TAB-COD-CTAB IN TAB
+           MOVE FIO-GET-KEY TO FIO-CMND
+           PERFORM GNS-FIO-TAB
+           IF FIO-STAT-OKS
+              MOVE TAB-IND-VIGE IN TAB  TO WSS-VSN-VTCR IN WSS-VARI
+           ELSE
+              MOVE  'N'                 TO WSS-VSN-VTCR IN WSS-VARI.
+       FIN-INI.
+           EXIT.
+
+       COPY GNSBGHOY.
+       COPY GNSBGDTC.
+       COPY GNSBBIDD.
+       COPY GNSBHVSM.
+       COPY GNSBGVSM.
+
+       COPY COLBFOPC.
+       COPY COLBFDLC.
+       COPY COLBFRDC.
+
+       COPY LDCBFCLF.
+       COPY LDCBFRDC REPLACING RDC BY RDL
+                  ==ADR-RDC-REQA== BY ==ADR-RDL-REQA==.
+       COPY SGCBFOPE.
+       COPY SGCBFRCO.
+       COPY SGCBFREC.
+
+       COPY GNSBFTAB.
+       COPY TABBFCAM.
+       COPY GNSBIABT.
+       FIN SECTION.
+       INI-FIN.
+
+      * Si esta todo OK en tipo de mensaje 1
+           IF CEG-NUM-MENS = 99
+               MOVE ZEROES TO CEG-NUM-MENS
+               MOVE SPACES TO CEG-COD-MENS.
+
+           IF CEG-NUM-MEN2 = 99
+               MOVE ZEROES TO CEG-NUM-MEN2
+               MOVE SPACES TO CEG-COD-MEN2.
+
+      *FLB CST  15-APR-1994
+           IF CEG-IIC-ICLI IN CEG-VARI > ZEROES AND
+              CEG-IIC-ICLF IN CEG-VARI NOT > ZEROES
+               PERFORM FIN-MENS.
+
+           MOVE 'DEU'  TO CEG-COD-SIST IN CEG-VARI.
+      *JSS 26-NOV-1993
+           MOVE FIO-MSFL TO CEG-MSFL.
+      *
+           MOVE CEG-CMMA IN CEG-VARI TO DFHCOMMAREA.
+           MOVE +0 TO EIBRESP.
+       COPY GNSBGGBK.
+       FIN-FIN.
+           EXIT.
+
+       FIN-MENS SECTION.
+       INI-FIN-MENS.
+      * Analiza Variables de Retorno de Ejecucion LDCPSCCU y LDCPSCEG
+
+           IF NOT OK-OPCS-ANTIGUAS
+               GO TO VER-NO-EXISTE-CLF.
+
+           IF CEG-OK-OPCS-ANTIGUAS OR
+              CEG-EXCESO-OPCS-ANTIGUAS OR
+              CEG-ERROR-OPCS-ANTIGUAS OR
+              CEG-OK-MENSAJE-OPCS-ANTIGUAS
+               GO TO VER-MEN2.
+
+           IF CEG-NO-CALCULO-POR-NO-EXISTIR
+               PERFORM RESTAURA-MENS-CCU
+               GO TO VER-MEN2.
+
+       VER-NO-EXISTE-CLF.
+           IF NOT NO-CALCULO-POR-NO-EXISTIR
+               GO TO VER-OK-MENSAJE-OPCS-ANTIGUAS.
+
+           GO TO VER-MEN2.
+
+       VER-OK-MENSAJE-OPCS-ANTIGUAS.
+           IF NOT OK-CON-MENSAJE-OPCS-ANTIGUAS
+               GO TO VER-EXCESO-OPCS-ANTIGUAS.
+
+           IF CEG-ERROR-OPCS-ANTIGUAS OR
+              CEG-EXCESO-OPCS-ANTIGUAS
+               GO TO VER-MEN2.
+
+           IF CEG-OK-OPCS-ANTIGUAS OR
+              CEG-OK-MENSAJE-OPCS-ANTIGUAS OR
+              CEG-NO-CALCULO-POR-NO-EXISTIR
+               PERFORM RESTAURA-MENS-CCU
+               GO TO VER-MEN2.
+
+       VER-EXCESO-OPCS-ANTIGUAS.
+           IF NOT EXCESO-OPCS-ANTIGUAS
+               GO TO VER-ERROR-OPCS-ANTIGUAS.
+
+           IF CEG-ERROR-OPCS-ANTIGUAS
+               GO TO VER-MEN2.
+
+           IF CEG-OK-OPCS-ANTIGUAS OR
+              CEG-OK-MENSAJE-OPCS-ANTIGUAS OR
+              CEG-NO-CALCULO-POR-NO-EXISTIR OR
+              CEG-EXCESO-OPCS-ANTIGUAS
+               PERFORM RESTAURA-MENS-CCU
+               GO TO VER-MEN2.
+
+       VER-ERROR-OPCS-ANTIGUAS.
+           PERFORM RESTAURA-MENS-CCU.
+
+       VER-MEN2.
+           IF NOT OK-OPC-EN-CURSE
+               GO TO VER-MENSAJE-OPC-EN-CURSE.
+
+           GO TO FIN-FIN-MENS.
+
+       VER-MENSAJE-OPC-EN-CURSE.
+           IF NOT OK-CON-MENSAJE-OPC-EN-CURSE
+               GO TO VER-EXCESO-OPC-EN-CURSE.
+
+           IF CEG-OK-OPC-EN-CURSE OR
+              CEG-OK-MENSAJE-OPC-EN-CURSE
+               PERFORM RESTAURA-MEN2-CCU
+               GO TO FIN-FIN-MENS.
+
+           IF CEG-EXCESO-OPC-EN-CURSE OR
+              CEG-ERROR-OPC-EN-CURSE
+               GO TO FIN-FIN-MENS.
+
+       VER-EXCESO-OPC-EN-CURSE.
+           IF NOT EXCESO-OPC-EN-CURSE
+               GO TO VER-ERROR-OPC-EN-CURSE.
+
+           IF CEG-OK-OPC-EN-CURSE OR
+              CEG-OK-MENSAJE-OPC-EN-CURSE OR
+              CEG-EXCESO-OPC-EN-CURSE
+               PERFORM RESTAURA-MEN2-CCU
+               GO TO FIN-FIN-MENS.
+
+           IF CEG-ERROR-OPC-EN-CURSE
+               GO TO FIN-FIN-MENS.
+
+       VER-ERROR-OPC-EN-CURSE.
+           PERFORM RESTAURA-MEN2-CCU.
+
+       FIN-FIN-MENS.
+           EXIT.
+
+       RESTAURA-MENS-CCU SECTION.
+       INI-RESTAURA-MENS-CCU.
+           MOVE WSS-NUM-MENS TO CEG-NUM-MENS.
+           MOVE WSS-COD-MENS TO CEG-COD-MENS.
+       FIN-RESTAURA-MENS-CCU.
+           EXIT.
+
+       RESTAURA-MEN2-CCU SECTION.
+       INI-RESTAURA-MEN2-CCU.
+           MOVE WSS-NUM-MEN2 TO CEG-NUM-MEN2.
+           MOVE WSS-COD-MEN2 TO CEG-COD-MEN2.
+       FIN-RESTAURA-MEN2-CCU.
+           EXIT.
+
+
+       COPY GNSBGSYS.
+       SGC-OBT-OSC SECTION.
+       INI-SGC-OBT-OSC.
+      *************************************************************
+      * Obtiene Saldos de cuentas para los distintos tipos de operacion
+      * de un cliente.
+      * Parametros de Entrada: OSC-CIC-ICLI Identificador Cliente
+      * Parametros de Salida : Vector de Saldos para tipos de operacion.
+      *************************************************************
+      * Inicializa Variables
+
+           MOVE SPACES TO OSC-COD-MENS IN OSC-VARI.
+           MOVE ZEROS  TO OSC-COD-STAT IN OSC-VARI.
+       FIN-SGC-OBT-OSC.
+           EXIT.

@@ -1,0 +1,205 @@
+       IDENTIFICATION DIVISION.
+      *=======================
+       PROGRAM-ID.      DAPPJOPD.
+       AUTHOR.          CONSIST.
+       DATE-WRITTEN.     8-NOV-1994 11:56:49.
+
+      * Programa que calcula OPD-VAL-IPES para DAP's antiguos
+      * y lo compara con la sumatoria de las CADs
+
+       ENVIRONMENT DIVISION.
+      *====================
+       CONFIGURATION SECTION.
+      *---------------------
+       SPECIAL-NAMES.
+            DECIMAL-POINT IS COMMA.
+       INPUT-OUTPUT SECTION.
+      *--------------------
+       FILE-CONTROL.
+
+       DATA DIVISION.
+      *=============
+       FILE SECTION.
+      *------------
+
+       WORKING-STORAGE SECTION.
+      *-----------------------
+
+       COPY GNSWGRQA.
+       COPY GNSWGUIB.
+       COPY GNSWGELS.
+       COPY GNSWGIFD.
+       COPY GNSWCFIO.
+       COPY GNSWVFIO.
+       COPY GNSWGSYS.
+       COPY GNSWVNUM.
+       COPY GNSWCNUM.
+       COPY GNSWGPES.
+       COPY GNSWGCPT.
+
+      * Entidades de GNS
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-TAB-REQA==.
+       COPY GNSBRTAB.
+
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-MSG-REQA==.
+       COPY GNSBRMSG.
+
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-MSC-REQA==.
+       COPY GNSBRMSC.
+
+      * Entidades de DAP
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-OPD-REQA==.
+       COPY DAPBROPD.
+
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-CAD-REQA==.
+       COPY DAPBRCAD.
+
+      * Entidades de TAB
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-CAM-REQA==.
+       COPY TABBRCAM.
+
+       01  FRM-VARI.
+           03 FRM-IFLD                PIC 9(05).
+           03 FRM-MENS                PIC X(79).
+           03 FRM-MENS-RED REDEFINES  FRM-MENS.
+              05 FRM-MEN1             PIC X(40).
+              05 FRM-MEN2             PIC X(39).
+           03 FRM-SUAR                PIC X(03).
+           03 FRM-SUAR-MAL            PIC X(3) VALUE 'MAL'.
+           03 FRM-SUAR-WRN            PIC X(3) VALUE 'WRN'.
+           03 FRM-SUAR-CLR            PIC X(3) VALUE 'CLR'.
+           03 FRM-SUAR-OKS            PIC X(3) VALUE 'OKS'.
+           03 FRM-SUAR-EOF            PIC X(3) VALUE 'EOF'.
+
+       01  WSS-VARI.
+           03  WSS-STAT-VCAM        VALUE ZEROES     PIC 9(01).
+           03  SUM-CADS                              PIC S9(11)V9(4).
+           03  WSS-VAL-IPES                          PIC S9(11).
+           03  WSS-PROG                              PIC X(12).
+           03  WSS-SUM-CADS-EDT       PIC --.---.---.--9,9999.
+           03  WSS-VAL-IPES-EDT       PIC --.---.---.--9.
+
+       PROCEDURE DIVISION.
+      *==================
+
+       MAIN SECTION.
+       INI-MAIN.
+       COPY GNSBGEDB.
+           MOVE 'DAPPJOPD' TO FIO-PROG
+                              WSS-PROG
+           PERFORM BUS-FSIS
+           MOVE FIO-INP TO FIO-CMND.
+           PERFORM DAP-FIO-CAD.
+           MOVE FIO-INP TO FIO-CMND.
+           PERFORM DAP-FIO-OPD.
+           IF FIO-STAT-OKS
+               MOVE FIO-GET-FST TO FIO-CMND
+               PERFORM DAP-FIO-OPD
+               IF FIO-STAT-OKS
+               DISPLAY 'OPD-CIC-IOPD    SUMAT. CADS     OPD-VAL-IPES'
+               DISPLAY '--------------------------------------------'
+                   PERFORM PROCESA-VAL-IPES
+                   MOVE FIO-CLO TO FIO-CMND
+                   PERFORM DAP-FIO-CAD
+                   MOVE FIO-CLO TO FIO-CMND
+                   PERFORM DAP-FIO-OPD
+                   IF NOT FIO-STAT-OKS
+                       DISPLAY 'ERROR EN CLOSE A OPD. FIO-STAT: '
+                                                      FIO-STAT
+                   ELSE
+                       NEXT SENTENCE
+               ELSE
+                   DISPLAY 'ERROR EN START A OPD. FIO-STAT: ' FIO-STAT
+           ELSE
+               DISPLAY 'ERROR EN OPEN A OPD. FIO-STAT: ' FIO-STAT.
+           PERFORM GNS-PRO-END.
+       FIN-MAIN.
+           EXIT.
+
+       PROCESA-VAL-IPES SECTION.
+       INI-PROCESA-VAL-IPES.
+           IF OPD-MSC-TVAL IN OPD = '0' AND
+              OPD-COD-CVAL IN OPD NOT = '999'
+               PERFORM SUMAR-CADS
+               IF SUM-CADS > ZEROES
+                   PERFORM BUSCA-VALOR-CAMBIO
+                   IF WSS-STAT-VCAM = 0
+                       MULTIPLY OPD-VAL-CAPT IN OPD BY
+                                CAM-SGV-VCAM IN CAM GIVING
+                                WSS-VAL-IPES        ROUNDED
+                       IF WSS-VAL-IPES NOT = SUM-CADS
+                           MOVE WSS-VAL-IPES TO WSS-VAL-IPES-EDT
+                           MOVE SUM-CADS     TO WSS-SUM-CADS-EDT
+                           DISPLAY OPD-CAI-IOPD IN OPD '-'
+                                   OPD-IIC-IOPD IN OPD '  '
+                                   WSS-SUM-CADS-EDT    '  '
+                                   WSS-VAL-IPES-EDT.
+       LEE-PROXIMA-OPD.
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM DAP-FIO-OPD.
+           IF FIO-STAT-OKS
+               GO TO INI-PROCESA-VAL-IPES.
+       FIN-PROCESA-VAL-IPES.
+           EXIT.
+
+       SUMAR-CADS SECTION.
+       INI-SUMAR-CADS.
+           MOVE ZEROES TO SUM-CADS.
+           MOVE OPD-CIC-IOPD IN OPD TO CAD-CIC-IOPD IN CAD.
+           MOVE ZEROES              TO CAD-NUM-ILIQ IN CAD.
+           MOVE SPACES              TO CAD-NUM-ICAD IN CAD.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM DAP-FIO-CAD.
+           IF NOT (FIO-STAT-OKS AND
+                   OPD-CIC-IOPD IN OPD = CAD-CIC-IOPD IN CAD AND
+                   CAD-NUM-ILIQ IN CAD = ZEROES)
+               DISPLAY 'NO EXISTE CAD ASOCIADA A OPD. CIC '
+                        OPD-CIC-IOPD IN OPD
+               GO TO FIN-SUMAR-CADS.
+       LUP-SUMAR-CADS.
+           ADD CAD-SGV-LIQU IN CAD TO SUM-CADS.
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM DAP-FIO-CAD.
+           IF FIO-STAT-OKS AND
+              OPD-CIC-IOPD IN OPD = CAD-CIC-IOPD IN CAD AND
+              CAD-NUM-ILIQ IN CAD = ZEROES
+               GO TO LUP-SUMAR-CADS.
+       FIN-SUMAR-CADS.
+           EXIT.
+
+       BUSCA-VALOR-CAMBIO SECTION.
+       INI-BUSCA-VALOR-CAMBIO.
+      *VALOR DEL CAMBIO A FECHA CAPTACION
+           MOVE 0 TO WSS-STAT-VCAM
+           MOVE '0999  '            TO TAB-CIC-CTAB IN TAB.
+           MOVE OPD-COD-VCAM IN OPD TO TAB-COD-CTAB IN TAB.
+           MOVE OPD-NUM-DREA IN OPD TO TAB-NUM-DTRN IN TAB.
+           MOVE OPD-NUM-MREA IN OPD TO TAB-NUM-MTRN IN TAB.
+           MOVE OPD-NUM-SREA IN OPD TO TAB-NUM-STRN IN TAB.
+           MOVE OPD-NUM-AREA IN OPD TO TAB-NUM-ATRN IN TAB.
+           PERFORM GET-VCAM.
+           IF MSG-COD-MENS > SPACES
+               MOVE 1 TO WSS-STAT-VCAM
+               DISPLAY 'NO EXISTE VCAM A F CAPT. REAL: '
+            OPD-FEC-FREA IN OPD ' Y MONEDA: ' OPD-COD-VCAM IN OPD.
+       FIN-BUSCA-VALOR-CAMBIO.
+           EXIT.
+
+       COPY TABBFCAM.
+       COPY DAPBFOPD.
+       COPY DAPBFCAD.
+       COPY GNSBGDTC.
+       COPY GNSBTABT.
+       COPY GNSBGABT.
+       COPY GNSBBSYS.
+       COPY GNSBVTAB.
+       COPY GNSBBTAB.
+       COPY GNSBFTAB.
+       COPY GNSBGCAM.
+       COPY GNSBFMSG.
+       COPY GNSBFMSC.
+       COPY GNSBBMSC.
+       COPY GNSBGEND.
+      *Entidades  de GNS
+       COPY GNSBBMSG.
+       COPY GNSBGIFD.

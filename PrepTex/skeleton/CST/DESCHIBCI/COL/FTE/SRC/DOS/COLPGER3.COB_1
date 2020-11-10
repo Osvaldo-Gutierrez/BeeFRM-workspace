@@ -1,0 +1,274 @@
+       IDENTIFICATION DIVISION.
+      *=======================
+       PROGRAM-ID.      COLPGER3.
+       AUTHOR.          CONSIST.
+       DATE-WRITTEN.     30-JAN-1992 20:08:50.
+
+      * Programa que recalcula los contadores de vencimientos originales
+      * vigentes, para aquellos creditos que tienen multiples estructura
+      * y vencimientos concurrentes para ellas
+
+       ENVIRONMENT DIVISION.
+      *====================
+
+       DATA DIVISION.
+      *=============
+       WORKING-STORAGE SECTION.
+      *-----------------------
+       COPY GNSWGRQA.
+       COPY GNSWGUIB.
+       COPY GNSWGELS.
+       COPY GNSWVIDD.
+       COPY GNSWCFIO.
+       COPY GNSWVFIO.
+       COPY GNSWGSYS.
+       COPY GNSWGFEC.
+       COPY GNSWGHOY.
+      *SMC-INI 09.09.1993
+       COPY COLWGINT.
+      *SMC-FIN 09.09.1993
+       COPY GNSWGPES.
+       COPY GNSBRTAB.
+       COPY GNSBRMSC.
+       COPY GNSBRMSG.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-TAB-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-MSC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-MSG-REQA==.
+
+       COPY COLWGVEN.
+       COPY COLBRRCV.
+       COPY COLBRVEN.
+       COPY COLBROPC.
+       COPY COLBRICG.
+       COPY COLBRDLC.
+       COPY COLBREVC.
+       COPY COLBRTOC.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-RCV-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-VEN-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-OPC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-ICG-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-DLC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-EVC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-TOC-REQA==.
+
+       COPY TABBRCAM.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-CAM-REQA==.
+
+       01  WSS-VARI.
+           03 WSS-IOPC                 PIC X(12).
+           03 WSS-IEVC                 PIC X(15).
+           03 WSS-NEVC                 PIC 9(03).
+           03 WSS-IVEN-MAS1    VALUE 0 PIC 9(03).
+           03 WSS-VCOR                 PIC 9(03).
+           03 WSS-VCVG                 PIC 9(03).
+           03 WSS-NVOR                 PIC 9(03).
+           03 WSS-NVVG                 PIC 9(03).
+           03 WSS-DIFE                 PIC 9(03).
+           03 WSS-OTOT         VALUE 0 PIC 9(08).
+           03 WSS-OIGU         VALUE 0 PIC 9(08).
+           03 WSS-OMAY         VALUE 0 PIC 9(08).
+           03 WSS-OMEN         VALUE 0 PIC 9(08).
+           03 WSS-OSUP         VALUE 0 PIC 9(08).
+           03 WSS-ONUP         VALUE 0 PIC 9(08).
+           03 WSS-ACTU                 PIC X(03).
+
+       PROCEDURE DIVISION.
+      *==================
+
+       MAIN SECTION.
+       INI-MAIN.
+           COPY GNSBGEDB.
+           MOVE 'COLPGER3' TO FIO-PROG.
+           PERFORM GNS-BUS-IDD.
+           PERFORM ENCABEZADO.
+           PERFORM PROCESO.
+           PERFORM ESTADISTICAS.
+       FIN-MAIN.
+           PERFORM GNS-PRO-END.
+
+       ENCABEZADO SECTION.
+       INI-ENCABEZADO.
+           DISPLAY 'º     IOPC     '
+                   'º VCOR '
+                   'º VCVG '
+                   'º NVOR '
+                   'º NVVG '
+                   'º ACTU º'.
+           DISPLAY '+--------------'
+                   '+------'
+                   '+------'
+                   '+------'
+                   '+------'
+                   '+------+'.
+       FIN-ENCABEZADO.
+           EXIT.
+
+       PROCESO SECTION.
+       INI-PROCESO.
+           MOVE SPACES TO EVC-KEY-IEVC IN EVC.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM COL-FIO-EVC.
+           IF NOT FIO-STAT-OKS
+               DISPLAY '%E - NO HAY REGISTROS EVC : ERROR'
+               GO TO FIN-PROCESO.
+       ORG-PROCESO.
+           MOVE EVC-CIC-IOPC IN EVC TO WSS-IOPC.
+           MOVE 1 TO WSS-NEVC.
+       LUP-PROCESO.
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM COL-FIO-EVC.
+           IF NOT FIO-STAT-OKS
+               IF WSS-NEVC > 1
+                   PERFORM CALCULAR
+                   GO TO FIN-PROCESO
+               ELSE
+                   GO TO FIN-PROCESO.
+           IF EVC-CIC-IOPC IN EVC = WSS-IOPC
+               ADD 1 TO WSS-NEVC
+               GO TO LUP-PROCESO.
+           IF WSS-NEVC > 1
+               MOVE EVC-KEY-IEVC IN EVC TO WSS-IEVC
+               PERFORM CALCULAR
+               MOVE WSS-IEVC TO EVC-KEY-IEVC IN EVC
+               MOVE FIO-GET-KEY TO FIO-CMND
+               PERFORM COL-FIO-EVC
+               IF FIO-STAT-OKS
+                   GO TO ORG-PROCESO
+               ELSE
+                   DISPLAY '%E - ABORTO DEL PROCESO '
+                           'NO SE PUDO RECUPERAR POSICION EN EVC: '
+                           EVC-KEY-IEVC IN EVC
+                   GO TO FIN-PROCESO
+           ELSE
+               GO TO ORG-PROCESO.
+       FIN-PROCESO.
+           EXIT.
+
+       CALCULAR SECTION.
+       INI-CALCULAR.
+           MOVE WSS-IOPC TO OPC-CIC-IOPC IN OPC.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM COL-FIO-OPC.
+           IF NOT FIO-STAT-OKS
+               DISPLAY 'ERROR: NO EXISTE OPERACION : '
+                       OPC-CIC-IOPC IN OPC
+               GO TO FIN-CALCULAR.
+           IF OPC-MSC-STAT IN OPC NOT = 'A'
+               GO TO FIN-CALCULAR.
+           IF OPC-IND-VSTR IN OPC NOT = 'S'
+               GO TO FIN-CALCULAR.
+           PERFORM LISTAR-VEN-EVC.
+       FIN-CALCULAR.
+           EXIT.
+
+       LISTAR-VEN-EVC SECTION.
+       INI-LISTAR-VEN-EVC.
+           ADD 1 OPC-NUM-IVEN IN OPC GIVING WSS-IVEN-MAS1.
+           MOVE OPC-CIC-IOPC IN OPC TO VEN-CIC-IOPC IN VEN.
+           MOVE 1                   TO VEN-NUM-IVEN IN VEN.
+       LUP-LISTAR-VEN-EVC.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           MOVE OPC-FEC-FCOL IN OPC TO VEN-FTBS.
+           PERFORM COL-OBT-VEN.
+           IF NOT VEN-STAT-OKS
+               IF VEN-STAT = 'CAMBTSANXABT' OR 'CAMBTSANVABT'
+                   DISPLAY 'ERROR EN OPC ' WSS-IOPC ' : '
+                            VEN-STAT '-' VEN-MEN2
+                   GO TO FIN-LISTAR-VEN-EVC
+               ELSE
+                   GO TO CON-LISTAR-VEN-EVC.
+           MOVE VEN-NUM-IVEN TO WSS-NVOR.
+           ADD 1 TO VEN-NUM-IVEN IN VEN.
+           IF VEN-NUM-IVEN IN VEN > WSS-IVEN-MAS1
+               MOVE 'N' TO VEN-INIT.
+           GO TO LUP-LISTAR-VEN-EVC.
+       CON-LISTAR-VEN-EVC.
+           ADD 1                    TO WSS-OTOT.
+           MOVE ' NO'               TO WSS-ACTU.
+           MOVE OPC-NUM-VCOR IN OPC TO WSS-VCOR.
+           MOVE OPC-NUM-VCVG IN OPC TO WSS-VCVG WSS-NVVG.
+           IF WSS-NVOR = OPC-NUM-VCOR IN OPC
+               ADD 1 TO WSS-OIGU
+               GO TO DSP-LISTAR-VEN-EVC.
+           IF WSS-NVOR > OPC-NUM-VCOR IN OPC
+               ADD 1 TO WSS-OMAY
+               GO TO DSP-LISTAR-VEN-EVC.
+           ADD 1 TO WSS-OMEN.
+           MOVE WSS-IOPC TO OPC-CIC-IOPC IN OPC.
+           MOVE FIO-GET-KEY-UPD TO FIO-CMND.
+           PERFORM COL-FIO-OPC.
+           IF NOT FIO-STAT-OKS
+               MOVE 1 TO WSS-ONUP
+               MOVE 'ERR' TO WSS-ACTU
+               GO TO DSP-LISTAR-VEN-EVC.
+           SUBTRACT WSS-NVOR FROM OPC-NUM-VCOR IN OPC GIVING WSS-DIFE.
+           IF WSS-DIFE NOT > OPC-NUM-VCVG IN OPC
+               SUBTRACT WSS-DIFE FROM OPC-NUM-VCVG IN OPC
+                                                      GIVING WSS-NVVG
+               MOVE WSS-NVVG TO OPC-NUM-VCVG IN OPC.
+           MOVE WSS-NVOR TO OPC-NUM-VCOR IN OPC.
+           MOVE FIO-MOD TO FIO-CMND.
+           PERFORM COL-FIO-OPC.
+           IF FIO-STAT-OKS
+               ADD 1 TO WSS-OSUP
+               MOVE ' SI' TO WSS-ACTU
+               MOVE FIO-CHK-PNT TO FIO-CMND
+               PERFORM COL-FIO-OPC
+           ELSE
+               MOVE 'ERR' TO WSS-ACTU
+               ADD 1 TO WSS-ONUP.
+       DSP-LISTAR-VEN-EVC.
+           DISPLAY  'º '  WSS-IOPC
+                   ' º  ' WSS-VCOR
+                   ' º  ' WSS-VCVG
+                   ' º  ' WSS-NVOR
+                   ' º  ' WSS-NVVG
+                   ' º  ' WSS-ACTU ' º'.
+       FIN-LISTAR-VEN-EVC.
+           EXIT.
+
+       ESTADISTICAS SECTION.
+       INI-ESTADISTICAS.
+           DISPLAY '+--------------'
+                   '+------'
+                   '+------'
+                   '+------'
+                   '+------'
+                   '+------+'.
+           DISPLAY '  '.
+           DISPLAY 'TOTAL DE OPERACIONES PROCESADAS     : ' WSS-OTOT.
+           DISPLAY 'OPERACIONES CON VENC. IGUALES       : ' WSS-OIGU.
+           DISPLAY 'OPERACIONES CON VENC. CALC. MAYOR   : ' WSS-OMAY.
+           DISPLAY 'OPERACIONES CON VENC. CALC. MENOR   : ' WSS-OMEN.
+           DISPLAY 'OPERACIONES CON VENC. ACTUALIZADOS  : ' WSS-OSUP.
+           DISPLAY 'OPERACIONES CON ERROR AL ACTUALIZAR : ' WSS-ONUP.
+       FIN-ESTADISTICAS.
+           EXIT.
+
+       COPY GNSBFMSG.
+       COPY GNSBFTAB.
+       COPY GNSBFMSC.
+       COPY GNSBBMSG.
+       COPY GNSBGFEC.
+       COPY GNSBPFEC.
+       COPY GNSBGHOY.
+       COPY GNSBGDTC.
+       COPY GNSBGIDD.
+       COPY GNSBTABT.
+       COPY GNSBBSYS.
+      *SMC-INI 09.09.1993
+       COPY COLBGINT.
+      *SMC-FIN 09.09.1993
+       COPY GNSBGPES.
+       COPY GNSBGEND.
+
+       COPY COLBGVEN.
+       COPY COLBFRCV.
+       COPY COLBFVEN.
+       COPY COLBFOPC.
+       COPY COLBFICG.
+       COPY COLBFDLC.
+       COPY COLBFEVC.
+       COPY COLBFTOC.
+
+       COPY TABBFCAM.

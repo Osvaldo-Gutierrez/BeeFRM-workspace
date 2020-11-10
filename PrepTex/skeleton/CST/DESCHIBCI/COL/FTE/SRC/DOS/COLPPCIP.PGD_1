@@ -1,0 +1,278 @@
+       IDENTIFICATION DIVISION.
+      *========================
+       PROGRAM-ID.    COLPPCIP.
+       AUTHOR.        CONSIST.
+       DATE-WRITTEN.  15-JUL-1994      ( Ultima Modificacion ).
+
+      * Obtiene para una operacion de credito el credito original, para
+      * asi calcular el impuesto en caso de prorrogas
+
+       ENVIRONMENT DIVISION.
+      *=====================
+       DATA DIVISION.
+      *==============
+
+       WORKING-STORAGE SECTION.
+      *------------------------
+       COPY GNSWCSCR.
+       COPY GNSWVSCR.
+       COPY GNSWGRQA.
+       COPY GNSWGUIB.
+       COPY GNSWGELS.
+       COPY GNSWCFIO.
+       COPY GNSWVFIO.
+       COPY GNSWVIDD.
+       COPY GNSWGFRM.
+       COPY GNSWGSYS.
+       COPY GNSWGFEC.
+       COPY GNSWGHOY.
+       COPY GNSBRTAB.
+       COPY GNSBRMSG.
+       COPY TABBRCAM.
+       COPY COLBROPC.
+       COPY COLBRDLC.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-TAB-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-MSG-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-CAM-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-OPC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-DLC-REQA==.
+       COPY COLWGCIP.
+
+       01  WSS-VARI.
+           03 WSS-NUM-DMTS                         PIC  9(02).
+           03 WSS-NUM-DMPT                         PIC  9(02).
+           03 WSS-NUM-DMPA                         PIC  9(02).
+           03 WSS-FEC-FCCO.
+              07 WSS-NUM-SCCO                      PIC  9(02).
+              07 WSS-NUM-ACCO                      PIC  9(02).
+              07 WSS-NUM-MCCO                      PIC  9(02).
+              07 WSS-NUM-DCCO                      PIC  9(02).
+           03 WSS-FEC-FVCP.
+              07 WSS-NUM-SVCP                      PIC  9(02).
+              07 WSS-NUM-AVCP                      PIC  9(02).
+              07 WSS-NUM-MVCP                      PIC  9(02).
+              07 WSS-NUM-DVCP                      PIC  9(02).
+           03 WSS-COD-PESO                         PIC  X(12).
+           03 WSS-COD-UEFE                         PIC  X(12).
+           03 WSS-VAL-FTOR    VALUE 0.001          PIC  9(01)V9(03).
+           03 WSS-VAL-IMPU    VALUE +0             PIC S9(13)V9(04).
+           03 WSS-SGV-FNEW    VALUE +0   COMP-3    PIC S9(11)V9(04).
+           03 WSS-SGV-FORI    VALUE +1   COMP-3    PIC S9(11)V9(04).
+
+       LINKAGE SECTION.
+      *----------------
+       01  DFHCOMMAREA.
+           03 FILLER                          PIC X(723).
+       COPY GNSLGFIO.
+
+
+       PROCEDURE DIVISION.
+      *===================
+       MAIN SECTION.
+       INI-MAIN.
+       COPY GNSBGEDB.
+           MOVE 'COLPPCIP'  TO FIO-PROG.
+           MOVE DFHCOMMAREA TO CIP-CMMA.
+           MOVE 'COL'       TO SCR-SIST.
+           MOVE CIP-VIDD    TO IDD-FSIS.
+           MOVE CIP-MSFL    TO FIO-MSFL.
+           PERFORM CAL-IMP-PRO.
+           MOVE FIO-MSFL TO CIP-MSFL.
+           MOVE CIP-CMMA TO DFHCOMMAREA.
+        FIN-MAIN.
+           EXEC CICS RETURN END-EXEC.
+
+      ******************************************************************
+       CAL-IMP-PRO SECTION.
+       INI-CAL-IMP-PRO.
+      * Inicializacion de Variables en CMMA
+           MOVE ZEROES TO CIP-IMPP IN CIP-VARI.
+           MOVE SPACES TO CIP-CMSG IN CIP-VARI
+                          CIP-MEN2 IN CIP-VARI.
+
+      * Busca y Obtiene el codigo de PESO
+           MOVE 'TAB'          TO TAB-COD-SIST FIO-SIST.
+           MOVE 'VLR'          TO TAB-CIC-TTAB IN TAB.
+           MOVE '0999'         TO TAB-CIC-CTAB IN TAB.
+           MOVE 'TAB-CIC-TABL' TO FIO-AKEY.
+           MOVE FIO-GET-KEY    TO FIO-CMND.
+           PERFORM GNS-FIO-TAB.
+           IF FIO-STAT-OKS
+               MOVE TAB-COD-CTAB IN TAB TO WSS-COD-PESO IN WSS-VARI
+           ELSE
+               MOVE 'CIC    NEX'        TO CIP-CMSG IN CIP-VARI
+               MOVE TAB-CIC-TABL IN TAB TO CIP-MEN2 IN CIP-VARI
+               GO TO FIN-CAL-IMP-PRO.
+
+      * Busca y Obtiene el codigo de la UF
+           MOVE 'TAB'          TO TAB-COD-SIST FIO-SIST.
+           MOVE 'VLR'          TO TAB-CIC-TTAB IN TAB.
+           MOVE '0998'         TO TAB-CIC-CTAB IN TAB.
+           MOVE 'TAB-CIC-TABL' TO FIO-AKEY.
+           MOVE FIO-GET-KEY    TO FIO-CMND.
+           PERFORM GNS-FIO-TAB.
+           IF FIO-STAT-OKS
+               MOVE TAB-COD-CTAB IN TAB TO WSS-COD-UEFE IN WSS-VARI
+           ELSE
+               MOVE 'CIC    NEX'        TO CIP-CMSG IN CIP-VARI
+               MOVE TAB-CIC-TABL IN TAB TO CIP-MEN2 IN CIP-VARI
+               GO TO FIN-CAL-IMP-PRO.
+
+      * Busca el Documento asociado a la Operacion Prorrogada
+           MOVE CIP-CICP IN CIP-VARI TO DLC-CIC-IOPC IN DLC.
+           MOVE ZEROES               TO DLC-NUM-IDLC IN DLC.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM COL-FIO-DLC.
+           IF NOT ( FIO-STAT-OKS AND
+                    DLC-CIC-IOPC IN DLC = CIP-CICP IN CIP-VARI )
+               MOVE 'OPC    DLCNX'       TO CIP-CMSG IN CIP-VARI
+               MOVE CIP-CICP IN CIP-VARI TO CIP-MEN2 IN CIP-VARI
+               GO TO FIN-CAL-IMP-PRO.
+
+      * Obtiene la Fecha de Vencimiento del Credito Prorrogado
+           MOVE DLC-FEC-FMAV IN DLC TO WSS-FEC-FVCP IN WSS-VARI.
+
+      * Determina cual es la Operacion Original y la Lee
+           IF DLC-CIC-IOCO IN DLC > SPACES
+               MOVE DLC-CIC-IOCO IN DLC TO OPC-CIC-IOPC IN OPC
+           ELSE
+               MOVE DLC-CIC-IOPC IN DLC TO OPC-CIC-IOPC IN OPC.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM COL-FIO-OPC.
+           IF NOT FIO-STAT-OKS
+               MOVE 'OPC    NEX'        TO CIP-CMSG IN CIP-VARI
+               MOVE OPC-CIC-IOPC IN OPC TO CIP-MEN2 IN CIP-VARI
+               GO TO FIN-CAL-IMP-PRO.
+
+      * Obtiene la Fecha de Curse Original
+           MOVE OPC-FEC-FCOL IN OPC TO WSS-FEC-FCCO IN WSS-VARI.
+
+      * Obtiene el Valor de Cambio a la Fecha de Curse Original Credito
+           IF OPC-COD-VCOC IN OPC = WSS-COD-PESO IN WSS-VARI
+               MOVE WSS-FEC-FCCO IN WSS-VARI TO CAM-FEC-FCAM IN CAM(1)
+               MOVE WSS-FEC-FCCO IN WSS-VARI TO CAM-FEC-FCAM IN CAM(2)
+               MOVE WSS-COD-UEFE IN WSS-VARI TO CAM-COD-VCAM IN CAM(1)
+               MOVE WSS-COD-PESO IN WSS-VARI TO CAM-COD-VCAM IN CAM(2)
+               MOVE FIO-GET-KEY TO FIO-CMND
+               PERFORM TAB-FIO-CAM
+               IF NOT FIO-STAT-OKS
+                   MOVE 'CODVCAMNEX'        TO CIP-CMSG IN CIP-VARI
+                   MOVE CAM-KEY-CAMB IN CAM TO CIP-MEN2 IN CIP-VARI
+                   GO TO FIN-CAL-IMP-PRO
+               ELSE
+               IF CAM-IND-VIGE IN CAM NOT = 'S'
+                   MOVE 'CODVCAMNVG'        TO CIP-CMSG IN CIP-VARI
+                   MOVE CAM-KEY-CAMB IN CAM TO CIP-MEN2 IN CIP-VARI
+                   GO TO FIN-CAL-IMP-PRO
+               ELSE
+                   MOVE CAM-SGV-VCAM IN CAM TO WSS-SGV-FORI IN WSS-VARI.
+
+      * Obtiene el Valor de Cambio a la Fecha de Curse Nuevo Credito
+           MOVE CIP-DCCN IN CIP-VARI     TO CAM-NUM-DCAM IN CAM(1).
+           MOVE CIP-MCCN IN CIP-VARI     TO CAM-NUM-MCAM IN CAM(1).
+           MOVE CIP-SCCN IN CIP-VARI     TO CAM-NUM-SCAM IN CAM(1).
+           MOVE CIP-ACCN IN CIP-VARI     TO CAM-NUM-ACAM IN CAM(1).
+           MOVE CAM-FEC-FCAM IN CAM(1)   TO CAM-FEC-FCAM IN CAM(2).
+           MOVE WSS-COD-UEFE IN WSS-VARI TO CAM-COD-VCAM IN CAM(1).
+           MOVE WSS-COD-PESO IN WSS-VARI TO CAM-COD-VCAM IN CAM(2).
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM TAB-FIO-CAM.
+           IF NOT FIO-STAT-OKS
+               MOVE 'CODVCAMNEX'        TO CIP-CMSG IN CIP-VARI
+               MOVE CAM-KEY-CAMB IN CAM TO CIP-MEN2 IN CIP-VARI
+               GO TO FIN-CAL-IMP-PRO
+           ELSE
+           IF CAM-IND-VIGE IN CAM NOT = 'S'
+               MOVE 'CODVCAMNVG'        TO CIP-CMSG IN CIP-VARI
+               MOVE CAM-KEY-CAMB IN CAM TO CIP-MEN2 IN CIP-VARI
+               GO TO FIN-CAL-IMP-PRO
+           ELSE
+               MOVE CAM-SGV-VCAM IN CAM TO WSS-SGV-FNEW IN WSS-VARI.
+
+      * Se obtiene Periodo desde FCOL Original a FMAV nuevo credito
+           MOVE WSS-NUM-DCCO IN WSS-VARI TO FEC-DEC1.
+           MOVE WSS-NUM-MCCO IN WSS-VARI TO FEC-MEC1.
+           MOVE WSS-NUM-SCCO IN WSS-VARI TO FEC-SEC1.
+           MOVE WSS-NUM-ACCO IN WSS-VARI TO FEC-AEC1.
+           MOVE CIP-FVCN     IN CIP-VARI TO FEC-FEC2.
+           MOVE FEC-FORM-FEC TO FEC-FORM.
+           MOVE FEC-DIF-MES  TO FEC-CMND.
+           PERFORM CAL-FEC.
+           IF NOT FEC-STAT-OKS
+               MOVE MSG-COD-MENS IN MSG TO CIP-CMSG IN CIP-VARI
+               MOVE FEC-MENS            TO CIP-MEN2 IN CIP-VARI
+               GO TO FIN-CAL-IMP-PRO.
+
+           IF FEC-NDIA > 0
+               ADD 1 TO FEC-NMES.
+
+      * El Periodo Transcurrido se acota a 12 meses
+           IF FEC-NMES > 12
+               MOVE 12 TO WSS-NUM-DMPT IN WSS-VARI
+           ELSE
+               MOVE FEC-NMES TO WSS-NUM-DMPT IN WSS-VARI.
+
+      * Se obtiene Periodo desde FCOL Original a FMAV cred prorrogado
+           MOVE WSS-NUM-DCCO IN WSS-VARI TO FEC-DEC1.
+           MOVE WSS-NUM-MCCO IN WSS-VARI TO FEC-MEC1.
+           MOVE WSS-NUM-SCCO IN WSS-VARI TO FEC-SEC1.
+           MOVE WSS-NUM-ACCO IN WSS-VARI TO FEC-AEC1.
+           MOVE WSS-NUM-DVCP IN WSS-VARI TO FEC-DEC2.
+           MOVE WSS-NUM-MVCP IN WSS-VARI TO FEC-MEC2.
+           MOVE WSS-NUM-SVCP IN WSS-VARI TO FEC-SEC2.
+           MOVE WSS-NUM-AVCP IN WSS-VARI TO FEC-AEC2.
+           MOVE FEC-FORM-FEC TO FEC-FORM.
+           MOVE FEC-DIF-MES  TO FEC-CMND.
+           PERFORM CAL-FEC.
+           IF NOT FEC-STAT-OKS
+               MOVE MSG-COD-MENS IN MSG TO CIP-CMSG IN CIP-VARI
+               MOVE FEC-MENS            TO CIP-MEN2 IN CIP-VARI
+               GO TO FIN-CAL-IMP-PRO.
+
+           IF FEC-NDIA > 0
+               ADD 1 TO FEC-NMES.
+
+      * El Periodo Abonado se acota a 12 meses
+           IF FEC-NMES > 12
+               MOVE 12 TO WSS-NUM-DMPA IN WSS-VARI
+           ELSE
+               MOVE FEC-NMES TO WSS-NUM-DMPA IN WSS-VARI.
+
+      * Se calcula el Periodo al cual se aplica TASA
+           IF WSS-NUM-DMPA IN WSS-VARI = WSS-NUM-DMPT IN WSS-VARI
+               MOVE 0 TO WSS-NUM-DMTS IN WSS-VARI
+           ELSE
+               SUBTRACT WSS-NUM-DMPA IN WSS-VARI FROM
+                        WSS-NUM-DMPT IN WSS-VARI GIVING
+                        WSS-NUM-DMTS IN WSS-VARI.
+
+      *Calcula el valor del Impuesto para Prorrogas
+           IF WSS-NUM-DMTS IN WSS-VARI = 0
+               MOVE 0 TO WSS-VAL-IMPU IN WSS-VARI
+           ELSE
+               COMPUTE WSS-VAL-IMPU IN WSS-VARI =
+                                     ( CIP-NDLC IN CIP-VARI *
+                                   WSS-NUM-DMTS IN WSS-VARI *
+                                   WSS-VAL-FTOR IN WSS-VARI *
+                                   WSS-SGV-FNEW IN WSS-VARI ) /
+                                   WSS-SGV-FORI IN WSS-VARI.
+
+      *Guarda el valor del Impuesto para Prorrogas
+           MOVE WSS-VAL-IMPU IN WSS-VARI TO CIP-IMPP IN CIP-VARI.
+       FIN-CAL-IMP-PRO.
+           EXIT.
+      ******************************************************************
+
+       COPY GNSBFMSG.
+       COPY GNSBFTAB.
+       COPY GNSBGMSG.
+       COPY GNSBGFEC.
+       COPY GNSBPFEC.
+       COPY GNSBGHOY.
+       COPY GNSBGDTC.
+       COPY GNSBIABT.
+       COPY GNSBGFRM.
+       COPY GNSBGSYS.
+       COPY TABBFCAM.
+       COPY COLBFOPC.
+       COPY COLBFDLC.

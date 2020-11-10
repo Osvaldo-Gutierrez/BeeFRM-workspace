@@ -1,0 +1,923 @@
+      $SET LIST LINEINFO SUMMARY ERRORLIST
+       IDENTIFICATION DIVISION.
+      *========================
+       PROGRAM-ID. GNSPPDBG.
+       AUTHOR. BEE.
+       DATE-WRITTEN.        20-FEB-1998 12:30:00.
+      *
+      * GENERA PROGRAMA PARA DEBUG.
+      *
+        ENVIRONMENT DIVISION.
+      *----------------------
+      
+       CONFIGURATION SECTION.
+      *----------------------
+       SPECIAL-NAMES.
+               DECIMAL-POINT IS COMMA.
+      
+       INPUT-OUTPUT SECTION.
+       FILE-CONTROL.
+           SELECT GNSDBI ASSIGN TO DISK
+                  ORGANIZATION IS SEQUENTIAL.
+           SELECT GNSDBO ASSIGN TO DISK.
+      *           ORGANIZATION IS SEQUENTIAL.
+      
+       DATA DIVISION.
+      *==============
+      *
+       FILE SECTION.
+       FD  GNSDBI
+           LABEL RECORD ARE STANDARD
+           VALUE OF FILETYPE IS 7,
+           BLOCKSIZE IS 8600.
+       01  REG-GNSDBI.
+           03  DBI-REG.
+      *        05  DBI-NUM-SEQ1                       PIC X(08).
+               05  DBI-NUM-SEQ2                       PIC X(06).
+               05  DBI-GLS-LINE                       PIC X(72).
+      
+       FD  GNSDBO.
+      *    LABEL RECORD ARE STANDARD
+      *    VALUE OF FILETYPE IS 7.
+       01  REG-GNSDBO.
+           03  DBO-REG.
+               05 DBO-NUM-SECU                        PIC 9(06).
+               05 DBO-GLS-LINE                        PIC X(78).
+      
+      
+      
+      *
+       WORKING-STORAGE SECTION.
+      *------------------------
+      *
+       77  WSS-NUM-CIEN                          PIC 9(02).
+       01  WSS-VEC-SECU.
+           03  WSS-VEC-SECU-ELM OCCURS 6 TIMES.
+               05  WSS-ELM-SECU                  PIC X(01).
+       01  WSS-ARCH-AUX.
+           03  WSS-ARCH-AUX-D1     VALUE SPACES  PIC X(11).
+           03  WSS-ARCH-AUX-D2     VALUE SPACES  PIC X(35).
+           03  WSS-ARCH-AUX-D3     VALUE SPACES  PIC X(16).
+       01  WSS-ARCH-AUX-RED REDEFINES WSS-ARCH-AUX.
+           03  WSS-ARCH-AUX-TBL OCCURS 57 TIMES.
+               05 WSS-ARCH-AUX-ELM               PIC X(01).
+       77  WSS-COMI                              PIC X(01).
+       77  WSS-LINEA-INP-VALIDA                           PIC X(01).
+       77  WSS-IDX-SECU                          PIC 9(03).
+       77  WSS-TOT-LEI             VALUE ZEROES  PIC 9(07).
+       77  WSS-TOT-LEI-EDT         VALUE ZEROES  PIC Z.ZZZ.ZZ9.
+       77  WSS-TOT-GEN             VALUE ZEROES  PIC 9(07).
+       77  WSS-IDX-I               VALUE ZEROES  PIC 9(05).
+       77  WSS-IDX-J               VALUE ZEROES  PIC 9(05).
+       77  WSS-IDX-K               VALUE ZEROES  PIC 9(05).
+       77  WSS-TOT-CBL             VALUE ZEROES  PIC 9(05).
+       77  WSS-TOT-CMP             VALUE ZEROES  PIC 9(05).
+       77  WSS-IND-ENC             VALUE SPACES  PIC X(01).
+       77  WSS-HAY-COPY            VALUE SPACES  PIC X(01).
+       77  WSS-HAY-OF              VALUE SPACES  PIC X(01).
+       77  WSS-HAY-SECTION         VALUE SPACES  PIC X(01).
+       77  WSS-HAY-CONFIGURATION   VALUE SPACES  PIC X(01).
+       77  WSS-HAY-FILE            VALUE SPACES  PIC X(01).
+       77  WSS-HAY-DATA-BASE       VALUE SPACES  PIC X(01).
+       77  WSS-HAY-WORKING-STORAGE VALUE SPACES  PIC X(01).
+       77  WSS-HAY-INPUT-OUTPUT    VALUE SPACES  PIC X(01).
+       77  WSS-HAY-FILE-CONTROL    VALUE SPACES  PIC X(01).
+       77  WSS-HAY-INI-GNS-TAB     VALUE SPACES  PIC X(01).
+       77  WSS-HAY-FIN-GNS-TAB     VALUE SPACES  PIC X(01).
+       77  WSS-HAY-INI-GNS-MSG     VALUE SPACES  PIC X(01).
+       77  WSS-HAY-FIN-GNS-MSG     VALUE SPACES  PIC X(01).
+       77  WSS-HAY-INI-GNS-MSC     VALUE SPACES  PIC X(01).
+       77  WSS-HAY-FIN-GNS-MSC     VALUE SPACES  PIC X(01).
+       77  WSS-HAY-INI-TAB-OFI     VALUE SPACES  PIC X(01).
+       77  WSS-HAY-FIN-TAB-OFI     VALUE SPACES  PIC X(01).
+       77  WSS-HAY-INI-TAB-USR     VALUE SPACES  PIC X(01).
+       77  WSS-HAY-FIN-TAB-USR     VALUE SPACES  PIC X(01).
+       77  WSS-HAY-OPEN-GNSLDB     VALUE SPACES  PIC X(01).
+       77  WSS-HAY-CLOS-GNSLDB     VALUE SPACES  PIC X(01).
+       77  WSS-IDX-SECTION         VALUE ZEROES  PIC 9(01).
+       77  WSS-UTL-SECTION         VALUE SPACES  PIC X(72).
+       77  WSS-HAY-INI-SECTION     VALUE SPACES  PIC X(01).
+       77  WSS-HAY-FIN-SCR-EXIT    VALUE SPACES  PIC X(01).
+      
+       01  WSS-LIN-CMP.
+           03  WSS-LIN-CMP-OCC OCCURS 40 TIMES.
+               05  WSS-LIN-CMP-ELM            PIC X(01).
+        01  WSS-LIN-CBL.
+            03  WSS-LIN-CBL-OCC OCCURS 72 TIMES.
+                05  WSS-LIN-CBL-ELM            PIC X(01).
+      
+      
+       PROCEDURE DIVISION.
+      *===================
+      
+       MAIN SECTION.
+       INI-MAIN.
+           DISPLAY "[[*****COMIENZA  GNSPPDBG*****]]".
+           MOVE """" TO WSS-COMI.
+           MOVE SPACES TO DBO-REG.
+           MOVE ZEROES TO DBO-NUM-SECU.
+           PERFORM PRO-ABRE-ARCH.
+      
+           MOVE "N" TO WSS-HAY-FILE
+                       WSS-HAY-FILE-CONTROL
+                       WSS-HAY-WORKING-STORAGE
+                       WSS-HAY-INI-GNS-TAB
+                       WSS-HAY-FIN-GNS-TAB
+                       WSS-HAY-INI-GNS-MSG
+                       WSS-HAY-FIN-GNS-MSG
+                       WSS-HAY-INI-GNS-MSC
+                       WSS-HAY-FIN-GNS-MSC
+                       WSS-HAY-INI-TAB-OFI
+                       WSS-HAY-FIN-TAB-OFI
+                       WSS-HAY-INI-TAB-USR
+                       WSS-HAY-FIN-TAB-USR
+                       WSS-HAY-OPEN-GNSLDB
+                       WSS-HAY-INI-SECTION
+                       WSS-HAY-CLOS-GNSLDB.
+       LUP-MAIN.
+      *     DISPLAY "EN LUP-MAIN ".
+            READ GNSDBI  RECORD
+                  AT END      DISPLAY "FIN DE ARCHIVO "
+                              DISPLAY "TERMINO DE PROGRAMA"
+                              PERFORM GENERA-PUT-OPN-CLO-LDB
+                              GO TO FIN-MAIN.
+            ADD 1 TO WSS-TOT-LEI.
+            MOVE WSS-TOT-LEI TO WSS-NUM-CIEN.
+            IF WSS-NUM-CIEN = ZEROES
+                 MOVE WSS-TOT-LEI TO WSS-TOT-LEI-EDT
+                 DISPLAY "REGISTROS LEIDOS : " WSS-TOT-LEI-EDT.
+      *     IF WSS-TOT-LEI > 20
+      *         DISPLAY "STOP RUN POR 100 REGISTROS DE PRUEBA"
+      *         GO TO FIN-MAIN.
+            MOVE DBI-NUM-SEQ2 TO WSS-VEC-SECU.
+            MOVE "S" TO WSS-LINEA-INP-VALIDA.
+            PERFORM DTC-LIN-PROG VARYING WSS-IDX-SECU FROM 1 BY 1
+                  UNTIL WSS-IDX-SECU > 6 OR WSS-LINEA-INP-VALIDA = "N"
+            IF WSS-LINEA-INP-VALIDA = "S"
+                PERFORM PROC-LINE
+      *         DISPLAY "DETECTO LINEA DE PROGRAMA"
+      *         ADD 1 TO WSS-TOT-GEN
+                MOVE DBI-GLS-LINE TO DBO-GLS-LINE
+                PERFORM PUT-DBO-PGM.
+      
+            GO TO LUP-MAIN.
+       FIN-MAIN.
+           DISPLAY "REG. LEIDOS : " WSS-TOT-LEI.
+           DISPLAY "REG. GENER. : " WSS-TOT-GEN.
+           PERFORM PRO-CIERRA-ARCH.
+           STOP RUN.
+      
+       DTC-LIN-PROG SECTION.
+       INI-DTC-LIN-PROG.
+            IF WSS-ELM-SECU IN WSS-VEC-SECU(WSS-IDX-SECU) < "0" OR
+               WSS-ELM-SECU IN WSS-VEC-SECU(WSS-IDX-SECU) > "9"
+                 MOVE "N" TO WSS-LINEA-INP-VALIDA.
+       FIN-DTC-LIN-PROG.
+           EXIT.
+      
+       PROC-LINE SECTION.
+       INI-PROC-LINE.
+           MOVE DBI-GLS-LINE TO WSS-LIN-CBL.
+           PERFORM BUSCA-OPEN-GNSLDB.
+      
+           PERFORM BUSCA-CLOS-GNSLDB.
+           IF WSS-HAY-OPEN-GNSLDB = "S"
+              MOVE "*APERTURA DE GNSLDB" TO DBO-GLS-LINE
+              PERFORM PUT-DBO-DBG
+              MOVE "*======== == ======" TO DBO-GLS-LINE
+              PERFORM PUT-DBO-DBG
+              MOVE "       PERFORM OPN-LDB." TO DBO-GLS-LINE
+              MOVE "N"  TO WSS-HAY-OPEN-GNSLDB
+              PERFORM PUT-DBO-DBG.
+           IF WSS-HAY-CLOS-GNSLDB = "S"
+              MOVE "       PERFORM CLO-LDB." TO DBO-GLS-LINE
+              MOVE "N"  TO WSS-HAY-CLOS-GNSLDB
+              PERFORM PUT-DBO-DBG.
+      
+           IF WSS-LIN-CBL-ELM IN WSS-LIN-CBL(1) = "*"
+               GO TO FIN-PROC-LINE.
+      
+           IF WSS-IDX-SECTION = 2
+              MOVE ZEROES TO WSS-IDX-SECTION
+              PERFORM AGREGA-LOG-SECTION
+              MOVE SPACES TO WSS-UTL-SECTION
+              IF WSS-HAY-INI-GNS-TAB = "S" OR
+                 WSS-HAY-INI-GNS-MSC = "S" OR
+                 WSS-HAY-INI-GNS-MSG = "S"
+                     PERFORM AGREGA-LOG-GNS-TAB.
+      
+           IF WSS-HAY-SECTION = "S"
+              PERFORM BUSCA-INI-SECT
+              IF WSS-HAY-INI-SECTION = "S"
+                 IF WSS-IDX-SECTION = 1
+                    ADD 1 TO WSS-IDX-SECTION
+                 ELSE
+                    NEXT SENTENCE
+              ELSE
+                 MOVE ZEROES TO WSS-IDX-SECTION.
+      
+           IF WSS-HAY-FILE-CONTROL = "S"
+              PERFORM INSERTA-FILE-CONTROL.
+      
+           IF WSS-HAY-FILE = "S"
+              PERFORM INSERTA-FILE.
+      
+           IF WSS-HAY-WORKING-STORAGE = "S"
+              PERFORM INSERTA-WORKING-STORAGE.
+      
+           MOVE "N" TO WSS-HAY-COPY
+                       WSS-HAY-OF
+                       WSS-HAY-SECTION
+                       WSS-HAY-CONFIGURATION
+                       WSS-HAY-FILE
+                       WSS-HAY-DATA-BASE
+                       WSS-HAY-WORKING-STORAGE
+                       WSS-HAY-FILE-CONTROL
+                       WSS-HAY-INPUT-OUTPUT
+                       WSS-HAY-INI-GNS-TAB
+                       WSS-HAY-FIN-GNS-TAB
+                       WSS-HAY-INI-GNS-MSG
+                       WSS-HAY-FIN-GNS-MSG
+                       WSS-HAY-INI-GNS-MSC
+                       WSS-HAY-FIN-GNS-MSC
+                       WSS-HAY-INI-TAB-OFI
+                       WSS-HAY-FIN-TAB-OFI
+                       WSS-HAY-INI-TAB-USR
+                       WSS-HAY-FIN-TAB-USR
+                       WSS-HAY-OPEN-GNSLDB
+                       WSS-HAY-INI-SECTION
+                       WSS-HAY-CLOS-GNSLDB
+                       WSS-HAY-FIN-SCR-EXIT.
+      
+           PERFORM BUSCA-COPY.
+           IF WSS-HAY-COPY = "S"
+               PERFORM BUSCA-OF.
+      
+           PERFORM BUSCA-SECTION.
+           IF WSS-HAY-SECTION = "S"
+               PERFORM BUSCA-CONFIGURATION
+               PERFORM BUSCA-FILE
+               PERFORM BUSCA-DATA-BASE
+               PERFORM BUSCA-WORKING-STORAGE
+               PERFORM BUSCA-INPUT-OUTPUT.
+      
+           PERFORM BUSCA-FILE-CONTROL.
+      
+           PERFORM BUSCA-INI-GNS-TAB.
+           PERFORM BUSCA-INI-FIO-MSC.
+           PERFORM BUSCA-INI-FIO-MSG.
+           PERFORM BUSCA-FIN-GNS-TAB.
+           PERFORM BUSCA-FIN-FIO-MSC.
+           PERFORM BUSCA-FIN-FIO-MSG.
+           PERFORM BUSCA-FIN-SCR-EXIT.
+      
+           IF WSS-HAY-FIN-SCR-EXIT = "S"
+              PERFORM INSERTA-FIN-SCR-EXIT.
+      
+           IF WSS-HAY-FIN-GNS-TAB = "S" OR
+              WSS-HAY-FIN-GNS-MSC = "S" OR
+                 WSS-HAY-FIN-GNS-MSG = "S"
+                    PERFORM AGREGA-FIN-GNS.
+      
+           IF WSS-HAY-COPY = "S" AND
+              WSS-HAY-OF   = "S"
+      *          DISPLAY "========> COPY :" WSS-LIN-CBL
+                 PERFORM HDR-COPY
+                 MOVE "*" TO WSS-LIN-CBL-ELM IN WSS-LIN-CBL(1)
+                 MOVE WSS-LIN-CBL TO DBI-GLS-LINE.
+      
+           IF WSS-HAY-SECTION = "S" AND
+              ( WSS-HAY-CONFIGURATION   = "N" AND
+                WSS-HAY-FILE            = "N" AND
+                WSS-HAY-DATA-BASE       = "N" AND
+                WSS-HAY-WORKING-STORAGE = "N" AND
+                WSS-HAY-INPUT-OUTPUT    = "N" )
+      *           DISPLAY "========> SECT :" WSS-LIN-CBL
+                  ADD 1 TO WSS-IDX-SECTION
+                  MOVE DBI-GLS-LINE TO WSS-UTL-SECTION
+                  PERFORM HDR-SECTION.
+      
+       FIN-PROC-LINE.
+           EXIT.
+      
+      
+       AGREGA-LOG-SECTION SECTION.
+       INI-AGREGA-LOG-SECTION.
+           MOVE "     MOVE  ==> EN :   TO LDB-1-TSEC."  TO WSS-ARCH-AUX.
+           MOVE WSS-COMI TO WSS-ARCH-AUX-ELM IN WSS-ARCH-AUX-RED(11).
+           MOVE WSS-COMI TO WSS-ARCH-AUX-ELM IN WSS-ARCH-AUX-RED(21).
+           MOVE WSS-ARCH-AUX          TO DBO-GLS-LINE
+           PERFORM PUT-DBO-DBG.
+           MOVE "     MOVE  "             TO WSS-ARCH-AUX-D1.
+           MOVE WSS-UTL-SECTION      TO WSS-ARCH-AUX-D2.
+           MOVE "  TO LDB-1-NSEC."   TO WSS-ARCH-AUX-D3.
+      *    MOVE WSS-COMI TO WSS-ARCH-AUX-ELM IN WSS-ARCH-AUX-RED(11).
+      *    MOVE WSS-COMI TO WSS-ARCH-AUX-ELM IN WSS-ARCH-AUX-RED(42).
+           MOVE WSS-COMI TO WSS-ARCH-AUX-ELM IN WSS-ARCH-AUX-RED(11).
+           MOVE WSS-COMI TO WSS-ARCH-AUX-ELM IN WSS-ARCH-AUX-RED(42).
+           MOVE WSS-ARCH-AUX         TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+           MOVE "     PERFORM PUT-LDB."   TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+      
+       FIN-AGREGA-LOG-SECTION.
+           EXIT.
+      
+       AGREGA-LOG-GNS-TAB SECTION.
+       INI-AGREGA-LOG-GNS-TAB.
+           MOVE "     MOVE  S/T/C:    TO LDB-2-ITAB."
+           TO WSS-ARCH-AUX.
+           MOVE WSS-COMI TO WSS-ARCH-AUX-ELM IN WSS-ARCH-AUX-RED(11).
+           MOVE WSS-COMI TO WSS-ARCH-AUX-ELM IN WSS-ARCH-AUX-RED(21).
+           MOVE WSS-ARCH-AUX          TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+      
+           MOVE "     MOVE FIO-SIST        TO LDB-2-SIST."
+           TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+      
+      
+           MOVE "     MOVE  /               TO LDB-2-SLH1."
+           TO WSS-ARCH-AUX.
+           MOVE WSS-COMI TO WSS-ARCH-AUX-ELM IN WSS-ARCH-AUX-RED(11).
+           MOVE WSS-COMI TO WSS-ARCH-AUX-ELM IN WSS-ARCH-AUX-RED(13).
+           MOVE WSS-ARCH-AUX          TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+      
+           IF WSS-HAY-INI-GNS-TAB ="S"
+              MOVE "     MOVE TAB-COD-TTAB IN TAB  TO LDB-2-TTAB."
+              TO DBO-GLS-LINE.
+           IF WSS-HAY-INI-GNS-MSC ="S"
+              MOVE "     MOVE MSC-COD-TTAB IN MSC  TO LDB-2-TTAB."
+              TO DBO-GLS-LINE.
+           IF WSS-HAY-INI-GNS-MSG ="S"
+              MOVE "     MOVE MSG-COD-TTAB IN MSG  TO LDB-2-TTAB."
+              TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+      
+           MOVE "     MOVE  /              TO LDB-2-SLH2."
+           TO WSS-ARCH-AUX.
+           MOVE WSS-COMI TO WSS-ARCH-AUX-ELM IN WSS-ARCH-AUX-RED(11).
+           MOVE WSS-COMI TO WSS-ARCH-AUX-ELM IN WSS-ARCH-AUX-RED(13).
+           MOVE WSS-ARCH-AUX          TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+      
+           IF WSS-HAY-INI-GNS-TAB ="S"
+              MOVE "     MOVE TAB-COD-CTAB IN TAB  TO LDB-2-CTAB."
+              TO DBO-GLS-LINE.
+           IF WSS-HAY-INI-GNS-MSC ="S"
+              MOVE "     MOVE MSC-COD-MSCL IN MSC  TO LDB-2-CTAB."
+              TO DBO-GLS-LINE.
+           IF WSS-HAY-INI-GNS-MSG ="S"
+              MOVE "     MOVE MSG-COD-MENS IN MSG  TO LDB-2-CTAB."
+              TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+      
+           MOVE "     PERFORM PUT-LDB."    TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+       FIN-AGREGA-LOG-GNS-TAB.
+           EXIT.
+      
+       AGREGA-FIN-GNS SECTION.
+       INI-AGREGA-FIN-GNS.
+           MOVE "     MOVE  RESULTADO :             TO LDB-3-DATA."
+                                           TO WSS-ARCH-AUX.
+           MOVE WSS-COMI TO WSS-ARCH-AUX-ELM IN WSS-ARCH-AUX-RED(11).
+           MOVE WSS-COMI TO WSS-ARCH-AUX-ELM IN WSS-ARCH-AUX-RED(24).
+           MOVE WSS-ARCH-AUX          TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+      
+           MOVE "     MOVE FIO-STAT                 TO LDB-3-FIO-STAT."
+                                               TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+      
+           MOVE "     MOVE CFT-ELM IN CFT(FIO-CMND) TO LDB-3-CMND"
+                                               TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+      
+           MOVE "     PERFORM PUT-LDB."        TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+      
+       FIN-AGREGA-FIN-GNS.
+           EXIT.
+      
+      
+       CMP-STR SECTION.
+       INI-CMP-STR.
+           MOVE "S" TO WSS-IND-ENC.
+           SUBTRACT 1 FROM WSS-IDX-I GIVING WSS-IDX-K.
+           PERFORM CMP-CHR VARYING WSS-IDX-J FROM 1 BY 1
+                   UNTIL WSS-IDX-J > WSS-TOT-CMP OR
+                   WSS-IND-ENC = "N".
+           IF WSS-IND-ENC = "S"
+              ADD 1 WSS-TOT-CBL GIVING WSS-IDX-I.
+       FIN-CMP-STR.
+           EXIT.
+      
+       CMP-CHR SECTION.
+       INI-CMP-CHR.
+           ADD 1 TO WSS-IDX-K.
+           IF WSS-LIN-CBL-ELM IN WSS-LIN-CBL(WSS-IDX-K) NOT =
+              WSS-LIN-CMP-ELM IN WSS-LIN-CMP(WSS-IDX-J)
+                 MOVE "N" TO WSS-IND-ENC.
+      
+       FIN-CMP-CHR.
+           EXIT.
+      
+       BUSCA-COPY SECTION.
+       INI-BUSCA-COPY.
+           MOVE " COPY " TO WSS-LIN-CMP.
+           MOVE 6        TO WSS-TOT-CMP.
+           COMPUTE WSS-TOT-CBL = 72 - WSS-TOT-CMP.
+           PERFORM CMP-STR VARYING WSS-IDX-I FROM 1 BY 1 UNTIL
+                 WSS-IDX-I > WSS-TOT-CBL.
+           IF WSS-IND-ENC = "S"
+             MOVE "S" TO WSS-HAY-COPY.
+       FIN-BUSCA-COPY.
+           EXIT.
+      
+       BUSCA-OF SECTION.
+       INI-BUSCA-OF.
+           MOVE " OF " TO WSS-LIN-CMP.
+           MOVE 4        TO WSS-TOT-CMP.
+           COMPUTE WSS-TOT-CBL = 72 - WSS-TOT-CMP.
+           PERFORM CMP-STR VARYING WSS-IDX-I FROM 1 BY 1 UNTIL
+                 WSS-IDX-I > WSS-TOT-CBL.
+           IF WSS-IND-ENC = "S"
+             MOVE "S" TO WSS-HAY-OF.
+       FIN-BUSCA-OF.
+           EXIT.
+      
+       BUSCA-SECTION SECTION.
+       INI-BUSCA-SECTION.
+           MOVE " SECTION. " TO WSS-LIN-CMP.
+           MOVE 10           TO WSS-TOT-CMP.
+           COMPUTE WSS-TOT-CBL = 72 - WSS-TOT-CMP.
+           PERFORM CMP-STR VARYING WSS-IDX-I FROM 1 BY 1 UNTIL
+                 WSS-IDX-I > WSS-TOT-CBL.
+           IF WSS-IND-ENC = "S"
+             MOVE "S" TO WSS-HAY-SECTION.
+       FIN-BUSCA-SECTION.
+           EXIT.
+      
+       BUSCA-CONFIGURATION SECTION.
+       INI-BUSCA-CONFIGURATION.
+           MOVE " CONFIGURATION " TO WSS-LIN-CMP.
+           MOVE 15       TO WSS-TOT-CMP.
+           COMPUTE WSS-TOT-CBL = 72 - WSS-TOT-CMP.
+           PERFORM CMP-STR VARYING WSS-IDX-I FROM 1 BY 1 UNTIL
+                 WSS-IDX-I > WSS-TOT-CBL.
+           IF WSS-IND-ENC = "S"
+             MOVE "S" TO WSS-HAY-CONFIGURATION.
+       FIN-BUSCA-CONFIGURATION.
+           EXIT.
+      
+       BUSCA-FILE SECTION.
+       INI-BUSCA-FILE.
+           MOVE " FILE " TO WSS-LIN-CMP.
+           MOVE 6        TO WSS-TOT-CMP.
+           COMPUTE WSS-TOT-CBL = 72 - WSS-TOT-CMP.
+           PERFORM CMP-STR VARYING WSS-IDX-I FROM 1 BY 1 UNTIL
+                 WSS-IDX-I > WSS-TOT-CBL.
+           IF WSS-IND-ENC = "S"
+             MOVE "S" TO WSS-HAY-FILE.
+       FIN-BUSCA-FILE.
+           EXIT.
+      
+       BUSCA-DATA-BASE SECTION.
+       INI-BUSCA-DATA-BASE.
+           MOVE " DATA-BASE " TO WSS-LIN-CMP.
+           MOVE 11       TO WSS-TOT-CMP.
+           COMPUTE WSS-TOT-CBL = 72 - WSS-TOT-CMP.
+           PERFORM CMP-STR VARYING WSS-IDX-I FROM 1 BY 1 UNTIL
+                 WSS-IDX-I > WSS-TOT-CBL.
+           IF WSS-IND-ENC = "S"
+             MOVE "S" TO WSS-HAY-DATA-BASE.
+       FIN-BUSCA-DATA-BASE.
+           EXIT.
+      
+       BUSCA-WORKING-STORAGE SECTION.
+       INI-BUSCA-WORKING-STORAGE.
+           MOVE " WORKING-STORAGE " TO WSS-LIN-CMP.
+           MOVE 17       TO WSS-TOT-CMP.
+           COMPUTE WSS-TOT-CBL = 72 - WSS-TOT-CMP.
+           PERFORM CMP-STR VARYING WSS-IDX-I FROM 1 BY 1 UNTIL
+                 WSS-IDX-I > WSS-TOT-CBL.
+           IF WSS-IND-ENC = "S"
+             MOVE "S" TO WSS-HAY-WORKING-STORAGE.
+       FIN-BUSCA-WORKING-STORAGE.
+           EXIT.
+      
+       BUSCA-INPUT-OUTPUT SECTION.
+       INI-BUSCA-INPUT-OUTPUT.
+           MOVE " INPUT-OUTPUT " TO WSS-LIN-CMP.
+           MOVE 14               TO WSS-TOT-CMP.
+           COMPUTE WSS-TOT-CBL = 72 - WSS-TOT-CMP.
+           PERFORM CMP-STR VARYING WSS-IDX-I FROM 1 BY 1 UNTIL
+                 WSS-IDX-I > WSS-TOT-CBL.
+           IF WSS-IND-ENC = "S"
+             MOVE "S" TO WSS-HAY-INPUT-OUTPUT.
+       FIN-BUSCA-INPUT-OUTPUT.
+           EXIT.
+      
+       BUSCA-FILE-CONTROL SECTION.
+       INI-BUSCA-FILE-CONTROL.
+           MOVE " FILE-CONTROL. " TO WSS-LIN-CMP.
+           MOVE 14               TO WSS-TOT-CMP.
+           COMPUTE WSS-TOT-CBL = 72 - WSS-TOT-CMP.
+           PERFORM CMP-STR VARYING WSS-IDX-I FROM 1 BY 1 UNTIL
+                 WSS-IDX-I > WSS-TOT-CBL.
+           IF WSS-IND-ENC = "S"
+             MOVE "S" TO WSS-HAY-FILE-CONTROL.
+       FIN-BUSCA-FILE-CONTROL.
+           EXIT.
+      
+       BUSCA-INI-GNS-TAB SECTION.
+       INI-BUSCA-INI-GNS-TAB.
+           MOVE " INI-GNS-FIO-TAB." TO WSS-LIN-CMP.
+           MOVE 17                  TO WSS-TOT-CMP.
+           COMPUTE WSS-TOT-CBL = 72 - WSS-TOT-CMP.
+           PERFORM CMP-STR VARYING WSS-IDX-I FROM 1 BY 1 UNTIL
+                 WSS-IDX-I > WSS-TOT-CBL.
+           IF WSS-IND-ENC = "S"
+             MOVE "S" TO WSS-HAY-INI-GNS-TAB.
+       FIN-BUSCA-INI-GNS-TAB.
+           EXIT.
+      
+       BUSCA-INI-FIO-MSC SECTION.
+       INI-BUSCA-INI-FIO-MSC.
+           MOVE " INI-GNS-FIO-MSC." TO WSS-LIN-CMP.
+           MOVE 17                  TO WSS-TOT-CMP.
+           COMPUTE WSS-TOT-CBL = 72 - WSS-TOT-CMP.
+           PERFORM CMP-STR VARYING WSS-IDX-I FROM 1 BY 1 UNTIL
+                 WSS-IDX-I > WSS-TOT-CBL.
+           IF WSS-IND-ENC = "S"
+             MOVE "S" TO WSS-HAY-INI-GNS-MSC.
+       FIN-BUSCA-INI-FIO-MSC.
+           EXIT.
+      
+       BUSCA-INI-FIO-MSG SECTION.
+       INI-BUSCA-INI-FIO-MSG.
+           MOVE " INI-GNS-FIO-MSG." TO WSS-LIN-CMP.
+           MOVE 17                  TO WSS-TOT-CMP.
+           COMPUTE WSS-TOT-CBL = 72 - WSS-TOT-CMP.
+           PERFORM CMP-STR VARYING WSS-IDX-I FROM 1 BY 1 UNTIL
+                 WSS-IDX-I > WSS-TOT-CBL.
+           IF WSS-IND-ENC = "S"
+             MOVE "S" TO WSS-HAY-INI-GNS-MSG.
+       FIN-BUSCA-INI-FIO-MSG.
+           EXIT.
+      
+       BUSCA-FIN-GNS-TAB SECTION.
+       INI-BUSCA-FIN-GNS-TAB.
+           MOVE " FIN-GNS-FIO-TAB." TO WSS-LIN-CMP.
+           MOVE 17                  TO WSS-TOT-CMP.
+           COMPUTE WSS-TOT-CBL = 72 - WSS-TOT-CMP.
+           PERFORM CMP-STR VARYING WSS-IDX-I FROM 1 BY 1 UNTIL
+                 WSS-IDX-I > WSS-TOT-CBL.
+           IF WSS-IND-ENC = "S"
+             MOVE "S" TO WSS-HAY-FIN-GNS-TAB.
+       FIN-BUSCA-FIN-GNS-TAB.
+           EXIT.
+      
+       BUSCA-FIN-FIO-MSC SECTION.
+       INI-BUSCA-FIN-FIO-MSC.
+           MOVE " FIN-GNS-FIO-MSC." TO WSS-LIN-CMP.
+           MOVE 17                  TO WSS-TOT-CMP.
+           COMPUTE WSS-TOT-CBL = 72 - WSS-TOT-CMP.
+           PERFORM CMP-STR VARYING WSS-IDX-I FROM 1 BY 1 UNTIL
+                 WSS-IDX-I > WSS-TOT-CBL.
+           IF WSS-IND-ENC = "S"
+             MOVE "S" TO WSS-HAY-FIN-GNS-MSC.
+       FIN-BUSCA-FIN-FIO-MSC.
+           EXIT.
+      
+       BUSCA-FIN-FIO-MSG SECTION.
+       INI-BUSCA-FIN-FIO-MSG.
+           MOVE " FIN-GNS-FIO-MSG." TO WSS-LIN-CMP.
+           MOVE 17                  TO WSS-TOT-CMP.
+           COMPUTE WSS-TOT-CBL = 72 - WSS-TOT-CMP.
+           PERFORM CMP-STR VARYING WSS-IDX-I FROM 1 BY 1 UNTIL
+                 WSS-IDX-I > WSS-TOT-CBL.
+           IF WSS-IND-ENC = "S"
+             MOVE "S" TO WSS-HAY-FIN-GNS-MSG.
+       FIN-BUSCA-FIN-FIO-MSG.
+           EXIT.
+      
+       BUSCA-OPEN-GNSLDB SECTION.
+       INI-BUSCA-OPEN-GNSLDB.
+           MOVE "*OPEN GNSLDB "     TO WSS-LIN-CMP.
+           MOVE 13                  TO WSS-TOT-CMP.
+           COMPUTE WSS-TOT-CBL = 72 - WSS-TOT-CMP.
+           PERFORM CMP-STR VARYING WSS-IDX-I FROM 1 BY 1 UNTIL
+                 WSS-IDX-I > WSS-TOT-CBL.
+           IF WSS-IND-ENC = "S"
+             MOVE "S" TO WSS-HAY-OPEN-GNSLDB.
+       FIN-BUSCA-OPEN-GNSLDB.
+           EXIT.
+      
+       BUSCA-CLOS-GNSLDB SECTION.
+       INI-BUSCA-CLOS-GNSLDB.
+           MOVE "*CLOSE GNSLDB "    TO WSS-LIN-CMP.
+           MOVE 14                  TO WSS-TOT-CMP.
+           COMPUTE WSS-TOT-CBL = 72 - WSS-TOT-CMP.
+           PERFORM CMP-STR VARYING WSS-IDX-I FROM 1 BY 1 UNTIL
+                 WSS-IDX-I > WSS-TOT-CBL.
+           IF WSS-IND-ENC = "S"
+             MOVE "S" TO WSS-HAY-CLOS-GNSLDB.
+       FIN-BUSCA-CLOS-GNSLDB.
+           EXIT.
+      
+       BUSCA-INI-SECT SECTION.
+       INI-BUSCA-INI-SECT.
+           MOVE " INI-" TO WSS-LIN-CMP.
+           MOVE 4       TO WSS-TOT-CMP.
+           COMPUTE WSS-TOT-CBL = 72 - WSS-TOT-CMP.
+           PERFORM CMP-STR VARYING WSS-IDX-I FROM 1 BY 1 UNTIL
+                 WSS-IDX-I > WSS-TOT-CBL.
+           IF WSS-IND-ENC = "S"
+             MOVE "S" TO WSS-HAY-INI-SECTION.
+       FIN-BUSCA-INI-SECT.
+           EXIT.
+      
+       BUSCA-FIN-SCR-EXIT SECTION.
+       INI-BUSCA-FIN-SCR-EXIT.
+           MOVE " FIN-SCR-EXIT." TO WSS-LIN-CMP.
+           MOVE 14      TO WSS-TOT-CMP.
+           COMPUTE WSS-TOT-CBL = 72 - WSS-TOT-CMP.
+           PERFORM CMP-STR VARYING WSS-IDX-I FROM 1 BY 1 UNTIL
+                WSS-IDX-I > WSS-TOT-CBL.
+           IF WSS-IND-ENC = "S"
+             MOVE "S" TO WSS-HAY-FIN-SCR-EXIT.
+       FIN-BUSCA-FIN-SCR-EXIT.
+           EXIT.
+      
+       HDR-COPY SECTION.
+       INI-HDR-COPY.
+           MOVE "*" TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+      
+           MOVE "*  INICIO COPY EN PROGRAMA" TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+      
+           MOVE "*  ====== ==== == ========" TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+      
+       FIN-HDR-COPY.
+           EXIT.
+      
+       HDR-SECTION SECTION.
+       INI-HDR-SECTION.
+           MOVE "*" TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+      
+           MOVE "*  INICIO SECTION EN PROGRAMA" TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+      
+           MOVE "*  ====== ======= == ========" TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+      
+       FIN-HDR-SECTION.
+           EXIT.
+      
+       INSERTA-FILE-CONTROL SECTION.
+       INI-INSERTA-FILE-CONTROL.
+           MOVE "     SELECT GNSLDB ASSIGN TO DISK" TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+      
+           MOVE "           ORGANIZATION IS SEQUENTIAL."
+                                                   TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+      
+       FIN-INSERTA-FILE-CONTROL.
+           EXIT.
+      
+       INSERTA-FILE SECTION.
+       INI-INSERTA-FILE.
+           MOVE " FD GNSLDB" TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+           MOVE "    LABEL RECORD ARE STANDARD" TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+           MOVE "    VALUE OF FILETYPE IS 7," TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+           MOVE "    BLOCKSIZE IS 7200." TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+           MOVE " 01  LDB."                          TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+           MOVE "     03  LDB-TERM               PIC X(20)."
+                                                      TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+           MOVE "     03  LDB-FECH               PIC X(06)."
+                                                      TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+           MOVE "     03  LDB-HORA               PIC X(08)."
+                                                      TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+           MOVE "     03  LDB-INIC               PIC X(01)."
+                                                      TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+           MOVE "     03  LDB-DATA               PIC X(37)."
+                                                      TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+      
+       FIN-INSERTA-FILE.
+           EXIT.
+      
+       INSERTA-WORKING-STORAGE SECTION.
+       INI-INSERTA-WORKING-STORAGE.
+           MOVE "  COPY GNSWGCFT OF GNS."     TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+           MOVE "* IDENTIFICACION DE SECTION" TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+           MOVE " 01  LDB-1." TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+           MOVE "     03  LDB-1-TSEC          PIC X(08)."
+                                                      TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+           MOVE "     03  LDB-1-NSEC          PIC X(29)."
+                                                      TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+           MOVE "* IDENTIFICACION DE CODIGO"  TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+           MOVE " 01  LDB-2 REDEFINES LDB-1." TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+           MOVE "     03  LDB-2-ITAB             PIC X(09)."
+                                                      TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+           MOVE "     03  LDB-2-SIST             PIC X(03)."
+                                                      TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+           MOVE "     03  LDB-2-SLH1             PIC X(01)."
+                                                      TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+           MOVE "     03  LDB-2-TTAB             PIC X(03)."
+                                                      TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+           MOVE "     03  LDB-2-SLH2             PIC X(01)."
+                                                      TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+           MOVE "     03  LDB-2-CTAB             PIC X(12)."
+                                                      TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+           MOVE "     03  LDB-2-SLH3             PIC X(01)."
+                                                      TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+      *    MOVE "     03  LDB-2-CMND             PIC 9(05)."
+      *                                               TO DBO-GLS-LINE.
+      *    PERFORM PUT-DBO-DBG.
+           MOVE "     03  LDB-2-FILL             PIC X(07)."
+                                                      TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+      
+           MOVE " 01  LDB-3 REDEFINES LDB-1." TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+      
+           MOVE "     03  LDB-3-DATA                PIC X(12)."
+                                                      TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+      
+           MOVE "     03  LDB-3-FIO-STAT            PIC X(02)."
+                                                      TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+      
+           MOVE "     03  LDB-3-BLNC                PIC X(01)."
+                                                      TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+      
+           MOVE "     03  LDB-3-CMND                PIC X(07)."
+                                                      TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+      
+           MOVE "     03  LDB-3-RESTO               PIC X(16)."
+                                                      TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+       FIN-INSERTA-WORKING-STORAGE.
+           EXIT.
+      
+       INSERTA-FIN-SCR-EXIT SECTION.
+       INI-INSERTA-FIN-SCR-EXIT.
+           MOVE "     IF SYS-IND-ENDC =  S "
+                                             TO WSS-ARCH-AUX.
+           MOVE WSS-COMI TO WSS-ARCH-AUX-ELM IN WSS-ARCH-AUX-RED(24).
+           MOVE WSS-COMI TO WSS-ARCH-AUX-ELM IN WSS-ARCH-AUX-RED(26).
+           MOVE WSS-ARCH-AUX                 TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+           MOVE "         PERFORM CLO-LDB"   TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+           MOVE "         STOP RUN."         TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+       FIN-INSERTA-FIN-SCR-EXIT.
+           EXIT.
+      
+       PRO-ABRE-ARCH SECTION.
+       INI-PRO-ABRE-ARCH.
+           DISPLAY "ABRIENDO GNSDBI".
+           OPEN INPUT GNSDBI.
+           DISPLAY "GNSDBI ABIERTO".
+      *FALTA VERIFICAR ERROR EN APERTURA DE ARCHIVO
+      
+           CHANGE ATTRIBUTE FILEKIND   OF GNSDBO TO
+                                               VALUE(COBOL74SYMBOL).
+           CHANGE ATTRIBUTE FRAMESIZE  OF GNSDBO TO 48.
+           CHANGE ATTRIBUTE AREASIZE   OF GNSDBO TO 1080.
+           CHANGE ATTRIBUTE BLOCKSIZE  OF GNSDBO TO 8400.
+           CHANGE ATTRIBUTE MAXRECSIZE OF GNSDBO TO 14.
+      
+      
+      
+      *    MOVE VALUE(COBOL74SYMBOL) TO FILETYPE OF GNSDBO.
+           OPEN OUTPUT GNSDBO.
+       FIN-PRO-ABRE-ARCH.
+           EXIT.
+      
+       PRO-CIERRA-ARCH SECTION.
+       INI-PRO-CIERRA-ARCH.
+            CLOSE GNSDBI  WITH RELEASE.
+            CLOSE GNSDBO  CRUNCH.
+       FIN-PRO-CIERRA-ARCH.
+           EXIT.
+      
+       PUT-DBO-PGM SECTION.
+       INI-PUT-DBO-PGM.
+          ADD 10 TO DBO-NUM-SECU.
+          ADD 1 TO WSS-TOT-GEN.
+          WRITE REG-GNSDBO INVALID KEY DISPLAY
+                "ERROR AL GRABAR GNSDBO".
+       FIN-PUT-DBO-PGM.
+           EXIT.
+      
+       PUT-DBO-DBG SECTION.
+       INI-PUT-DBO-DBG.
+          ADD 11 TO DBO-NUM-SECU.
+          ADD 1 TO WSS-TOT-GEN.
+          WRITE REG-GNSDBO INVALID KEY DISPLAY
+                "ERROR AL GRABAR GNSDBO".
+          SUBTRACT 1 FROM DBO-NUM-SECU.
+       FIN-PUT-DBO-DBG.
+           EXIT.
+      
+       GENERA-PUT-OPN-CLO-LDB SECTION.
+       INI-GENERA-PUT-OPN-CLO-LDB.
+           MOVE " PUT-LDB SECTION."   TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+           MOVE " INI-PUT-LDB."   TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+           MOVE "     MOVE EIBTRMID TO LDB-TERM." TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+           MOVE "     ACCEPT LDB-FECH FROM DATE." TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+           MOVE "     ACCEPT LDB-HORA FROM TIME." TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+           MOVE "     MOVE LDB-1 TO LDB-DATA.   " TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+           MOVE "     WRITE LDB INVALID KEY DISPLAY"
+                                                  TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+           MOVE "           ERROR AL GRABAR GNSLDB ." TO WSS-ARCH-AUX.
+           MOVE WSS-COMI TO WSS-ARCH-AUX-ELM IN WSS-ARCH-AUX-RED(11).
+           MOVE WSS-COMI TO WSS-ARCH-AUX-ELM IN WSS-ARCH-AUX-RED(34).
+           MOVE WSS-ARCH-AUX          TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+           MOVE "     MOVE SPACES TO LDB-1.     " TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+           MOVE " FIN-PUT-LDB."   TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+           MOVE "     EXIT."                      TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+           MOVE " "                               TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+      
+           MOVE " OPN-LDB SECTION."               TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+           MOVE " INI-OPN-LDB."                   TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+           MOVE "     PERFORM GNS-CFT."           TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+           MOVE "     OPEN OUTPUT GNSLDB."        TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+           MOVE " FIN-OPN-LDB."                   TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+           MOVE "     EXIT."                      TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+           MOVE " "                               TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+      
+           MOVE " CLO-LDB SECTION."               TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+           MOVE " INI-CLO-LDB."                   TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+           MOVE "     CLOSE GNSLDB WITH LOCK."    TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+           MOVE " FIN-CLO-LDB."                   TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+           MOVE "     EXIT."                      TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+           MOVE "  "                              TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+      
+           MOVE " COPY GNSBGCFT OF GNS."          TO DBO-GLS-LINE.
+           PERFORM PUT-DBO-DBG.
+      
+       FIN-GENERA-PUT-OPN-CLO-LDB.
+           EXIT.
+      

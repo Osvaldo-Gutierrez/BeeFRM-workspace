@@ -1,0 +1,133 @@
+$SET SHARING = SHAREDBYRUNUNIT
+ BEGIN
+ EBCDIC ARRAY E[0:100];
+ BOOLEAN LOG;
+ FILE LISTADO(KIND=DISK,MAXRECSIZE=540,FRAMESIZE=8,MYUSE=OUT,
+              BLOCKSIZE=5400,
+              TITLE="GNS/GNSLOT.",SECURITYTYPE=PUBLIC);
+ LIBRARY COMS_LIB(LIBACCESS = BYFUNCTION,FUNCTIONNAME="COMSSUPPORT.");
+      
+ INTEGER PROCEDURE GET_NAME_USING_DESIGNATOR(STA_DESG, STA_NAME);
+   REAL STA_DESG;
+   EBCDIC ARRAY STA_NAME[0];
+   LIBRARY COMS_LIB;
+      
+ DEFINE
+   COMS_IN_PROGRAM         = CD_IN[0]#,
+   COMS_IN_FUNCTION_INDEX  = CD_IN[1]#,
+   COMS_IN_FUNCTION_STATUS = CD_IN[1]#,
+   COMS_IN_USERCODE        = CD_IN[2]#,
+   COMS_IN_SECURITY_DESG   = CD_IN[3]#,
+   COMS_IN_DATE            = CD_IN[4]#,
+   COMS_IN_TIMESTAMP       = CD_IN[5]#,
+   COMS_IN_STATION         = CD_IN[6]#,
+   COMS_IN_TEXT_LENGTH     = CD_IN[7]#,
+   COMS_IN_END_KEY         = CD_IN[8]#,
+   COMS_IN_STATUS_KEY      = CD_IN[9]#,
+   COMS_IN_RST_LOC         = CD_IN[10]#,
+   COMS_IN_AGENDA          = CD_IN[11]#,
+   COMS_IN_CD_SIZE(S)      = (STATE_CONVINX(S)) #;
+      
+ REAL PROCEDURE PROC_ITEM(STATE,
+                          CD_IN,
+                          USER_DATA,
+                          TEXT_1,
+                          TEXT_2,
+                          OUTPUT_PROC);
+   REAL STATE;
+   ARRAY CD_IN[0];
+   EBCDIC ARRAY USER_DATA[0], TEXT_1[0],
+   TEXT_2[0];
+   REAL PROCEDURE OUTPUT_PROC(STATE,
+                              HEADER,
+                              TEXT_1,
+                              TEXT_2);
+     REAL STATE;
+     ARRAY HEADER[0];
+     EBCDIC ARRAY TEXT_1[0], TEXT_2[0];
+     FORMAL;
+   BEGIN
+   POINTER P;
+   INTEGER I;
+   EBCDIC ARRAY REFERENCE TEXT[0],
+                          STA_NAME[0],
+                          LINEA [0];
+ % DISPLAY("INGRESO A LA LIBRERIA");
+   IF STATE.[0:1] = 0 THEN   %MENSAJE DE INPUT
+     BEGIN
+ %   DISPLAY("MENSAJE DE INPUT");
+     CASE (STATE.[15:2]) OF BEGIN
+       (0): TEXT     := USER_DATA;
+            STA_NAME := TEXT_1;
+            LINEA    := TEXT_2;
+       (1): TEXT     := TEXT_1;
+            STA_NAME := TEXT_2;
+            LINEA    := USER_DATA;
+       (2): TEXT     := TEXT_2;
+            STA_NAME := TEXT_1;
+            LINEA    := USER_DATA;
+     END; %CASE;
+      
+     IF (TEXT[0] = "LOGI+") THEN
+       BEGIN
+       IF NOT LOG THEN
+         BEGIN
+         LOG := TRUE;
+         DISPLAY("ABRIENDO ARCHIVO GNS/GNSLOT...");
+         OPEN(LISTADO);
+         END;
+       END
+     ELSE IF (TEXT[0] = "LOGI-") THEN
+       BEGIN
+       IF LOG THEN
+         BEGIN
+         REPLACE E
+              BY "CERRANDO ARCHIVO:",LISTADO.TITLE;
+         DISPLAY(E);
+         CLOSE(LISTADO, LOCK);
+         LOG := FALSE;
+         END;
+       END
+     ELSE IF (TEXT[0] = "LOGI?") THEN
+       BEGIN
+       IF LOG THEN
+         DISPLAY("LOG ACTIVO")
+       ELSE
+         DISPLAY("LOG NO ACTIVO");
+       END;
+     IF LOG THEN
+       BEGIN
+       IF SIZE(STA_NAME) LSS 300 THEN
+         RESIZE(STA_NAME, 300);
+       IF SIZE(LINEA) LSS 540 THEN
+         RESIZE(LINEA, 540);
+       REPLACE STA_NAME BY " " FOR 50 WORDS;
+       GET_NAME_USING_DESIGNATOR(COMS_IN_STATION,STA_NAME);
+       REPLACE LINEA BY " " FOR 540;
+       REPLACE P:LINEA
+            BY TIME(7).[23:06] FOR 2 DIGITS,":",
+               TIME(7).[17:06] FOR 2 DIGITS,":",
+               TIME(7).[11:06] FOR 2 DIGITS," ",
+               STA_NAME[0] FOR 20;
+       REPLACE STA_NAME BY " " FOR 22 WORDS;
+       GET_NAME_USING_DESIGNATOR(COMS_IN_AGENDA,STA_NAME);
+       REPLACE P:P
+            BY STA_NAME[0] FOR 10,":(",COMS_IN_TEXT_LENGTH FOR 4 DIGITS,
+               "/",COMS_IN_STATUS_KEY FOR 2 DIGITS;
+       IF COMS_IN_FUNCTION_STATUS < 0 THEN
+         REPLACE P:P
+              BY "/-",COMS_IN_FUNCTION_STATUS FOR 3 DIGITS,")"
+       ELSE
+         REPLACE P:P
+              BY "/+",COMS_IN_FUNCTION_STATUS FOR 3 DIGITS,")";
+       REPLACE P:P
+            BY TEXT[0] FOR MIN(492,SIZE(TEXT),COMS_IN_TEXT_LENGTH);
+       WRITE(LISTADO,540,LINEA);
+       END;
+     END;
+   END OF PROC_ITEM;
+      
+   EXPORT PROC_ITEM;
+      
+   FREEZE (PERMANENT);
+ END.

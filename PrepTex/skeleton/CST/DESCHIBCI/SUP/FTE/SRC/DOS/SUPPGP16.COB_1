@@ -1,0 +1,590 @@
+       IDENTIFICATION DIVISION.
+      *************************
+       PROGRAM-ID.     SUPPGP16.
+      *AUTHOR.         DONOSO JARA OSVALDO.
+      *                DATE-WRITTEN,  15/09/95.
+00000 *COMPILED SITE 2000         07.08.98
+      ******************************************************************
+      *  INTERSOFT                                                     *
+      *  MIGRACION A COBOL OS/390                                      *
+      *  FECHA: 15 DE ABRIL DE 1998                                    *
+      ******************************************************************
+      ******************************************************************
+      *  Sistema  : Sistema Super Bancos                               *
+      *  Subsist. :                                                    *
+      *  Analista : Donoso J. Osvaldo                                  *
+      *  Objetivo : Genera archivo P16 formato Super                   *
+      *                                                                *
+      *  Archivos :                                                    *
+      *   Entrada : SUPVD01, Archivo D01 formato banco                 *
+      *             SUPVD02, Archivo D02 formato banco                 *
+      *             SUPVTAR, Carteras origen asociadas a Cod. Producto *
+      *             TAB-150, Tabla de valores (VLR)                    *
+      *                                                                *
+      *   Salida  : SUPVP16, Archivo P16 enviado a la Super            *
+      *                                                                *
+      *   Ent/Sal :                                                    *
+      *                                                                *
+      *   Trabajo : SUPVSOR, Archivo Sort de paso                      *
+      *                                                                *
+      *  Mantenciones                                                  *
+      *  ============                                                  *
+      *            Programador: David Parraguez Muoz......            *
+      *            Fecha      : 25/06/98                               *
+      *            Cambio     : Se modifica el formato de las fechas   *
+      *                         en el archivo P16 en el item ao, de   *
+      *                         AA por AAAA a peticion de la SUPER.    *
+      *                                                                *
+      *            Programador: ...........................            *
+      *            Fecha      : dd/mm/aa                               *
+      *            Cambio     : .....................................  *
+      *                         .....................................  *
+      *                         .....................................  *
+      ******************************************************************
+           EJECT
+       ENVIRONMENT DIVISION.
+      **********************
+       CONFIGURATION SECTION.
+      *=====================
+       SPECIAL-NAMES.
+                      DECIMAL-POINT IS COMMA.
+       INPUT-OUTPUT SECTION.
+      *=====================
+       FILE-CONTROL.
+           SELECT SUPVD01 ASSIGN       TO SUPVD01
+                  ORGANIZATION         IS INDEXED
+                  ACCESS MODE          IS RANDOM
+                  RECORD KEY           IS D01-COD-ID01
+                  FILE STATUS          IS WR-FS-SUPVD01.
+           SELECT SUPVD02 ASSIGN       TO SUPVD02
+                  ORGANIZATION         IS INDEXED
+                  ACCESS MODE          IS SEQUENTIAL
+                  RECORD KEY           IS D02-COD-ID02
+                  FILE STATUS          IS WR-FS-SUPVD02.
+           SELECT SUPVP16 ASSIGN       TO SUPVP16
+                  FILE STATUS          IS WR-FS-SUPVP16.
+           SELECT SUPVSOR ASSIGN       TO SORTWK1.
+           SELECT SUPVTAR ASSIGN       TO SUPVTAR
+                  FILE STATUS          IS WR-FS-SUPVTAR.
+           EJECT
+       DATA DIVISION.
+      *==============
+           SKIP3
+       FILE SECTION.
+      *=============
+       FD  SUPVD01                LABEL RECORD STANDARD
+                                  RECORD CONTAINS 695 CHARACTERS
+                                  BLOCK  CONTAINS 0 RECORDS.
+       COPY SUPBRD01.
+           SKIP1
+       FD  SUPVD02                LABEL RECORD STANDARD
+                                  RECORD CONTAINS 460 CHARACTERS
+                                  BLOCK  CONTAINS 0 RECORDS.
+       COPY SUPBRD02.
+           SKIP1
+       FD  SUPVP16                LABEL RECORD STANDARD
+                                  RECORD CONTAINS 24 CHARACTERS
+                                  BLOCK  CONTAINS 0 RECORDS.
+       COPY SUPBRP16.
+       SD  SUPVSOR                LABEL RECORD STANDARD
+                                  RECORD CONTAINS 24 CHARACTERS
+                                  BLOCK  CONTAINS 0 RECORDS.
+       01  SUPRSOR.
+      * Llave
+           05 SOR-KEY-IP16.
+      * Identificacion de producto
+              10 SOR-COD-PROD               PIC  X(03).
+      * Codigo de region
+              10 SOR-COD-REGI               PIC  X(02).
+      * Codigo de moneda
+              10 SOR-COD-MONE               PIC  X(03).
+      * Codigo actividad economica
+              10 SOR-COD-ACTI               PIC  X(02).
+      * Saldo a fin de mes
+           05 SOR-VAL-SLDO                  PIC  9(14).
+           SKIP1
+       FD  SUPVTAR.
+       01  SUPRTAR                          PIC  X(80).
+           SKIP1
+       WORKING-STORAGE SECTION.
+      *========================
+       01  W-PARAMETROS.
+           05 FILLER                        PIC X(20).
+           05 WP-FEC-PRO.
+              10 WP-SIG-PRO                 PIC X(02).
+              10 WP-ANO-PRO                 PIC X(02).
+              10 WP-MES-PRO                 PIC X(02).
+              10 WP-DIA-PRO                 PIC X(02).
+           05 FILLER                        PIC X(52).
+           SKIP1
+       01  W-TABLAS.
+           05 WT-PRODUCTOS OCCURS 100 TIMES INDEXED BY WI-PRO.
+              10 WT-COD-TCCO                PIC  X(04).
+              10 FILLER                     PIC  X(01).
+              10 WT-COD-PROD                PIC  X(03).
+           05 WT-VLR-EXT OCCURS 100 TIMES INDEXED BY WI-MON.
+              10 WT-COD-MBCO                PIC  X(03).
+              10 WT-COD-MEXT                PIC  X(03).
+           SKIP1
+       01  W-SWITCHES.
+           05 WS-PROCESO                    PIC 9(01) VALUE 0.
+              88 WS-PROCESO-OK       VALUE 0.
+              88 WS-PROCESO-ERROR    VALUE 1.
+              88 WS-PROCESO-WARNING  VALUE 2.
+           SKIP1
+       01  W-CONTADORES-Y-ACUMULADORES.
+           02 WA-L-D02                      PIC 9(06) VALUE 0.
+           02 WA-L-SOR                      PIC 9(06) VALUE 0.
+           02 WA-G-SOR                      PIC 9(06) VALUE 0.
+           02 WA-G-P16                      PIC 9(06) VALUE 0.
+           SKIP1
+       01  W-REGISTROS-DE-TRABAJO.
+           05 WR-FECHA-HOY.
+              10 WR-HOY-AA                  PIC X(02).
+              10 WR-HOY-MM                  PIC X(02).
+              10 WR-HOY-DD                  PIC X(02).
+           05 WR-MENSAJES.
+              10 WR-SECCION                 PIC X(15).
+              10 WR-PARRAFO                 PIC X(15).
+              10 WR-ARCHIVO                 PIC X(10).
+              10 WR-OPERACI                 PIC X(10).
+              10 WR-FILE-ST                 PIC X(02).
+              10 WR-MENSAJE                 PIC X(35).
+           05 WR-FS-SUPVD01                 PIC 9(02) VALUE 0.
+           05 WR-FS-SUPVD02                 PIC 9(02) VALUE 0.
+           05 WR-FS-SUPVP16                 PIC 9(02) VALUE 0.
+           05 WR-FS-SUPVSOR                 PIC 9(02) VALUE 0.
+           05 WR-FS-SUPVTAR                 PIC 9(02) VALUE 0.
+           05 WR-COD-PROD-OK                PIC X(02).
+           05 WR-COD-MONE                   PIC X(03).
+           05 WR-SISTEMA                    PIC X(01).
+      *<<<< VARIABLES PARA RUTINA DE VAL DE FECHAS
+       COPY RTNWCALE.
+      *
+      ******************************************************************
+      * Areas de uso para Datacom                                      *
+      ******************************************************************
+      *
+       01  WB-UIB.
+           05 FILLER                        PIC X(32) VALUE 'SUPPGP16'.
+      *
+       01  WB-REQ-TAB-AREA.
+           02 WB-REQ-TAB-CMD                PIC X(5) VALUE 'REDKY'.
+           02 FILLER                        PIC X(3) VALUE 'TAB'.
+           02 FILLER                        PIC X(5) VALUE 'TAB03'.
+           02 WB-REQ-TAB-RC                 PIC X(2) VALUE SPACES.
+           02 FILLER                        PIC X(1).
+           02 FILLER                        PIC S9(4) COMP VALUE +150.
+           02 FILLER                        PIC X(58).
+           02 WB-REQ-TAB-KEY-VALUE.
+              03 WB-REQ-TAB-KEY-TAB         PIC X(03).
+              03 WB-REQ-TAB-KEY-COD         PIC X(12).
+      *
+           COPY GNSBRTAB.
+      *
+       01  WB-ELEM-LIS                      PIC X(11).
+      *
+           EJECT
+       PROCEDURE DIVISION.
+      *===================
+       A-CONTROL SECTION.
+      *=================
+       AA-INICIALIZACION.
+           ENTRY 'DBMSCBL'.
+      *
+           PERFORM B-INICIALIZAR.
+           SKIP1
+       AB-PROCESAMIENTO.
+           IF WS-PROCESO-OK
+              SORT SUPVSOR ON   ASCENDING KEY SOR-KEY-IP16
+                         INPUT  PROCEDURE C-PROCESAR
+                         OUTPUT PROCEDURE E-GENERAR-P16
+           END-IF.
+           SKIP1
+       AC-TERMINACION.
+           PERFORM D-TERMINAR.
+           SKIP1
+       AZ-FIN-DE-SECCION.
+           STOP RUN.
+           EJECT
+       B-INICIALIZAR SECTION.
+      *======================
+       BA-PROC-PPAL.
+      *-------------
+           PERFORM BB-ABRIR-ARCHIVOS.
+           PERFORM BC-VALIDA-FECHA.
+           PERFORM BE-CARGA-TABLA-PROD.
+           GO BZ-FIN-DE-SECCION.
+       BB-ABRIR-ARCHIVOS.
+      *------------------
+           OPEN OUTPUT SUPVP16
+                INPUT  SUPVD01 SUPVD02 SUPVTAR.
+
+           IF WR-FS-SUPVP16 NOT = 0 AND NOT = 97
+              MOVE 'B-INICIALIZAR'          TO WR-SECCION
+              MOVE 'BB-ABRIR-ARCHIVOS'      TO WR-PARRAFO
+              MOVE 'SUPVP16    '            TO WR-ARCHIVO
+              MOVE 'OPEN       '            TO WR-OPERACI
+              MOVE WR-FS-SUPVP16            TO WR-FILE-ST
+              PERFORM BF-DISPLAY-ERROR
+           END-IF.
+           IF WR-FS-SUPVD01 NOT = 0 AND NOT = 97
+              MOVE 'B-INICIALIZAR'          TO WR-SECCION
+              MOVE 'BB-ABRIR-ARCHIVOS'      TO WR-PARRAFO
+              MOVE 'SUPVD01    '            TO WR-ARCHIVO
+              MOVE 'OPEN       '            TO WR-OPERACI
+              MOVE WR-FS-SUPVD01            TO WR-FILE-ST
+              PERFORM BF-DISPLAY-ERROR
+           END-IF.
+           IF WR-FS-SUPVD02 NOT = 0 AND NOT = 97
+              MOVE 'B-INICIALIZAR'          TO WR-SECCION
+              MOVE 'BB-ABRIR-ARCHIVOS'      TO WR-PARRAFO
+              MOVE 'SUPVD02    '            TO WR-ARCHIVO
+              MOVE 'OPEN       '            TO WR-OPERACI
+              MOVE WR-FS-SUPVD02            TO WR-FILE-ST
+              PERFORM BF-DISPLAY-ERROR
+           END-IF.
+           IF WR-FS-SUPVTAR NOT = 0 AND NOT = 97
+              MOVE 'B-INICIALIZAR'          TO WR-SECCION
+              MOVE 'BB-ABRIR-ARCHIVOS'      TO WR-PARRAFO
+              MOVE 'SUPVTAR    '            TO WR-ARCHIVO
+              MOVE 'OPEN       '            TO WR-OPERACI
+              MOVE WR-FS-SUPVTAR            TO WR-FILE-ST
+              PERFORM BF-DISPLAY-ERROR
+           END-IF.
+           ACCEPT WR-FECHA-HOY FROM DATE.
+           SKIP1
+       BC-VALIDA-FECHA.
+      *----------------
+           ACCEPT W-PARAMETROS.
+           MOVE 'CARGAR'                    TO CALEAREA-FUNCION.
+           MOVE ZEROES                      TO CALEAREA-FECHA-1.
+           MOVE ZEROES                      TO CALEAREA-FECHA-2.
+           PERFORM BD-CALL-RUTUCALE.
+           MOVE WP-SIG-PRO                  TO CALEAREA-FECHA-1-AM
+           MOVE WP-ANO-PRO                  TO CALEAREA-FECHA-1-AA
+           MOVE WP-MES-PRO                  TO CALEAREA-FECHA-1-M
+           MOVE WP-DIA-PRO                  TO CALEAREA-FECHA-1-D
+           MOVE ZEROES                      TO CALEAREA-FECHA-2
+           MOVE 'INFO  '                    TO CALEAREA-FUNCION
+           PERFORM BD-CALL-RUTUCALE
+           IF (CALEAREA-COD-RET NOT = 0)
+               MOVE 'B-INICIALIZAR'         TO WR-SECCION
+               MOVE 'BD-CALL-RUTUCALE'      TO WR-PARRAFO
+               MOVE 'RUTUCALE'              TO WR-ARCHIVO
+               MOVE CALEAREA-FUNCION        TO WR-OPERACI
+               MOVE '*ERROR EN FECHA '      TO WR-MENSAJE
+               MOVE CALEAREA-COD-RET        TO WR-FILE-ST
+               DISPLAY 'CALEAREA-FECHA-1 : ' CALEAREA-FECHA-1
+               DISPLAY 'CALEAREA-FECHA-2 : ' CALEAREA-FECHA-2
+               PERFORM BF-DISPLAY-ERROR
+           END-IF.
+           SKIP1
+       BD-CALL-RUTUCALE.
+      *-----------------
+           CALL 'RUTUCALE' USING RTNWCALE.
+           IF (CALEAREA-FUNCION = 'CANCEL')
+               MOVE 'B-INICIALIZAR'         TO WR-SECCION
+               MOVE 'BD-CALL-RUTUCALE'      TO WR-PARRAFO
+               MOVE 'RUTUCALE'              TO WR-ARCHIVO
+               MOVE CALEAREA-FUNCION        TO WR-OPERACI
+               MOVE '*ERROR EN RUTINA'      TO WR-MENSAJE
+               MOVE CALEAREA-COD-RET        TO WR-FILE-ST
+               DISPLAY 'CALEAREA-FECHA-1 : ' CALEAREA-FECHA-1
+               DISPLAY 'CALEAREA-FECHA-2 : ' CALEAREA-FECHA-2
+               PERFORM BF-DISPLAY-ERROR
+           END-IF.
+           SKIP1
+       BE-CARGA-TABLA-PROD.
+      *--------------------
+           INITIALIZE W-TABLAS.
+           SET WI-PRO                       TO 1
+           READ SUPVTAR.
+           PERFORM UNTIL (WR-FS-SUPVTAR NOT = 00 OR WS-PROCESO-ERROR OR
+                          WI-PRO > 100)
+              MOVE SUPRTAR                  TO WT-PRODUCTOS(WI-PRO)
+              READ SUPVTAR
+              SET WI-PRO                    UP BY 1
+           END-PERFORM.
+           IF (WI-PRO > 100)
+              MOVE 'B-INICIALIZAR'          TO WR-SECCION
+              MOVE 'BE-CARGA-TABLA-PROD'    TO WR-PARRAFO
+              MOVE 'SUPVTAR    '            TO WR-ARCHIVO
+              MOVE '           '            TO WR-OPERACI
+              MOVE '  '                     TO WR-FILE-ST
+              MOVE 'SE LLENO TABLA PRODUC'  TO WR-MENSAJE
+              PERFORM BF-DISPLAY-ERROR
+           END-IF.
+           SKIP1
+       BF-DISPLAY-ERROR.
+      *-----------------
+           SET  WS-PROCESO-ERROR            TO TRUE
+           DISPLAY ' '
+           DISPLAY 'ERROR EN SECCION  : ' WR-SECCION
+           DISPLAY ' PARRAFO          : ' WR-PARRAFO
+           DISPLAY ' ARCHIVO          : ' WR-ARCHIVO
+           DISPLAY ' OPERACION        : ' WR-OPERACI
+           DISPLAY ' FILE STATUS      : ' WR-FILE-ST
+           DISPLAY ' MENSAJE DE ERROR : ' WR-MENSAJE
+           DISPLAY ' '.
+           SKIP1
+       BZ-FIN-DE-SECCION.
+      *------------------
+           EXIT.
+           EJECT
+       C-PROCESAR SECTION.
+      *===================
+       EA-PROC-PPAL.
+      *-------------
+           PERFORM CB-LEER-SUPVD02
+           PERFORM CC-ACUMULA-P16-SUPER
+              UNTIL (WR-FS-SUPVD02 NOT = 0 OR WS-PROCESO-ERROR)
+           GO CZ-FIN-DE-SECCION.
+           SKIP1
+       CB-LEER-SUPVD02.
+      *----------------
+           READ SUPVD02 END-READ.
+           IF WR-FS-SUPVD02 = 0
+              ADD 1                         TO WA-L-D02
+           ELSE
+           IF WR-FS-SUPVD02  NOT = 10
+              MOVE 'C-PROCESAR'             TO WR-SECCION
+              MOVE 'CB-LEER-SUPVD02 '       TO WR-PARRAFO
+              MOVE 'SUPVD02     '           TO WR-ARCHIVO
+              MOVE 'READ       '            TO WR-OPERACI
+              MOVE WR-FS-SUPVD02            TO WR-FILE-ST
+              PERFORM BF-DISPLAY-ERROR
+           END-IF.
+           SKIP1
+       CC-ACUMULA-P16-SUPER.
+      *---------------------
+           MOVE D02-COD-NIIO                TO WR-SISTEMA
+           IF (D02-COD-TCCO = '1115' AND WR-SISTEMA = '5')
+               MOVE '1116'                  TO D02-COD-TCCO
+           END-IF.
+
+           SET WI-PRO                       TO 1
+           SEARCH WT-PRODUCTOS
+             AT END MOVE 'NO'               TO WR-COD-PROD-OK
+             WHEN (WT-COD-TCCO(WI-PRO) = D02-COD-TCCO)
+                   MOVE 'SI'                TO WR-COD-PROD-OK
+           END-SEARCH.
+
+           IF (D02-IND-TDOP     = 'D' AND
+               D02-NUM-DDIR     =  1  AND
+               D02-IND-DCAS NOT = 'C' AND
+               D02-VAL-SCON     >  0  AND
+               WR-COD-PROD-OK   = 'SI')
+
+               PERFORM CE-BUSCA-VLR-EXT
+
+               MOVE WT-COD-PROD(WI-PRO)     TO SOR-COD-PROD
+               MOVE WR-COD-MONE             TO SOR-COD-MONE
+               MOVE D02-COD-LOCA            TO SOR-COD-REGI
+               MULTIPLY D02-VAL-SCON BY 1000 GIVING SOR-VAL-SLDO
+               IF (D02-COD-TCCO = '1115' OR
+                   D02-COD-TCCO = '1116' OR
+                   D02-COD-TCCO = '1210')
+                   MOVE '01'                TO SOR-COD-ACTI
+               ELSE
+               IF (D02-COD-TCCO = '1310' OR
+                   D02-COD-TCCO = '1246' OR
+                   D02-COD-TCCO = '1247')
+                   MOVE '02'                TO SOR-COD-ACTI
+               ELSE
+                   MOVE D02-COD-ID02        TO D01-COD-ID01
+                   PERFORM CD-LEER-SUPVD01
+                   MOVE D01-COD-ACTP        TO SOR-COD-ACTI
+               END-IF
+               END-IF
+
+               RELEASE SUPRSOR
+               ADD  1                       TO WA-G-SOR
+
+           END-IF.
+           PERFORM CB-LEER-SUPVD02.
+           SKIP1
+       CD-LEER-SUPVD01.
+      *----------------
+           READ SUPVD01 END-READ.
+           IF WR-FS-SUPVD01  NOT = 0 AND NOT = 23
+              MOVE 'C-PROCESAR'             TO WR-SECCION
+              MOVE 'CD-LEER-SUPVD01 '       TO WR-PARRAFO
+              MOVE 'SUPVD01     '           TO WR-ARCHIVO
+              MOVE 'READ       '            TO WR-OPERACI
+              MOVE WR-FS-SUPVD01            TO WR-FILE-ST
+              PERFORM BF-DISPLAY-ERROR
+           END-IF.
+           SKIP1
+       CE-BUSCA-VLR-EXT.
+      *-----------------
+           SET WI-MON                       TO 1
+           SEARCH WT-VLR-EXT
+             AT END  DISPLAY 'SE LLENO TABLA DE VALORES...'
+                     PERFORM BF-DISPLAY-ERROR
+             WHEN (WT-COD-MBCO(WI-MON) = SPACES)
+                   MOVE D02-COD-MONE        TO WT-COD-MBCO(WI-MON)
+                   MOVE 'VLR'               TO WB-REQ-TAB-KEY-TAB
+                   MOVE D02-COD-MONE        TO WB-REQ-TAB-KEY-COD
+                   PERFORM CF-LEER-TAB
+                   MOVE TAB-GLS-DAT3        TO WR-COD-MONE
+                                               WT-COD-MEXT(WI-MON)
+             WHEN (WT-COD-MBCO(WI-MON) = D02-COD-MONE)
+                   MOVE WT-COD-MEXT(WI-MON) TO WR-COD-MONE
+           END-SEARCH.
+           SKIP1
+       CF-LEER-TAB.
+      *------------
+           MOVE SPACES                      TO WB-REQ-TAB-RC
+           MOVE 'TAB00'                     TO WB-ELEM-LIS
+           CALL 'DBNTRY' USING WB-UIB WB-REQ-TAB-AREA TAB WB-ELEM-LIS
+           IF (WB-REQ-TAB-RC NOT = '  ' AND NOT = '14')
+               MOVE 'C-PROCESAR'            TO WR-SECCION
+               MOVE 'CF-LEER-TAB'           TO WR-PARRAFO
+               MOVE 'TAB'                   TO WR-ARCHIVO
+               MOVE WB-REQ-TAB-CMD          TO WR-OPERACI
+               MOVE WB-REQ-TAB-RC           TO WR-FILE-ST
+               MOVE WB-REQ-TAB-KEY-VALUE    TO WR-MENSAJE
+               PERFORM BF-DISPLAY-ERROR
+           END-IF.
+           SKIP1
+       CZ-FIN-DE-SECCION.
+      *------------------
+           EXIT.
+           EJECT
+       D-TERMINAR SECTION.
+      *===================
+       DA-ESTADISTICAS.
+      *----------------
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY 'INFORMES'
+           DISPLAY '--------'
+           DISPLAY ' '
+           DISPLAY 'ESTE PROCESO NO EMITE INFORME'
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY 'ESTADISTICAS DE PROCESO PROGRAMA SUPPGP16 FECHA '
+                    WR-FECHA-HOY
+           DISPLAY '-----------------------------------------------'
+           DISPLAY '    GENERA ARCHIVO D02 EN FORMATO SUPER'
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY 'REG LEIDOS DE SUPVD02 : ' WA-L-D02
+           DISPLAY 'REG GRABADOS AL SORT  : ' WA-G-SOR
+           DISPLAY 'REG LEIDOS DEL SORT   : ' WA-L-SOR
+           DISPLAY 'REG GRABADOS  SUPVP16 : ' WA-G-P16
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY 'TARJETAS DE PARAMETROS'
+           DISPLAY '----------------------'
+           DISPLAY ' '
+           DISPLAY W-PARAMETROS
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY 'MENSAJES PARA EL EXPLOTADOR'
+           DISPLAY '---------------------------'
+           DISPLAY ' '
+           IF WS-PROCESO-OK
+               DISPLAY 'NO HAY MENSAJES PARA EL EXPLOTADOR'
+           ELSE
+               DISPLAY 'HAY MENSAJES PARA EL EXPLOTADOR'
+           END-IF.
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY ' '.
+           SKIP1
+       DB-TERMINO.
+      *-----------
+           CLOSE SUPVD01 SUPVD02 SUPVP16 SUPVTAR
+           IF WS-PROCESO-ERROR
+              MOVE 100                      TO RETURN-CODE
+              DISPLAY ' '
+              DISPLAY ' '
+              DISPLAY '**********************************************'
+              DISPLAY '**********************************************'
+              DISPLAY '********                              ********'
+              DISPLAY '******** TERMINO ERRONEO DEL PROCESO  ********'
+              DISPLAY '********                              ********'
+              DISPLAY '**********************************************'
+              DISPLAY '**********************************************'
+           ELSE
+              DISPLAY ' '
+              DISPLAY ' '
+              DISPLAY '*****PROCESO TERMINO EN FORMA NORMAL*****'
+           END-IF.
+           SKIP1
+       DZ-FIN-DE-SECCION.
+      *------------------
+           EXIT.
+           EJECT
+       E-GENERAR-P16 SECTION.
+      *======================
+       EA-PROC-PPAL.
+      *-------------
+           IF (SORT-RETURN = 0)
+               PERFORM EC-MUEVE-REG-CABECERA
+               PERFORM EB-LEER-SUPVSOR
+               PERFORM ED-GENERA-P16-SUPER
+                       UNTIL (WR-FS-SUPVSOR NOT = 0 OR WS-PROCESO-ERROR)
+           GO EZ-FIN-DE-SECCION.
+           SKIP1
+       EB-LEER-SUPVSOR.
+      *----------------
+           RETURN SUPVSOR AT END MOVE 10    TO WR-FS-SUPVSOR END-RETURN
+           IF WR-FS-SUPVSOR = 0
+              ADD  1                        TO WA-L-SOR
+           ELSE
+           IF WR-FS-SUPVSOR  NOT = 10
+              MOVE 'E-GENERAR-P16'          TO WR-SECCION
+              MOVE 'EB-LEER-SUPVSOR '       TO WR-PARRAFO
+              MOVE 'SUPVSOR     '           TO WR-ARCHIVO
+              MOVE 'RETURN     '            TO WR-OPERACI
+              MOVE WR-FS-SUPVSOR            TO WR-FILE-ST
+              PERFORM BF-DISPLAY-ERROR
+           END-IF.
+           SKIP1
+       EC-MUEVE-REG-CABECERA.
+      *----------------------
+           MOVE '016'                       TO P16-COD-INS-FIN
+           MOVE 'P16'                       TO P16-IDE-ARC
+      * DPM ini  2-JUL-1998
+           MOVE WP-SIG-PRO                  TO P16-SIG-PER.
+      * DPM fin  2-JUL-1998
+           MOVE WP-ANO-PRO                  TO P16-ANO-PER.
+           MOVE WP-MES-PRO                  TO P16-MES-PER.
+           MOVE SPACES                      TO P16-FILLER
+           PERFORM EE-GRABA-SUPVP16.
+           SKIP1
+       ED-GENERA-P16-SUPER.
+      *--------------------
+           MOVE SOR-KEY-IP16                TO P16-KEY-IP16
+           MOVE 0                           TO P16-VAL-SLDO
+           PERFORM UNTIL (WR-FS-SUPVSOR NOT = 0 OR WS-PROCESO-ERROR OR
+                         P16-KEY-IP16   NOT = SOR-KEY-IP16)
+                   ADD SOR-VAL-SLDO         TO P16-VAL-SLDO
+                   PERFORM EB-LEER-SUPVSOR
+           END-PERFORM.
+           PERFORM EE-GRABA-SUPVP16.
+           SKIP1
+       EE-GRABA-SUPVP16.
+      *-----------------
+           WRITE P16 END-WRITE.
+           IF WR-FS-SUPVP16 = 0
+              ADD 1                         TO WA-G-P16
+           ELSE
+              MOVE 'E-GENERAR-P16'          TO WR-SECCION
+              MOVE 'EE-GRABA-SUPVP16'       TO WR-PARRAFO
+              MOVE 'SUPVP16     '           TO WR-ARCHIVO
+              MOVE 'WRITE      '            TO WR-OPERACI
+              MOVE WR-FS-SUPVP16            TO WR-FILE-ST
+              PERFORM BF-DISPLAY-ERROR
+           END-IF.
+           SKIP1
+       EZ-FIN-DE-SECCION.
+      *------------------
+           EXIT.
+           EJECT
+

@@ -1,0 +1,173 @@
+*%! Codigo adicional para archivo
+*% IF WSS
+      *<<<< WSS
+       01  WSS-VARI.
+           03 WSS-IND-NEXT                        PIC 9(01).
+           03 WSS-IND-SISA                        PIC X(03). 
+       COPY TABBRUSR.
+      *COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-USR-REQA==.
+      *>>>>
+*% END
+*% IF CH_MCS_CIN_COD_SISA
+      *<<<< CH_MCS_CIN_COD_SISA
+      * Mediante BUS-TAB Busca Glosa de Codigo en Tabla SIA
+           IF CIN-COD-SISA IN SRT > SPACES
+               MOVE 'CDC'               TO TAB-COD-SIST
+               MOVE 'SIS'               TO TAB-COD-TTAB IN TAB
+               MOVE CIN-COD-SISA IN SRT TO TAB-COD-CTAB IN TAB
+*% IF PGM_VMS
+      * INI SOLO VAX
+               MOVE FIO-GET-KEY         TO FIO-CMND
+               CALL TAB-GLS-FTAB USING FIO-CMND TAB
+      * FIN SOLO VAX
+*% ELSE
+      * INI SOLO IBM
+               PERFORM BUS-TAB
+      * FIN SOLO IBM
+*% END
+               IF NOT FIO-STAT-OKS
+                   MOVE 'CODIGO INEXISTENTE' TO WSS-GLS-SISA IN WSS-MCS
+               ELSE
+                   MOVE TAB-GLS-DESC IN TAB  TO WSS-GLS-SISA IN WSS-MCS
+           ELSE
+               MOVE SPACES TO WSS-GLS-SISA IN WSS-MCS.
+      *>>>>
+*% END
+*% IF INI_INP
+      *<<<< INI_INP
+           MOVE FIO-ACCS-UPD TO FIO-ACCS.
+           MOVE FIO-ACC      TO FIO-CMND.
+           MOVE 'CDC'        TO FIO-SIST.
+           PERFORM GNS-FIO-TAB.
+
+           MOVE FIO-INP      TO FIO-CMND.
+           MOVE 'CDC'        TO FIO-SIST.
+           PERFORM GNS-FIO-TAB.
+
+      *Captura de Sistema Asignado a Cinta
+           DISPLAY 'SISTEMA ASIGNADO : ESPECIFICO/* '.
+           ACCEPT  WSS-IND-SISA IN WSS-VARI.
+
+
+      *VAL-TAB Valida Sistema Asignado en TABLAS
+           IF WSS-IND-SISA IN WSS-VARI NOT > SPACES
+               MOVE '*' TO WSS-IND-SISA IN WSS-VARI.
+           IF WSS-IND-SISA IN WSS-VARI NOT = '*'
+               DISPLAY WSS-IND-SISA IN WSS-VARI
+               MOVE 'CDC'                    TO TAB-COD-SIST
+               MOVE 'SIS'                    TO TAB-COD-TTAB IN TAB
+               MOVE WSS-IND-SISA IN WSS-VARI TO TAB-COD-CTAB IN TAB
+               PERFORM VAL-TAB
+               IF MSG-COD-MENS > SPACES
+                   DISPLAY MSG-GLS-DESC IN MSG
+                   COPY GNSBGGBK.
+
+      *>>>>
+*% END
+*% IF LUP_INP
+      *<<<< LUP_INP
+      * Proceso de Seleccion y Clasificacion a Partir del Registro CIN
+           PERFORM SEL-REG-PRO.
+           IF WSS-IND-NEXT IN WSS-VARI = 1
+               GO TO NXT-INP-SRT.
+      *BUS-USR busca usuario en tablas
+           MOVE SPACES TO USR-GLS-DCOR IN USR.
+           IF CIN-COD-IUSR IN CIN > SPACES
+               MOVE 'CDC'               TO TAB-COD-SIST
+               MOVE 'USR'               TO TAB-COD-TTAB IN TAB
+               MOVE CIN-COD-IUSR IN CIN TO TAB-COD-CTAB IN TAB
+               PERFORM BUS-TAB
+               MOVE TAB-GLS-DCOR TO USR-GLS-DCOR IN USR.
+           PERFORM BUS-SRT-REG.
+      *>>>>
+*% END
+*% IF FST_OUT
+      *<<<< FST_OUT
+      * Mediante BUS-TAB Busca Glosa de Codigo en Tabla SIA
+           IF CIN-COD-SISA IN SRT > SPACES
+               MOVE 'CDC'               TO TAB-COD-SIST
+               MOVE 'SIS'               TO TAB-COD-TTAB IN TAB
+               MOVE CIN-COD-SISA IN SRT TO TAB-COD-CTAB IN TAB
+               PERFORM BUS-TAB
+               MOVE TAB-GLS-DESC IN TAB TO WSS-GLS-SISA IN WSS-MCS
+           ELSE
+               MOVE SPACES TO WSS-GLS-SISA IN WSS-MCS.
+      *>>>>
+*% END
+*% IF LUP_OUT
+      *<<<< LUP_OUT
+           PERFORM GEN-LIN-OUT.
+      *>>>>
+*% END
+*% IF EOF
+      *<<<< EOF
+      **************************************************************************
+      * Seleccion del Registro para Proceso Mediante Fecha y Oficina del Listado
+       SEL-REG-PRO SECTION.
+       INI-SEL-REG-PRO.
+           MOVE  1  TO WSS-IND-NEXT IN WSS-VARI.
+
+           IF WSS-IND-SISA IN WSS-VARI NOT = '*'
+               IF WSS-IND-SISA IN WSS-VARI NOT = CIN-COD-SISA IN CIN
+                   GO TO FIN-SEL-REG-PRO.
+
+           MOVE  0  TO WSS-IND-NEXT IN WSS-VARI.
+       FIN-SEL-REG-PRO.
+           EXIT.
+      **************************************************************************
+      * Formacion y Generacion del Registro SRT al Procesar Varios Registros
+       BUS-SRT-REG SECTION.
+       INI-BUS-SRT-REG.
+      * Complementa Formacion del Registro SRT
+           MOVE 1 TO SRT-NUM-TCSI IN SRT.
+
+      * Completa Llenado de Campos y Genera el Registro SRT
+      *     COPY COLRMMCS.
+      *     RELEASE SRT.
+       FIN-BUS-SRT-REG.
+           EXIT.
+      **************************************************************************
+      * Genera Lineas de Detalle a Partir de Registro SRT Ordenado
+       GEN-LIN-OUT SECTION.
+       INI-GEN-LIN-OUT.
+      * Mediante BUS-TAB Busca Glosa de Codigo en Tabla MAR
+           IF CIN-COD-MARK IN SRT > SPACES
+               MOVE 'CDC'               TO TAB-COD-SIST
+               MOVE 'MAR'               TO TAB-COD-TTAB IN TAB
+               MOVE CIN-COD-MARK IN SRT TO TAB-COD-CTAB IN TAB
+               PERFORM BUS-TAB
+               MOVE TAB-GLS-ABRV IN TAB TO WSS-GLS-MARK IN WSS-MCS
+           ELSE
+               MOVE SPACES TO WSS-GLS-MARK IN WSS-MCS.
+
+      * Mediante BUS-TAB Busca Glosa de Codigo en Tabla LON
+           IF CIN-COD-LONG IN SRT > SPACES
+               MOVE 'CDC'               TO TAB-COD-SIST
+               MOVE 'LON'               TO TAB-COD-TTAB IN TAB
+               MOVE CIN-COD-LONG IN SRT TO TAB-COD-CTAB IN TAB
+               PERFORM BUS-TAB
+               MOVE TAB-GLS-ABRV IN TAB TO WSS-GLS-LONG IN WSS-MCS
+           ELSE
+               MOVE SPACES TO WSS-GLS-LONG IN WSS-MCS.
+
+      * Mediante BUS-TAB Busca Glosa de Codigo en Tabla USR
+      *     IF CIN-COD-IUSR IN SRT > SPACES
+      *         MOVE 'CDC'               TO TAB-COD-SIST
+      *         MOVE 'USR'               TO TAB-COD-TTAB IN TAB
+      *         MOVE CIN-COD-IUSR IN SRT TO TAB-COD-CTAB IN TAB
+      *         PERFORM BUS-TAB
+      *         MOVE TAB-GLS-DESC IN TAB TO WSS-GLS-IUSR IN WSS-MCS
+      *     ELSE
+      *         MOVE SPACES TO WSS-GLS-IUSR IN WSS-MCS.
+       FIN-GEN-LIN-OUT.
+           EXIT.
+      **************************************************************************
+
+       COPY GNSBBMSG.
+       COPY GNSBBTAB.
+       COPY GNSBVTAB.
+      *COPY TABBBUSR.
+      *COPY TABBVUSR.
+      *COPY TABBFUSR.
+      *>>>>
+*% END

@@ -1,0 +1,222 @@
+       IDENTIFICATION DIVISION.
+      *=======================
+       PROGRAM-ID.      COLP2D08.
+       AUTHOR.          BEE-TEAM.
+       DATE-WRITTEN.     27-JAN-2000.
+
+      * Programa Generador Interfaz D08 Super-Bancos de COL.
+
+       ENVIRONMENT DIVISION.
+      *====================
+       CONFIGURATION SECTION.
+      *---------------------
+       SPECIAL-NAMES.
+            DECIMAL-POINT IS COMMA.
+       INPUT-OUTPUT SECTION.
+      *--------------------
+       FILE-CONTROL.
+
+       DATA DIVISION.
+      *=============
+       FILE SECTION.
+      *------------
+
+       WORKING-STORAGE SECTION.
+      *-----------------------
+
+       COPY GNSWCFIO.
+       COPY GNSWVFIO.
+
+       COPY SUPBRDE8.
+       COPY COLBRD08.
+
+       01  WSS-VARI.
+           03 WSS-IND-STAT         VALUE 0             PIC 9(01).
+           03 WSS-CIC-IOPC.
+              05 WSS-CAI-IOPC                          PIC X(04).
+              05 WSS-IIC-IOPC                          PIC X(08).
+           03 WSS-IDD-GAUX                             PIC X(01).
+      *
+           03 WSS-NUM-CCAT                             PIC 9(03).
+           03 WSS-NUM-CMAA                             PIC 9(03).
+           03 WSS-VAL-SDCA                             PIC 9(14).
+           03 WSS-VAL-MCAT                             PIC 9(14).
+           03 WSS-NUM-DE8L         VALUE 0             PIC 9(07).
+           03 WSS-NUM-D08G         VALUE 0             PIC 9(07).
+           03 WSS-GLS-INGR.
+              05 FILLER                                PIC X(25).
+              05 WSS-COD-CCAS                          PIC X(09).
+
+
+       PROCEDURE DIVISION.
+      *==================
+       MAIN SECTION.
+      *------------
+       INI-MAIN.
+
+           PERFORM ABRE-ARCH.
+           PERFORM PRO-DE8.
+           PERFORM CIERRA-ARCH.
+           PERFORM MUESTRA-ESTAD.
+       FIN-MAIN.
+      * Termino del Proceso
+           STOP RUN.
+
+      *<<<< EOF
+      ******************************************************************
+       ABRE-ARCH SECTION.
+       INI-ABRE-ARCH.
+           MOVE 'COLP2D08' TO FIO-PROG.
+      * Apertura de Registros
+           MOVE FIO-INP TO FIO-CMND.
+           PERFORM SUP-FIO-DE8.
+
+           MOVE FIO-OUT TO FIO-CMND.
+           PERFORM COL-FIO-D08.
+       FIN-ABRE-ARCH.
+           EXIT.
+
+      ******************************************************************
+       PRO-DE8 SECTION.
+       INI-PRO-DE8.
+      * Primera Lectura de Creditos en DE8
+           MOVE FIO-GET-FST TO FIO-CMND.
+           PERFORM SUP-FIO-DE8.
+           IF NOT FIO-STAT-OKS
+               DISPLAY 'ERROR : NO HAY REGISTROS DE8 '
+               GO TO EXT-PRO-DE8.
+
+           MOVE SPACES TO WSS-CIC-IOPC IN WSS-VARI.
+
+       LUP-PRO-DE8.
+      * Proceso de Seleccion y Clasificacion a Partir del Registro DE8
+           IF NOT FIO-STAT-OKS
+               GO TO FIN-PRO-DE8.
+           ADD  1  TO WSS-NUM-DE8L IN WSS-VARI.
+
+      * Si Credito Origen de DE8 es igual anterior se SALTA su Proceso
+      * en caso contrario Grabar D08 con Credito Origen de DE8 Procesado
+           IF DE8-COD-NIOO IN DE8 = WSS-CIC-IOPC IN WSS-VARI
+               GO TO VCD-PRO-DE8
+           ELSE
+           IF WSS-CIC-IOPC IN WSS-VARI > SPACES
+               PERFORM GEN-REG-D08-DE8
+               MOVE SPACES TO WSS-CIC-IOPC IN WSS-VARI.
+
+      ******************************************************************
+      * MIENTRAS EL CREDITO ORIGINAL SEA EL MISMO.
+      *  * SE DEBEN ACUMULAR MONTOS DEL DE8 (VENCIDO) EN EL D08
+      ******************************************************************
+
+           MOVE ZEROES       TO D08-VAL-SDCA IN D08.
+           MOVE ZEROES       TO D08-NUM-CCAT IN D08.
+           MOVE ZEROES       TO D08-VAL-MCAT IN D08.
+           MOVE SPACES       TO D08-GLS-FILL IN D08.
+
+
+           MOVE DE8-COD-NIOO IN DE8 TO WSS-CIC-IOPC IN WSS-VARI.
+      * Guarda montos acumulables del DE8
+           MOVE DE8-VAL-SDCA IN DE8 TO WSS-VAL-SDCA IN WSS-VARI.
+           MOVE DE8-NUM-CCAT IN DE8 TO WSS-NUM-CCAT IN WSS-VARI.
+           MOVE DE8-VAL-MCAT IN DE8 TO WSS-VAL-MCAT IN WSS-VARI.
+           MOVE DE8-NUM-CMAA IN DE8 TO WSS-NUM-CMAA IN WSS-VARI.
+
+           PERFORM FIL-REG-D08-DE8.
+           GO TO NXT-PRO-DE8.
+
+       VCD-PRO-DE8.
+
+           IF DE8-COD-NIOO IN DE8 = DE8-COD-NIIO IN DE8
+              PERFORM FIL-REG-D08-DE8.
+
+      * Acumular montos acumulables del DE8
+           ADD DE8-VAL-SDCA IN DE8 TO WSS-VAL-SDCA IN WSS-VARI.
+           ADD DE8-NUM-CCAT IN DE8 TO WSS-NUM-CCAT IN WSS-VARI.
+           ADD DE8-VAL-MCAT IN DE8 TO WSS-VAL-MCAT IN WSS-VARI.
+           IF DE8-NUM-CMAA IN DE8 > WSS-NUM-CMAA IN WSS-VARI
+               MOVE DE8-NUM-CMAA IN DE8 TO WSS-NUM-CMAA IN WSS-VARI.
+
+       NXT-PRO-DE8.
+      * Siguiente lectura de Relaciones de Creditos por Llave Primaria e
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM SUP-FIO-DE8.
+           GO TO LUP-PRO-DE8.
+       FIN-PRO-DE8.
+      * Graba registro de interfaz D08 con informacion generada
+           PERFORM GEN-REG-D08-DE8.
+       EXT-PRO-DE8.
+           EXIT.
+      ******************************************************************
+
+       CIERRA-ARCH SECTION.
+       INI-CIERRA-ARCH.
+      * Cierre de Registros
+           MOVE FIO-CLO TO FIO-CMND.
+           PERFORM SUP-FIO-DE8.
+           PERFORM COL-FIO-D08.
+
+       FIN-CIERRA-ARCH.
+           EXIT.
+
+      ******************************************************************
+       MUESTRA-ESTAD SECTION.
+       INI-MUESTRA-ESTAD.
+      * Despliega Totales de Control Proceso
+           DISPLAY 'TOTAL DE8 LEIDOS         : '
+                               WSS-NUM-DE8L IN WSS-VARI.
+           DISPLAY 'TOTAL D08 GRABADOS       : '
+                               WSS-NUM-D08G IN WSS-VARI.
+       FIN-MUESTRA-ESTAD.
+           EXIT.
+
+      ******************************************************************
+      * Proceso de Carga del Registro D08 con el DE8 Seleccionado
+       FIL-REG-D08-DE8 SECTION.
+       INI-FIL-REG-D08-DE8.
+
+           MOVE DE8-NUM-RUTD IN DE8 TO D08-NUM-RUTD  IN D08.
+           MOVE DE8-VRF-RUTD IN DE8 TO D08-VRF-RUTD  IN D08.
+           MOVE DE8-COD-NIIO IN DE8 TO D08-COD-NIIO  IN D08.
+           MOVE DE8-GLS-NOMD IN DE8 TO D08-GLS-NOMD  IN D08.
+           MOVE DE8-IND-TCRE IN DE8 TO D08-IND-TCRE  IN D08.
+           MOVE DE8-VAL-MCRE IN DE8 TO D08-VAL-MCRE  IN D08.
+           MOVE DE8-NUM-ACRE IN DE8 TO D08-NUM-ACRE  IN D08.
+           MOVE DE8-NUM-MCRE IN DE8 TO D08-NUM-MCRE  IN D08.
+           MOVE DE8-NUM-DCRE IN DE8 TO D08-NUM-DCRE  IN D08.
+           MOVE DE8-NUM-PCRE IN DE8 TO D08-NUM-PCRE  IN D08.
+           MOVE DE8-VAL-PRCR IN DE8 TO D08-VAL-PRCR  IN D08.
+           MOVE DE8-VAL-SDCA IN DE8 TO D08-VAL-SDCA  IN D08.
+           MOVE DE8-VAL-SDCO IN DE8 TO D08-VAL-SDCO  IN D08.
+           MOVE DE8-NUM-CCAT IN DE8 TO D08-NUM-CCAT  IN D08.
+           MOVE DE8-VAL-MCAT IN DE8 TO D08-VAL-MCAT  IN D08.
+           MOVE DE8-NUM-CMAA IN DE8 TO D08-NUM-CMAA  IN D08.
+           MOVE DE8-IND-CJUD IN DE8 TO D08-IND-CJUD  IN D08.
+           MOVE DE8-IND-ESTC IN DE8 TO D08-IND-ESTC  IN D08.
+           MOVE DE8-GLS-FILL IN DE8 TO D08-GLS-FILL  IN D08.
+
+       FIN-FIL-REG-D08-DE8.
+           EXIT.
+      *-----------------------------------------------------------------
+      * Graba el Registro D08 Super-Bancos desde RVO
+       GEN-REG-D08-DE8 SECTION.
+       INI-GEN-REG-D08-DE8.
+      * Guarda montos acumulables del D08
+           MOVE WSS-VAL-SDCA IN WSS-VARI TO D08-VAL-SDCA IN D08.
+           MOVE WSS-NUM-CCAT IN WSS-VARI TO D08-NUM-CCAT IN D08.
+           MOVE WSS-VAL-MCAT IN WSS-VARI TO D08-VAL-MCAT IN D08.
+           MOVE WSS-NUM-CMAA IN WSS-VARI TO D08-NUM-CMAA IN D08.
+           MOVE FIO-PUT TO FIO-CMND.
+           PERFORM COL-FIO-D08.
+           IF NOT FIO-STAT-OKS
+              DISPLAY ' ERROR EN INGRESO D08, FIO-STAT : ' FIO-STAT
+              DISPLAY ' LLAVE : ' D08-COD-ID08
+              STOP RUN
+           ELSE
+              ADD 1 TO WSS-NUM-D08G.
+       FIN-GEN-REG-D08-RVO.
+           EXIT.
+      *-----------------------------------------------------------------
+
+       COPY SUPBFDE8.
+       COPY COLBFD08.
+      *>>>>

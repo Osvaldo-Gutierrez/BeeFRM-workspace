@@ -1,0 +1,258 @@
+*%! Codigo adicional para archivo GRDPQQLI
+*% IF SETTAG
+*% FNCPQ = "COBRJUDICIAL"
+*% VSNPQ = "05.11.22.1"
+*% END
+*% LARGO_MI_COMMAREA = 20
+*% PGM_PTC = TRUE
+*% IF MI_COMMAREA
+      *<<<< MI_COMMAREA
+           03 CMA-VARI.
+              05 SCR-IMAX      COMP                   PIC S9(04).
+              05 SCR-I         COMP                   PIC S9(04).
+      *>>>>
+*% END
+*% IF WSS
+      *<<<< WSS
+       COPY GRDWGQLI.
+       COPY GNSBRMSC.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-MSC-REQA==.
+       COPY GNSWGPES.
+       COPY TABBRCAM.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-CAM-REQA==.
+    
+       01  WSS-VARI.
+           03  WSS-I                              PIC 9(02).
+      *>>>>
+*% END
+*% IF INI_FIO
+      *<<<< INI_FIO                                                     
+           IF SCR-OFRM-SRV                                              
+              MOVE TSK-TERM-ALF TO QLI-COD-TERM                         
+              MOVE TSK-TERM-ALF TO QLI-COD-TERM-MAS                     
+                                                                        
+           ELSE                                                         
+              MOVE EIBTRMID     TO QLI-COD-TERM                         
+              MOVE EIBTRMID     TO QLI-COD-TERM-MAS.                    
+      *>>>>                                                             
+*% END
+*% IF PFS_SCR_ACC
+      *<<<< PFS_SCR_ACC
+           IF FRM-FFLD = FRM-FFLD-PF6
+                    OR   FRM-FFLD-PF5
+               PERFORM VAL-NUM-KEY-QLI
+               PERFORM VAL-NUM-FLD-QLI
+               PERFORM RST-STAT
+               PERFORM FND-SCR-KEY THRU FIN-SCR-KEY
+               IF SCR-STAT NOT = SCR-STAT-ABT
+                   PERFORM SCR-TRL
+               ELSE
+                   PERFORM DESSCRTRL
+                   GO TO FIN-SCR-ACC.
+      *>>>>
+*% END
+*% IF INI_FND_KEY
+      *<<<< INI_FND_KEY
+           MOVE SPACES TO FRM-MEN1.
+           IF FRM-FFLD = FRM-FFLD-PF5
+               MOVE PGM-SNUL TO PGM-STAT-LIQ
+               SUBTRACT 1 FROM SCR-I GIVING QLI-I
+               IF QLI-I NOT > ZEROES
+                   MOVE 'QLI LIQPRV' TO MSG-COD-MENS
+                   GO TO ERR-FND-KEY
+               ELSE
+                   GO TO CARGA-QLI
+           ELSE
+           IF FRM-FFLD = FRM-FFLD-PF6
+               MOVE PGM-SNUL TO PGM-STAT-LIQ
+               ADD 1 SCR-I GIVING QLI-I
+               IF QLI-I > SCR-IMAX
+                   MOVE 'QLI LIQNXT' TO MSG-COD-MENS
+                   GO TO ERR-FND-KEY
+               ELSE
+                   GO TO CARGA-QLI.
+           GO TO CON-FND-KEY.
+
+      *>>>>
+*% END
+*% IF FIN_FND_KEY
+      *<<<< FIN_FND_KEY
+           IF NOT FIO-STAT-OKS
+               GO TO FIN-FND-KEY.
+       CON-FND-KEY.
+      *
+           MOVE ZEROES TO SCR-IMAX.
+           MOVE 1 TO SCR-I.
+           MOVE '00' TO FIO-STAT.
+           PERFORM OBT-DAT-TS.
+           MOVE 1 TO SCR-I.
+           MOVE SCR-I TO QLI-I.
+       CARGA-QLI.
+           MOVE SPACES TO MSG-COD-MENS.
+           IF NOT SCR-OFRM-SRV
+           PERFORM PUT-TAB-QLI.
+           MOVE '00' TO FIO-STAT.
+           GO TO FIN-FND-KEY.
+      *
+       ERR-FND-KEY.
+           MOVE SCR-STAT-CON TO SCR-STAT.
+     
+           MOVE 'GRD' TO MSG-COD-SIST.
+           PERFORM GET-MSG.
+           MOVE MSG-GLS-DESC TO FRM-MEN1.
+           MOVE '00' TO FIO-STAT.
+           GO TO FIN-FND-KEY.
+      *>>>>
+*% END
+*% IF PFS_GET_CON OR PFS_GET_ACC
+      *<<<< PFS_GET_CON OR PFS_GET_ACC
+           IF NOT (FRM-FFLD = FRM-FFLD-PF6
+                         OR   FRM-FFLD-PF5)
+      *>>>>
+*% END
+*% IF EOF
+      *<<<< EOF
+       COPY GNSBFMSC.
+       COPY GNSBGPES.
+       COPY TABBFCAM.
+
+       CAR-MOV-QLI SECTION.
+       INI-CAR-MOV-QLI.
+       FIN-CAR-MOV-QLI.
+           EXIT.
+
+   
+       OBT-DAT-TS SECTION.
+       INI-OBT-DAT-TS.
+           EXEC CICS HANDLE CONDITION QIDERR(CON-OBT-DAT-TS)
+                                     ITEMERR(CON-OBT-DAT-TS)
+           END-EXEC.
+
+      *     EXEC CICS DELETEQ TS QUEUE(QLI-NAME-QUE)
+      *     END-EXEC.
+      *<<<<
+           MOVE QLI-NOM-TSQLI     TO QUE-COLA.
+           MOVE QUE-DEL           TO QUE-CMND.
+           PERFORM GNS-PRO-QUE.
+      *>>>>
+       CON-OBT-DAT-TS.
+           MOVE QLI-SI-IMP TO QLI-IMP.
+           PERFORM CLR-VEC-TS VARYING QLI-I FROM 1 BY 1 UNTIL
+                   QLI-I > QLI-IMAX-MTX.
+           MOVE 1 TO QLI-I.
+           PERFORM CAR-MOV-QLI.
+      
+       NXT-OBT-DAT-TS.
+           IF QLI-IMP = QLI-SI-IMP
+               PERFORM WRT-TS.
+       FIN-OBT-DAT-TS.
+           EXIT.
+
+       PUT-TAB-QLI SECTION.
+       INI-PUT-TAB-QLI.
+           PERFORM RED-TS.
+           PERFORM LLE-DAT-PNT VARYING QLI-I FROM 1 BY 1
+                   UNTIL QLI-I > QLI-IMAX.
+       FIN-PUT-TAB-QLI.
+           EXIT.
+
+       LLE-DAT-PNT SECTION.
+       INI-LLE-DAT-PNT.
+           MOVE QLI-CIC-ILIQ(QLI-I) TO QLI-CIC-ILIQ IN QLI-FLD(QLI-I).
+           MOVE QLI-CIC-IREC(QLI-I) TO QLI-CIC-IREC IN QLI-FLD(QLI-I).
+           MOVE QLI-NUM-ICL1(QLI-I) TO QLI-NUM-ICL1 IN QLI-FLD(QLI-I).
+           MOVE QLI-VRF-ICL1(QLI-I) TO QLI-VRF-ICL1 IN QLI-FLD(QLI-I).
+           MOVE QLI-COD-ABOG(QLI-I) TO QLI-COD-ABOG IN QLI-FLD(QLI-I).
+           MOVE QLI-FEC-FINI(QLI-I) TO QLI-FEC-FINI IN QLI-FLD(QLI-I).
+           MOVE QLI-FEC-FENT(QLI-I) TO QLI-FEC-FENT IN QLI-FLD(QLI-I). 
+           MOVE QLI-FEC-FREC(QLI-I) TO QLI-FEC-FREC IN QLI-FLD(QLI-I).
+           MOVE QLI-COD-ESTA(QLI-I) TO QLI-COD-ESTA IN QLI-FLD(QLI-I).
+           MOVE QLI-COD-SEGM(QLI-I) TO QLI-COD-SEGM IN QLI-FLD(QLI-I).
+           MOVE QLI-GLS-NOMB(QLI-I) TO QLI-GLS-NOMB IN QLI-FLD(QLI-I).
+       FIN-LLE-DAT-PNT.
+           EXIT.
+
+       INC-REG-TS SECTION.
+       INI-INC-REG-TS.
+            MOVE QLI-SI-IMP TO QLI-IMP.
+      *      IF SCR-OFRM-SRV
+      *         MOVE QLI-SGV-MORA(QLI-I) TO QLI-SGV-MORA-EDT
+      *         MOVE QLI-SGV-MORA-EDT TO QLI-SGV-MORA-ALF(QLI-I).
+           ADD 1 TO QLI-I.
+           IF QLI-I > QLI-IMAX
+               PERFORM WRT-TS
+               PERFORM CLR-VEC-TS VARYING QLI-I FROM 1 BY 1
+                                     UNTIL QLI-I > QLI-IMAX
+               MOVE 1 TO QLI-I
+               MOVE QLI-NO-IMP TO QLI-IMP.
+       FIN-INC-REG-TS.
+           EXIT.
+
+      *<<<<
+      *>>>>
+
+       WRT-TS SECTION.
+       INI-WRT-TS.
+           ADD 1 TO SCR-IMAX.
+      *     EXEC CICS WRITEQ TS QUEUE(QLI-NAME-QUE)
+      *                         FROM(QLI-TS)
+      *                         LENGTH(QLI-LONG-TS)
+      *     END-EXEC.
+      *<<<<
+           MOVE QLI-NOM-TSQLI  TO QUE-COLA.
+           MOVE QLI-TS         TO QUE-ITEM.
+           MOVE QLI-LEN-TSQLI  TO QUE-LITM.
+           MOVE QUE-PUT        TO QUE-CMND.
+           PERFORM GNS-PRO-QUE.
+      *>>>>
+       FIN-WRT-TS.
+           EXIT.
+
+       RED-TS SECTION.
+       INI-RED-TS.
+           MOVE QLI-I TO SCR-I.
+           EXEC CICS HANDLE CONDITION QIDERR(FIN-RED-TS)
+                                     ITEMERR(FIN-RED-TS)
+           END-EXEC.
+      *     EXEC CICS READQ TS QUEUE(DEC-NAME-QUE)
+      *                         INTO(DEC-TS)
+      *                          LENGTH(DEC-LONG-TS)
+      *                         ITEM(DEC-I)
+      *     END-EXEC.
+      *<<<<
+           MOVE QLI-NOM-TSQLI      TO QUE-COLA.
+           MOVE QLI-TS             TO QUE-ITEM.
+           MOVE QLI-LEN-TSQLI      TO QUE-LITM.
+           MOVE QLI-I              TO QUE-NITM.
+           MOVE QUE-GET            TO QUE-CMND.
+           PERFORM GNS-PRO-QUE.
+           MOVE QUE-ITEM          TO QLI-TS.
+      *>>>>
+       FIN-RED-TS.
+           EXIT.
+
+       CLR-VEC-TS SECTION.
+       INI-CLR-VEC-TS.
+           MOVE SPACES TO QLI-CIC-ILIQ(QLI-I).
+           MOVE SPACES TO QLI-CIC-IREC(QLI-I).
+           MOVE ZEROES TO QLI-NUM-ICL1(QLI-I).
+           MOVE SPACES TO QLI-VRF-ICL1(QLI-I).
+           MOVE SPACES TO QLI-COD-ABOG(QLI-I).
+           MOVE ZEROES TO QLI-FEC-FINI(QLI-I).
+           MOVE ZEROES TO QLI-FEC-FENT(QLI-I). 
+           MOVE ZEROES TO QLI-FEC-FREC(QLI-I).
+           MOVE SPACES TO QLI-COD-ESTA(QLI-I).
+           MOVE SPACES TO QLI-COD-SEGM(QLI-I).
+           MOVE SPACES TO QLI-GLS-NOMB(QLI-I).
+       FIN-CLR-VEC-TS.
+           EXIT.
+
+       RST-STAT SECTION.
+       INI-RST-STAT.
+           MOVE SCR-STPP     TO SCR-STAT.
+           MOVE SCR-MFLD-NOT TO SCR-MFLD.
+       FIN-RST-STAT.
+           EXIT.
+
+      *>>>>
+*% END

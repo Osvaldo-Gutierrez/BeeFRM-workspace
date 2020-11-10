@@ -1,0 +1,489 @@
+      $FEDLEVEL = 5 SHARING = SHAREDBYALL
+       IDENTIFICATION DIVISION.
+      *=======================
+       PROGRAM-ID.      {sis}PF{reg}.
+       AUTHOR.          CONSIST.
+       DATE-WRITTEN.    {fec}.
+
+      * Modulo de I/O para tabla DMSII {sis}{reg}.
+
+       ENVIRONMENT DIVISION.
+      *====================
+       INPUT-OUTPUT SECTION.
+       FILE-CONTROL.
+
+       DATA DIVISION.
+      *=============
+       FILE SECTION.
+
+       DATA-BASE SECTION.
+      *-----------------
+       DB BD{sis}.
+       01 AUDITAREA.
+       01 BD-{reg}.
+
+       WORKING-STORAGE SECTION.
+      *-----------------------
+       01  WSS-AKEY                             PIC X(32).
+       COPY GNSWCFIO.
+       77  WSS-IND-DABT                         PIC X(01).
+       77  WSS-IND-BGTN                         PIC X(01).
+       77  WSS-FIO-PROG                         PIC X(12).
+
+       LINKAGE SECTION.
+      *---------------
+       COPY GNSWVFIO.
+       COPY {sis}BR{reg}.
+
+       PROCEDURE DIVISION USING FIO-VARI {reg}.
+      *==================
+
+       MAIN SECTION.
+       INI-MAIN.
+           MOVE "{sis}PF{reg}" TO WSS-FIO-PROG.
+           MOVE "N" TO WSS-IND-BGTN.
+           IF FIO-AKEY > SPACES
+               MOVE FIO-AKEY TO WSS-AKEY
+           ELSE
+               MOVE SPACES   TO WSS-AKEY.
+           MOVE SPACES TO FIO-AKEY.
+           MOVE "00" TO FIO-STAT-LNK.
+           GO TO INI-GET-KEY     INI-GET-NXT     INI-GET-FST
+                 INI-GET-NLS     INI-GET-GRT     INI-PUT-FIL
+                 INI-MOD-FIL     INI-DEL-FIL     ERR-MAIN
+                 INI-INP-FIL     ERR-MAIN        INI-UPD-FIL
+                 INI-CLO-FIL     ERR-MAIN        INI-FND-FST
+                 ERR-MAIN        ERR-MAIN        INI-ULK-REC
+                 ERR-MAIN        ERR-MAIN        ERR-MAIN
+                 ERR-MAIN        ERR-MAIN        ERR-MAIN
+                 ERR-MAIN        ERR-MAIN        ERR-MAIN
+                 ERR-MAIN        ERR-MAIN        ERR-MAIN
+                 ERR-MAIN        ERR-MAIN        ERR-MAIN
+                 ERR-MAIN        ERR-MAIN        INI-GET-KEY-UPD
+                 NUL-FUNC        INI-BCK-OUT     INI-GET-LEQ
+                 INI-GET-PRV     INI-CHK-PNT     NUL-FUNC
+                 NUL-FUNC
+
+           DEPENDING ON FIO-CMND.
+
+       ERR-MAIN.
+           DISPLAY "? CODIGO "
+                FIO-CMND
+                .
+           DISPLAY "  INVALIDO EN {sis}PF{reg} PARA ARCHIVO "
+                "{sis}{reg}"
+                " : ABORTO"
+                .
+           STOP RUN.
+       NUL-FUNC.
+           MOVE "00"   TO FIO-STAT-LNK.
+       FIN-MAIN.
+           EXIT PROGRAM.
+
+       MOV-REG SECTION.
+       INI-MOV-REG.
+           IF FIO-STAT-LNK = "00"
+               MOVE BD-{reg} TO {reg}.
+       FIN-MOV-REG.
+           EXIT.
+
+       MOV-BDD  SECTION.
+       INI-MOV-BDD.
+           BEGIN-TRANSACTION NO-AUDIT AUDITAREA ON EXCEPTION
+                             PERFORM DMS-ABT.
+           MOVE "S" TO WSS-IND-BGTN.
+           IF FIO-STAT-LNK = "00"
+               MOVE {reg} TO BD-{reg}
+               STORE BD-{reg}
+                   ON EXCEPTION PERFORM SET-STAT.
+           IF WSS-IND-BGTN = "S"
+                   END-TRANSACTION NO-AUDIT AUDITAREA ON EXCEPTION
+                             PERFORM DMS-ABT.
+       FIN-MOV-BDD.
+           EXIT.
+
+       SET-STAT SECTION.
+       INI-SET-STAT.
+           MOVE "N" TO WSS-IND-DABT.
+           IF DMSTATUS(NOTFOUND)
+              MOVE "23" TO FIO-STAT-LNK
+           ELSE
+           IF DMSTATUS(DUPLICATES)
+              MOVE "22" TO FIO-STAT-LNK
+           ELSE
+           IF DMSTATUS(DEADLOCK)
+              MOVE "44" TO FIO-STAT-LNK
+           ELSE
+           IF DMSTATUS(DMCATEGORY)  = 11 AND
+              DMSTATUS(DMERRORTYPE) = 3
+              MOVE "00" TO FIO-STAT-LNK
+           ELSE
+           IF DMSTATUS(DMCATEGORY)  = 15 AND
+              DMSTATUS(DMERRORTYPE) = 1
+                 PERFORM DMS-DSP
+                 MOVE "S" TO WSS-IND-DABT
+                 MOVE "S" TO WSS-IND-BGTN
+           ELSE
+              MOVE "S" TO WSS-IND-DABT
+              PERFORM DMS-DSP.
+           IF WSS-IND-BGTN = "S"
+                 END-TRANSACTION NO-AUDIT AUDITAREA ON EXCEPTION
+                             PERFORM DMS-ABT.
+           IF WSS-IND-DABT = "S"
+              PERFORM DMS-TMN.
+       FIN-SET-STAT.
+           EXIT PROGRAM.
+
+       DMS-ABT SECTION.
+       INI-DMS-ABT.
+           PERFORM DMS-DSP.
+           PERFORM DMS-TMN.
+       FIN-DMS-ABT.
+           EXIT PROGRAM.
+
+       DMS-TMN SECTION.
+       INI-DMS-TMN.
+           CALL SYSTEM DMTERMINATE.
+       FIN-DMS-TMN.
+           EXIT PROGRAM.
+
+       GET-KEY SECTION.
+       INI-GET-KEY.
+           IF WSS-AKEY = "{ky0}" OR
+               WSS-AKEY NOT > SPACES
+               FIND FIRST {reg}00 AT BD-{ky0} =
+                          {ky0} IN {reg}
+                ON EXCEPTION PERFORM SET-STAT
+           ELSE
+*% FOR I = 1 TO {nka}
+           IF WSS-AKEY = "{ky{i}}"
+            FIND FIRST {reg}0{i} AT BD-{ky{i}} =
+                       {ky{i}} IN {reg}
+                ON EXCEPTION PERFORM SET-STAT
+           ELSE
+*% NEXT I
+               PERFORM ERR-ALT.
+           PERFORM MOV-REG.
+       FIN-GET-KEY.
+           EXIT PROGRAM.
+
+       GET-NXT SECTION.
+       INI-GET-NXT.
+           IF WSS-AKEY = "{ky0}" OR
+               WSS-AKEY NOT > SPACES
+               FIND NEXT {reg}00
+                ON EXCEPTION PERFORM SET-STAT
+           ELSE
+*% FOR I = 1 TO {nka}
+           IF WSS-AKEY = "{ky{i}}"
+            FIND NEXT {reg}0{i}
+                ON EXCEPTION PERFORM SET-STAT
+           ELSE
+*% NEXT I
+               PERFORM ERR-ALT.
+           PERFORM MOV-REG.
+       FIN-GET-NXT.
+           EXIT PROGRAM.
+
+       GET-FST SECTION.
+       INI-GET-FST.
+           IF WSS-AKEY = "{ky0}" OR
+               WSS-AKEY NOT > SPACES
+               FIND FIRST {reg}00
+                ON EXCEPTION PERFORM SET-STAT
+           ELSE
+*% FOR I = 1 TO {nka}
+           IF WSS-AKEY = "{ky{i}}"
+            FIND FIRST {reg}0{i}
+                ON EXCEPTION PERFORM SET-STAT
+           ELSE
+*% NEXT I
+               PERFORM ERR-ALT.
+           PERFORM MOV-REG.
+       FIN-GET-FST.
+           EXIT PROGRAM.
+
+       GET-NLS SECTION.
+       INI-GET-NLS.
+           IF WSS-AKEY = "{ky0}" OR
+               WSS-AKEY NOT > SPACES
+               FIND FIRST {reg}00 AT BD-{ky0} NOT <
+                          {ky0} IN {reg}
+                ON EXCEPTION PERFORM SET-STAT
+           ELSE
+*% FOR I = 1 TO {nka}
+           IF WSS-AKEY = "{ky{i}}"
+            FIND FIRST {reg}0{i} AT BD-{ky{i}} NOT <
+                       {ky{i}} IN {reg}
+                ON EXCEPTION PERFORM SET-STAT
+           ELSE
+*% NEXT I
+               PERFORM ERR-ALT.
+           PERFORM MOV-REG.
+       FIN-GET-NLS.
+           EXIT PROGRAM.
+
+       GET-GRT SECTION.
+       INI-GET-GRT.
+           IF WSS-AKEY = "{ky0}" OR
+               WSS-AKEY NOT > SPACES
+               FIND FIRST {reg}00 AT BD-{ky0} >
+                          {ky0} IN {reg}
+                ON EXCEPTION PERFORM SET-STAT
+           ELSE
+*% FOR I = 1 TO {nka}
+           IF WSS-AKEY = "{ky{i}}"
+            FIND FIRST {reg}0{i} AT BD-{ky{i}} >
+                       {ky{i}} IN {reg}
+                ON EXCEPTION PERFORM SET-STAT
+           ELSE
+*% NEXT I
+               PERFORM ERR-ALT.
+           PERFORM MOV-REG.
+       FIN-GET-GRT.
+           EXIT PROGRAM.
+
+       PUT-FIL SECTION.
+       INI-PUT-FIL.
+           CREATE BD-{reg}
+                   ON EXCEPTION PERFORM SET-STAT.
+           IF FIO-STAT-LNK = "00"
+              PERFORM MOV-BDD.
+       FIN-PUT-FIL.
+           EXIT PROGRAM.
+
+       MOD-FIL SECTION.
+       INI-MOD-FIL.
+           PERFORM DEL-REG.
+           PERFORM PUT-FIL.
+       FIN-MOD-FIL.
+           EXIT PROGRAM.
+
+       DEL-FIL SECTION.
+       INI-DEL-FIL.
+           PERFORM DEL-REG.
+       FIN-DEL-FIL.
+           EXIT PROGRAM.
+
+       DEL-REG SECTION.
+       INI-DEL-REG.
+           BEGIN-TRANSACTION NO-AUDIT AUDITAREA ON EXCEPTION
+                             PERFORM DMS-ABT.
+           MOVE "S" TO WSS-IND-BGTN.
+           DELETE BD-{reg}
+                   ON EXCEPTION PERFORM SET-STAT.
+           IF WSS-IND-BGTN = "S"
+                 END-TRANSACTION NO-AUDIT AUDITAREA ON EXCEPTION
+                             PERFORM DMS-ABT.
+       FIN-DEL-REG.
+           EXIT.
+
+       CHG-FIL SECTION.
+       INI-CHG-FIL.
+      *No implementado (Etapa II)
+       FIN-CHG-FIL.
+           EXIT PROGRAM.
+
+       INP-FIL SECTION.
+       INI-INP-FIL.
+           OPEN INQUIRY BD{sis}
+               ON EXCEPTION PERFORM SET-STAT.
+       FIN-INP-FIL.
+           EXIT PROGRAM.
+
+       OUT-FIL SECTION.
+       INI-OUT-FIL.
+      *No implementado (No existe en DMSII)
+       FIN-OUT-FIL.
+           EXIT PROGRAM.
+
+       UPD-FIL SECTION.
+       INI-UPD-FIL.
+           OPEN UPDATE BD{sis}
+               ON EXCEPTION PERFORM SET-STAT.
+       FIN-UPD-FIL.
+           EXIT PROGRAM.
+
+       CLO-FIL SECTION.
+       INI-CLO-FIL.
+           CLOSE BD{sis}
+               ON EXCEPTION PERFORM SET-STAT.
+       FIN-CLO-FIL.
+           EXIT PROGRAM.
+
+       FND-EQL SECTION.
+       INI-FND-EQL.
+      *No implementado (No existe en DMSII)
+       FIN-FND-EQL.
+           EXIT PROGRAM.
+
+       FND-FST SECTION.
+       INI-FND-FST.
+           IF WSS-AKEY = "{ky0}" OR
+               WSS-AKEY NOT > SPACES
+               SET {reg}00 TO BEGINNING
+           ELSE
+*% FOR I = 1 TO {nka}
+           IF WSS-AKEY = "{ky{i}}"
+               SET {reg}0{i} TO BEGINNING
+           ELSE
+*% NEXT I
+               PERFORM ERR-ALT.
+       FIN-FND-FST.
+           EXIT PROGRAM.
+
+       FND-NLS SECTION.
+       INI-FND-NLS.
+      *No implementado (No existe en DMSII)
+       FIN-FND-NLS.
+           EXIT PROGRAM.
+
+       ULK-REC SECTION.
+       INI-ULK-REC.
+           FREE BD-{reg}.
+       FIN-ULK-REC.
+           EXIT PROGRAM.
+
+       ULK-ALL SECTION.
+       INI-ULK-ALL.
+      *No implementado (Etapa II)
+       FIN-ULK-ALL.
+           EXIT PROGRAM.
+
+       VID SECTION.
+       INI-VID.
+      *No implementado (No existe en DMSII)
+       FIN-VID.
+           EXIT PROGRAM.
+
+       ACC SECTION.
+       INI-ACC.
+      *Pendiente (investigar).
+       FIN-ACC.
+           EXIT PROGRAM.
+
+       REC-LCK SECTION.
+       INI-REC-LCK.
+      *No implementado (No existe en DMSII)
+       FIN-REC-LCK.
+           EXIT PROGRAM.
+
+       FNF SECTION.
+       INI-FNF.
+      *No implementado (No existe en DMSII)
+       FIN-FNF.
+           EXIT PROGRAM.
+
+       REC-LEN SECTION.
+       INI-REC-LEN.
+      *No implementado (No existe en DMSII)
+       FIN-REC-LEN.
+           EXIT PROGRAM.
+
+       EXT SECTION.
+       INI-EXT.
+      *No implementado (No existe en DMSII)
+       FIN-EXT.
+           EXIT PROGRAM.
+
+       GET-KEY-UPD SECTION.
+       INI-GET-KEY-UPD.
+           IF WSS-AKEY = "{ky0}" OR
+               WSS-AKEY NOT > SPACES
+               LOCK FIRST {reg}00 AT BD-{ky0} =
+                          {ky0} IN {reg}
+                ON EXCEPTION PERFORM SET-STAT
+           ELSE
+*% FOR I = 1 TO {nka}
+           IF WSS-AKEY = "{ky{i}}"
+            LOCK FIRST {reg}0{i} AT BD-{ky{i}} =
+                       {ky{i}} IN {reg}
+                ON EXCEPTION PERFORM SET-STAT
+           ELSE
+*% NEXT I
+               PERFORM ERR-ALT.
+           PERFORM MOV-REG.
+       FIN-GET-KEY-UPD.
+           EXIT PROGRAM.
+
+       END-BRW SECTION.
+       INI-END-BRW.
+      *No implementado (No existe en DMSII)
+       FIN-END-BRW.
+           EXIT PROGRAM.
+
+       BCK-OUT SECTION.
+       INI-BCK-OUT.
+      *Pendiente (investigar)
+       FIN-BCK-OUT.
+           EXIT PROGRAM.
+
+       GET-LEQ SECTION.
+       INI-GET-LEQ.
+           IF WSS-AKEY = "{ky0}" OR
+               WSS-AKEY NOT > SPACES
+               FIND LAST {reg}00 AT BD-{ky0} NOT >
+                         {ky0} IN {reg}
+                ON EXCEPTION PERFORM SET-STAT
+           ELSE
+*% FOR I = 1 TO {nka}
+           IF WSS-AKEY = "{ky{i}}"
+            FIND LAST {reg}0{i} AT BD-{ky{i}} NOT >
+                      {ky{i}} IN {reg}
+                ON EXCEPTION PERFORM SET-STAT
+           ELSE
+*% NEXT I
+               PERFORM ERR-ALT.
+           PERFORM MOV-REG.
+       FIN-GET-LEQ.
+           EXIT PROGRAM.
+
+       GET-PRV SECTION.
+       INI-GET-PRV.
+           IF WSS-AKEY = "{ky0}" OR
+               WSS-AKEY NOT > SPACES
+               FIND PRIOR {reg}00
+                ON EXCEPTION PERFORM SET-STAT
+           ELSE
+*% FOR I = 1 TO {nka}
+           IF WSS-AKEY = "{ky{i}}"
+            FIND PRIOR {reg}0{i}
+                ON EXCEPTION PERFORM SET-STAT
+           ELSE
+*% NEXT I
+               PERFORM ERR-ALT.
+           PERFORM MOV-REG.
+       FIN-GET-PRV.
+           EXIT PROGRAM.
+
+       CHK-PNT SECTION.
+       INI-CHK-PNT.
+
+       FIN-CHK-PNT.
+           EXIT PROGRAM.
+
+       BFR-RFH SECTION.
+       INI-BFR-RFH.
+      *No implementado (No existe en DMSII)
+       FIN-BFR-RFH.
+           EXIT PROGRAM.
+
+       EBR-ALL SECTION.
+       INI-EBR-ALL.
+      *No implementado (No existe en DMSII)
+       FIN-EBR-ALL.
+           EXIT PROGRAM.
+
+       ERR-ALT SECTION.
+       INI-ERR-ALT.
+           DISPLAY "? LLAVE"
+                WSS-AKEY
+                .
+           DISPLAY "  INVALIDO EN {sis}PF{reg} PARA ARCHIVO "
+                "{sis}{reg}"
+                " : ABORTO"
+                .
+           STOP RUN.
+       FIN-ERR-ALT.
+           EXIT PROGRAM.
+       COPY GNSBGDMD.

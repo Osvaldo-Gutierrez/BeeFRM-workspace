@@ -1,0 +1,871 @@
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. DAPPE06.
+       AUTHOR.     JUAN MARIN CUETO.
+      *DATE-WRITTEN. 10 DE JUNIO DE 1997.
+      *DATE-COMPILED. 10 DE JUNIO DE 1997.
+      *
+      *REMARKS.    *************************************************
+      ******************************************************************
+      *  INTERSOFT                                                     *
+      *  MIGRACION A COBOL OS/390                                      *
+      *  FECHA: 30 DE MARZO DE 1998                                    *
+      ******************************************************************
+      *            *                                               *
+      *            * OBJETIVO :                                    *
+      *            *            GENERAR INFORMACION DE DAP EN LIS- *
+      *            *            TADOS PARA ARCHIVO <E06> DE LA     *
+      *            *            SUPER, SEGREGADA MES A MES, CON LOS*
+      *            *            VENCIMINTOS PRODUCIDOS EN EL MES   *
+      *            *            RESPECTIVOS.                       *
+      *            *                                               *
+      *            * MANTENCION:                                   *
+      *            *                                               *
+      *            *                                               *
+      *            *************************************************
+      *
+       ENVIRONMENT DIVISION.
+      *--------------------
+       CONFIGURATION SECTION.
+       SPECIAL-NAMES.
+                     DECIMAL-POINT IS COMMA
+                     C01 IS CANAL-1.
+       INPUT-OUTPUT SECTION.
+       FILE-CONTROL.
+
+           SELECT DAPDCID       ASSIGN    DAPDCID
+                                ORGANIZATION IS SEQUENTIAL
+                                FILE STATUS IS FS-DAPDCID.
+
+           SELECT DAPDCI2       ASSIGN   DAPDCI2
+                                ORGANIZATION IS SEQUENTIAL
+                                FILE STATUS IS FS-DAPDCI2.
+
+           SELECT SALIDA        ASSIGN TO SALIDA.
+
+       DATA DIVISION.
+      *-------------
+      *
+       FILE SECTION.
+      *
+       FD  DAPDCID
+           LABEL RECORD   IS STANDARD
+           BLOCK CONTAINS 0  RECORDS
+           RECORDING MODE IS F.
+       01  REG-DAPDCID.
+           05  CID-GLS-FLAG           PIC X(01).
+           05  CID-KEY-IOPD.
+               10  CID-CIC-IOPD.
+                   15  CID-CAI-IOPD   PIC X(04).
+                   15  CID-IIC-IOPD   PIC X(08).
+           05  CID-VAL-SCAP           PIC S9(11)V9(04) COMP-3.
+           05  CID-VAL-INTD           PIC S9(11)V9(04) COMP-3.
+           05  CID-VAL-READ           PIC S9(11)V9(04) COMP-3.
+           05  CID-SGV-TINT           PIC S9(03)V9(04) COMP.
+           05  CID-SGV-TINP           PIC S9(03)V9(04) COMP.
+           05  CID-NUM-DIAS           PIC 9(05).
+           05  CID-SGV-VCAM           PIC S9(11)V9(04) COMP-3.
+           05  CID-COD-VCAM.
+               10  CID-MSC-TVAL       PIC X(01).
+               10  CID-COD-CVAL       PIC X(03).
+               10  CID-COD-TCAM       PIC X(02).
+           05  CID-COD-COPD.
+               10  CID-COD-TOPD       PIC X(03).
+               10  CID-COD-AOPD       PIC X(03).
+           05  CID-COD-OFIC           PIC X(03).
+           05  CID-COD-SCTB           PIC X(03).
+           05  CID-COD-PLZO           PIC X(02).
+           05  CID-FEC-FDEV.
+               10  CID-NUM-SDEV       PIC 9(02).
+               10  CID-NUM-ADEV       PIC 9(02).
+               10  CID-NUM-MDEV       PIC 9(02).
+               10  CID-NUM-DDEV       PIC 9(02).
+           05  CID-FEC-FVEN.
+               10  CID-NUM-SVEN       PIC 9(02).
+               10  CID-NUM-AVEN       PIC 9(02).
+               10  CID-NUM-MVEN       PIC 9(02).
+               10  CID-NUM-DVEN       PIC 9(02).
+           05  CID-GLS-DISP           PIC X(16).
+
+       FD  DAPDCI2
+           LABEL RECORD    IS  STANDARD
+           BLOCK CONTAINS  0   RECORDS
+           RECORDING MODE  IS  F.
+       01  REG-DAPDCI2.
+           05 DAPCI2-SS    PIC 9(02).
+           05 DAPCI2-AA    PIC 9(02).
+           05 DAPCI2-MM    PIC 9(02).
+           05 DAPCI2-VCAM  PIC X(06).
+           05 DAPCI2-COPD  PIC X(06).
+           05 DAPCI2-PLZO  PIC X(02).
+           05 DAPCI2-CAPI  PIC 9(12).
+           05 DAPCI2-VALI  PIC 9(12).
+           05 DAPCI2-CTAC  PIC X(10).
+           05 DAPCI2-REAJ  PIC 9(12).
+
+      *
+       FD  SALIDA   LABEL RECORD OMITTED.
+
+       01  REG-SALIDA     PIC X(132).
+      *
+       WORKING-STORAGE SECTION.
+      *------------------------
+       01  ESTADOS.
+           02 FS-DAPDCID           PIC XX VALUE ZEROS.
+           02 FS-DAPDCI2           PIC XX VALUE ZEROS.
+       01  CONTADORES.
+           05 WA-LEIDOS-CID        PIC 9(08)    VALUE ZEROES.
+           05 WA-PROCES-CID        PIC 9(08)    VALUE ZEROES.
+           05 WA-TOTAL-MESES       PIC 9(08)    VALUE ZEROES.
+           05 WA-TOTAL-IMPRE       PIC 9(08)    VALUE ZEROES.
+           05 WA-GRABA-CI2         PIC 9(08)    VALUE ZEROES.
+      *
+       01  VARIABLES.
+           02 WR-FREA.
+              05 WR-SFREA          PIC 9(02) VALUE 00.
+              05 WR-AFREA          PIC 9(02) VALUE 00.
+              05 WR-MFREA          PIC 9(02) VALUE 00.
+              05 WR-DFREA          PIC 9(02) VALUE 00.
+           02 WR-FPVC.
+              05 WR-SPVC           PIC 9(02) VALUE 00.
+              05 WR-APVC           PIC 9(02) VALUE 00.
+              05 WR-MPVC           PIC 9(02) VALUE 00.
+              05 WR-DPVC           PIC 9(02) VALUE 00.
+           02 WR-VCAM.
+              05 WR-TVAL           PIC X(01) VALUE ' '.
+              05 WR-CVAL           PIC X(03) VALUE SPACES.
+              05 WR-TCAM           PIC X(02) VALUE SPACES.
+           02 WR-COPD.
+              05 WR-TOPD           PIC X(03) VALUE SPACES.
+              05 WR-AOPD           PIC X(03) VALUE SPACES.
+           02 WR-PLZO              PIC X(02) VALUE SPACES.
+           02 WR-CAPI              PIC 9(12) VALUE ZEROES.
+           02 WR-INTE              PIC 9(12) VALUE ZEROES.
+           02 WR-CTAC              PIC X(10) VALUE SPACES.
+           02 WR-REAJ              PIC 9(12) VALUE ZEROES.
+      * AREA DE COMUNICACION CON RUTINA RUTUVALF
+       01  RUTWVALF.
+           05 RUTWVALF-FECHA.
+              10 RUTWVALF-FECHA-D        PIC 9(02).
+              10 RUTWVALF-FECHA-M        PIC 9(02).
+              10 RUTWVALF-FECHA-A.
+                 15 RUTWVALF-FECHA-AM    PIC 9(02).
+                 15 RUTWVALF-FECHA-AA    PIC 9(02).
+           05 RUTWVALF-CODRET            PIC 9(01)  VALUE 0.
+      * TABLA DE VALORES UF
+      *
+       01  TABLA-TABVUF.
+           05 TB-CNT-TABVUF            PIC 9(08)              VALUE 0.
+           05 TB-BUS-TABVUF            PIC 9(08)              VALUE 0.
+           05 TB-TABVUF                OCCURS 0 TO 15000 TIMES
+                                       DEPENDING ON TB-CNT-TABVUF
+                                       ASCENDING KEY TB-TABVUF-FECHA
+                                       INDEXED BY IX-TABVUF.
+              10 TB-TABVUF-FECHA       PIC 9(8).
+              10 TB-TABVUF-VALOR       PIC S9(6)V9(04) COMP-3.
+      *
+      *
+      * TABLA DE CUENTAS CONTABLES
+      *
+       01  TABLA-TABDCC.
+           05 TB-CNT-TABDCC            PIC 9(08) VALUE IS 0.
+           05 TB-TABDCC-BUS.
+              10 TB-TABDCC-BUS-CODI    PIC X(03) VALUE SPACES.
+              10 TB-TABDCC-BUS-TIPO    PIC X(03) VALUE SPACES.
+              10 TB-TABDCC-BUS-VCAM    PIC X(06) VALUE SPACES.
+              10 TB-TABDCC-BUS-COPD    PIC X(06) VALUE SPACES.
+              10 TB-TABDCC-BUS-PLZO    PIC X(05) VALUE SPACES.
+           05 TB-TABDCC                OCCURS 0 TO 1000 TIMES
+                                       DEPENDING ON TB-CNT-TABDCC
+                                       ASCENDING KEY TB-TABDCC-COD
+                                       INDEXED BY IX-TABDCC.
+              10 REG-TB-TABDCC.
+                 15 TB-TABDCC-COD      PIC X(23).
+                 15 TB-TABDCC-CTA      PIC X(09).
+      *
+      *
+       01  WT-TITULO-1.
+           02 FILLER         PIC X(078) VALUE
+              'BANCO CREDITO INVERSIONES'.
+           02 FILLER         PIC X(09) VALUE 'PAGINA : '.
+           02 PAGINA-D       PIC ZZZZZZZ9.
+      *
+       01  WT-TITULO-2.
+           02 FILLER         PIC X(078) VALUE 'PGM :DAPPE06'.
+           02 FILLER         PIC X(09) VALUE 'FECHA  : '.
+           02 FECHA-DD1      PIC X(02).
+           02 FILLER         PIC X(01) VALUE '/'.
+           02 FECHA-MM1      PIC X(02).
+           02 FILLER         PIC X(01) VALUE '/'.
+           02 FECHA-SS1      PIC X(02).
+           02 FECHA-AA1      PIC X(02).
+      *
+       01  WT-TITULO-3.
+           02 FILLER         PIC X(098) VALUE ALL '-'.
+      *
+       01  WT-TITULO-4.
+           02 FILLER         PIC X(05) VALUE 'MES :'.
+           02 WT-TIT4-MES    PIC X(12) VALUE SPACES.
+           02 FILLER         PIC X(04) VALUE 'DE :'.
+           02 WT-TIT4-SIG    PIC 9(02) VALUE ZEROES.
+           02 WT-TIT4-ANO    PIC 9(02) VALUE ZEROES.
+      *
+       01  WT-TITULO-5.
+           02 FILLER         PIC X(02) VALUE SPACES.
+           02 FILLER         PIC X(60) VALUE
+           'CODIGO MONEDA  CODIGO OPERACION   PLAZO   CAPITAL INICIAL'.
+           02 FILLER         PIC X(35) VALUE
+           '  VALOR INTERES   CUENTA CONTABLE'.
+      *
+       01  WT-DETALLE.
+           02 FILLER         PIC X(05) VALUE SPACES.
+           02 VCAM-D         PIC X(06) VALUE SPACES.
+           02 FILLER         PIC X(11) VALUE SPACES.
+           02 COPD-D         PIC X(06) VALUE SPACES.
+           02 FILLER         PIC X(10) VALUE SPACES.
+           02 PLZO-D         PIC X(02) VALUE SPACES.
+           02 FILLER         PIC X(04) VALUE SPACES.
+           02 CAPI-D         PIC ZZZ.ZZZ.ZZZ.ZZ9.
+           02 FILLER         PIC X(03) VALUE SPACES.
+           02 INTE-D         PIC ZZZ.ZZZ.ZZZ.ZZ9.
+           02 FILLER         PIC X(03) VALUE SPACES.
+           02 CTAC-D         PIC X(10) VALUE SPACES.
+
+       01  WR-VARIOS.
+           05 WR-VAL-UF             PIC S9(07)V9(04) COMP-3 VALUE +0.
+           05 WR-VAL-UF2            PIC S9(07)V9(04) COMP-3 VALUE +0.
+           05 WR-VAL-DOLAR          PIC S9(07)V9(04) COMP-3 VALUE +0.
+           05 WR-FECHA-FILEUF       PIC 9(06)  VALUE ZEROES.
+           05 WR-FECHA-PROCESO.
+              10 WR-FECHA-AA1       PIC 99.
+              10 WR-FECHA-MM1       PIC 99.
+              10 WR-FECHA-DD1       PIC 99.
+           05 WR-ULTIMO-DIA.
+              10 WR-ULTIMO-DD       PIC 99.
+              10 WR-ULTIMO-MM       PIC 99.
+              10 WR-ULTIMO-SS       PIC 99.
+              10 WR-ULTIMO-AA       PIC 99.
+           05 WR-CONT-LINEAS1       PIC 9(02)  VALUE 90.
+           05 WR-SW-IMPRESION       PIC 9(01)  VALUE 0.
+           05 WR-CONT-PAG1          PIC 9(04)  VALUE ZEROES.
+           05 WR-REGISTRO-LINEA     PIC X(90)  VALUE SPACES.
+           05 WR-ERROR              PIC X(02)  VALUE SPACES.
+           05 WR-MESES.
+              10 FILLER PIC X(12) VALUE 'ENERO       '.
+              10 FILLER PIC X(12) VALUE 'FEBRERO     '.
+              10 FILLER PIC X(12) VALUE 'MARZO       '.
+              10 FILLER PIC X(12) VALUE 'ABRIL       '.
+              10 FILLER PIC X(12) VALUE 'MAYO        '.
+              10 FILLER PIC X(12) VALUE 'JUNIO       '.
+              10 FILLER PIC X(12) VALUE 'JULIO       '.
+              10 FILLER PIC X(12) VALUE 'AGOSTO      '.
+              10 FILLER PIC X(12) VALUE 'SEPTIEMBRE  '.
+              10 FILLER PIC X(12) VALUE 'OCTUBRE     '.
+              10 FILLER PIC X(12) VALUE 'NOVIEMBRE   '.
+              10 FILLER PIC X(12) VALUE 'DICIEMBRE   '.
+           05 WR-MES REDEFINES WR-MESES PIC X(12) OCCURS 12 TIMES.
+           05 WR-SECTION                   PIC X(35).
+           05 WR-PARRAFO                   PIC X(35).
+           05 WR-OPERACION                 PIC X(35).
+           05 WR-CODIGO                    PIC X(4).
+       01  W-PARAMETROS.
+           05 WP-PARAMETRO-1.
+              10 FILLER                PIC X(07).
+              10 WP-FECHA-PROCESO.
+                 15 WP-FECHA-DD1       PIC 99.
+                 15 WP-FECHA-MM1       PIC 99.
+                 15 WP-FECHA-SS1       PIC 99.
+                 15 WP-FECHA-AA1       PIC 99.
+              10 FILLER                PIC X(50) VALUE SPACES.
+      ******************************************************************
+      *      USER INFORMATION BLOCK                                    *
+      ******************************************************************
+      *
+       01  UIB.
+           05 FILLER                 PIC X(32) VALUE 'DAPPE06 '.
+      *
+      ******************************************************************
+      *      REQUEST AREA                                              *
+      ******************************************************************
+      *
+       01  REQ-AREA-DCC.
+           02 REQ-COMAN-DCC        PIC X(05).
+           02 REQ-TBLNM-DCC        PIC X(03)  VALUE 'DCC'.
+           02 REQ-KEYNM-DCC        PIC X(05)  VALUE 'DCC00'.
+           02 REQ-RTNCD-DCC        PIC X(02)  VALUE SPACES.
+           02 REQ-INRCD-DCC        PIC X(01).
+           02 REQ-DBIDE-DCC        PIC S9(4)  COMP VALUE +371.
+           02 REQ-TBLID-DCC        PIC X(07).
+           02 FILLER               PIC X(25).
+           02 REQ-CTMAX-DCC        PIC S9(4)  COMP.
+           02 REQ-IOCNT-DCC        PIC S9(4)  COMP.
+           02 FILLER               PIC X(22).
+           02 REQ-KYVAL-DCC.
+              03 REQ-CLAVE-DCC.
+                 05 REQ-CLAVE-DCC-COD   PIC X(03) VALUE 'DCC'.
+                 05 FILLER              PIC X(20).
+      ******************************************************************
+      *                   WORK AREA                                    *
+      ******************************************************************
+      *
+       01  REG-DCC.
+      *    COPYDD TDL-R-DCC.TDL-E-DCC00(PROD),02,D
+      *                             EQUIVALENTE AL REGISTRO DCC
+           02  TDL-E-DCC00.
+      *                             DICCIONARIO CUENTAS CONTABLES
+               04  DCC.
+      *                             FILLER COMPATIBILIDAD VSAM/MVS
+                   06  DCC-GLS-FLAG PICTURE X(1).
+      *                             LLAVE PRINCIPAL
+                   06  DCC-KEY-IDCC.
+      *                             TIPO + CODIGO
+                       08  DCC-COD-TABL.
+      *                             CODIGO TIPO TABLA
+                       10  DCC-COD-TTAB
+                                    PICTURE X(3).
+      *                             IDENTIFICACION CUENTA CONTABLE
+                       10  DCC-COD-CCTB.
+      *                             IDENTIFICA TIPO CUENTA CONTABLE
+                       12  DCC-COD-TCCT
+                                    PICTURE X(3).
+      *                             CODIGO VALOR DE CAMBIO
+                       12  DCC-COD-VCAM.
+      *                             MISCELANEO TIPO VALOR
+                       14  DCC-MSC-TVAL
+                                    PICTURE X(1).
+      *                             CODIGO VALOR
+                       14  DCC-COD-CVAL
+                                    PICTURE X(3).
+      *                             CODIGO TIPO CAMBIO
+                       14  DCC-COD-TCAM
+                                    PICTURE X(2).
+      *                             CODIGO CLASE OPERACION DAP
+                       12  DCC-COD-COPD.
+      *                             CODIGO TIPO OPERACION
+                       14  DCC-COD-TOPD
+                                    PICTURE X(3).
+      *                             CODIGO AUXILIAR
+                       14  DCC-COD-AOPD
+                                    PICTURE X(3).
+      *                             CODIGO PLAZO
+                       12  DCC-COD-PLZO
+                                    PICTURE X(2).
+      *                             SITUACION CONTABLE
+                       12  DCC-COD-SCTB
+                                    PICTURE X(3).
+      *                             TIME STAMP TRANSACCION
+                   06  DCC-STP-ITRN.
+      *                             FECHA TRANSACCION
+                       08  DCC-FEC-FTRN.
+                       10  DCC-NUM-STRN
+                                    PICTURE 9(2).
+                       10  DCC-NUM-ATRN
+                                    PICTURE 9(2).
+                       10  DCC-NUM-MTRN
+                                    PICTURE 9(2).
+                       10  DCC-NUM-DTRN
+                                    PICTURE 9(2).
+      *                             HORA TRANSACCION
+                       08  DCC-HRA-HRTR
+                                    PICTURE 9(6).
+      *                             INDICADOR TIPO ACCION
+                   06  DCC-COD-TACC PICTURE X(1).
+      *                             INDICADOR STATUS
+                   06  DCC-COD-STAT PICTURE X(1).
+      *                             CODIGO ORIGEN TRANSACCION
+                   06  DCC-COD-OTRN PICTURE X(4).
+      *                             AUTOR TRANSACCION
+                   06  DCC-COD-ATRN PICTURE X(12).
+      *                             TIPO + CODIGO ( INTERNO COMPUTACIONA
+                   06  DCC-CIC-TABL.
+      *                             CODIGO TIPO TABLA
+                       08  DCC-CIC-TTAB
+                                    PICTURE X(3).
+      *                             IDENTIFICACION CUENTA CONTABLE
+                       08  DCC-CIC-CCTB.
+      *                             IDENTIFICA TIPO CUENTA CONTABLE
+                       10  DCC-CIC-TCCT
+                                    PICTURE X(3).
+      *                             CODIGO VALOR DE CAMBIO
+                       10  DCC-CIC-VCAM.
+      *                             MISCELANEO TIPO VALOR
+                       12  DCC-CIC-TVAL
+                                    PICTURE X(1).
+      *                             CODIGO VALOR
+                       12  DCC-CIC-CVAL
+                                    PICTURE X(3).
+      *                             CODIGO TIPO CAMBIO
+                       12  DCC-CIC-TCAM
+                                    PICTURE X(2).
+      *                             CODIGO CLASE OPERACION DAP
+                       10  DCC-CIC-COPD.
+      *                             CODIGO TIPO OPERACION
+                       12  DCC-CIC-TOPD
+                                    PICTURE X(3).
+      *                             CODIGO AUXILIAR
+                       12  DCC-CIC-AOPD
+                                    PICTURE X(3).
+      *                             CODIGO PLAZO
+                       10  DCC-CIC-PLZO
+                                    PICTURE X(2).
+      *                             SITUACION CONTABLE
+                       10  DCC-CIC-SCTB
+                                    PICTURE X(3).
+      *                             CODIGO EXTERNO ( CTA SEGUN SUPER )
+                   06  DCC-EXT-TABL.
+      *                             CODIGO TIPO TABLA
+                       08  DCC-EXT-TTAB
+                                    PICTURE X(3).
+      *                             CODIGO TABLA
+                       08  DCC-EXT-CTAB
+                                    PICTURE X(5).
+      *                             CODIGO CUENTA SEGUN BANCO
+                   06  DCC-GLS-CCSB PICTURE X(12).
+      *                             INDICADOR DE VIGENCIA
+                   06  DCC-COD-VIGE PICTURE X(1).
+      *                             DISPONIBLE
+                   06  DCC-GLS-DISP PICTURE X(17).
+      ******************************************************************
+      *                 ELEMENT LIST                                   *
+      ******************************************************************
+      *
+       01  ELM-LIS-DCC.
+           05 ELEM-DCC             PIC X(05)  VALUE 'DCC00'.
+           05 ELSE-DCC             PIC X(01).
+           05 FILLER               PIC X(05)  VALUE SPACES.
+      *
+           COPY RTNWCALE.
+           COPY RUTWVCAM.
+       PROCEDURE DIVISION.
+      *===================
+       INICIO SECTION.
+      *===============
+           ENTRY 'DBMSCBL'.
+           PERFORM A-INICIALIZAR.
+           IF WR-ERROR NOT = 'SI'
+              PERFORM B-ABRIR-ARCHIVOS
+           END-IF
+           IF WR-ERROR NOT = 'SI'
+              PERFORM C-PROCESO
+           END-IF
+           PERFORM D-TERMINO.
+           DISPLAY '***'.
+           DISPLAY '*** DAPPE06 : TERMINO NORMAL ***'.
+           GOBACK.
+       FIN-INICIO. EXIT.
+      *-----------
+       A-INICIALIZAR SECTION.
+      *======================
+           INITIALIZE CONTADORES.
+       A0-CARGA-CALENDARIO.
+      *--------------------
+      *
+           MOVE '00000000' TO CALEAREA-FECHA-1
+           MOVE 'CARGAR'   TO CALEAREA-FUNCION
+           CALL 'RUTUCALE' USING RTNWCALE
+           IF CALEAREA-COD-RET NOT = 0
+              MOVE 'SI' TO WR-ERROR
+              DISPLAY ' '
+              DISPLAY 'ERROR EN LA SECCION A-INICIALIZAR'
+              DISPLAY 'PARRAFO   : A0-CARGA-CALENDARIO'
+              DISPLAY 'OPERACION : CALL RUTUCALE'
+              DISPLAY 'CODIGO RETORNO: ' CALEAREA-COD-RET
+              MOVE    'SECCION ..: A-INICIALIZAR'       TO WR-SECTION
+              MOVE    'PARRAFO ..: A0-CARGA-CALENDARIO' TO WR-PARRAFO
+              MOVE    'OPERACION : CALL RUTUCALE'       TO WR-OPERACION
+              MOVE     CALEAREA-COD-RET                 TO WR-CODIGO
+              DISPLAY ' '
+              GO TO AZ-FIN-INICIALIZAR
+           END-IF.
+       AB-LEER-PARAMETROS.
+      *-------------------
+           ACCEPT WP-PARAMETRO-1.
+           DISPLAY WP-PARAMETRO-1.
+      *  VALIDA FECHA PARAMETRO
+           MOVE WP-FECHA-DD1 TO RUTWVALF-FECHA-D
+           MOVE WP-FECHA-MM1 TO RUTWVALF-FECHA-M.
+           MOVE WP-FECHA-AA1 TO RUTWVALF-FECHA-AA.
+           MOVE WP-FECHA-SS1 TO RUTWVALF-FECHA-AM.
+       AC-PROCESO-FECHAS.
+      *------------------
+           CALL 'RUTUVALF' USING RUTWVALF-FECHA RUTWVALF-CODRET
+           IF RUTWVALF-CODRET NOT = 0
+              DISPLAY
+                 '* FECHA PROCESO INVALIDA. :' WP-FECHA-PROCESO
+              MOVE    'SECCION ..: A-INICIALIZAR'       TO WR-SECTION
+              MOVE    'PARRAFO ..: AC-PROCESO-FECHAS  ' TO WR-PARRAFO
+              MOVE    'OPERACION : CALL RUTUVALF'       TO WR-OPERACION
+              MOVE     RUTWVALF-CODRET                  TO WR-CODIGO
+              MOVE 'SI' TO WR-ERROR
+              GO TO AZ-FIN-INICIALIZAR
+           END-IF.
+           MOVE WP-FECHA-DD1      TO FECHA-DD1.
+           MOVE WP-FECHA-MM1      TO FECHA-MM1.
+           MOVE WP-FECHA-SS1      TO FECHA-SS1.
+           MOVE WP-FECHA-AA1      TO FECHA-AA1.
+      *
+      *     ***    CALCULA ULTIMO DIA CALENDARIO MES ACTUAL
+      *
+           MOVE 'BUDCM '                      TO CALEAREA-FUNCION.
+           MOVE WP-FECHA-PROCESO              TO CALEAREA-FECHA-1.
+           CALL 'RUTUCALE' USING RTNWCALE.
+           IF CALEAREA-COD-RET NOT = 0
+              MOVE 'SECTION ..: A-INICIALIZAR '    TO WR-SECTION
+              MOVE 'PARRAFO ..: AC-PROCESO-FECHAS' TO WR-PARRAFO
+              MOVE 'OPERACION : BUDCM '            TO WR-OPERACION
+              MOVE CALEAREA-COD-RET                TO WR-CODIGO
+              MOVE  'SI' TO WR-ERROR
+           ELSE
+              MOVE CALEAREA-FECHA-2           TO WR-ULTIMO-DIA
+           END-IF.
+           MOVE WR-ULTIMO-DD     TO   WR-FECHA-DD1.
+           MOVE WR-ULTIMO-MM     TO   WR-FECHA-MM1.
+           MOVE WR-ULTIMO-AA     TO   WR-FECHA-AA1.
+       AZ-FIN-INICIALIZAR. EXIT.
+      *-------------------
+
+       B-ABRIR-ARCHIVOS SECTION.
+      *=========================
+           OPEN INPUT  DAPDCID
+                OUTPUT DAPDCI2
+                       SALIDA.
+           IF FS-DAPDCID NOT = ZEROS
+              DISPLAY ' ERROR EN OPEN DAPCID *****'
+              DISPLAY ' FILE STATUS :' FS-DAPDCID
+              MOVE    'SECCION ..: B-ABRIR-ARCHIVOS'    TO WR-SECTION
+              MOVE    'PARRAFO ..: B-ABRIR-ARCHIVOS   ' TO WR-PARRAFO
+              MOVE    'OPERACION : OPEN DAPDCID '       TO WR-OPERACION
+              MOVE     FS-DAPDCID                       TO WR-CODIGO
+              MOVE    'SI'                              TO WR-ERROR
+           END-IF.
+           IF FS-DAPDCI2 NOT = ZEROS
+              DISPLAY ' ERROR EN OPEN DAPCI2 *****'
+              DISPLAY ' FILE STATUS :' FS-DAPDCI2
+              MOVE    'SECCION ..: B-ABRIR-ARCHIVOS'    TO WR-SECTION
+              MOVE    'PARRAFO ..: B-ABRIR-ARCHIVOS   ' TO WR-PARRAFO
+              MOVE    'OPERACION : OPEN DAPDCI2 '       TO WR-OPERACION
+              MOVE     FS-DAPDCI2                       TO WR-CODIGO
+              MOVE    'SI'                              TO WR-ERROR
+           END-IF.
+       FIN-ABRIR-ARCHIVOS. EXIT.
+      *-------------------
+
+       C-PROCESO SECTION.
+      *==================
+           IF WR-ERROR NOT = 'SI'
+              PERFORM CA1-BUSCAR-VALOR-DOLAR
+           END-IF.
+           IF WR-ERROR NOT = 'SI'
+              PERFORM CA4-PROCESAR-TABDCC
+           END-IF.
+           IF WR-ERROR NOT = 'SI'
+              MOVE 'NO' TO WR-ERROR
+              PERFORM CA-LEER-DAPDCID
+           END-IF.
+           IF WR-ERROR = 'NO'
+              IF CID-NUM-SVEN < WP-FECHA-SS1 OR
+                (CID-NUM-SVEN = WP-FECHA-SS1 AND
+                 CID-NUM-AVEN < WP-FECHA-AA1) OR
+                (CID-NUM-SVEN = WP-FECHA-SS1 AND
+                 CID-NUM-AVEN = WP-FECHA-AA1 AND
+                 CID-NUM-MVEN < WP-FECHA-MM1)
+                 PERFORM CA-LEER-DAPDCID UNTIL
+                                   CID-NUM-SVEN NOT < WP-FECHA-SS1 AND
+                                  (CID-NUM-AVEN     > WP-FECHA-AA1 OR
+                                   CID-NUM-AVEN     = WP-FECHA-AA1 AND
+                                   CID-NUM-MVEN NOT < WP-FECHA-MM1)
+              END-IF
+              MOVE CID-FEC-FVEN  TO WR-FPVC
+              MOVE CID-COD-VCAM  TO WR-VCAM
+              MOVE CID-COD-COPD  TO WR-COPD
+              MOVE CID-COD-PLZO  TO WR-PLZO
+              PERFORM CB-PROCESAR-DAPDCID UNTIL FS-DAPDCID = '10' OR
+                                                WR-ERROR   = 'SI'
+              PERFORM CE-LISTAR-DATOS.
+           GO TO CZ-FIN-PROCESO.
+
+       CA1-BUSCAR-VALOR-DOLAR.
+      *-----------------------
+           MOVE WR-FECHA-DD1 TO RUTWVCAM-FECHA-DD.
+           MOVE WR-FECHA-MM1 TO RUTWVCAM-FECHA-MM.
+           MOVE WP-FECHA-SS1 TO RUTWVCAM-FECHA-SS.
+           MOVE WR-FECHA-AA1 TO RUTWVCAM-FECHA-AA.
+           MOVE '101301'     TO RUTWVCAM-CODIGO.
+           MOVE ZEROES       TO RUTWVCAM-VALOR.
+           MOVE SPACES       TO RUTWVCAM-CODRET.
+           CALL 'RUTUVCAM' USING  RUTWVCAM.
+           IF RUTWVCAM-CODRET = SPACES
+              MOVE RUTWVCAM-VALOR TO WR-VAL-DOLAR
+              MOVE RUTWVCAM-VALOR TO WR-VAL-UF2
+              DISPLAY 'VALOR DEL US$. :' WR-VAL-UF2 ' AL :'
+               WR-FECHA-DD1 WR-FECHA-MM1 WP-FECHA-SS1 WP-FECHA-AA1
+           ELSE
+              MOVE 'SECCION ..: C-PROCESO       '    TO WR-SECTION
+              MOVE 'PARRAFO ..: CA1-BUSCAR-VALOR-UF' TO WR-PARRAFO
+              MOVE 'OPERACION : CALL RUTWVCAM ...  ' TO WR-OPERACION
+              MOVE  RUTWVCAM-CODRET                  TO WR-CODIGO
+              MOVE 'SI'                              TO WR-ERROR
+           END-IF.
+
+       CA4-PROCESAR-TABDCC.
+      *--------------------
+      * CARGAR VECTOR PARA BUSQUEDA DE CUENTA CONTABLE.
+      *+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*
+           PERFORM CA5-POSI-TABDCC
+           IF WR-ERROR NOT = 'SI'
+              PERFORM CA6-LEER-TABDCC
+           END-IF
+           IF WR-ERROR NOT = 'SI'
+              PERFORM CA7-CARG-TABDCC UNTIL
+                 DCC-COD-TTAB NOT = 'DCC' OR
+                    REQ-RTNCD-DCC NOT = SPACES
+              IF TB-CNT-TABDCC = 0
+                 DISPLAY '** NO HAY DATOS EN TABLA TABDCC'
+                 MOVE 'SI'               TO WR-ERROR.
+       CA5-POSI-TABDCC.
+      *----------------
+      * POSICIONA EN TABLA
+           MOVE 'GSETL'             TO REQ-COMAN-DCC
+           MOVE 'DCC'               TO REQ-TBLNM-DCC
+           MOVE 'DCC00'             TO REQ-KEYNM-DCC
+           MOVE SPACES              TO REQ-RTNCD-DCC
+           MOVE +371                TO REQ-DBIDE-DCC
+           MOVE LOW-VALUES          TO REQ-KYVAL-DCC
+           MOVE 'DCC'               TO REQ-CLAVE-DCC-COD
+           CALL 'DBNTRY' USING UIB REQ-AREA-DCC REG-DCC ELM-LIS-DCC
+           IF REQ-RTNCD-DCC NOT = SPACES
+              DISPLAY '** ERROR POSI   (BD 371 TB DCC) -' REQ-RTNCD-DCC
+              DISPLAY 'REQ ' REQ-AREA-DCC
+              MOVE    'SECCION ..: C-PROCESO       '    TO WR-SECTION
+              MOVE    'PARRAFO ..: CA5-POSIC-TABDCC   ' TO WR-PARRAFO
+              MOVE    'OPERACION : GSETL        '       TO WR-OPERACION
+              MOVE     REQ-RTNCD-DCC                    TO WR-CODIGO
+              MOVE    'SI'                              TO WR-ERROR
+           END-IF.
+       CA6-LEER-TABDCC.
+      *----------------
+      * LEE REGISTRO
+           MOVE 'GETIT'             TO REQ-COMAN-DCC
+           CALL 'DBNTRY' USING UIB REQ-AREA-DCC REG-DCC ELM-LIS-DCC.
+           IF REQ-RTNCD-DCC NOT = '14' AND
+              REQ-RTNCD-DCC NOT = '19' AND
+              REQ-RTNCD-DCC NOT = SPACES
+              DISPLAY '** ERROR LEER   (BD 371 TB DCC) :' REQ-RTNCD-DCC
+              DISPLAY 'REQ ' REQ-AREA-DCC
+              DISPLAY 'WKA ' REG-DCC
+              MOVE    'SECCION ..: C-PROCESO      '  TO WR-SECTION
+              MOVE    'PARRAFO ..: CA5-POSIC-TABDCC' TO WR-PARRAFO
+              MOVE    'OPERACION : GSETL        '    TO WR-OPERACION
+              MOVE     REQ-RTNCD-DCC                 TO WR-CODIGO
+              MOVE    'SI'                           TO WR-ERROR
+           END-IF.
+       CA7-CARG-TABDCC.
+      *----------------
+           ADD 1                      TO TB-CNT-TABDCC
+           IF TB-CNT-TABDCC > 1000
+              DISPLAY '** TABLA TABDCC EXCEDIDA (1000)'
+              MOVE    'SECCION ..: C-PROCESO      '  TO WR-SECTION
+              MOVE    'PARRAFO ..: CA7-CARGA-TABDCC' TO WR-PARRAFO
+              MOVE    'TABLA EXCEDIDA (1000)    '    TO WR-OPERACION
+              MOVE     TB-CNT-TABDCC                TO WR-CODIGO
+              MOVE    'SI'                           TO WR-ERROR
+           ELSE
+              SET IX-TABDCC           TO TB-CNT-TABDCC
+              MOVE DCC-KEY-IDCC       TO TB-TABDCC-COD (IX-TABDCC)
+              MOVE DCC-GLS-CCSB       TO TB-TABDCC-CTA (IX-TABDCC).
+           PERFORM CA6-LEER-TABDCC.
+       CA-LEER-DAPDCID.
+      *----------------
+           READ DAPDCID NEXT.
+           IF FS-DAPDCID = '00'
+             ADD 1 TO WA-LEIDOS-CID
+           ELSE
+             IF FS-DAPDCID NOT = '10'
+               DISPLAY '***'
+               DISPLAY '*** ERROR AL LEER ARCHIVO DAPDCID'
+               DISPLAY '*** ERROR AL LEER ARCHIVO DAPDCID' UPON CONSOLE
+               DISPLAY '*** FILE STATUS DAPDCID : ' FS-DAPDCID
+               DISPLAY '*** PROCESO CANCELADO'
+               DISPLAY '*** PROCESO CANCELADO' UPON CONSOLE
+               CLOSE DAPDCID SALIDA DAPDCI2
+               MOVE    'SECCION ..: C-PROCESO      '  TO WR-SECTION
+               MOVE    'PARRAFO ..: CA-LEER-DAPDCID ' TO WR-PARRAFO
+               MOVE    'READ TABDCID NEXT        '    TO WR-OPERACION
+               MOVE     FS-DAPDCID                    TO WR-CODIGO
+               MOVE 'SI' TO WR-ERROR
+             END-IF
+           END-IF.
+
+       CB-PROCESAR-DAPDCID.
+      *--------------------
+           ADD 1 TO WA-PROCES-CID
+           IF CID-NUM-SVEN NOT = WR-SPVC OR
+              CID-NUM-AVEN NOT = WR-APVC OR
+              CID-NUM-MVEN NOT = WR-MPVC OR
+              CID-COD-VCAM NOT = WR-VCAM OR
+              CID-COD-COPD NOT = WR-COPD OR
+              CID-COD-PLZO NOT = WR-PLZO
+              PERFORM CE-LISTAR-DATOS
+              MOVE CID-COD-VCAM TO WR-VCAM
+              MOVE CID-COD-COPD TO WR-COPD
+              MOVE CID-COD-PLZO TO WR-PLZO
+           END-IF.
+           IF CID-NUM-SVEN NOT = WR-SPVC OR
+              CID-NUM-AVEN NOT = WR-APVC OR
+              CID-NUM-MVEN NOT = WR-MPVC
+              MOVE 090  TO WR-CONT-LINEAS1
+              ADD  1    TO WA-TOTAL-MESES
+              MOVE CID-FEC-FVEN  TO WR-FPVC
+           END-IF.
+           IF CID-COD-VCAM = '1013  '
+             PERFORM CD-CALCULAR-DOLAR
+           ELSE
+             COMPUTE WR-CAPI = WR-CAPI +  CID-VAL-SCAP
+           END-IF
+             COMPUTE WR-INTE = WR-INTE +  CID-VAL-INTD
+             COMPUTE WR-REAJ = WR-REAJ +  CID-VAL-READ
+           PERFORM CA-LEER-DAPDCID.
+       CD-CALCULAR-DOLAR.
+      *------------------
+           COMPUTE WR-CAPI ROUNDED =
+                           WR-CAPI +  (CID-VAL-SCAP * WR-VAL-DOLAR).
+      *    COMPUTE WR-INTE ROUNDED = WR-INTE +
+      *                    WR-INTE +  (CID-VAL-INTD * WR-VAL-DOLAR).
+      *    COMPUTE WR-REAJ ROUNDED =
+      *                    WR-REAJ +  (CID-VAL-READ  * WR-VAL-DOLAR).
+       CE-LISTAR-DATOS.
+      *----------------
+           PERFORM CF-BUSCAR-CTAC.
+      *
+      * GRABAR ARCHIVO DAPCI2 CON DATOS DE LISTADO.
+      *
+           MOVE WR-MPVC  TO DAPCI2-MM.
+           MOVE WR-SPVC  TO DAPCI2-SS.
+           MOVE WR-APVC  TO DAPCI2-AA.
+           MOVE WR-VCAM  TO DAPCI2-VCAM.
+           MOVE WR-COPD  TO DAPCI2-COPD.
+           MOVE WR-PLZO  TO DAPCI2-PLZO.
+           MOVE WR-CAPI  TO DAPCI2-CAPI.
+           MOVE ZEROES   TO DAPCI2-VALI.
+           MOVE WR-CTAC  TO DAPCI2-CTAC.
+           MOVE ZEROES   TO DAPCI2-REAJ.
+           WRITE REG-DAPDCI2.
+           IF WR-INTE > ZEROES OR WR-REAJ > ZEROES
+              MOVE WP-FECHA-MM1 TO DAPCI2-MM
+              MOVE WP-FECHA-SS1 TO DAPCI2-SS
+              MOVE WP-FECHA-AA1 TO DAPCI2-AA
+              IF WP-FECHA-MM1 < 12
+                 ADD 1          TO DAPCI2-MM
+              ELSE
+                 MOVE 01        TO DAPCI2-MM
+                 ADD  01        TO DAPCI2-AA
+              END-IF
+              MOVE WR-VCAM      TO DAPCI2-VCAM
+              MOVE WR-COPD      TO DAPCI2-COPD
+              MOVE WR-PLZO      TO DAPCI2-PLZO
+              MOVE ZEROES       TO DAPCI2-CAPI
+              MOVE WR-INTE      TO DAPCI2-VALI
+              MOVE WR-CTAC      TO DAPCI2-CTAC
+              MOVE WR-REAJ      TO DAPCI2-REAJ
+              WRITE REG-DAPDCI2
+           END-IF.
+           ADD 1 TO WA-GRABA-CI2.
+      *
+      * GENERAR LISTADO.
+      *
+           MOVE WR-VCAM  TO VCAM-D.
+           MOVE WR-COPD  TO COPD-D.
+           MOVE WR-PLZO  TO PLZO-D.
+           MOVE WR-CAPI  TO CAPI-D.
+           MOVE WR-INTE  TO INTE-D.
+           MOVE WR-CTAC  TO CTAC-D.
+           MOVE WT-DETALLE   TO REG-SALIDA.
+           PERFORM CCW-WRITE-REG1.
+           MOVE ZEROES   TO WR-CAPI.
+           MOVE ZEROES   TO WR-INTE.
+           MOVE ZEROES   TO WR-REAJ.
+           ADD 1 TO WA-TOTAL-IMPRE.
+       CF-BUSCAR-CTAC.
+      *---------------
+           MOVE SPACES TO WR-CTAC.
+      * BUSCA CUENTA CONTABLE
+           MOVE 'DCC'           TO TB-TABDCC-BUS-CODI
+           MOVE 'CAP'           TO TB-TABDCC-BUS-TIPO
+           MOVE WR-VCAM         TO TB-TABDCC-BUS-VCAM
+           MOVE WR-COPD         TO TB-TABDCC-BUS-COPD
+           MOVE WR-PLZO         TO TB-TABDCC-BUS-PLZO
+           SEARCH ALL TB-TABDCC
+              AT END
+                 DISPLAY '** NO EXISTE CUENTA CONTABLE PARA CODIGO. '
+                         TB-TABDCC-BUS
+                 MOVE SPACES                       TO WR-CTAC
+              WHEN
+                 TB-TABDCC-COD (IX-TABDCC) = TB-TABDCC-BUS
+                    MOVE TB-TABDCC-CTA (IX-TABDCC) TO WR-CTAC.
+       CI-TITULOS-LISTADO.
+      *-------------------
+           MOVE ZEROS                      TO   WR-CONT-LINEAS1.
+           MOVE WT-TITULO-1                TO   REG-SALIDA.
+           MOVE 1                          TO   WR-SW-IMPRESION.
+           PERFORM CCW-WRITE-REG1.
+           ADD  1                          TO   WR-CONT-PAG1.
+           MOVE WR-CONT-PAG1               TO   PAGINA-D.
+           MOVE WT-TITULO-2                TO   REG-SALIDA.
+           MOVE 0                          TO   WR-SW-IMPRESION.
+           PERFORM CCW-WRITE-REG1.
+           MOVE WR-MES (WR-MPVC)           TO   WT-TIT4-MES.
+           MOVE WR-SPVC                    TO   WT-TIT4-SIG.
+           MOVE WR-APVC                    TO   WT-TIT4-ANO.
+           MOVE WT-TITULO-4                TO   REG-SALIDA.
+           PERFORM CCW-WRITE-REG1.
+           MOVE WT-TITULO-3                TO   REG-SALIDA.
+           PERFORM CCW-WRITE-REG1.
+           MOVE WT-TITULO-5                TO   REG-SALIDA.
+           PERFORM CCW-WRITE-REG1.
+           MOVE WT-TITULO-3                TO   REG-SALIDA.
+           PERFORM CCW-WRITE-REG1.
+      *
+       CCW-WRITE-REG1.
+      *--------------
+           IF  WR-CONT-LINEAS1 > 64
+               MOVE REG-SALIDA            TO   WR-REGISTRO-LINEA
+               PERFORM CI-TITULOS-LISTADO
+               MOVE WR-REGISTRO-LINEA     TO   REG-SALIDA.
+           IF  WR-SW-IMPRESION = 1
+               WRITE REG-SALIDA  AFTER ADVANCING CANAL-1
+           ELSE
+               WRITE REG-SALIDA  AFTER ADVANCING 1 LINE.
+           ADD 1                          TO   WR-CONT-LINEAS1.
+           MOVE SPACES                    TO   REG-SALIDA.
+       CZ-FIN-PROCESO. EXIT.
+      *---------------
+      *
+       D-TERMINO SECTION.
+      *==================
+           DISPLAY '***'.
+           DISPLAY '*** TOTAL DE REGISTROS LEIDOS DAPDCID ......: '
+                   WA-LEIDOS-CID.
+           DISPLAY '***'.
+           DISPLAY '*** TOTAL DE REGISTROS PROCESADOS ..........: '
+                   WA-PROCES-CID.
+           DISPLAY '***'.
+           DISPLAY '*** TOTAL DE MESES PROCESADOS ..............: '
+                   WA-TOTAL-MESES.
+           DISPLAY '***'.
+           DISPLAY '*** TOTAL DE REGISTROS IMPRESOS ............: '
+                   WA-TOTAL-IMPRE.
+           DISPLAY '***'.
+           DISPLAY '*** TOTAL DE REGS. GRABADOS EN DAPCI2. .....: '
+                   WA-GRABA-CI2.
+           DISPLAY '***'.
+           CLOSE DAPDCID DAPDCI2 SALIDA.
+           IF WR-ERROR = 'SI'
+              DISPLAY '*+*+*+*+* MENSAJES PARA EL EXPLOTADOR *+*+*+*+*'
+              DISPLAY '*+*                                         *+*'
+              DISPLAY '*+* ' WR-SECTION                        '   *+*'
+              DISPLAY '*+* ' WR-PARRAFO                        '   *+*'
+              DISPLAY '*+* ' WR-OPERACION                        ' *+*'
+              DISPLAY '*+* ' WR-CODIGO                       '     *+*'
+           END-IF.
+       FIN-TERMINO. EXIT.
+      *-----------------
+

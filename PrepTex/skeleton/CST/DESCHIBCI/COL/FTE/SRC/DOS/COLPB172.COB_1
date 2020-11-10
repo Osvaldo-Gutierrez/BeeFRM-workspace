@@ -1,0 +1,1304 @@
+       IDENTIFICATION DIVISION.
+      *........................
+       PROGRAM-ID.    COLPB172.
+      *
+      *   PAREO    """  GENERA MAESTRO D00 CIRCULAR 5 NO VIGENTES "
+      *
+      *     ARCHIVOS : CREDITOS-CUOTAS-OPERACIONES
+      *              : CIR5MDOO.
+      *---------------------------------------------------------------*
+      * MODIFICACIONES :
+      *   1.- SE DEBE USAR CRE-IND-I9 EN VEZ DE OPE-I9
+      *       ODJ 25/02/91
+      *   2.- SE AGREGA AL PARAMETRO EL MANEJO DE OPERACIONES QUE NO
+      *       SERAN PROCESADAS.
+      *       KCJ 21/07/1999.
+      *
+       ENVIRONMENT DIVISION.
+      *.....................
+
+       CONFIGURATION SECTION.
+      *......................
+       SPECIAL-NAMES.
+           DECIMAL-POINT IS COMMA.
+
+       INPUT-OUTPUT SECTION.
+      *.....................
+       FILE-CONTROL.
+           SELECT TAR-TARJETA    ASSIGN         TARJETA.
+           SELECT  SORTWK        ASSIGN TO DA-S-SORTWK1.
+
+           SELECT CRE-CREDITOS   ASSIGN TO   AS-CREDIT
+                  ORGANIZATION    IS SEQUENTIAL
+                  ACCESS MODE     IS SEQUENTIAL
+                  FILE STATUS     IS CRE-STATUS1.
+
+           SELECT CRE-MAESTRO    ASSIGN TO   MAESTRO
+                  ORGANIZATION    IS INDEXED
+                  ACCESS MODE     IS RANDOM
+                  RECORD KEY      IS CRE-CLMAE
+                  FILE STATUS     IS CRE-STATUS2.
+
+           SELECT OPE-OPERACIONES ASSIGN        OPERAC
+                                  ORGANIZATION INDEXED
+                                  ACCESS MODE  RANDOM
+                                  RECORD KEY   OPE-CLAVE
+                                  FILE STATUS  OPE-STATUS.
+
+           SELECT UF-UEFES           ASSIGN        UEFES
+                  ORGANIZATION       IS INDEXED
+                  ACCESS MODE        IS RANDOM
+                  RECORD KEY         IS UF-CLAVE
+                  FILE STATUS        IS UF-STATUS.
+
+           SELECT CIR5-CIR5MD00      ASSIGN AS-CIR5D00
+                  ORGANIZATION       IS SEQUENTIAL
+                  ACCESS MODE        IS SEQUENTIAL
+                  FILE STATUS        IS D00-STATUS.
+
+       DATA DIVISION.
+      *..............
+       FILE SECTION.
+       FD  CRE-CREDITOS
+                         RECORD   CONTAINS 377 CHARACTERS.
+           COPY  CREM002.
+
+       FD  CRE-MAESTRO
+                         RECORD   CONTAINS 377 CHARACTERS.
+       01  CRE-MAESTRO-REG.
+           05  CRE-CLMAE                       PIC X(21).
+           05  CRE-RESTO                       PIC X(356).
+
+
+       FD  OPE-OPERACIONES
+                           RECORD   CONTAINS 110 CHARACTERS.
+                           COPY CRET031.
+
+       FD  UF-UEFES
+                           RECORD   CONTAINS  12 CHARACTERS.
+                           COPY CREM021.
+
+        FD  TAR-TARJETA
+            RECORDING MODE F
+            RECORD CONTAINS 80 CHARACTERS.
+        01  TAR-REG-TARJETAS.
+            05  TAR-FECHA.
+                15  TAR-FECHA-AA    PIC 9(02).
+                15  TAR-FECHA-MM    PIC 9(02).
+                15  TAR-FECHA-DD    PIC 9(02).
+            05  TAR-FILLER1         PIC X(01).
+            05  TAR-CODIGOS.
+                15  TAR-COD-EXCLUIBLES OCCURS 20 TIMES
+                    INDEXED BY IND-TAR.
+                    25  TAR-COD-EXC     PIC 9(03).
+            05  TAR-FILLER              PIC X(13).
+
+       FD  CIR5-CIR5MD00
+                           RECORD   CONTAINS 360 CHARACTERS.
+      ******************************************************************
+      *             DESCRIPCION DE REGISTRO (CYDV000)
+      *                  2DA. VERSION AL 28/04/87
+      *             ---------------------------------
+      *
+      *    ARCHIVO   : BCRO.CIRCU5.D00.XXXXXXX
+      *                                CREMN
+      *                                CREMNE
+      *                                CREHIPO
+      *                                CTA2A
+      *                                VISA
+      *                                SOBPER
+      *                                SOBEMP
+      *                                SOBNOPAC
+      *    FD        : D00-REGISTRO
+      *    PREFIJO   : 'D00'
+      *    LARGO REG.: 360
+      *    ORGANIZAC.: VSAM-KSDS
+      *    BLOQUEO   : NO
+      *    LLAVE     : D00-CLAVE
+      *
+      ******************************************************************
+      *
+       01  D00-REGISTRO.
+           05  D00-CLAVE.
+      *
+               10 D00-SISTEMA                  PIC 9(02).
+      *               SISTEMA                  = 01 CREDITOS M/N
+      *                                        = 02 CREDITOS M/E
+      *                                        = 03 CREDITOS HIPOTECAR.
+      *                                        = 04 CUENTA 2A
+      *                                        = 05 VISA
+      *                                        = 06 SOBREGIRO PERSONA
+      *                                        = 07 SOBREGIRO EMPRESA
+      *                                        = 08 SOBREGIRO NO PACTADO
+      *                                        = 00 OTRO
+      *
+               10 D00-NUM-INTERNO-IDENT        PIC X(21).
+      *               NUM-INTERNO-IDENT        = D02-03
+      *
+           05  D00-TIPO-OPERACION              PIC X(03).
+      *            TIPO-OPERACION              = CRED.M/E = '000'
+      *                                        = CRED.M/N = TIPO OPERAC.
+      *                                                     INTERNO
+      *
+           05  D00-SITUAC-OPERACION            PIC 9(01).
+      *            SITUAC-OPERACION            = 1 NO VENDIDO
+      *                                        = 2 VENDIDO
+      *
+           05  D00-OFICINA                     PIC X(05).
+      *            OFICINA                     = D02-08
+      *
+           05  D00-TIPO-CRED-CART-ORIGEN       PIC 9(04).
+      *            TIPO-CRED-CART-ORIGEN       = D02-09
+      *
+           05  D00-ESTADO-CREDITO              PIC 9(01).
+      *            ESTADO-CREDITO              = 1 VIGENTE
+      *                                        = 2 MOROSO
+      *                                        = 3 VENCIDO
+      *                                        = 4 EXTINGUIDO
+      *
+           05  D00-ACT-DESTINO-CRED            PIC 9(02).
+      *            ACT-DESTINO-CRED            = D02-12
+      *
+           05  D00-FECHA-OTORGAM.
+      *            FECHA-OTORGAM               = D02-13
+               10  D00-FECHA-OTORGAM-AA        PIC 9(02).
+               10  D00-FECHA-OTORGAM-MM        PIC 9(02).
+               10  D00-FECHA-OTORGAM-DD        PIC 9(02).
+      *
+           05  D00-MONEDA                      PIC 9(03).
+      *            MONEDA                      = D02-15
+      *
+           05  D00-MONTO-ORIGINAL              PIC 9(13) COMP-3.
+      *            MONTO-ORIGINAL              = D02-14.
+      *
+           05  D00-SALDO-CONTABLE              PIC 9(13) COMP-3.
+      *            SALDO-CONTABLE              = D02-24, D02-25, D02-26
+      *                                          O D02-27
+      *                                          PERO SIN INCLUIR
+      *                                          REAJUSTES NI INTERSES.
+      *
+           05  D00-SALDO-MOROSO1               PIC 9(13) COMP-3.
+      *            SALDO-MOROSO1               = D01-17 O D01-19
+      *
+           05  D00-SALDO-MOROSO2               PIC 9(13) COMP-3.
+      *            SALDO-MOROSO2               = D01-18 O D01-20
+      *
+           05  D00-SALDO-EN-CART-VENC          PIC 9(13) COMP-3.
+      *            SALDO-EN-CART-VENC          = D02-29 O D02-30
+      *
+           05  D00-SALDO-REPROGRAMADO          PIC 9(13) COMP-3.
+      *            SALDO-REPROGRAMADO          = SDO. REPROGRAMADO SOLO
+      *                                          PARA CRED.HIPOTECARIOS
+      *
+           05  D00-TIPO-GARANTIA               PIC 9(01).
+      *            TIPO-GARANTIA               = 1 PRENDA
+      *                                        = 2 CON AVAL
+      *                                        = 3 HIPOTECARIA
+      *                                        = 4 SIN GARANTIA
+      *                                        = 5 FIANZA SOLIDARIA
+      *                                        = 6 LETRAS A TERCERO
+      *                                        = 7 DOCTOS. DE EMBARQUE
+      *                                        = 8 OTRAS GARANTIAS
+      *
+           05  D00-FECHA-PROX-VCTO.
+      *            FECHA-PROX-VCTO             = D02-18
+               10  D00-FECHA-PROX-VCTO-AA      PIC 9(02).
+               10  D00-FECHA-PROX-VCTO-MM      PIC 9(02).
+               10  D00-FECHA-PROX-VCTO-DD      PIC 9(02).
+      *
+           05  D00-FECHA-ULT-PAGO-INT.
+      *            FECHA-ULT-PAGO-INT          = D02-19
+               10  D00-FECHA-ULT-PAGO-INT-AA   PIC 9(02).
+               10  D00-FECHA-ULT-PAGO-INT-MM   PIC 9(02).
+               10  D00-FECHA-ULT-PAGO-INT-DD   PIC 9(02).
+      *
+           05  D00-FECHA-DE-EXTINCION.
+      *            FECHA-DE-EXTINCION          = D02-20
+               10  D00-FECHA-DE-EXTINCION-AA   PIC 9(02).
+               10  D00-FECHA-DE-EXTINCION-MM   PIC 9(02).
+               10  D00-FECHA-DE-EXTINCION-DD   PIC 9(02).
+      *
+           05  D00-PLAZO-PROM-PONDERADO        PIC 9(04).
+      *            PLAZO-PROM-PONDERADO        = D02-22
+      *
+           05  D00-NRO-CTAS-AMORT-PEND         PIC 9(03).
+      *            NRO-CTAS-AMORT-PEND         = D02-23
+      *
+           05  D00-BASE-CALCULO-TASA-INT       PIC 9(03).
+      *            BASE-CALCULO-TASA-INT       = D02-16
+      *
+           05  D00-TASA-INTERES                PIC 9(03)V9(04).
+      *            TASA-INTERES                = D02-17
+      *
+           05  D00-INT-POR-COBRAR              PIC 9(13) COMP-3.
+      *            INT-POR-COBRAR              = D02-31, D02-34 O D02-38
+      *
+           05  D00-INT-POR-COBRAR-VCDOS        PIC 9(13) COMP-3.
+      *            INT-POR-COBRAR-VCDOS        = D02-32
+      *
+           05  D00-INT-POR-COBRAR-RIESGO       PIC 9(13) COMP-3.
+      *            INT-POR-COBRAR-RIESGO       = D02-36
+      *
+           05  D00-REAJ-DEVEN                  PIC 9(13) COMP-3.
+      *            REAJ-DEVEN                  = D02-33 O D02-37 O
+      *                                          REAJ.DEVENGADOS CUENTAS
+      *                                          DE ACTIVOS.
+      *
+           05  D00-REAJ-DEVEN-RIESGO           PIC 9(13) COMP-3.
+      *            REAJ-DEVEN-RIESGO           = D02-35
+      *
+           05  D00-TIPO-CREDITO                PIC 9(02).
+      *            TIPO-CREDITO                = 1 INV. FINANCIERAS
+      *                                        = 2 CONTINGENTES
+      *                                        = 3 COMERCIALES
+      *                                        = 4 CONSUMO
+      *                                        = 5 LETRAS HIPOT.VIVIENDA
+      *                                        = 6 M/E IMPORT O EXPORT.
+      *                                            PARA CAMPO D01-45
+      *                                        = 7 SDOS.PRECIO IF EN
+      *                                            LIQUIDACION
+      *                                        = 8 SDOS.PRECIO IF NO EN
+      *                                            LIQUIDACION
+      *
+           05  D00-NRO-CTAS-ATRAS              PIC 9(02).
+      *            NRO-CTAS-ATRAS              = D01-58 O D01-60
+      *
+           05  D00-MONTO-PAG-EN-MES            PIC 9(13) COMP-3.
+      *            MONTO-PAG-EN-MES            = P16-05
+      *
+           05  D00-VENC-EN-MES                 PIC 9(13) COMP-3.
+      *            VENC-EN-MES                 = P16-04
+      *
+           05  D00-MONTO-RENOV-MES             PIC 9(13) COMP-3.
+      *            MONTO-RENOV-MES             = P16-06
+      *
+           05  D00-ULT-INTERES-PAGADO          PIC 9(13) COMP-3.
+      *            ULT-INTERES-PAGADO          = D02-21
+      *
+           05  D00-CUENTA-CONTABLE             PIC X(10).
+      *            CUENTA-CONTABLE             = CUENTA CONTABLE DEL
+      *                                          CAPITAL
+      *
+           05  D00-NRO-CTAS-ORIG               PIC 9(03).
+      *            NRO-CTAS-ORIG               = CUOTAS ORIGINALES DEL
+      *                                          CREDITO
+      *
+           05  D00-AFECTA-MARGENES-S-N         PIC X(01).
+      *            AFECTA-MARGENES-S-N         = S SI AFECTA A MARGENES
+      *                                        = N NO AFECTA A MARGENES
+      *
+           05  D00-FECHA-DE-CIERRE.
+      *            FECHA-DE-CIERRE             = INFORMACION REFERIDA A
+      *                                          ESTA FECHA DE CIERRE
+      *
+               10  D00-FECHA-DE-CIERRE-AA      PIC 9(02).
+               10  D00-FECHA-DE-CIERRE-MM      PIC 9(02).
+               10  D00-FECHA-DE-CIERRE-DD      PIC 9(02).
+      *
+           05  D00-FECHA-CREAC-REGIS.
+      *            FECHA-CREAC-REGIS           = FECHA DE LA CREACION
+      *                                          DEL REGISTRO
+               10  D00-FECHA-CREAC-REG-AA      PIC 9(02).
+               10  D00-FECHA-CREAC-REG-MM      PIC 9(02).
+               10  D00-FECHA-CREAC-REG-DD      PIC 9(02).
+      *
+           05  D00-AUTOR-CREC-REG              PIC X(12).
+      *            AUTOR-CREC-REG              = SOLO PARA CREACION EN
+      *                                          LINEA DEL REGISTRO
+      *
+           05  D00-AUTOR-ULT-MOD-REG           PIC X(12).
+      *            AUTOR-ULT-MOD-REG           = SOLO PARA ACTUALIZACION
+      *                                          EN LINEA DEL REGISTRO
+      *
+           05  D00-FECHA-ULT-MOD-REG.
+      *            FECHA-ULT-MOD-REG          = SOLO PARA ACTUALIZACION
+      *                                          EN LINEA DEL REGISTRO
+               10  D00-FECHA-ULT-MOD-REG-AA    PIC 9(02).
+               10  D00-FECHA-ULT-MOD-REG-MM    PIC 9(02).
+               10  D00-FECHA-ULT-MOD-REG-DD    PIC 9(02).
+      *
+           05  D00-FILLER                      PIC X(12).
+           05  D00-ARREGLO-RUT             OCCURS     9   TIMES.
+               10 D00-ARR-RUT-DD.
+      *
+                  15 D00-ARR-RUT-DD-NUM        PIC X(09).
+      *                  ARR-RUT-DD-NUM        = PARTE NUMERICA DEL RUT
+      *
+                  15 D00-ARR-RUT-DD-VER        PIC X(01).
+      *                  ARR-RUT-DD-VER        = DIGITO VERIFICADOR
+      *
+               10 D00-TIPO-DEUDOR              PIC X(01).
+      *               TIPO-DEUDOR              = D DEUDOR DIRECTO
+      *                                        = A AVAL
+      ******************************************************************
+
+
+       SD  SORTWK
+           RECORD CONTAINS 377 CHARACTERS.
+       01  SOR-REG.
+           05  SOR-CLAVE.
+               10  SOR-SUCURSAL                PIC  9(03).
+               10  SOR-CODIGO-OPER.
+                   20  SOR-COD-OPER            PIC  9(03).
+                   20  SOR-SERIAL-OPER         PIC  9(05).
+               10  SOR-RUT-DD.
+                   20  SOR-RUT-DD-NUM          PIC  9(09).
+                   20  SOR-RUT-DD-VER          PIC  X(01).
+
+           05  SOR-RUT-DI.
+               10  SOR-RUT-DI-DIG              PIC  9(09).
+               10  SOR-RUT-DI-VER              PIC  X(01).
+           05  SOR-RUT-EMP.
+               10  SOR-RUT-EMP-DIG             PIC  9(09).
+               10  SOR-RUT-EMP-VER             PIC  X(01).
+           05  SOR-CTA-CTE                     PIC  X(10).
+
+           05  SOR-TOTAL-CUOTAS                PIC  9(03).
+           05  SOR-NUM-CUOT-PAGADAS            PIC  9(03).
+           05  SOR-NUM-CUOT-MOROSAS            PIC  9(03).
+           05  SOR-NUM-CUOT-PENDIENTES         PIC  9(03).
+
+           05  SOR-FECH-CURSE.
+               10  SOR-FECH-CURSE-AA           PIC  9(02).
+               10  SOR-FECH-CURSE-MM           PIC  9(02).
+               10  SOR-FECH-CURSE-DD           PIC  9(02).
+
+           05  SOR-FECH-PAGARE.
+               10  SOR-FECH-PAGARE-AA          PIC  9(02).
+               10  SOR-FECH-PAGARE-MM          PIC  9(02).
+               10  SOR-FECH-PAGARE-DD          PIC  9(02).
+           05  SOR-FECH-PRIMER-VENC.
+               10  SOR-FECH-PRIMER-VENC-AA     PIC  9(02).
+               10  SOR-FECH-PRIMER-VENC-MM     PIC  9(02).
+               10  SOR-FECH-PRIMER-VENC-DD     PIC  9(02).
+           05  SOR-FECH-VENC-ANTERIOR.
+               10  SOR-FECH-VENC-ANTERIOR-DD   PIC  9(02).
+               10  SOR-FECH-VENC-ANTERIOR-MM   PIC  9(02).
+               10  SOR-FECH-VENC-ANTERIOR-AA   PIC  9(02).
+
+           05  SOR-FECH-PROX-VENC.
+               10  SOR-FECH-PROX-VENC-AA       PIC  9(02).
+               10  SOR-FECH-PROX-VENC-MM       PIC  9(02).
+               10  SOR-FECH-PROX-VENC-DD       PIC  9(02).
+
+           05  SOR-FECH-ULTIMO-MOV.
+               10  SOR-FECH-ULTIMO-MOV-DD      PIC  9(02).
+               10  SOR-FILLER-1                PIC  X(01).
+               10  SOR-FECH-ULTIMO-MOV-MM      PIC  9(02).
+               10  SOR-FILLER-2                PIC  X(01).
+               10  SOR-FECH-ULTIMO-MOV-AA      PIC  9(02).
+
+           05  SOR-TIPO-OPER                   PIC  X(03).
+           05  SOR-TIPO-GARANTIA               PIC  X(01).
+           05  SOR-TIPO-INTERES                PIC  X(01).
+           05  SOR-TIPO-CLIENTE                PIC  9(03).
+           05  SOR-PERIODICIDAD                PIC  9(01).
+           05  SOR-REAJUSTABILIDAD             PIC  X(01).
+           05  SOR-DIAS-PLAZO                  PIC  9(03).
+           05  SOR-MESES-DIFERIDOS             PIC  X(03).
+           05  SOR-TIEMPO-GRACIA               PIC  9(02).
+           05  SOR-COD-DISTRIBUIDOR            PIC  X(02).
+           05  SOR-AGENTE                      PIC  9(03).
+           05  SOR-LINEA-CRED                  PIC  9(02).
+           05  SOR-DESTINO                     PIC  X(02).
+           05  SOR-TIPO-COBRANZA               PIC  9(01).
+           05  SOR-INDIC-MONEDA                PIC  9(01).
+           05  SOR-VIGENCIA                    PIC  X(01).
+           05  SOR-OTRO-DD                     PIC  X(01).
+           05  SOR-OTRO-DI                     PIC  X(01).
+
+           05  SOR-MONTO-COLOC                 PIC S9(12)V9(03)  COMP-3.
+           05  SOR-INTERES-COLOC               PIC S9(12)V9(03)  COMP-3.
+           05  SOR-CUOTA-BASE                  PIC S9(10)V9(03)  COMP-3.
+           05  SOR-TASA-VIGENTE                PIC S9(02)V9(02)  COMP-3.
+
+           05  SOR-MONTO-PAGADO                PIC S9(12)V9(03)  COMP-3.
+           05  SOR-INTERES-PAGADO              PIC S9(12)V9(03)  COMP-3.
+
+           05  SOR-ULT-MONTO-CANC              PIC S9(10)V9(03)  COMP-3.
+           05  SOR-ULT-INTERES-CANC            PIC S9(10)V9(03)  COMP-3.
+
+           05  SOR-CUOTA-PROX-VENC             PIC S9(10)V9(03)  COMP-3.
+           05  SOR-INTERES-PROX-VENC           PIC S9(10)V9(03)  COMP-3.
+
+           05  SOR-SALDO-COLOCAC               PIC S9(12)V9(03)  COMP-3.
+           05  SOR-SALDO-TEORICO               PIC S9(12)V9(03)  COMP-3.
+
+           05  SOR-REAJUSTES-PAG               PIC S9(10)V9(03)  COMP-3.
+           05  SOR-MONTO-INIC-REAJ             PIC S9(12)V9(03)  COMP-3.
+           05  SOR-INTERES-TOT-REAJ            PIC S9(12)V9(03)  COMP-3.
+
+           05  SOR-AJUSTE                      PIC S9(06)V9(02)  COMP-3.
+           05  SOR-GASTO-NOTARIAL              PIC S9(06)V9(02)  COMP-3.
+           05  SOR-OPERAC-ANTERIOR             PIC  X(08).
+           05  SOR-COD-HIPOTECARIO             PIC  X(08).
+           05  SOR-CLAVE-LINEA                 PIC  X(11).
+           05  SOR-TASA-SPREAD-COLOC           PIC S9(02)V9(02).
+           05  SOR-SALDO-CAPIT-REAJ            PIC S9(12)V9(03)  COMP-3.
+           05  SOR-CUOTAS-ORIGINALES           PIC  9(03).
+           05  SOR-NUM-OPERATIVAS              PIC  9(03).
+           05  SOR-CONT-CAPITALIZ              PIC  9(02).
+           05  SOR-CUOTAS-CURSE                PIC  9(03).
+           05  SOR-PERIODICIDAD-INTERES        PIC  9(01).
+           05  SOR-FECH-PROX-VCTO-AMORT.
+               10  SOR-FECH-PROX-VENC-AMORT-AA PIC  9(02).
+               10  SOR-FECH-PROX-VENC-AMORT-MM PIC  9(02).
+               10  SOR-FECH-PROX-VENC-AMORT-DD PIC  9(02).
+           05  SOR-FECH-PROX-VCTO-INT.
+               10  SOR-FECH-PROX-VENC-INT-AA   PIC  9(02).
+               10  SOR-FECH-PROX-VENC-INT-MM   PIC  9(02).
+               10  SOR-FECH-PROX-VENC-INT-DD   PIC  9(02).
+           05  SOR-FECH-ULT-PAGO-INT.
+               10  SOR-FECH-ULT-PAGO-INT-AA    PIC  9(02).
+               10  SOR-FECH-ULT-PAGO-INT-MM    PIC  9(02).
+               10  SOR-FECH-ULT-PAGO-INT-DD    PIC  9(02).
+           05  SOR-MTO-INTERES-CAPITALIZADO    PIC S9(08)V9(02)  COMP-3.
+           05  SOR-TASA-INTERES-2              PIC S9(02)V9(02)  COMP-3.
+           05  SOR-TASA-INTERES-3              PIC S9(02)V9(02)  COMP-3.
+           05  SOR-TIPO-CUOTA                  PIC  9(01).
+           05  SOR-IND-I8                      PIC  9(01).
+           05  SOR-IND-I9                      PIC  9(01).
+           05  SOR-IND-I11                     PIC  9(01).
+           05  SOR-IND-I14                     PIC  9(02).
+           05  SOR-IND-I16                     PIC  9(02).
+           05  SOR-IND-I17                     PIC  9(01).
+           05  SOR-IND-I18                     PIC  9(01).
+           05  SOR-FECHA-SUSPEN.
+               10  SOR-FECHA-SUSPEN-AA         PIC  9(02).
+               10  SOR-FECHA-SUSPEN-MM         PIC  9(02).
+               10  SOR-FECHA-SUSPEN-DD         PIC  9(02).
+           05  SOR-VCTOS-EN-MES                PIC S9(12)V9(03)  COMP-3.
+           05  SOR-VCTOS-PAG-MES               PIC S9(12)V9(03)  COMP-3.
+           05  SOR-FILLER                      PIC  X(12).
+
+       WORKING-STORAGE SECTION.
+      *-----------------------
+       01  ANT-CLAVE-CRE          PIC X(21)   VALUE SPACES.
+       01  WOR-CUENTA.
+           05  WOR-CODIGO         PIC 9(04).
+           05  WOR-RESTO-COD      PIC 9(05).
+       01  WOR-CLAVE-LINEA.
+           05  WOR-LETRA          PIC X(01)  VALUE 'D'.
+           05  WOR-RESTO-LIN      PIC X(11).
+
+       01  INDICES-Y-SWITCHS.
+           05  CRE-STATUS1        PIC 9(02)    VALUE 0.
+           05  CRE-STATUS2        PIC 9(02)    VALUE 0.
+           05  OPE-STATUS         PIC 9(02)    VALUE 0.
+           05  UF-STATUS          PIC 9(02)    VALUE 0.
+           05  D00-STATUS         PIC 9(02)    VALUE 0.
+           05  FIN-CREDITOS       PIC X(02)    VALUE 'NO'.
+           05  FIN-LECTURA        PIC X(02)    VALUE 'NO'.
+           05  I                  PIC 9(03)    VALUE 0.
+           05  J                  PIC 9(02)    VALUE 0.
+           05  K                  PIC 9        VALUE  0.
+           05  INICIO             PIC X(02)    VALUE 'NO'.
+           05  PRIMER             PIC X(02)    VALUE 'NO'.
+           05  WS-EXCLUYE         PIC X(01)    VALUE 'N'.
+               88 WS-EXCLUYE-SI                VALUE 'S'.
+               88 WS-EXCLUYE-NO                VALUE 'N'.
+
+       01  CONTADORES.
+           05  MAXIMO             PIC 9(08)   VALUE 300.
+           05  TOPE               PIC 9(08)   VALUE 0.
+           05  CONT-LEIDOS-MA     PIC 9(08)   VALUE 0.
+           05  CONT-REPETIDOS     PIC 9(08)   VALUE 0.
+           05  CONT-LEIDOS-CU     PIC 9(08)   VALUE 0.
+           05  CONT-LEIDOS-UF     PIC 9(08)   VALUE 0.
+           05  CONT-LEIDOS-SORT   PIC 9(08)   VALUE 0.
+           05  CONT-LEIDOS-OP     PIC 9(08)   VALUE 0.
+           05  CONT-LEIDOS-CR     PIC 9(08)   VALUE 0.
+           05  CONT-OPE-ERR       PIC 9(08)   VALUE 0.
+           05  CONT-UF-ERR        PIC 9(08)   VALUE 0.
+           05  CONT-ERROR-CR      PIC 9(08)   VALUE 0.
+           05  CONT-GRABADOS-C5   PIC 9(08)   VALUE 0.
+           05  CONT-PAREADOS      PIC 9(08)   VALUE 0.
+           05  CONT-CRE-MAS       PIC 9(08)   VALUE 0.
+           05  CONT-PROBLEMAS     PIC 9(08)   VALUE 0.
+           05  CONT-NO-PROC       PIC 9(08)   VALUE 0.
+
+       01  VARIABLES-PROGRAMA.
+           05  WSS-IND-TTAS.
+               07  DIGITO-1       PIC 9(01).
+               07  DIGITO-2       PIC 9(01).
+               07  DIGITO-3       PIC 9(01).
+
+           05  WSS-OLD-IOPC       PIC X(12).
+           05  WSS-FEC-NDIA       PIC 9(06).
+           05  WSS-FEC-FPO2.
+               07  WSS-NUM-SPO2   PIC 9(02).
+               07  WSS-NUM-APO2   PIC 9(02).
+               07  WSS-NUM-MPO2   PIC 9(02).
+               07  WSS-NUM-DPO2   PIC 9(02).
+           05  DIAS               PIC 9(07) COMP-3 VALUE 0.
+           05  DIF-DIAS           PIC 9(04)        VALUE 0.
+           05  ANT-CLAVE          PIC 9(03)        VALUE 0.
+           05  WORK-UF-CURSE      PIC 9(08)V99 COMP-3.
+           05  WORK-UF-PARAM      PIC 9(08)V99 COMP-3.
+           05  WORK-UF            PIC 9(08)V99 COMP-3.
+           05  TASA               PIC S9(07)V9(10) COMP-3 VALUE 0.
+
+           05 FECHA-DATE                PIC 9(06).
+           05 FECHA-DATER               REDEFINES FECHA-DATE.
+              10 AA-DATE                PIC 9(02).
+              10 MM-DATE                PIC 9(02).
+              10 DD-DATE                PIC 9(02).
+           05 FECHA-TAR8.
+              10  FECHA-TAR-SS          PIC 9(02).
+              10  FECHA-TAR.
+                15  FECHA-TAR-AA        PIC 9(02).
+                15  FECHA-TAR-MM        PIC 9(02).
+                15  FECHA-TAR-DD        PIC 9(02).
+           05 FECHA18.
+              10  FECHA1-SS             PIC 9(02).
+              10  FECHA1.
+                15  FECHA1-AA           PIC 9(02).
+                15  FECHA1-MM           PIC 9(02).
+                15  FECHA1-DD           PIC 9(02).
+           05 FECHA28.
+              10  FECHA2-SS             PIC 9(02).
+              10  FECHA2.
+                15  FECHA2-AA           PIC 9(02).
+                15  FECHA2-MM           PIC 9(02).
+                15  FECHA2-DD           PIC 9(02).
+      *    05 FECHA-CURRENT.
+      *       10 FECHA-CURRENT-AA       PIC 9(02) VALUE 0.
+      *       10 FECHA-CURRENT-1        PIC X(01).
+      *       10 FECHA-CURRENT-MM       PIC 9(02) VALUE 0.
+      *       10 FECHA-CURRENT-2        PIC X(01).
+      *       10 FECHA-CURRENT-DD       PIC 9(02) VALUE 0.
+
+       01  CAMPOS-MENSAJES-ERROR-VSAM.
+           05  MENS-PROC          PIC X(50)   VALUE SPACES.
+           05  MENS-ARCH          PIC X(30)   VALUE SPACES.
+           05  MENS-STAT          PIC XX      VALUE SPACES.
+           05  MENS-CLAVE         PIC X(70)   VALUE SPACES.
+           05  MENS-SW            PIC 9       VALUE 1.
+           05  BLANCO             PIC X(05)   VALUE SPACES.
+
+
+       01  UIB.
+           05 FILLER               PIC X(32) VALUE 'COLPB172'.
+
+
+      ***************************************************************
+       01  REQ-AREA-EVC.
+           03 EVC-COMMAND          PIC  X(05).
+           03 EVC-TABLE            PIC  X(03) VALUE 'EVC'.
+           03 EVC-KEY              PIC  X(05) VALUE 'EVC00'.
+           03 EVC-RET-COD          PIC  X(02) VALUE SPACES.
+           03 EVC-INT-RC           PIC  X(01).
+           03 EVC-DB-ID            PIC S9(04) COMP VALUE +160.
+           03 EVC-REC-ID           PIC  X(07).
+           03 FILLER               PIC  X(25).
+           03 EVC-CONT-MAX         PIC S9(04) COMP.
+           03 EVC-CONT-IO          PIC S9(04) COMP.
+           03 FILLER               PIC  X(22).
+           03 EVC-VAL-KEY          PIC  X(15).
+           03 EVC-VAL-KEY-R REDEFINES EVC-VAL-KEY.
+              05 EVC-VAL-KEY-1     PIC X(12).
+              05 EVC-VAL-KEY-2     PIC 9(03).
+
+       01  REG-EVC.
+           COPYDD COL-R-EVC.COL-E-EVC00(PROD),01,D
+
+       01  ELEM-LIST-EVC.
+           03 ELEM-1-EVC     PIC X(5) VALUE 'EVC00'.
+           03 ELEM-EVC       PIC X(1).
+           03 FILLER         PIC X(5) VALUE SPACES.
+
+
+      ***************************************************************
+       01  REQ-AREA-ICG.
+           03 ICG-COMMAND          PIC  X(05).
+           03 ICG-TABLE            PIC  X(03) VALUE 'ICG'.
+           03 ICG-KEY              PIC  X(05) VALUE 'ICG00'.
+           03 ICG-RET-COD          PIC  X(02) VALUE SPACES.
+           03 ICG-INT-RC           PIC  X(01).
+           03 ICG-DB-ID            PIC S9(04) COMP VALUE +160.
+           03 ICG-REC-ID           PIC  X(07).
+           03 FILLER               PIC  X(25).
+           03 ICG-CONT-MAX         PIC S9(04) COMP.
+           03 ICG-CONT-IO          PIC S9(04) COMP.
+           03 FILLER               PIC  X(22).
+           03 ICG-VAL-KEY          PIC  X(41).
+           03 ICG-VAL-KEY-R REDEFINES ICG-VAL-KEY.
+              05 ICG-VAL-KEY-1     PIC  X(12).
+              05 ICG-VAL-KEY-2     PIC  9(03).
+              05 ICG-VAL-KEY-3     PIC  X(12).
+              05 ICG-VAL-KEY-4     PIC  9(03).
+              05 ICG-VAL-KEY-5     PIC  X(03).
+              05 ICG-VAL-KEY-6     PIC  9(08).
+
+       01  REG-ICG.
+           COPYDD COL-R-ICG.COL-E-ICG00(PROD),01,D
+
+       01  ELEM-LIST-ICG.
+           03 ELEM-1-ICG     PIC X(5) VALUE 'ICG00'.
+           03 ELEM-ICG       PIC X(1).
+           03 FILLER         PIC X(5) VALUE SPACES.
+      ***************************************************************
+      ******************************************************************
+      *    DEFINICION DE AREAS PARA RUTINA CALENDAR.                   *
+      ******************************************************************
+           COPY CALEAREA.
+
+
+
+       PROCEDURE DIVISION.
+      *...................
+
+       PRINCIPAL.
+           ENTRY 'DBMSCBL'.
+           PERFORM  ABRIR.
+           PERFORM  LEER-TARJETA.
+           PERFORM  LEER-UF-PARAMETRO.
+           PERFORM  PARRAFO-SORT.
+           PERFORM  CERRAR.
+           PERFORM  ESTADISTICAS.
+           STOP RUN.
+           EJECT
+
+       ABRIR.
+           OPEN  INPUT   CRE-MAESTRO
+                         TAR-TARJETA
+                         UF-UEFES
+                         OPE-OPERACIONES
+                 OUTPUT  CIR5-CIR5MD00.
+
+
+           IF (CRE-STATUS2  NOT = 0)
+           THEN  MOVE  'ABRIR'          TO  MENS-PROC
+                 MOVE  'CRE-MAESTRO   ' TO  MENS-ARCH
+                 MOVE  CRE-STATUS2       TO  MENS-STAT
+                 PERFORM  ERROR-VSAM.
+
+           IF (OPE-STATUS  NOT = 0)
+           THEN  MOVE  'ABRIR'          TO  MENS-PROC
+                 MOVE  'OPE-OPERACIONE' TO  MENS-ARCH
+                 MOVE  OPE-STATUS       TO  MENS-STAT
+                 PERFORM  ERROR-VSAM.
+
+           IF (UF-STATUS  NOT = 0)
+           THEN  MOVE  'ABRIR'        TO  MENS-PROC
+                 MOVE  'UF-UEFES    ' TO  MENS-ARCH
+                 MOVE  UF-STATUS      TO  MENS-STAT
+                 PERFORM  ERROR-VSAM.
+
+           IF (D00-STATUS  NOT = 0)
+           THEN  MOVE  'ABRIR'          TO  MENS-PROC
+                 MOVE  'D00-CIR5MD00  ' TO  MENS-ARCH
+                 MOVE  D00-STATUS       TO  MENS-STAT
+                 PERFORM  ERROR-VSAM.
+
+
+       CERRAR.
+           CLOSE    CRE-MAESTRO
+                    TAR-TARJETA
+                    OPE-OPERACIONES
+                    UF-UEFES
+                    CIR5-CIR5MD00.
+
+       PARRAFO-SORT.
+           SORT  SORTWK  ON ASCENDING KEY   SOR-CLAVE
+                 USING  CRE-CREDITOS
+                 OUTPUT PROCEDURE  SALIDA.
+
+       SALIDA SECTION.
+
+           PERFORM PROC-SALIDA.
+
+       VARIOS SECTION.
+
+       PROC-SALIDA.
+           PERFORM  LEER-SORT.
+           PERFORM  PROCESAR   UNTIL   FIN-LECTURA  =  'SI'.
+
+       PROCESAR.
+            IF ANT-CLAVE-CRE = SOR-CLAVE
+            THEN PERFORM REPETIDO
+            ELSE MOVE SOR-CLAVE   TO ANT-CLAVE-CRE
+                 PERFORM   NO-REPETIDO.
+            PERFORM LEER-SORT.
+
+       NO-REPETIDO.
+            IF SOR-VIGENCIA = 'N'  AND
+               SOR-FECH-CURSE-AA     = TAR-FECHA-AA   AND
+               SOR-FECH-CURSE-MM     = TAR-FECHA-MM
+               PERFORM VALIDAR-CODIGO
+               IF WS-EXCLUYE-NO
+                  PERFORM PROCESO-OK
+                  ADD  1    TO    TOPE
+                  IF TOPE > MAXIMO
+                     DISPLAY 'VAN PROCESADOS :' TOPE UPON CONSOLE
+                     ADD      MAXIMO       TO   MAXIMO
+                  ELSE
+                     NEXT SENTENCE
+                  END-IF
+               ELSE
+                  ADD 1 TO CONT-NO-PROC
+               END-IF
+            ELSE
+               ADD 1 TO CONT-NO-PROC
+            END-IF.
+
+       VALIDAR-CODIGO.
+            SET IND-TAR             TO     1
+            SEARCH  TAR-COD-EXCLUIBLES
+            AT END  MOVE  'N'    TO           WS-EXCLUYE
+            WHEN SOR-COD-OPER = TAR-COD-EXC (IND-TAR)
+                    MOVE  'S'    TO           WS-EXCLUYE.
+
+       REPETIDO.
+           DISPLAY 'REGISTRO-REPETIDO..' ANT-CLAVE-CRE.
+
+
+       LEER-SORT.
+           RETURN SORTWK    AT  END MOVE  'SI' TO  FIN-LECTURA.
+           IF ( FIN-LECTURA = 'NO' )
+           THEN ADD 1                       TO CONT-LEIDOS-SORT.
+
+       PROCESO-OK.
+           MOVE SOR-CLAVE           TO    CRE-CLMAE.
+           READ CRE-MAESTRO
+           IF  CRE-STATUS2 = 23
+           THEN  PERFORM LEER-ARCHIVOS-PROCESO
+                 PERFORM LLENAR-SALIDA
+                 PERFORM GRABAR-REGISTRO-C5
+           ELSE  ADD   1             TO    CONT-REPETIDOS.
+
+       LLENAR-SALIDA.
+      *...............
+           PERFORM  LLENAR-CAMPOS-DIRECTOS.
+           PERFORM  LLENAR-CAMPOS-CALCULOS.
+
+       LEER-ARCHIVOS-PROCESO.
+      *......................
+            IF SOR-COD-OPER  NOT = ANT-CLAVE
+            THEN MOVE SOR-COD-OPER         TO  ANT-CLAVE    OPE-CLAVE
+                 PERFORM LEER-OPERACIONES
+                 MOVE OPE-CTA-DE-CAJA       TO  WOR-CUENTA.
+            IF CRE-IND-I9 = 1 OR 2
+            THEN  PERFORM LEER-UEFES.
+
+       LEER-UEFES.
+      *...........
+           MOVE  SOR-FECH-CURSE           TO          UF-CLAVE.
+           PERFORM  LEER-UF.
+           MOVE   UF-VALOR                TO          WORK-UF-CURSE.
+           MOVE SOR-FECH-PROX-VENC TO FECHA1.
+           PERFORM MUEVE-FECHA1.
+      *          IF  SOR-FECH-PROX-VENC     <  TAR-FECHA     AND
+      *              SOR-FECH-PROX-VENC-AA  >  50
+           IF FECHA18  <  FECHA-TAR8
+              MOVE   SOR-FECH-PROX-VENC  TO   UF-CLAVE
+              PERFORM  LEER-UF
+              MOVE   UF-VALOR            TO   WORK-UF
+           ELSE     MOVE   WORK-UF-PARAM       TO   WORK-UF.
+
+       LEER-UF-PARAMETRO.
+      *..................
+           MOVE   TAR-FECHA           TO          UF-CLAVE.
+           PERFORM  LEER-UF.
+           MOVE   UF-VALOR            TO          WORK-UF-PARAM.
+
+       LLENAR-CAMPOS-DIRECTOS.
+      *.......................
+            MOVE 01                 TO     D00-SISTEMA.
+      *     MOVE SOR-CLAVE          TO     D00-NUM-INTERNO-IDENT.
+            MOVE SOR-CLAVE-LINEA    TO     WOR-RESTO-LIN.
+            MOVE WOR-CLAVE-LINEA    TO     D00-NUM-INTERNO-IDENT.
+            MOVE SOR-CODIGO-OPER    TO     D00-TIPO-OPERACION.
+            MOVE ZEROES             TO     D00-MONTO-RENOV-MES.
+            MOVE 'S'                TO     D00-AFECTA-MARGENES-S-N.
+            MOVE ZEROES             TO     D00-INT-POR-COBRAR-RIESGO
+                                           D00-REAJ-DEVEN-RIESGO
+                                           D00-INT-POR-COBRAR-VCDOS
+                                           D00-MONTO-RENOV-MES.
+            MOVE SOR-VCTOS-PAG-MES  TO     D00-MONTO-PAG-EN-MES.
+            MOVE SOR-VCTOS-EN-MES   TO     D00-VENC-EN-MES.
+            MOVE SOR-TIPO-GARANTIA  TO     D00-TIPO-GARANTIA.
+            MOVE SOR-ULT-INTERES-CANC TO   D00-ULT-INTERES-PAGADO
+            IF (( OPE-I16 = 25 ) OR ( SOR-COD-OPER = 001 OR 007 OR 013
+            OR 920 OR 308 OR 014 OR 310 OR 321 OR 323 OR 705 OR 708 ))
+            THEN MOVE '2'           TO     D00-SITUAC-OPERACION
+            ELSE MOVE '1'           TO     D00-SITUAC-OPERACION.
+
+            MOVE SOR-SUCURSAL       TO     D00-OFICINA.
+
+
+            MOVE 0000               TO     D00-TIPO-CRED-CART-ORIGEN.
+            MOVE ZEROES             TO     D00-SALDO-REPROGRAMADO.
+
+            MOVE  4                 TO     D00-ESTADO-CREDITO
+
+            MOVE SOR-DESTINO        TO     D00-ACT-DESTINO-CRED
+            MOVE SOR-FECH-CURSE     TO     D00-FECHA-OTORGAM.
+
+            IF CRE-IND-I9 = 3
+            THEN  MOVE 999              TO     D00-MONEDA
+                  MOVE SOR-TASA-VIGENTE TO     D00-TASA-INTERES
+            ELSE  MOVE 998              TO     D00-MONEDA
+                  COMPUTE D00-TASA-INTERES ROUNDED =
+                          SOR-TASA-VIGENTE * 12.
+
+            MOVE SOR-MONTO-COLOC    TO     D00-MONTO-ORIGINAL
+           MOVE SOR-FECH-CURSE     TO FECHA1.
+           PERFORM MUEVE-FECHA1.
+           MOVE SOR-FECH-PROX-VENC TO FECHA2.
+           PERFORM MUEVE-FECHA2.
+      *     IF  SOR-FECH-CURSE  < SOR-FECH-PROX-VENC
+      *     AND SOR-FECH-PROX-VENC NOT > TAR-FECHA
+            IF  FECHA18         < FECHA28
+            AND FECHA28            NOT > FECHA-TAR8
+                 NEXT SENTENCE
+            ELSE
+      * ESTABA  MOVE FECHA-CURRENT-AA   TO     SOR-FECH-PROX-VENC-AA
+      *  MAL    MOVE FECHA-CURRENT-MM   TO     SOR-FECH-PROX-VENC-MM
+      * MOVIDO  MOVE FECHA-CURRENT-DD   TO     SOR-FECH-PROX-VENC-DD
+                MOVE AA-DATE TO SOR-FECH-PROX-VENC-AA FECHA2-AA
+                MOVE DD-DATE TO SOR-FECH-PROX-VENC-DD FECHA2-DD
+                MOVE MM-DATE TO SOR-FECH-PROX-VENC-MM FECHA2-MM
+                PERFORM MUEVE-FECHA2
+      * MALA LA  IF  SOR-FECH-CURSE  < SOR-FECH-PROX-VENC
+      * COMPARAC AND SOR-FECH-PROX-VENC NOT > TAR-FECHA
+                IF  FECHA18 < FECHA28
+                AND FECHA28 NOT > FECHA-TAR8
+                     NEXT SENTENCE
+                ELSE MOVE TAR-FECHA     TO     SOR-FECH-PROX-VENC.
+
+            MOVE SOR-FECH-PROX-VENC-AA  TO D00-FECHA-PROX-VCTO-AA
+                                           D00-FECHA-ULT-PAGO-INT-AA
+            MOVE SOR-FECH-PROX-VENC-MM  TO D00-FECHA-PROX-VCTO-MM
+                                           D00-FECHA-ULT-PAGO-INT-MM
+            MOVE SOR-FECH-PROX-VENC-DD  TO D00-FECHA-PROX-VCTO-DD
+                                           D00-FECHA-ULT-PAGO-INT-DD
+            MOVE SOR-FECH-PROX-VENC     TO D00-FECHA-DE-EXTINCION.
+
+            IF OPE-I11 = 3
+            THEN MOVE  2            TO     D00-TIPO-CREDITO
+            ELSE IF OPE-I11 = 2
+                 THEN MOVE  3            TO     D00-TIPO-CREDITO
+                 ELSE IF OPE-I11 = 1
+                      THEN MOVE  4            TO     D00-TIPO-CREDITO
+                      ELSE MOVE  0            TO     D00-TIPO-CREDITO.
+
+            MOVE  0                 TO     D00-NRO-CTAS-ATRAS
+            MOVE  0                 TO     D00-MONTO-PAG-EN-MES
+            MOVE  0                 TO     D00-VENC-EN-MES
+            MOVE  OPE-CTA-COLOCAC   TO     D00-CUENTA-CONTABLE
+            MOVE SOR-TOTAL-CUOTAS   TO     D00-NRO-CTAS-ORIG
+            MOVE WOR-CODIGO         TO     D00-TIPO-CRED-CART-ORIGEN.
+            MOVE TAR-FECHA          TO     D00-FECHA-DE-CIERRE.
+      *     MOVE CURRENT-DATE       TO     FECHA-CURRENT.
+            ACCEPT FECHA-DATE       FROM   DATE.
+      *     MOVE FECHA-CURRENT-AA   TO     D00-FECHA-CREAC-REG-AA
+            MOVE AA-DATE            TO     D00-FECHA-CREAC-REG-AA
+                                           D00-FECHA-ULT-MOD-REG-AA.
+      *     MOVE FECHA-CURRENT-MM   TO     D00-FECHA-CREAC-REG-MM
+            MOVE DD-DATE            TO     D00-FECHA-CREAC-REG-MM
+                                           D00-FECHA-ULT-MOD-REG-MM.
+      *     MOVE FECHA-CURRENT-DD   TO     D00-FECHA-CREAC-REG-DD
+            MOVE MM-DATE            TO     D00-FECHA-CREAC-REG-DD
+                                           D00-FECHA-ULT-MOD-REG-DD.
+            MOVE SPACES             TO     D00-AUTOR-CREC-REG
+            MOVE SPACES             TO     D00-AUTOR-ULT-MOD-REG
+            MOVE ZEROES             TO     D00-FILLER
+            PERFORM LIMPIAR VARYING J FROM 1 BY 1 UNTIL J > 9.
+            MOVE SOR-RUT-DD         TO     D00-ARR-RUT-DD (1).
+            MOVE 'D'                TO     D00-TIPO-DEUDOR(1).
+            IF  ( SOR-RUT-DI  = SPACES OR ZEROES )
+             OR ( SOR-RUT-DD  = SOR-RUT-DI )
+            THEN NEXT SENTENCE
+            ELSE MOVE SOR-RUT-DI         TO     D00-ARR-RUT-DD (2)
+                 MOVE 'A'                TO     D00-TIPO-DEUDOR(2).
+       LIMPIAR.
+      *--------
+            MOVE SPACES             TO     D00-ARR-RUT-DD  (J).
+            MOVE SPACES             TO     D00-TIPO-DEUDOR (J).
+
+       MUEVE-FECHA1.
+      *-------------
+           IF FECHA1 = ZEROES
+              MOVE 0 TO FECHA1-SS
+           ELSE
+              IF FECHA1-AA < 60
+                 MOVE 20 TO FECHA1-SS
+              ELSE
+                 MOVE 19 TO FECHA1-SS
+              END-IF
+           END-IF.
+       MUEVE-FECHA2.
+      *-------------
+           IF FECHA2 = ZEROES
+              MOVE 0 TO FECHA2-SS
+           ELSE
+              IF FECHA2-AA < 60
+                 MOVE 20 TO FECHA2-SS
+              ELSE
+                 MOVE 19 TO FECHA2-SS
+              END-IF
+           END-IF.
+
+       LLENAR-CAMPOS-CALCULOS.
+      *.......................
+            MOVE ZEROES               TO   D00-REAJ-DEVEN
+                                           D00-SALDO-CONTABLE
+                                           D00-INT-POR-COBRAR-VCDOS
+                                           D00-NRO-CTAS-ATRAS
+                                           D00-SALDO-EN-CART-VENC
+                                           D00-PLAZO-PROM-PONDERADO
+                                           D00-INT-POR-COBRAR
+                                           D00-NRO-CTAS-AMORT-PEND
+                                           D00-SALDO-MOROSO1
+                                           D00-SALDO-MOROSO2.
+
+            IF OPE-I14 = 07 OR 08 OR 09 OR 13
+            THEN
+                 PERFORM BASE-CALCULO-TASA-INT-VAR
+      *          MOVE  999               TO   D00-BASE-CALCULO-TASA-INT
+                 MOVE WSS-IND-TTAS       TO   D00-BASE-CALCULO-TASA-INT
+            ELSE
+                 PERFORM BASE-CALCULO-TASA-INT-FIJ
+      *          MOVE  100               TO   D00-BASE-CALCULO-TASA-INT.
+                 MOVE WSS-IND-TTAS       TO   D00-BASE-CALCULO-TASA-INT.
+
+       GRABAR-REGISTRO-C5.
+      *...................
+           WRITE D00-REGISTRO.
+           IF ( D00-STATUS  NOT = 0 )
+                THEN  MOVE  '   GRABAR CIRC5       '  TO  MENS-PROC
+                MOVE  'D00-CIR5MD00'                  TO  MENS-ARCH
+                MOVE  D00-STATUS                      TO  MENS-STAT
+                PERFORM  ERROR-VSAM
+                ELSE  ADD 1 TO CONT-GRABADOS-C5.
+
+      *LEER-CREDITOS.
+      *..............
+      *    READ CRE-CREDITOS NEXT.
+      *    IF ( CRE-STATUS1  = 10 )
+      *    THEN MOVE 'SI' TO   FIN-CREDITOS
+      *    ELSE IF ( CRE-STATUS1  NOT = 0 )
+      *         THEN  MOVE  'A1-LEER-CREDITOS      '  TO  MENS-PROC
+      *         MOVE  'CRE-CREDITOS'                  TO  MENS-ARCH
+      *         MOVE  CRE-STATUS1                      TO  MENS-STAT
+      *         PERFORM  ERROR-VSAM
+      *         ELSE  ADD 1 TO CONT-LEIDOS-CR.
+
+       LEER-OPERACIONES.
+      *.................
+           READ OPE-OPERACIONES.
+           IF (OPE-STATUS = 23 )
+           THEN MOVE ZEROES               TO   OPE-CTA-COLOCAC
+                                               OPE-CTA-DE-CAJA
+                ADD   1                   TO   CONT-OPE-ERR
+           ELSE IF ( OPE-STATUS  NOT = 0 )
+                THEN  MOVE  '   LEER-OPERACIONES   '  TO  MENS-PROC
+                MOVE  'OPE-OPERACIO'                  TO  MENS-ARCH
+                MOVE  OPE-STATUS                      TO  MENS-STAT
+                PERFORM  ERROR-VSAM
+                ELSE  ADD 1 TO CONT-LEIDOS-OP.
+
+
+       LEER-UF.
+      *........
+           READ UF-UEFES.
+           IF (UF-STATUS = 23 )
+           THEN MOVE ZEROES               TO   UF-VALOR
+                ADD   1                   TO   CONT-UF-ERR
+           ELSE IF ( UF-STATUS  NOT = 0 )
+                THEN  MOVE  '   LEER-UEFES         '  TO  MENS-PROC
+                MOVE  'UF-UEFES    '                  TO  MENS-ARCH
+                MOVE  UF-STATUS                       TO  MENS-STAT
+                PERFORM  ERROR-VSAM
+                ELSE  ADD 1 TO CONT-LEIDOS-UF.
+
+       LEER-TARJETA.
+      *.............
+           READ TAR-TARJETA.
+           DISPLAY 'FECHA AAMMDD  ' TAR-FECHA
+           DISPLAY 'FECHA AAMMDD  ' TAR-FECHA UPON CONSOLE.
+           MOVE TAR-FECHA TO FECHA-TAR.
+           IF TAR-FECHA-AA < 60
+              MOVE 20 TO FECHA-TAR-SS
+           ELSE
+              MOVE 19 TO FECHA-TAR-SS
+           END-IF.
+
+       ERROR-VSAM.
+      *...........
+           DISPLAY  BLANCO
+           DISPLAY  BLANCO '*** ERROR VSAM  ERROR VSAM ***'
+           DISPLAY  BLANCO
+           DISPLAY  BLANCO 'PROCEDIMIENTO   :  ' MENS-PROC
+           DISPLAY  BLANCO 'ARCHIVO         :  ' MENS-ARCH
+           DISPLAY  BLANCO 'FILE-STATUS     :  ' MENS-STAT
+
+           DISPLAY  BLANCO
+           IF (MENS-SW = 0)
+           THEN DISPLAY BLANCO  '*** EL PROCESO CONTINUA ***'
+           ELSE DISPLAY  BLANCO '*** SE CANCELA EL PROGRAMA ***'
+                DISPLAY  BLANCO '*** ERROR VSAM  ERROR VSAM ***'
+                DISPLAY  BLANCO '*** SE CANCELA EL PROGRAMA ***'
+                                                 UPON CONSOLE
+                DISPLAY  BLANCO '*** ERROR VSAM  ERROR VSAM ***'
+                                                 UPON CONSOLE
+                MOVE  1   TO   MENS-SW
+                IF (MENS-PROC  NOT =  'CERRAR')
+                THEN  PERFORM  CERRAR
+                PERFORM  ESTADISTICAS
+                STOP RUN.
+           EJECT
+      *
+
+       ESTADISTICAS.
+      *.............
+           DISPLAY BLANCO
+           DISPLAY BLANCO    ' ESTADISTICAS PROCESO'
+           DISPLAY BLANCO '_____________________________'
+           DISPLAY BLANCO
+           DISPLAY BLANCO 'LEIDOS SOR-CREDITOS  : ' CONT-LEIDOS-CR.
+           DISPLAY BLANCO 'CRED. NO PROCESADOS  : ' CONT-NO-PROC.
+           DISPLAY BLANCO 'REPETIDOS            : ' CONT-REPETIDOS.
+           DISPLAY BLANCO 'LEIDOS OPE-OPERAC    : ' CONT-LEIDOS-OP.
+           DISPLAY BLANCO 'LEIDOS UF-UEFES      : ' CONT-LEIDOS-UF.
+           DISPLAY BLANCO 'LEIDOS SORT          : ' CONT-LEIDOS-SORT.
+           DISPLAY BLANCO 'ERROR OPERAC         : ' CONT-OPE-ERR.
+           DISPLAY BLANCO 'ERROR UF             : ' CONT-UF-ERR.
+           DISPLAY BLANCO 'ERROR CREDITOS       : ' CONT-ERROR-CR.
+           DISPLAY BLANCO 'PROBLEMAS            : ' CONT-PROBLEMAS.
+           DISPLAY BLANCO 'GRABADOS D00         : ' CONT-GRABADOS-C5.
+
+       BASE-CALCULO-TASA-INT-FIJ.
+
+           MOVE 0 TO DIGITO-2.
+           MOVE 1 TO DIGITO-1.
+           PERFORM DIF-DIA-FCOL-FMAV.
+           PERFORM DET-DIGITO-3.
+
+       BASE-CALCULO-TASA-INT-VAR.
+
+
+           MOVE 2 TO DIGITO-1.
+           PERFORM LEER-ICG.
+           IF NOT ( ICG-RET-COD = SPACES AND
+              ICG-VAL-KEY-1 = WSS-OLD-IOPC )
+               MOVE 8 TO DIGITO-2
+               MOVE 8 TO DIGITO-3
+           ELSE
+           IF ICG-COD-CVTI IN ICG = 'TAB' OR
+              ICG-COD-CVTI IN ICG = 'TBA' OR
+              ICG-COD-CVTI IN ICG = 'TBS' OR
+              ICG-COD-CVTI IN ICG = 'TBT'
+               MOVE 1 TO DIGITO-2
+           ELSE
+           IF ICG-COD-CVTI IN ICG = 'TIP'
+               MOVE 2 TO DIGITO-2
+           ELSE
+           IF ICG-COD-CVTI IN ICG = 'LIB'
+               MOVE 3 TO DIGITO-2
+           ELSE
+           IF ICG-COD-CVTI IN ICG = 'PRI' OR
+              ICG-COD-CVTI IN ICG = 'PRA' OR
+              ICG-COD-CVTI IN ICG = 'PRB' OR
+              ICG-COD-CVTI IN ICG = 'PRC' OR
+              ICG-COD-CVTI IN ICG = 'PRD'
+               MOVE 4 TO DIGITO-2
+           ELSE
+               MOVE 9 TO DIGITO-2.
+
+           IF ICG-RET-COD = SPACES AND
+              ICG-VAL-KEY-1 = WSS-OLD-IOPC
+               IF ICG-MSC-TFPR IN ICG = 'F'
+                   PERFORM DET-DIG-TRES-V-F
+               ELSE
+                   PERFORM DET-DIG-TRES-V-C.
+
+       DET-DIG-TRES-V-F.
+
+           PERFORM LEER-EVC.
+           IF NOT ( EVC-RET-COD = SPACES AND
+              EVC-VAL-KEY-1 = WSS-OLD-IOPC )
+               MOVE 8 TO DIGITO-3
+           ELSE
+                IF D00-FECHA-OTORGAM = D00-FECHA-ULT-PAGO-INT
+                    MOVE EVC-NUM-DPVC TO CALEAREA-FECHA-2-D
+                    MOVE EVC-NUM-MPVC TO CALEAREA-FECHA-2-M
+                    MOVE EVC-NUM-SPVC TO CALEAREA-FECHA-2-AM
+                    MOVE EVC-NUM-APVC TO CALEAREA-FECHA-2-AA
+                    PERFORM DIF-DIA-FCOL-FVEN
+                    PERFORM DET-DIGITO-3
+                ELSE
+                    IF EVC-IND-UTSV = 'D'
+                        MOVE EVC-NUM-SEVE TO WSS-FEC-NDIA
+                        PERFORM DET-DIGITO-3
+                    ELSE
+                    IF EVC-IND-UTSV = 'M'
+                        COMPUTE WSS-FEC-NDIA = EVC-NUM-SEVE * 30
+                        PERFORM DET-DIGITO-3
+                    ELSE
+                        COMPUTE WSS-FEC-NDIA = EVC-NUM-SEVE * 365
+                        PERFORM DET-DIGITO-3.
+
+       DET-DIG-TRES-V-C.
+
+           IF ICG-MSC-UTPR IN ICG =  'M'
+               COMPUTE ICG-NUM-PREP = ICG-NUM-PREP * 30
+           ELSE
+           IF ICG-MSC-UTPR IN ICG =  'A'
+               COMPUTE ICG-NUM-PREP = ICG-NUM-PREP * 365.
+           PERFORM SUMA-DIAS.
+           PERFORM DIF-DIA-FCOL-FPO2.
+           PERFORM DET-DIGITO-3.
+
+       DET-DIGITO-3.
+
+           IF WSS-FEC-NDIA < 30
+               MOVE 1 TO DIGITO-3
+           ELSE
+           IF WSS-FEC-NDIA < 90
+               MOVE 2 TO DIGITO-3
+           ELSE
+           IF WSS-FEC-NDIA NOT < 90 AND
+              WSS-FEC-NDIA < 180
+               MOVE 3 TO DIGITO-3
+           ELSE
+           IF WSS-FEC-NDIA NOT < 180 AND
+              WSS-FEC-NDIA < 365
+               MOVE 4 TO DIGITO-3
+           ELSE
+           IF WSS-FEC-NDIA NOT < 365 AND
+              WSS-FEC-NDIA < 1095
+               MOVE 5 TO DIGITO-3
+           ELSE
+               MOVE 6 TO DIGITO-3.
+
+       LEER-EVC.
+      *--------*
+
+           MOVE D00-NUM-INTERNO-IDENT TO WSS-OLD-IOPC.
+           MOVE LOW-VALUE    TO EVC-VAL-KEY.
+           MOVE WSS-OLD-IOPC TO EVC-VAL-KEY-1.
+           MOVE 'REDKG'      TO EVC-COMMAND.
+           CALL 'DBNTRY' USING UIB REQ-AREA-EVC REG-EVC ELEM-LIST-EVC.
+           IF EVC-RET-COD = SPACES AND
+              EVC-VAL-KEY-1 = WSS-OLD-IOPC
+              NEXT SENTENCE
+           ELSE
+              DISPLAY 'ERROR AL LEER TABLA EVC : ' ICG-RET-COD
+              DISPLAY 'LLAVE           : '         WSS-OLD-IOPC
+           END-IF.
+
+
+       LEER-ICG.
+      *--------*
+
+           MOVE D00-NUM-INTERNO-IDENT TO WSS-OLD-IOPC.
+           MOVE LOW-VALUE TO ICG-VAL-KEY
+           MOVE WSS-OLD-IOPC TO ICG-VAL-KEY-1
+           MOVE 'REDKG' TO ICG-COMMAND
+           CALL 'DBNTRY' USING UIB REQ-AREA-ICG REG-ICG ELEM-LIST-ICG.
+           IF ICG-RET-COD = SPACES AND
+              ICG-VAL-KEY-1 = WSS-OLD-IOPC
+              NEXT SENTENCE
+           ELSE
+              DISPLAY 'ERROR AL LEER TABLA ICG : ' ICG-RET-COD
+              DISPLAY 'LLAVE           : '         WSS-OLD-IOPC
+           END-IF.
+
+
+
+       SUMA-DIAS.
+      *--------*
+
+           MOVE 'AVNDH'         TO CALEAREA-FUNCION.
+
+           MOVE D00-FECHA-OTORGAM-AA TO CALEAREA-FECHA-1-AA.
+           MOVE D00-FECHA-OTORGAM-MM TO CALEAREA-FECHA-1-M.
+           MOVE D00-FECHA-OTORGAM-DD TO CALEAREA-FECHA-1-D.
+
+           IF D00-FECHA-OTORGAM-AA > 60
+               MOVE 19 TO CALEAREA-FECHA-1-AM
+           ELSE
+               MOVE 20 TO CALEAREA-FECHA-1-AM.
+           MOVE  ICG-NUM-PREP   TO CALEAREA-NUM-DIA.
+
+           CALL 'RUTUCALE' USING CALEAREA.
+
+           MOVE CALEAREA-FECHA-2-AM TO WSS-NUM-SPO2.
+           MOVE CALEAREA-FECHA-2-AA TO WSS-NUM-APO2.
+           MOVE CALEAREA-FECHA-2-M  TO WSS-NUM-MPO2.
+           MOVE CALEAREA-FECHA-2-D  TO WSS-NUM-DPO2.
+
+       DIF-DIA-FCOL-FVEN.
+      *-----------------*
+
+           MOVE 'CDCEF' TO CALEAREA-FUNCION.
+
+           MOVE D00-FECHA-OTORGAM-AA TO CALEAREA-FECHA-1-AA.
+           MOVE D00-FECHA-OTORGAM-MM TO CALEAREA-FECHA-1-M.
+           MOVE D00-FECHA-OTORGAM-DD TO CALEAREA-FECHA-1-D.
+
+           IF D00-FECHA-OTORGAM-AA > 60
+               MOVE 19 TO CALEAREA-FECHA-1-AM
+           ELSE
+               MOVE 20 TO CALEAREA-FECHA-1-AM.
+
+
+
+           CALL 'RUTUCALE' USING CALEAREA.
+
+           IF CALEAREA-COD-RET = 0
+               MOVE CALEAREA-NUM-DIA TO WSS-FEC-NDIA.
+
+       DIF-DIA-FCOL-FPO2.
+      *-----------------*
+
+           MOVE 'CDCEF'      TO CALEAREA-FUNCION.
+
+           MOVE D00-FECHA-OTORGAM-AA TO CALEAREA-FECHA-1-AA.
+           MOVE D00-FECHA-OTORGAM-MM TO CALEAREA-FECHA-1-M.
+           MOVE D00-FECHA-OTORGAM-DD TO CALEAREA-FECHA-1-D.
+
+           IF D00-FECHA-OTORGAM-AA > 60
+               MOVE 19 TO CALEAREA-FECHA-1-AM
+           ELSE
+               MOVE 20 TO CALEAREA-FECHA-1-AM.
+
+           MOVE WSS-NUM-DPO2 TO CALEAREA-FECHA-2-D.
+           MOVE WSS-NUM-MPO2 TO CALEAREA-FECHA-2-M.
+           MOVE WSS-NUM-SPO2 TO CALEAREA-FECHA-2-AM.
+           MOVE WSS-NUM-APO2 TO CALEAREA-FECHA-2-AA.
+
+           CALL 'RUTUCALE' USING CALEAREA.
+
+           IF CALEAREA-COD-RET = 0
+               MOVE CALEAREA-NUM-DIA TO WSS-FEC-NDIA.
+
+       DIF-DIA-FCOL-FMAV.
+      *-----------------*
+
+           MOVE 'CDCEF'      TO CALEAREA-FUNCION.
+
+           MOVE D00-FECHA-OTORGAM-AA TO CALEAREA-FECHA-1-AA.
+           MOVE D00-FECHA-OTORGAM-MM TO CALEAREA-FECHA-1-M.
+           MOVE D00-FECHA-OTORGAM-DD TO CALEAREA-FECHA-1-D.
+
+           IF D00-FECHA-OTORGAM-AA > 60
+               MOVE 19 TO CALEAREA-FECHA-1-AM
+           ELSE
+               MOVE 20 TO CALEAREA-FECHA-1-AM.
+
+
+           MOVE D00-FECHA-DE-EXTINCION-AA TO CALEAREA-FECHA-1-AA.
+           MOVE D00-FECHA-DE-EXTINCION-MM TO CALEAREA-FECHA-1-M.
+           MOVE D00-FECHA-DE-EXTINCION-DD TO CALEAREA-FECHA-1-D.
+
+           IF D00-FECHA-DE-EXTINCION-AA > 60
+               MOVE 19 TO CALEAREA-FECHA-1-AM
+           ELSE
+               MOVE 20 TO CALEAREA-FECHA-1-AM.
+
+           CALL 'RUTUCALE' USING CALEAREA.
+           IF CALEAREA-COD-RET = 0
+               MOVE CALEAREA-NUM-DIA TO WSS-FEC-NDIA.

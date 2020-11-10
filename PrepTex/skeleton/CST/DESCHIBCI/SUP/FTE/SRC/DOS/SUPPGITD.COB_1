@@ -1,0 +1,298 @@
+       IDENTIFICATION DIVISION.
+      *************************
+       PROGRAM-ID.     SUPPGITD.
+      *AUTHOR.         DONOSO JARA OSVALDO.
+      *                DATE-WRITTEN,  29/02/96.
+      ******************************************************************
+      *  INTERSOFT                                                     *
+      *  MIGRACION A COBOL OS/390                                      *
+      *  FECHA: 15 DE ABRIL DE 1998                                    *
+      ******************************************************************
+      ******************************************************************
+      *  Sistema  : Deudores Super                                     *
+      *  Subsist. :                                                    *
+      *  Analista : Donoso Jara Osvaldo                                *
+      *  Objetivo : Poblar los intereses devengados cuota fija en D00  *
+      *             de tarjetas de creditos                            *
+      *  Archivos :                                                    *
+      *   Entrada : SUPVTCR: Cinta de estado de situacion de TCR VISA  *
+      *                                                                *
+      *   Ent/Sal : SUPVD00: Archivo D00                               *
+      *                                                                *
+      *  Mantenciones                                                  *
+      *  ============                                                  *
+      *            Programador: ...........................            *
+      *            Fecha      : dd/mm/aa                               *
+      *            Cambio     : ...........................            *
+      *                                                                *
+      ******************************************************************
+           EJECT
+       ENVIRONMENT DIVISION.
+      **********************
+       CONFIGURATION SECTION.
+      *======================
+       SPECIAL-NAMES.
+            DECIMAL-POINT IS COMMA.
+           EJECT
+       INPUT-OUTPUT SECTION.
+      *=====================
+       FILE-CONTROL.
+           SELECT SUPVTCR ASSIGN TO SUPVTCR
+                  FILE STATUS  IS WR-FS-SUPVTCR.
+           SELECT SUPVD00 ASSIGN TO SUPVD00
+                  ORGANIZATION IS INDEXED
+                  ACCESS MODE  IS RANDOM
+                  RECORD KEY   IS D00-COD-ID00
+                  FILE STATUS  IS WR-FS-SUPVD00.
+           EJECT
+       DATA DIVISION.
+      *==============
+           SKIP3
+       FILE SECTION.
+      *=============
+       FD  SUPVD00.
+       COPY SUPBRD00.
+       SKIP1
+       FD  SUPVTCR
+           LABEL RECORD STANDARD
+           BLOCK CONTAINS 0 RECORDS
+           RECORD CONTAINS 184 CHARACTERS.
+       COPY TCRBRITD.
+       SKIP1
+       WORKING-STORAGE SECTION.
+      *========================
+       01  W-PARAMETROS.
+           05 FILLER                        PIC X(20).
+           05 WP-FECHA-PRO                  PIC X(08).
+           05 FILLER                        PIC X(52).
+           SKIP1
+       01  W-SWITCHES.
+           05 WS-PROCESO                    PIC 9(01) VALUE 0.
+              88 WS-PROCESO-OK       VALUE 0.
+              88 WS-PROCESO-ERROR    VALUE 1.
+           SKIP1
+       01  W-CONTADORES-Y-ACUMULADORES.
+           05 WA-L-TCR                      PIC 9(06) VALUE 0.
+           05 WA-R-D00                      PIC 9(06) VALUE 0.
+           05 WA-G-D00                      PIC 9(06) VALUE 0.
+           SKIP1
+       01  W-REGISTROS-DE-TRABAJO.
+           05 WR-FECHA-HOY.
+              10 WR-HOY-AA                  PIC X(02).
+              10 WR-HOY-MM                  PIC X(02).
+              10 WR-HOY-DD                  PIC X(02).
+           05 WR-MENSAJES.
+              10 WR-SECCION                 PIC X(15).
+              10 WR-PARRAFO                 PIC X(15).
+              10 WR-ARCHIVO                 PIC X(10).
+              10 WR-OPERACI                 PIC X(10).
+              10 WR-FILE-ST                 PIC X(02).
+              10 WR-MENSAJE                 PIC X(35).
+           05 WR-FS-SUPVTCR                 PIC 9(02).
+           05 WR-FS-SUPVD00                 PIC 9(02)  VALUE 0.
+           05 WR-CLAVE-D00.
+              10 WR-CLAVE-D00-1             PIC 9(02).
+              10 WR-CLAVE-D00-2             PIC 9(10).
+           SKIP1
+      *
+           EJECT
+       PROCEDURE DIVISION.
+      *===================
+           ENTRY 'DBMSCBL'.
+           EJECT
+       A-CONTROL SECTION.
+      *=================
+       AA-INICIALIZACION.
+           PERFORM B-INICIALIZAR.
+           SKIP1
+       AB-PROCESAMIENTO.
+           IF (WS-PROCESO-OK)
+               PERFORM C-PROCESAR
+           END-IF.
+           SKIP1
+       AC-TERMINACION.
+           PERFORM D-TERMINAR.
+           SKIP1
+       AZ-FIN-DE-SECCION.
+           GOBACK.
+           EJECT
+       B-INICIALIZAR SECTION.
+      *======================
+       BA-PROCESO-INICIAL.
+      *-------------------
+           PERFORM BB-ABRIR-ARCHIVOS
+           GO BZ-FIN-DE-SECCION.
+           SKIP1
+       BB-ABRIR-ARCHIVOS.
+      *------------------
+           OPEN INPUT SUPVTCR
+                I-O   SUPVD00.
+           IF (WR-FS-SUPVTCR NOT = 00 AND NOT = 97)
+               MOVE 'B-INICIALIZAR'         TO WR-SECCION
+               MOVE 'BB-ABRIR-ARCHIVOS'     TO WR-PARRAFO
+               MOVE 'SUPVTCR'               TO WR-ARCHIVO
+               MOVE 'OPEN'                  TO WR-MENSAJE
+               MOVE WR-FS-SUPVTCR           TO WR-FILE-ST
+               PERFORM BC-DISPLAY-ERROR
+           END-IF.
+           IF (WR-FS-SUPVD00 NOT = 00 AND NOT = 97)
+               MOVE 'B-INICIALIZAR'         TO WR-SECCION
+               MOVE 'BB-ABRIR-ARCHIVOS'     TO WR-PARRAFO
+               MOVE 'SUPVD00'               TO WR-ARCHIVO
+               MOVE 'OPEN'                  TO WR-MENSAJE
+               MOVE WR-FS-SUPVD00           TO WR-FILE-ST
+               PERFORM BC-DISPLAY-ERROR
+           END-IF.
+           ACCEPT WR-FECHA-HOY FROM DATE.
+           SKIP1
+       BC-DISPLAY-ERROR.
+      *-----------------
+           SET WS-PROCESO-ERROR             TO TRUE.
+           DISPLAY ' '
+           DISPLAY 'ERROR EN SECCION  : ' WR-SECCION
+           DISPLAY ' PARRAFO          : ' WR-PARRAFO
+           DISPLAY ' ARCHIVO          : ' WR-ARCHIVO
+           DISPLAY ' OPERACION        : ' WR-OPERACI
+           DISPLAY ' FILE STATUS      : ' WR-FILE-ST
+           DISPLAY ' MENSAJE DE ERROR : ' WR-MENSAJE.
+           SKIP1
+       BZ-FIN-DE-SECCION.
+      *------------------
+           EXIT.
+           EJECT
+       C-PROCESAR  SECTION.
+      *--------------------
+      * Salta primer registro de encabezado
+           PERFORM CA-LEER-SUPVTCR
+           PERFORM CA-LEER-SUPVTCR
+           PERFORM CB-PUEBLA-INTERESES
+              UNTIL (WR-FS-SUPVTCR NOT = 0 OR WS-PROCESO-ERROR)
+           GO CZ-FIN-DE-SECCION.
+           SKIP1
+       CA-LEER-SUPVTCR.
+      *----------------
+           READ SUPVTCR END-READ
+           IF (WR-FS-SUPVTCR NOT = 0 AND NOT = 10)
+               MOVE 'C-PROCESAR '           TO WR-SECCION
+               MOVE 'CA-LEER-SUPVTCR'       TO WR-PARRAFO
+               MOVE 'SUPVTCR'               TO WR-ARCHIVO
+               MOVE 'READ'                  TO WR-OPERACI
+               MOVE WR-FS-SUPVTCR           TO WR-FILE-ST
+               PERFORM BC-DISPLAY-ERROR
+           END-IF.
+           SKIP1
+       CB-PUEBLA-INTERESES.
+      *--------------------
+           ADD 1                            TO WA-L-TCR
+           IF (ITD-COD-CAR = 0 OR = 1 OR = 7 OR = 9)
+               MOVE 12                      TO WR-CLAVE-D00-1
+           ELSE
+               MOVE 00                      TO WR-CLAVE-D00-1
+           END-IF.
+           MOVE ITD-NUM-TAR                 TO WR-CLAVE-D00-2
+           MOVE '05'                        TO D00-COD-SIST
+           MOVE WR-CLAVE-D00                TO D00-COD-NIID
+           PERFORM CE-LEER-SUPVD00
+           IF (WR-FS-SUPVD00 = 0)
+               ADD ITD-VAL-INT-MEN
+                   ITD-VAL-INT-MAS          TO D00-VAL-IPCO
+               PERFORM CD-REGRABAR-D00
+           ELSE
+               DISPLAY 'CLAVE VISA NO EXISTE EN D00 : ' ITD-NUM-TAR
+           END-IF
+           PERFORM CA-LEER-SUPVTCR.
+           SKIP1
+       CD-REGRABAR-D00.
+      *--------------
+           REWRITE D00 END-REWRITE
+           ADD 1                            TO WA-R-D00
+           IF (WR-FS-SUPVD00 NOT = 0 AND NOT = 23)
+               MOVE 'C-PROCESAR '           TO WR-SECCION
+               MOVE 'CD-GRABAR-D00'         TO WR-PARRAFO
+               MOVE 'SUPVD00'               TO WR-ARCHIVO
+               MOVE D00-COD-ID00            TO WR-OPERACI
+               MOVE WR-FS-SUPVD00           TO WR-FILE-ST
+               MOVE '** ERROR AL GRABAR '   TO WR-MENSAJE
+               PERFORM BC-DISPLAY-ERROR
+           END-IF.
+           SKIP1
+       CE-LEER-SUPVD00.
+      *----------------
+           READ SUPVD00 END-READ
+           IF (WR-FS-SUPVD00 NOT = 0 AND NOT = 23)
+               MOVE 'C-PROCESAR '           TO WR-SECCION
+               MOVE 'CE-LEER-SUPVD00'       TO WR-PARRAFO
+               MOVE 'SUPVD00'               TO WR-ARCHIVO
+               MOVE D00-COD-ID00            TO WR-OPERACI
+               MOVE WR-FS-SUPVD00           TO WR-FILE-ST
+               MOVE '** ERROR AL LEER   '   TO WR-MENSAJE
+               PERFORM BC-DISPLAY-ERROR
+           END-IF.
+           SKIP1
+       CZ-FIN-DE-SECCION.
+      *------------------
+           EXIT.
+           EJECT
+       D-TERMINAR SECTION.
+      *===================
+       DA-ESTADISTICAS.
+      *----------------
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY 'INFORMES'
+           DISPLAY '--------'
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY 'ESTADISTICAS DE PROCESO PROGRAMA SUPPGITD FECHA '
+                    WR-FECHA-HOY
+           DISPLAY '-----------------------------------------------'
+           DISPLAY ' Actualiza intereses devegados cuota en D00'
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY 'Reg. leidos de SUPVTCR    : ' WA-L-TCR
+           DISPLAY ' '
+           DISPLAY 'Reg. regrabados en D00    : ' WA-R-D00
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY 'TARJETAS DE PARAMETROS'
+           DISPLAY '----------------------'
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY 'MENSAJES PARA EL EXPLOTADOR'
+           DISPLAY '---------------------------'
+           DISPLAY ' '
+           IF WS-PROCESO-OK
+               DISPLAY 'NO HAY MENSAJES PARA EL EXPLOTADOR'
+           ELSE
+               DISPLAY 'HAY MENSAJES PARA EL EXPLOTADOR'
+           END-IF
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY ' '.
+           SKIP1
+       DB-TERMINO.
+      *-----------
+           CLOSE SUPVTCR SUPVD00.
+           IF WS-PROCESO-ERROR
+              MOVE 100                      TO RETURN-CODE
+              DISPLAY ' '
+              DISPLAY '**********************************************'
+              DISPLAY '**********************************************'
+              DISPLAY '********                              ********'
+              DISPLAY '******** TERMINO ERRONEO DEL PROCESO  ********'
+              DISPLAY '********                              ********'
+              DISPLAY '**********************************************'
+              DISPLAY '**********************************************'
+           ELSE
+              DISPLAY ' '
+              DISPLAY ' '
+              DISPLAY '*****PROCESO TERMINO EN FORMA NORMAL*****'
+           END-IF.
+           SKIP1
+       DZ-FIN-DE-SECCION.
+      *------------------
+           EXIT.
+           EJECT

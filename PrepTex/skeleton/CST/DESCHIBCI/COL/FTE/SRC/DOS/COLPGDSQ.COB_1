@@ -1,0 +1,305 @@
+       IDENTIFICATION DIVISION.
+      *=======================
+       PROGRAM-ID.      COLPGDSQ.
+       AUTHOR.          BEE (DPM).
+       DATE-WRITTEN.    16-JUL-1997.
+
+      * Programa Generador de Archivo DSQ con deuda > parametro.
+
+       ENVIRONMENT DIVISION.
+      *====================
+
+       DATA DIVISION.
+      *=============
+       WORKING-STORAGE SECTION.
+      *-----------------------
+      *<<<< WSS_DTC
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-MSG-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-MSC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-TAB-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-DBC-REQA==.
+      *>>>>
+      *<<<< WSS
+       COPY COLBRDSQ.
+       COPY SGCBRDBC.
+       COPY GNSBRMSG.
+       COPY GNSBRMSC.
+       COPY GNSBRTAB.
+       COPY COLBRD01.
+       COPY GNSWGRQA.
+       COPY GNSWGUIB.
+       COPY GNSWGELS.
+       COPY GNSWVIDD.
+       COPY GNSWCFIO.
+       COPY GNSWVFIO.
+       COPY GNSWGSYS.
+       COPY GNSWGFEC.
+       COPY GNSWGHOY.
+       COPY GNSWGPES.
+
+       01  WSS-VARI.
+      * Variables para estadisticas
+           03  WSS-NUM-RLEI       VALUE ZEROES      PIC 9(06).
+           03  WSS-NUM-RGRA       VALUE ZEROES      PIC 9(06).
+           03  WSS-NUM-RRCH       VALUE ZEROES      PIC 9(06).
+      * Monto parametro
+           03  WSS-VAL-MPAR       VALUE ZEROES      PIC 9(14).
+           03  WSS-VAL-DEUT       VALUE ZEROES      PIC 9(14).
+           03  WSS-VAL-DEDI       VALUE ZEROES      PIC 9(14)V9(02).
+           03  WSS-VAL-DEIN       VALUE ZEROES      PIC 9(14)V9(02).
+           03  WSS-VAL-DECO       VALUE ZEROES      PIC 9(14)V9(02).
+           03  WSS-FEC-FPRO.
+               05  WSS-NUM-DPRO                     PIC 9(02).
+               05  WSS-NUM-MPRO                     PIC 9(02).
+               05  WSS-NUM-SPRO                     PIC 9(02).
+               05  WSS-NUM-APRO                     PIC 9(02).
+           03  WSS-NUM-ICLI.
+               05  FILLER         VALUE SPACES      PIC X(01).
+               05  WSS-GLS-ICLI   VALUE SPACES      PIC X(08).
+           03  WSS-IND-DISP       VALUE SPACES      PIC X(01).
+
+
+       PROCEDURE DIVISION.
+      *==================
+       MAIN SECTION.
+      *------------
+       INI-MAIN.
+           COPY GNSBGEDB.
+           MOVE 'COLPGDSQ' TO FIO-PROG.
+           PERFORM GNS-BUS-IDD.
+           PERFORM OPEN-FILE.
+           PERFORM OBT-PARAM.
+           PERFORM PROCESA-D01.
+           PERFORM CLOSE-FILE.
+           PERFORM MUESTRA-ESTADISTICAS.
+       FIN-MAIN.
+           PERFORM GNS-PRO-END.
+
+      ******************************************************************
+       OPEN-FILE SECTION.
+      *-----------------
+       INI-OPEN-FILE.
+           MOVE FIO-INP TO FIO-CMND.
+           PERFORM COL-FIO-D01.
+           PERFORM SGC-FIO-DBC.
+
+           DISPLAY 'ABRE UPD ARCHIVO DSQ'.
+           MOVE FIO-UPD TO FIO-CMND.
+           PERFORM COL-FIO-DSQ.
+           IF NOT FIO-STAT-OKS
+               DISPLAY 'ERROR APERTURA COLDSQ: ' FIO-STAT
+               PERFORM GNS-PRO-ABT.
+           DISPLAY 'FIN OPEN-FILE'.
+       FIN-OPEN-FILE.
+           EXIT.
+
+
+      ******************************************************************
+       OBT-PARAM SECTION.
+      *-----------------
+       INI-OBT-PARAM.
+           DISPLAY 'ACEPTA PARAMETROS.'
+           DISPLAY '------------------'
+           DISPLAY ' '.
+           ACCEPT WSS-VAL-MPAR IN WSS-VARI.
+           DISPLAY 'MONTO PARAMETRO: ' WSS-VAL-MPAR IN WSS-VARI.
+           DISPLAY ' '.
+           PERFORM GET-FHOY.
+           MOVE HOY-DHOY TO WSS-NUM-DPRO IN WSS-VARI.
+           MOVE HOY-MHOY TO WSS-NUM-MPRO IN WSS-VARI.
+           MOVE HOY-SHOY TO WSS-NUM-SPRO IN WSS-VARI.
+           MOVE HOY-AHOY TO WSS-NUM-APRO IN WSS-VARI.
+           DISPLAY 'FECHA PROCESO: ' WSS-FEC-FPRO IN WSS-VARI.
+           DISPLAY ' '.
+           ACCEPT WSS-IND-DISP IN WSS-VARI.
+           DISPLAY 'INDICADOR DE DISPLAY: ' WSS-IND-DISP IN WSS-VARI.
+           DISPLAY ' '.
+           IF WSS-IND-DISP IN WSS-VARI NOT = 'S' AND
+                                       NOT = 'N'
+               DISPLAY 'ASUME INDICADOR DE DISPLAY = N'.
+       FIN-OBT-PARAM.
+           EXIT.
+
+
+      ******************************************************************
+       PROCESA-D01 SECTION.
+      *-------------------
+       INI-PROCESA-D01.
+           MOVE FIO-GET-FST TO FIO-CMND.
+           PERFORM COL-FIO-D01.
+           IF NOT FIO-STAT-OKS
+               DISPLAY 'NO HAY REGISTROS EN SUPD01...'
+               GO TO FIN-PROCESA-D01.
+
+       LUP-PROCESA-D01.
+           ADD 1 TO WSS-NUM-RLEI IN WSS-VARI.
+
+      *Si cliente existe en archivo DSQ, lee sgte reg. de D01
+           MOVE D01-NUM-RUTD IN D01      TO WSS-NUM-ICLI IN WSS-VARI.
+           MOVE WSS-GLS-ICLI IN WSS-VARI TO DBC-NUM-ICLI IN DBC.
+           MOVE 'DBC-IDC-ICLI' TO FIO-AKEY.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM SGC-FIO-DBC.
+           IF NOT (FIO-STAT-OKS AND
+              WSS-GLS-ICLI IN WSS-VARI = DBC-NUM-ICLI IN DBC AND
+              D01-VRF-RUTD IN D01 = DBC-VRF-ICLI IN DBC)
+               IF WSS-IND-DISP IN WSS-VARI = 'S'
+                   DISPLAY 'ERROR LECTURA SGCDBC PARA LLAVE: '
+                                            D01-NUM-RUTD IN D01
+                   ADD 1 TO WSS-NUM-RRCH IN WSS-VARI
+                   GO TO NXT-PROCESA-D01
+               ELSE
+                   ADD 1 TO WSS-NUM-RRCH IN WSS-VARI
+                   GO TO NXT-PROCESA-D01.
+
+           MOVE DBC-CIC-ICLI IN DBC TO DSQ-CIC-DEUD IN DSQ.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM COL-FIO-DSQ.
+           IF FIO-STAT-OKS
+               DISPLAY 'REG. EXISTE EN DSQ: ' DBC-CIC-ICLI IN DBC
+               GO TO NXT-PROCESA-D01.
+
+           PERFORM CAL-DEUDA-TOTAL.
+
+           MULTIPLY WSS-VAL-DEUT IN WSS-VARI BY 1000
+                     GIVING WSS-VAL-DEUT IN WSS-VARI.
+
+           IF WSS-IND-DISP IN WSS-VARI = 'S'
+               DISPLAY 'REG. D01 LEIDO: ' D01-COD-ID01 IN D01
+               DISPLAY 'DEUDA DIRECTA: ' WSS-VAL-DEDI IN WSS-VARI
+               DISPLAY 'DEUDA TOTAL: ' WSS-VAL-DEUT IN WSS-VARI.
+
+           IF WSS-VAL-DEUT IN WSS-VARI NOT > WSS-VAL-MPAR OR
+              WSS-VAL-DEDI IN WSS-VARI NOT > ZEROES
+               IF WSS-IND-DISP IN WSS-VARI = 'S'
+                   DISPLAY 'DEUDA INFERIOR A MONTO, REG RECHAZADO'
+                   ADD 1 TO WSS-NUM-RRCH IN WSS-VARI
+                   GO TO NXT-PROCESA-D01
+               ELSE
+                   ADD 1 TO WSS-NUM-RRCH IN WSS-VARI
+                   GO TO NXT-PROCESA-D01.
+
+      * Graba datos de archivo D01 en archivo DSQ, mas la fecha
+      * de proceso
+           PERFORM GRABA-D01-DSQ.
+
+       NXT-PROCESA-D01.
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM COL-FIO-D01.
+           IF FIO-STAT-OKS
+               GO TO LUP-PROCESA-D01.
+       FIN-PROCESA-D01.
+           EXIT.
+
+
+      ******************************************************************
+       CAL-DEUDA-TOTAL SECTION.
+      *------------------------
+       INI-CAL-DEUDA-TOTAL.
+           COMPUTE WSS-VAL-DEDI IN WSS-VARI =
+                                D01-VAL-DVGL IN D01 +
+                                D01-VAL-DVGX IN D01 +
+                                D01-VAL-DML1 IN D01 +
+                                D01-VAL-DML2 IN D01 +
+                                D01-VAL-DMX1 IN D01 +
+                                D01-VAL-DMX2 IN D01 +
+                                D01-VAL-DVCL IN D01 +
+                                D01-VAL-DVCX IN D01.
+
+           COMPUTE WSS-VAL-DEIN IN WSS-VARI =
+                                D01-VAL-IVGL IN D01 +
+                                D01-VAL-IVGX IN D01 +
+                                D01-VAL-IVCL IN D01 +
+                                D01-VAL-IVCX IN D01.
+
+           COMPUTE WSS-VAL-DECO IN WSS-VARI =
+                                D01-VAL-TCOM IN D01.
+
+      *        Calcula Deuda Total = D. Dir + D. Ind + (D. Com + D. Fia)
+           COMPUTE WSS-VAL-DEUT IN WSS-VARI ROUNDED =
+                                WSS-VAL-DEDI IN WSS-VARI +
+                                WSS-VAL-DEIN IN WSS-VARI +
+                                WSS-VAL-DECO IN WSS-VARI.
+       FIN-CAL-DEUDA-TOTAL.
+           EXIT.
+
+
+      ******************************************************************
+       GRABA-D01-DSQ SECTION.
+      *---------------------
+       INI-GRABA-D01-DSQ.
+           MOVE DBC-CIC-ICLI IN DBC      TO DSQ-CIC-DEUD IN DSQ.
+           MOVE SPACES                   TO DSQ-GLS-DISP IN DSQ.
+           MOVE FIO-PUT TO FIO-CMND.
+           PERFORM COL-FIO-DSQ.
+           IF NOT FIO-STAT-OKS AND
+              FIO-STAT NOT = 22
+               IF WSS-IND-DISP IN WSS-VARI = 'S'
+                   DISPLAY 'ERROR GRABANDO COLDSQ '
+                           'FIO STAT: ' FIO-STAT
+                   ADD 1 TO WSS-NUM-RRCH IN WSS-VARI
+               ELSE
+                   ADD 1 TO WSS-NUM-RRCH IN WSS-VARI
+           ELSE
+           IF NOT FIO-STAT-OKS
+               IF WSS-IND-DISP IN WSS-VARI = 'S'
+                   DISPLAY 'REGISTRO YA EXISTE: '
+                                 DSQ-CIC-DEUD IN DSQ
+                   ADD 1 TO WSS-NUM-RRCH IN WSS-VARI
+               ELSE
+                   ADD 1 TO WSS-NUM-RRCH IN WSS-VARI
+           ELSE
+           IF FIO-STAT-OKS
+               ADD 1 TO WSS-NUM-RGRA IN WSS-VARI
+               IF WSS-IND-DISP IN WSS-VARI = 'S'
+                   DISPLAY 'REG. GRABADO OK.'.
+       FIN-GRABA-D01-DSQ.
+           EXIT.
+
+
+      ******************************************************************
+       CLOSE-FILE SECTION.
+      *------------------
+       INI-CLOSE-FILE.
+           MOVE FIO-CLO TO FIO-CMND.
+           PERFORM COL-FIO-D01.
+           PERFORM SGC-FIO-DBC.
+           PERFORM COL-FIO-DSQ.
+       FIN-CLOSE-FILE.
+           EXIT.
+
+
+      ******************************************************************
+       MUESTRA-ESTADISTICAS SECTION.
+      *----------------------------
+       INI-MUESTRA-ESTADISTICAS.
+           DISPLAY 'REGISTROS D01 LEIDOS   : '
+                                  WSS-NUM-RLEI IN WSS-VARI.
+           DISPLAY 'REGISTROS GRABADOS DSQ : '
+                                  WSS-NUM-RGRA IN WSS-VARI.
+           DISPLAY 'REGISTROS RECHAZADOS   : '
+                                  WSS-NUM-RRCH IN WSS-VARI.
+       FIN-MUESTRA-ESTADISTICAS.
+           EXIT.
+
+
+       COPY COLBFDSQ.
+       COPY SGCBFDBC.
+       COPY COLBFD01.
+       COPY GNSBFMSG.
+       COPY GNSBFMSC.
+       COPY GNSBFTAB.
+       COPY GNSBPFEC.
+       COPY GNSBBMSG.
+       COPY GNSBBMSC.
+       COPY GNSBBTAB.
+       COPY GNSBGDTC.
+       COPY GNSBGIDD.
+       COPY GNSBTABT.
+       COPY GNSBBSYS.
+       COPY GNSBGFEC.
+       COPY GNSBGHOY.
+       COPY GNSBGPES.
+       COPY GNSBGEND.
+       COPY GNSBGABT.
+

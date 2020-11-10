@@ -1,0 +1,462 @@
+       IDENTIFICATION DIVISION.
+      *========================
+       PROGRAM-ID. GNSPPDMQ.
+       AUTHOR. CONSIST.
+       DATE-WRITTEN.   19-JUL-1989 18:07:19.
+
+      *Despliega MAPAS desde Temporary Storage
+
+       ENVIRONMENT DIVISION.
+      *=====================
+       DATA DIVISION.
+      *==============
+
+       WORKING-STORAGE SECTION.
+      *------------------------
+       01  WSS-VARI.
+      *Registro ( el primero ) de control de la temporary storage.
+           03  WSS-ICTL.
+      *            Indica si tiene un 'Header' General
+               05  WSS-IHDR                            PIC X(01).
+      *            Indica si tiene un 'Trailer' General
+               05  WSS-ITRL                            PIC X(01).
+      *            Indica si borra la cola al final del proceso
+               05  WSS-IDEL                            PIC X(01).
+      *            Teclas de manejo
+               05  WSS-KEYS.
+      *            Tecla para avanzar
+                   07  WSS-KNXT                        PIC X(01).
+      *            Tecla para retroceder
+                   07  WSS-KPRV                        PIC X(01).
+      *            Tecla para retornar ( abandonar )
+                   07  WSS-KRET                        PIC X(01).
+      *            Tipo de Proceso
+               05  WSS-TPRO.
+      *            Nombre del Proceso, si es 'FX' se trata de
+      *            despacho de un FAX
+                   07 WSS-NPRO                         PIC X(02).
+      *            Si proceso es 'FX', es el valor inicial del flag
+                   07 WSS-RFBY                         PIC X(01).
+      *            Disponible
+               05  FILLER                              PIC X(21).
+      *Informacion de control del mapa a desplegar
+           03  WSS-MAPA.
+      *           Nombre del Mapa
+               05 WSS-NMAP                             PIC X(07).
+      *           Mapset del Mapa
+               05 WSS-LMAP                             PIC X(07).
+      *           Indicador de limpieza del mapa asume 'F'
+               05 WSS-ICLR                   VALUE ' ' PIC X(01).
+      *               Limpiar toda la pantalla
+                  88  WSS-ICLR-ALL           VALUE 'A', ' '.
+      *               Limpiar solo formulario
+                  88  WSS-ICLR-FRM           VALUE 'F'.
+      *               No limpiar Nada
+                  88  WSS-ICLR-NOT           VALUE 'N'.
+      *           Linea de inicio para limpiar en caso de WSS-ICLR-FRM
+               05 WSS-LINI                             PIC 9(02).
+      *           Linea de fin para limpiar en caso de WSS-ICLR-FRM
+               05 WSS-LFIN                             PIC 9(02).
+      *           Fila donde ubicar el Cursor
+               05 WSS-FCUR                             PIC 9(02).
+      *           Columna para ubicar el Cursor
+               05 WSS-CCUR                             PIC 9(02).
+      *           Tipo de Mapa ( 'T' indica 'Trailer' )
+               05 WSS-TMAP                             PIC X(01).
+      *           Disponible
+               05 FILLER                               PIC X(06).
+      *           Mapa a desplegar
+               05 WSS-DMAP                             PIC X(2000).
+      *Variables de trabajo
+           03 WSS-CMSG                                 PIC X(12).
+           03 WSS-PCUR  COMP      VALUE +0             PIC S9(04).
+           03 WSS-AUX1                                 PIC 9(02).
+           03 WSS-AUX2                                 PIC 9(02).
+           03 WSS-GRET.
+              05 WSS-GPRO                              PIC X(08).
+              05 WSS-FRET.
+                 07 WSS-GSIS                           PIC X(03).
+                 07 WSS-GSSG                           PIC X(03).
+                 07 WSS-GFUN                           PIC X(12).
+                 07 WSS-GCMD                           PIC X(03).
+                 07 WSS-GFLG                           PIC X(01).
+           03  WSS-NTRN                 VALUE 'GS54'   PIC X(04).
+           03  WSS-TCMA                 COMP VALUE +3  PIC S9(04).
+           03  WSS-CAAX.
+               05  WSS-NITM             COMP           PIC S9(04).
+               05  WSS-FLGR                            PIC  X(01).
+      *
+       COPY GNSWGQUE.
+       COPY GNSWGFRM.
+       COPY GNSWGSYS.
+
+       LINKAGE SECTION.
+      *----------------
+       01  DFHCOMMAREA.
+           02 FILLER                             PIC X(3000).
+
+       PROCEDURE DIVISION.
+      *===================
+
+       MAIN SECTION.
+       INI-MAIN.
+       COPY GNSBGEDB.
+           PERFORM GNS-ERR-QUE.
+           PERFORM GNS-HDL-FRM.
+           PERFORM GNS-HDL-SYS.
+      *Lee registro ( el primero ) de control de la temporary storage
+           PERFORM LEE-FST-ITEM.
+           IF QUE-STAT NOT = QUE-STAT-OKS
+               PERFORM GNS-PRO-RET.
+           MOVE QUE-ITEM TO WSS-ICTL.
+
+      *Largo de la commarea es 3 indica las siguintes veces
+           IF EIBCALEN NOT = 3
+               PERFORM PRO-FST-VEZ
+           ELSE
+               PERFORM PRO-NXT-VEZ.
+
+      *Lee MAPA de la Temporary Storage y lo despliega luego lee el
+      *siguiente registro para ver si el tipo de mapa es 'T' con lo
+      *cual lo considera 'Trailer' del mapa anterior y lo deSpliega
+           MOVE EIBTRMID TO QUE-TERM.
+           MOVE 'MAP'    TO QUE-TYPE.
+           MOVE WSS-NITM TO QUE-NITM.
+           MOVE QUE-GET  TO QUE-CMND.
+           MOVE +3000    TO QUE-LITM.
+           PERFORM GNS-PRO-QUE.
+           IF QUE-STAT = QUE-STAT-OKS
+               MOVE QUE-ITEM TO WSS-MAPA
+               PERFORM DSP-MAP
+
+               ADD 1 TO QUE-NITM
+               MOVE QUE-GET  TO QUE-CMND
+               MOVE +3000    TO QUE-LITM
+               PERFORM GNS-PRO-QUE
+               IF QUE-STAT = QUE-STAT-OKS
+                   MOVE QUE-ITEM TO WSS-MAPA
+                   IF WSS-TMAP = 'T'
+                       PERFORM DSP-TRL
+                       PERFORM DSP-CUR
+                       MOVE QUE-NITM TO WSS-NITM
+                       PERFORM SCR-EXIT
+                   ELSE
+                       PERFORM DSP-CUR
+                       SUBTRACT 1 FROM QUE-NITM
+                       MOVE QUE-NITM TO WSS-NITM
+                       PERFORM SCR-EXIT
+               ELSE
+                   PERFORM DSP-CUR
+                   SUBTRACT 1 FROM QUE-NITM
+                   MOVE QUE-NITM TO WSS-NITM
+                   PERFORM SCR-EXIT.
+       DEL-MAIN.
+      *pregunta por el indicador de borrado del la cola ( campo que
+      *pertenece al registro de control )
+           IF WSS-IDEL NOT = 'N'
+               MOVE EIBTRMID TO QUE-TERM
+               MOVE 'MAP'    TO QUE-TYPE
+               MOVE QUE-DEL  TO QUE-CMND
+               PERFORM GNS-PRO-QUE.
+       RET-MAIN.
+      *Retornar al programa que lo llamo
+           PERFORM GNS-PRO-RET.
+       FIN-MAIN.
+           EXIT.
+
+       PRO-FST-VEZ SECTION.
+       INI-PRO-FST-VEZ.
+      *Intercambia los valores de Flag para manejo de FAX
+           IF WSS-RFBY = '0'
+               MOVE '1' TO WSS-FLGR
+           ELSE
+               MOVE '0' TO WSS-FLGR.
+      *Si la pantalla no tiene 'Header' ni 'Trailer' termina este proceso.
+      *Los indicadores de 'Header' o 'Trailer' son parte del registro de
+      *control
+           IF ( WSS-IHDR NOT = 'S' ) AND ( WSS-ITRL NOT = 'S' )
+               ADD 1 TO WSS-NITM
+               GO TO FIN-PRO-FST-VEZ.
+      *Si la pantalla tiene 'Header', lee el siguiente registro
+      *( el segundo ) el cual considera header y lo despliega
+           IF WSS-IHDR = 'S'
+               ADD 1         TO WSS-NITM
+               MOVE WSS-NITM TO QUE-NITM
+               MOVE QUE-GET  TO QUE-CMND
+               MOVE +3000    TO QUE-LITM
+               PERFORM GNS-PRO-QUE
+               IF QUE-STAT NOT = QUE-STAT-OKS
+                   PERFORM GNS-PRO-RET
+               ELSE
+                   MOVE QUE-ITEM TO WSS-MAPA
+                   EXEC CICS SEND
+                             MAP(WSS-NMAP)
+                             MAPSET(WSS-LMAP)
+                             FROM(WSS-DMAP) CURSOR
+                             ERASE
+                   END-EXEC.
+      *Si la pantalla tiene 'Trailer', lee el siguiente registro
+      *( el tercero ) el cual considera 'Trailer' y lo despliega
+           IF WSS-ITRL = 'S'
+               ADD 1         TO WSS-NITM
+               MOVE WSS-NITM TO QUE-NITM
+               MOVE QUE-GET  TO QUE-CMND
+               MOVE +3000    TO QUE-LITM
+               PERFORM GNS-PRO-QUE
+               IF QUE-STAT NOT = QUE-STAT-OKS
+                   PERFORM GNS-PRO-RET
+               ELSE
+               IF WSS-IHDR NOT = 'S'
+      *Si la pantalla no tiene 'Header' despliega el 'Trailer' con opcion
+      *ERASE para limpiar el area de pantalla, en caso contrario lo
+      *despliega sin opcion ERASE
+                   MOVE QUE-ITEM TO WSS-MAPA
+                   EXEC CICS SEND
+                             MAP(WSS-NMAP)
+                             MAPSET(WSS-LMAP)
+                             FROM(WSS-DMAP) CURSOR
+                             ERASE
+                   END-EXEC
+               ELSE
+                   MOVE QUE-ITEM TO WSS-MAPA
+                   EXEC CICS SEND
+                             MAP(WSS-NMAP)
+                             MAPSET(WSS-LMAP)
+                             FROM(WSS-DMAP) CURSOR
+                   END-EXEC.
+      *Suma 1 para quedar apuntando al siguiente registro ( MAPA )
+           ADD 1 TO WSS-NITM.
+       FIN-PRO-FST-VEZ.
+           EXIT.
+
+       PRO-NXT-VEZ SECTION.
+       INI-PRO-NXT-VEZ.
+           MOVE DFHCOMMAREA TO WSS-CAAX.
+           PERFORM PRO-KEY.
+           IF WSS-CMSG = 'EXIT'
+               EXEC CICS SEND CONTROL FREEKB
+               END-EXEC
+               PERFORM SCR-EXIT.
+       FIN-PRO-NXT-VEZ.
+           EXIT.
+
+      *Despliega MAPA
+       DSP-MAP SECTION.
+       INI-DSP-MAP.
+      *Limpiar toda la pantalla
+           IF WSS-ICLR-ALL
+               EXEC CICS SEND
+                         MAP(WSS-NMAP)
+                         MAPSET(WSS-LMAP)
+                         FROM(WSS-DMAP) CURSOR
+                         ERASE
+               END-EXEC
+               GO TO CON-DSP-MAP.
+
+      *No limpiar nada
+           IF WSS-ICLR-NOT
+               EXEC CICS SEND
+                         MAP(WSS-NMAP)
+                         MAPSET(WSS-LMAP)
+                         FROM(WSS-DMAP) CURSOR
+               END-EXEC
+               GO TO CON-DSP-MAP.
+
+      *Se asume limpiar solo formulario
+           MOVE WSS-LINI                   TO     FRM-PLIN.
+           SUBTRACT WSS-LINI FROM WSS-LFIN GIVING FRM-NLIN.
+           ADD 1 TO FRM-NLIN.
+           MOVE FRM-CLR-FRM TO FRM-CMND.
+           PERFORM GNS-PRO-FRM.
+
+           EXEC CICS SEND
+                     MAP(WSS-NMAP)
+                     MAPSET(WSS-LMAP)
+                     FROM(WSS-DMAP) CURSOR
+           END-EXEC.
+       CON-DSP-MAP.
+      *Carga las variables de posicionamiento del Cursor
+           MOVE WSS-FCUR TO WSS-AUX1.
+           MOVE WSS-CCUR TO WSS-AUX2.
+       FIN-DSP-MAP.
+           EXIT.
+
+      *Despliega 'Trailer' de MAPA
+       DSP-TRL SECTION.
+       INI-DSP-TRL.
+      *Limpiar toda la pantalla
+           IF WSS-ICLR-ALL
+               EXEC CICS SEND
+                         MAP(WSS-NMAP)
+                         MAPSET(WSS-LMAP)
+                         FROM(WSS-DMAP) CURSOR
+                         ERASE
+               END-EXEC
+               GO TO FIN-DSP-TRL.
+
+      *No limpiar nada
+           IF WSS-ICLR-NOT
+               EXEC CICS SEND
+                         MAP(WSS-NMAP)
+                         MAPSET(WSS-LMAP)
+                         FROM(WSS-DMAP) CURSOR
+               END-EXEC
+               GO TO FIN-DSP-TRL.
+
+      *Se asume limpiar solo formulario
+           MOVE WSS-LINI                   TO     FRM-PLIN.
+           SUBTRACT WSS-LINI FROM WSS-LFIN GIVING FRM-NLIN.
+           ADD 1 TO FRM-NLIN.
+           MOVE FRM-CLR-FRM TO FRM-CMND.
+           PERFORM GNS-PRO-FRM.
+
+           EXEC CICS SEND
+                     MAP(WSS-NMAP)
+                     MAPSET(WSS-LMAP)
+                     FROM(WSS-DMAP) CURSOR
+           END-EXEC.
+       FIN-DSP-TRL.
+           EXIT.
+
+      *Posiciona el CURSOR despues de desplegar el MAPA y su 'Trailer'
+      *asociado ( si es que existe )
+       DSP-CUR SECTION.
+       INI-DSP-CUR.
+           MOVE WSS-AUX1 TO WSS-FCUR.
+           MOVE WSS-AUX2 TO WSS-CCUR.
+           IF NOT ( WSS-FCUR > ZEROES AND WSS-CCUR > ZEROES )
+               GO TO FIN-DSP-CUR.
+
+           SUBTRACT 1 FROM WSS-FCUR.
+           SUBTRACT 1 FROM WSS-CCUR.
+           MULTIPLY WSS-FCUR BY 80 GIVING WSS-PCUR.
+           ADD WSS-CCUR TO WSS-PCUR.
+           EXEC CICS SEND CONTROL CURSOR(WSS-PCUR)
+                     TERMINAL
+           END-EXEC.
+       FIN-DSP-CUR.
+           EXIT.
+
+       SCR-EXIT SECTION.
+       INI-SCR-EXIT.
+           IF WSS-FLGR = '0'
+               MOVE '1' TO WSS-FLGR
+           ELSE
+               MOVE '0' TO WSS-FLGR.
+
+           EXEC CICS RETURN
+                     TRANSID(WSS-NTRN)
+                     COMMAREA(WSS-CAAX)
+                     LENGTH(WSS-TCMA)
+           END-EXEC.
+       FIN-SCR-EXIT.
+           EXIT.
+
+       LEE-FST-ITEM SECTION.
+       INI-LEE-FST-ITEM.
+           MOVE 1 TO WSS-NITM.
+           MOVE EIBTRMID TO QUE-TERM.
+           MOVE 'MAP'    TO QUE-TYPE.
+           MOVE WSS-NITM TO QUE-NITM.
+           MOVE QUE-GET  TO QUE-CMND.
+           MOVE +3000    TO QUE-LITM.
+           PERFORM GNS-PRO-QUE.
+       FIN-LEE-FST-ITEM.
+           EXIT.
+
+       PRO-KEY SECTION.
+       INI-PRO-KEY.
+           MOVE EIBAID TO FRM-FFLD.
+           IF FRM-FFLD = FRM-FFLD-PFA
+               MOVE FRM-FFLD-PF1  TO FRM-FFLD
+           ELSE
+           IF FRM-FFLD = FRM-FFLD-PFB
+               MOVE FRM-FFLD-PF2  TO FRM-FFLD
+           ELSE
+           IF FRM-FFLD = FRM-FFLD-PFC
+               MOVE FRM-FFLD-PF3  TO FRM-FFLD
+           ELSE
+           IF FRM-FFLD = FRM-FFLD-PFD
+               MOVE FRM-FFLD-PF4  TO FRM-FFLD
+           ELSE
+           IF FRM-FFLD = FRM-FFLD-PFE
+               MOVE FRM-FFLD-PF5  TO FRM-FFLD
+           ELSE
+           IF FRM-FFLD = FRM-FFLD-PFF
+               MOVE FRM-FFLD-PF6  TO FRM-FFLD
+           ELSE
+           IF FRM-FFLD = FRM-FFLD-PFG
+               MOVE FRM-FFLD-PF7  TO FRM-FFLD
+           ELSE
+           IF FRM-FFLD = FRM-FFLD-PFH
+               MOVE FRM-FFLD-PF8  TO FRM-FFLD
+           ELSE
+           IF FRM-FFLD = FRM-FFLD-PFI
+               MOVE FRM-FFLD-PF9  TO FRM-FFLD
+           ELSE
+           IF FRM-FFLD = FRM-FFLD-PFJ
+               MOVE FRM-FFLD-PF10 TO FRM-FFLD
+           ELSE
+           IF FRM-FFLD = FRM-FFLD-PFK
+               MOVE FRM-FFLD-PF11 TO FRM-FFLD
+           ELSE
+           IF FRM-FFLD = FRM-FFLD-PFL
+               MOVE FRM-FFLD-PF12 TO FRM-FFLD.
+
+           IF FRM-FFLD = WSS-KNXT
+               ADD 1 TO WSS-NITM
+           ELSE
+           IF FRM-FFLD = WSS-KPRV
+               SUBTRACT 1 FROM WSS-NITM
+               IF ( WSS-NITM = 1 ) OR
+                  ( WSS-NITM = 2 AND
+                    ( WSS-IHDR = 'S' OR  WSS-ITRL = 'S' ) ) OR
+                  ( WSS-NITM = 3 AND
+                    ( WSS-IHDR = 'S' AND WSS-ITRL = 'S' ) )
+                   ADD 1 TO WSS-NITM
+                   MOVE 'EXIT' TO WSS-CMSG
+               ELSE
+                   NEXT SENTENCE
+           ELSE
+           IF FRM-FFLD = WSS-KRET
+               GO TO DEL-MAIN
+           ELSE
+      *Asume siguiente
+               ADD 1 TO WSS-NITM.
+       FIN-PRO-KEY.
+           EXIT.
+
+       GNS-PRO-RET SECTION.
+       INI-GNS-PRO-RET.
+           MOVE EIBTRMID TO QUE-TERM.
+           MOVE 'GRET'   TO QUE-TYPE.
+           MOVE 1        TO QUE-NITM.
+           MOVE QUE-GET  TO QUE-CMND.
+           MOVE +30      TO QUE-LITM.
+           PERFORM GNS-PRO-QUE.
+           IF QUE-STAT NOT = QUE-STAT-OKS
+               GO TO FIN-GNS-PRO-RET.
+           MOVE QUE-ITEM TO WSS-GRET.
+
+           IF WSS-NPRO = 'FX'
+               MOVE WSS-FLGR TO WSS-GFLG
+               MOVE +22      TO SYS-TCMA
+           ELSE
+               MOVE SPACES   TO WSS-GFLG
+               MOVE +21      TO SYS-TCMA.
+           MOVE WSS-FRET TO SYS-CMMA.
+           MOVE WSS-GPRO TO SYS-PROG.
+           MOVE SYS-XCTL TO SYS-CMND.
+           PERFORM GNS-PRO-SYS.
+       FIN-GNS-PRO-RET.
+           EXEC CICS SEND CONTROL FREEKB
+           END-EXEC.
+           GOBACK.
+       EXT-GNS-PRO-RET.
+           EXIT.
+
+       COPY GNSBGQUE.
+       COPY GNSBHFRM.
+       COPY GNSBGFRM.
+       COPY GNSBHSYS.
+       COPY GNSBGSYS.

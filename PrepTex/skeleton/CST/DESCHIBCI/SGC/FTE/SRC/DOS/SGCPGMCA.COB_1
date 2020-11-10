@@ -1,0 +1,160 @@
+       IDENTIFICATION DIVISION.
+      *=======================
+       PROGRAM-ID.      SGCPGMCA.
+       AUTHOR.          CONSIST.
+       DATE-WRITTEN.    28-Jul-93 04:46 PM.
+
+      * Programa que Reformatea campo ADP-COD-CLAP de la tabla ADP
+
+       ENVIRONMENT DIVISION.
+      *====================
+       CONFIGURATION SECTION.
+      *---------------------
+       SPECIAL-NAMES.
+            DECIMAL-POINT IS COMMA.
+
+       DATA DIVISION.
+      *=============
+       WORKING-STORAGE SECTION.
+      *-----------------------
+      *<<<< WSS_DTC
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-TAB-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-MSG-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-ADP-REQA==.
+      *>>>>
+      *<<<< WSS
+       COPY GNSBRTAB.
+       COPY GNSBRMSG.
+       COPY SGCBRADP.
+
+       COPY GNSWGRQA.
+       COPY GNSWGUIB.
+       COPY GNSWGELS.
+       COPY GNSWVIDD.
+       COPY GNSWCFIO.
+       COPY GNSWVFIO.
+       COPY GNSWGSYS.
+
+       01  WSS-VARI.
+           03 WSS-OADP.
+              05 WSS-OLD-FIL1                     PIC X(55).
+              05 WSS-OLD-CLAP                     PIC X(03).
+              05 WSS-OLD-FIL2                     PIC X(17).
+           03 WSS-NADP.
+              05 WSS-NEW-FIL1                     PIC X(55).
+              05 WSS-NEW-CLAP                     PIC X(05).
+              05 WSS-NEW-FIL2                     PIC X(15).
+           03 WSS-IND-ERRO                        PIC 9(01).
+           03 WSS-CONT.
+              05 WSS-NUM-READ                     PIC 9(06).
+              05 WSS-NUM-RECH                     PIC 9(06).
+              05 WSS-NUM-REGP                     PIC 9(06).
+              05 WSS-NUM-CHKP                     PIC 9(06).
+      *>>>>
+
+
+       PROCEDURE DIVISION.
+      *==================
+       MAIN SECTION.
+      *------------
+       INI-MAIN.
+       COPY GNSBGEDB.
+           MOVE 'SGCPGMCA' TO FIO-PROG.
+           PERFORM GNS-BUS-IDD.
+
+      * Inicializa Variables
+           MOVE ZEROES TO WSS-CONT IN WSS-VARI.
+
+      * Efectua la Apertura de Archivos
+           MOVE FIO-UPD TO FIO-CMND.
+           PERFORM SGC-FIO-ADP.
+
+           DISPLAY 'INICIO PROCESO DE REFORMATEO'.
+
+      * Lectura Inicial de Clientes en ADP
+           MOVE FIO-GET-FST TO FIO-CMND.
+           PERFORM SGC-FIO-ADP.
+           IF NOT FIO-STAT-OKS
+               DISPLAY 'NO EXISTEN RELACIONES : '
+               PERFORM GNS-PRO-ABT.
+       LUP-MAIN.
+           ADD  1  TO WSS-NUM-READ IN WSS-VARI.
+
+      * Proceso actualiza Codigo Asociado a la Relacion en ADP (Reformateo)
+           MOVE  0  TO WSS-IND-ERRO IN WSS-VARI.
+           MOVE FIO-GET-KEY-UPD TO FIO-CMND.
+           PERFORM SGC-FIO-ADP.
+           IF NOT FIO-STAT-OKS
+               MOVE  1  TO WSS-IND-ERRO IN WSS-VARI
+               DISPLAY 'ERROR: NO PUDO TOMAR DE UPD REGISTRO ADP -'
+                       ' KEY :' ADP-KEY-IADP IN ADP
+               GO TO CHK-MAIN.
+
+           MOVE ADP TO WSS-OADP IN WSS-VARI.
+           MOVE WSS-OLD-FIL1 IN WSS-VARI TO WSS-NEW-FIL1 IN WSS-VARI.
+           MOVE WSS-OLD-CLAP IN WSS-VARI TO WSS-NEW-CLAP IN WSS-VARI.
+           MOVE WSS-OLD-FIL2 IN WSS-VARI TO WSS-NEW-FIL2 IN WSS-VARI.
+           MOVE WSS-NADP IN WSS-VARI TO ADP.
+           MOVE FIO-MOD TO FIO-CMND.
+           PERFORM SGC-FIO-ADP.
+           IF NOT FIO-STAT-OKS
+               MOVE  1  TO WSS-IND-ERRO IN WSS-VARI
+               DISPLAY 'ERROR AL MODIFICAR RELACION EN ADP -'
+                       ' KEY :' ADP-KEY-IADP IN ADP
+               GO TO CHK-MAIN.
+       CHK-MAIN.
+           IF WSS-IND-ERRO IN WSS-VARI = 1
+               ADD  1  TO WSS-NUM-RECH IN WSS-VARI
+               MOVE FIO-BCK-OUT TO FIO-CMND
+               PERFORM SGC-FIO-ADP
+               GO TO NXT-MAIN.
+
+           ADD  1  TO WSS-NUM-REGP IN WSS-VARI.
+
+      * Proceso de CHK-PNT para los registros Procesados
+           ADD  1  TO WSS-NUM-CHKP IN WSS-VARI.
+           IF WSS-NUM-CHKP IN WSS-VARI = 9
+               MOVE FIO-CHK-PNT TO FIO-CMND
+               PERFORM SGC-FIO-ADP
+               GO TO NXT-MAIN.
+       NXT-MAIN.
+      * Siguiente lectura de Relacion de Clientes
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM SGC-FIO-ADP.
+           IF NOT FIO-STAT-OKS
+               GO TO FIN-MAIN.
+           GO TO LUP-MAIN.
+       FIN-MAIN.
+           DISPLAY 'TERMINO  PROCESO DE REFORMATEO'.
+
+      * Efectua la Clausura de Archivos
+           MOVE FIO-CLO TO FIO-CMND.
+           PERFORM SGC-FIO-ADP.
+
+      * Despliegue de los Totales de Control
+           DISPLAY 'LOS REGISTROS LEIDOS         SON : '
+                    WSS-NUM-READ IN WSS-VARI.
+           DISPLAY 'LOS REGISTROS PROCESADOS OK. SON : '
+                    WSS-NUM-REGP IN WSS-VARI.
+           DISPLAY 'LOS REGISTROS RECHAZADOS     SON : '
+                    WSS-NUM-RECH IN WSS-VARI.
+
+      * Termino del Proceso
+           PERFORM GNS-PRO-END.
+      **************************************************************************
+      *<<<< EOF
+       COPY GNSBFTAB.
+       COPY GNSBFMSG.
+       COPY SGCBFADP.
+
+       COPY GNSBBMSG.
+       COPY GNSBBTAB.
+       COPY GNSBVTAB.
+
+       COPY GNSBGDTC.
+       COPY GNSBGIDD.
+       COPY GNSBTABT.
+       COPY GNSBBSYS.
+       COPY GNSBGEND.
+       COPY GNSBGABT.
+      *>>>>

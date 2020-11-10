@@ -1,0 +1,432 @@
+      *Reliquida credito solo con estructuras de calculo FO
+      *Parametros de entrada : el registro OPC leido y la fecha
+      *de Proceso ( RFO-FPRO )
+       COL-PRO-RFO SECTION.
+       INI-COL-PRO-RFO.
+           MOVE SPACES TO RFO-CMSG RFO-MENS.
+      *Busca codigo de la moneda nacional por medio del CIC
+           MOVE 'TAB'  TO TAB-COD-SIST FIO-SIST.
+           MOVE 'VLR'  TO TAB-CIC-TTAB IN TAB.
+           MOVE '0999' TO TAB-CIC-CTAB IN TAB.
+           MOVE 'TAB-CIC-TABL' TO FIO-AKEY.
+           MOVE FIO-GET-KEY    TO FIO-CMND.
+           PERFORM GNS-FIO-TAB.
+           IF NOT FIO-STAT-OKS
+               MOVE 'VLRCICN0999' TO RFO-CMSG
+               GO TO FIN-COL-PRO-RFO.
+           IF OPC-COD-VCOC IN OPC = TAB-COD-CTAB IN TAB
+               MOVE 'S' TO RFO-PESO
+           ELSE
+               MOVE 'N' TO RFO-PESO.
+      *Busca registro VEN
+           MOVE OPC-CIC-IOPC IN OPC TO VEN-CIC-IOPC IN VEN.
+           MOVE 1                   TO VEN-NUM-IVEN IN VEN.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM COL-FIO-VEN.
+           IF NOT FIO-STAT-OKS
+               MOVE 'VEN    NEX'        TO RFO-CMSG
+               MOVE VEN-KEY-IVEN IN VEN TO RFO-MENS
+               GO TO FIN-COL-PRO-RFO.
+      *Valida que la Fecha de Proceso sea menor a Fecha de Vencimiento
+           IF RFO-FPRO NOT < VEN-FEC-FVEN IN VEN
+               MOVE 'RFOFPROVEN>='      TO RFO-CMSG
+               MOVE VEN-FEC-FVEN IN VEN TO RFO-MENS
+               GO TO FIN-COL-PRO-RFO.
+      *Revisa que no tenga pagos parciales
+           IF ( VEN-VAL-FINA IN VEN NOT = VEN-VAL-SFIN IN VEN ) OR
+              ( VEN-VAL-CAPI IN VEN NOT = VEN-VAL-SCAP IN VEN )
+               MOVE 'VENCANCPARCI'      TO RFO-CMSG
+               MOVE VEN-KEY-IVEN IN VEN TO RFO-MENS
+               GO TO FIN-COL-PRO-RFO.
+      *Busca registro DLC
+           PERFORM BUS-RDLC.
+           IF RFO-CMSG > SPACES
+               GO TO FIN-COL-PRO-RFO.
+      *Busca registro(s) EVC
+           PERFORM BUS-REVC.
+           IF RFO-CMSG > SPACES
+               GO TO FIN-COL-PRO-RFO.
+      *Calcula el nuevo valor Final
+           PERFORM PRO-VFIN-FO.
+           IF RFO-CMSG > SPACES
+               GO TO FIN-COL-PRO-RFO.
+      *Lee registro VEN
+           MOVE OPC-CIC-IOPC IN OPC TO VEN-CIC-IOPC IN VEN.
+           MOVE 1                   TO VEN-NUM-IVEN IN VEN.
+           MOVE FIO-GET-KEY-UPD TO FIO-CMND.
+           PERFORM COL-FIO-VEN.
+           IF NOT FIO-STAT-OKS
+               MOVE 'VEN    NOGKU'        TO RFO-CMSG
+               MOVE VEN-KEY-IVEN IN VEN TO RFO-MENS
+               GO TO FIN-COL-PRO-RFO.
+           MOVE RFO-VFIN TO VEN-VAL-FINA IN VEN.
+           MOVE RFO-VFIN TO VEN-VAL-SFIN IN VEN.
+           IF RFO-IETB > SPACES
+               MOVE 0        TO VEN-VAL-CAPI IN VEN
+               MOVE 0        TO VEN-VAL-SCAP IN VEN
+               MOVE 'N'      TO VEN-IND-CALC IN VEN
+               MOVE 0        TO VEN-VAL-IDNI IN VEN
+           ELSE
+               MOVE RFO-VCAP TO VEN-VAL-CAPI IN VEN
+               MOVE RFO-VCAP TO VEN-VAL-SCAP IN VEN
+               MOVE SPACES   TO VEN-IND-CALC IN VEN
+               MOVE RFO-IDNI TO VEN-VAL-IDNI IN VEN.
+           MOVE FIO-MOD TO FIO-CMND.
+           PERFORM COL-FIO-VEN.
+           IF NOT FIO-STAT-OKS
+               MOVE 'VEN    NOMOD'      TO RFO-CMSG
+               MOVE VEN-KEY-IVEN IN VEN TO RFO-MENS
+               GO TO FIN-COL-PRO-RFO.
+      *Actualiza la(s) EVC
+           MOVE 0 TO RFO-INDI.
+       EVC-COL-PRO-RFO.
+           ADD 1 TO RFO-INDI.
+           IF RFO-INDI > RFO-MEFO
+               GO TO DLC-COL-PRO-RFO.
+           MOVE RFO-REVC(RFO-INDI) TO EVC.
+           MOVE FIO-GET-KEY-UPD TO FIO-CMND.
+           PERFORM COL-FIO-EVC.
+           IF NOT FIO-STAT-OKS
+               MOVE 'EVC    NOGKU'      TO RFO-CMSG
+               MOVE EVC-KEY-IEVC IN EVC TO RFO-MENS
+               GO TO BKO-COL-PRO-RFO.
+           MOVE RFO-VFIN TO EVC-VAL-VCVF IN EVC.
+           MOVE FIO-MOD TO FIO-CMND.
+           PERFORM COL-FIO-EVC.
+           IF NOT FIO-STAT-OKS
+               MOVE 'EVC    NOMOD'      TO RFO-CMSG
+               MOVE EVC-KEY-IEVC IN EVC TO RFO-MENS
+               GO TO BKO-COL-PRO-RFO.
+           GO TO EVC-COL-PRO-RFO.
+       DLC-COL-PRO-RFO.
+           MOVE OPC-CIC-IOPC IN OPC TO DLC-CIC-IOPC IN DLC.
+           MOVE 1                   TO DLC-NUM-IDLC IN DLC.
+           MOVE FIO-GET-KEY-UPD TO FIO-CMND.
+           PERFORM COL-FIO-DLC.
+           IF NOT FIO-STAT-OKS
+               MOVE 'DLC    NOGKU'      TO RFO-CMSG
+               MOVE DLC-KEY-IDLC IN DLC TO RFO-MENS
+               GO TO BKO-COL-PRO-RFO.
+           SUBTRACT RFO-VCAP FROM OPC-VAL-SCRE IN OPC GIVING
+                    DLC-VAL-SCPA IN DLC.
+           MOVE VEN-VAL-IDNI IN VEN TO DLC-VAL-SINT IN DLC.
+           MOVE FIO-MOD TO FIO-CMND.
+           PERFORM COL-FIO-DLC.
+           IF NOT FIO-STAT-OKS
+               MOVE 'DLC    NOMOD'      TO RFO-CMSG
+               MOVE DLC-KEY-IDLC IN DLC TO RFO-MENS
+               GO TO BKO-COL-PRO-RFO.
+           GO TO FIN-COL-PRO-RFO.
+       BKO-COL-PRO-RFO.
+           MOVE FIO-BCK-OUT TO FIO-CMND.
+           PERFORM COL-FIO-OPC.
+       FIN-COL-PRO-RFO.
+           EXIT.
+
+       PRO-VFIN-FO SECTION.
+       INI-PRO-VFIN-FO.
+           MOVE SPACES              TO RFO-IETB.
+           MOVE OPC-VAL-SCRE IN OPC TO RFO-VCAP.
+
+           PERFORM BUS-VPER-EVC.
+           IF RFO-CMSG > SPACES
+               GO TO FIN-PRO-VFIN-FO.
+
+           MOVE 0 TO RFO-SUMA RFO-FTOR.
+           MOVE 1 TO RFO-FOLD RFO-NVVG RFO-QTAN.
+
+           MOVE DLC-FEC-FDEV IN DLC TO RFO-FAVC.
+
+           IF OPC-IND-AFER IN OPC = 'S'
+               PERFORM CHK-AFER-EVC
+               IF RFO-CMSG > SPACES
+                   GO TO FIN-PRO-VFIN-FO.
+       LUP-PRO-VFIN-FO.
+           PERFORM BUS-MEVC.
+           IF RFO-IMVC = ZEROES
+      *Se acabaron los vencimientos
+               GO TO CAL-PRO-VFIN-FO.
+           SUBTRACT 1 FROM RFO-VIGU(RFO-IMVC).
+
+           MOVE OPC-COD-VCOC IN OPC TO INT-VCAM.
+           MOVE OPC-CIC-IOPC IN OPC TO INT-IOPC.
+           MOVE 0                   TO INT-IDLC.
+           MOVE RFO-DAVC            TO INT-DUNO.
+           MOVE RFO-MAVC            TO INT-MUNO.
+           MOVE RFO-SAVC            TO INT-SUNO.
+           MOVE RFO-AAVC            TO INT-AUNO.
+           MOVE RFO-DMVC            TO INT-DDOS.
+           MOVE RFO-MMVC            TO INT-MDOS.
+           MOVE RFO-SMVC            TO INT-SDOS.
+           MOVE RFO-AMVC            TO INT-ADOS.
+           MOVE RFO-DPRO            TO INT-DBTV.
+           MOVE RFO-MPRO            TO INT-MBTV.
+           MOVE RFO-SPRO            TO INT-SBTV.
+           MOVE RFO-APRO            TO INT-ABTV.
+           PERFORM COL-CAL-INT.
+           IF INT-IETB > SPACES AND RFO-NVVG = 1
+               MOVE INT-IETB TO RFO-IETB.
+           IF INT-CMSG > SPACES
+               MOVE INT-CMSG TO RFO-CMSG
+               MOVE INT-MEN2 TO RFO-MENS
+               GO TO FIN-PRO-VFIN-FO.
+
+           COMPUTE RFO-SUMA = RFO-SUMA + ( 1 + INT-TIPE ) ** RFO-NVVG.
+
+           COMPUTE RFO-FTOR = RFO-FTOR +
+                              1 / ( RFO-FOLD * ( 1 + INT-TIPE ) ).
+           COMPUTE RFO-FOLD = RFO-FOLD * ( 1 + INT-TIPE ).
+
+           IF RFO-QTAN = RFO-NVVG
+               MOVE INT-TIPE TO RFO-TIQN.
+
+           ADD 1 TO RFO-NVVG.
+
+           MOVE RFO-DFPV(RFO-IMVC) TO RFO-DAVC.
+           MOVE RFO-MFPV(RFO-IMVC) TO RFO-MAVC.
+           MOVE RFO-SFPV(RFO-IMVC) TO RFO-SAVC.
+           MOVE RFO-AFPV(RFO-IMVC) TO RFO-AAVC.
+
+           IF RFO-VIGU(RFO-IMVC) = ZEROES
+               GO TO LUP-PRO-VFIN-FO.
+
+      *JSS Desplazar RFO-FPVC(RFO-IMVC) en RFO-SEVE(RFO-IMVC) segun
+      *                                    RFO-UTSV(RFO-IMVC)
+      *    Considerando analisis de feriado si corresponde.
+
+           IF RFO-UTSV(RFO-IMVC) = 'D'
+               MOVE FEC-SUM-DIA        TO FEC-CMND
+               MOVE RFO-SEVE(RFO-IMVC) TO FEC-NDIA
+           ELSE
+           IF RFO-UTSV(RFO-IMVC) = 'M'
+               MOVE FEC-SUM-MES        TO FEC-CMND
+               MOVE RFO-SEVE(RFO-IMVC) TO FEC-NMES
+           ELSE
+           IF RFO-UTSV(RFO-IMVC) = 'A'
+               MOVE FEC-SUM-ANO        TO FEC-CMND
+               MOVE RFO-SEVE(RFO-IMVC) TO FEC-NANO
+           ELSE
+               MOVE 'INTIPERINV' TO RFO-CMSG
+               GO TO FIN-PRO-VFIN-FO.
+
+           MOVE RFO-DPVC(RFO-IMVC) TO FEC-ITM1.
+           MOVE RFO-MPVC(RFO-IMVC) TO FEC-ITM2.
+           MOVE RFO-SPVC(RFO-IMVC) TO FEC-ITM3.
+           MOVE RFO-APVC(RFO-IMVC) TO FEC-ITM4.
+
+           MOVE FEC-FORM-FEC TO FEC-FORM.
+           PERFORM CAL-FEC.
+           IF NOT FEC-STAT-OKS
+               MOVE MSG-COD-MENS TO RFO-CMSG
+               GO TO FIN-PRO-VFIN-FO.
+
+           IF NOT ( ( RFO-UTSV(RFO-IMVC) = 'M' OR 'A' ) AND
+              RFO-DVEN(RFO-IMVC) > ZEROES AND
+              FEC-ITM1 < RFO-DVEN(RFO-IMVC) )
+               GO TO FER-PRO-VFIN-FO.
+           IF RFO-DVEN(RFO-IMVC) > FEC-DMES(FEC-ITM2)
+               MOVE FEC-DMES(FEC-ITM2) TO FEC-ITM1
+           ELSE
+               MOVE RFO-DVEN(RFO-IMVC) TO FEC-ITM1.
+           IF FEC-ITM2 = 2
+               DIVIDE FEC-ITM4 BY 4 GIVING FEC-REST REMAINDER FEC-REST
+               IF ( FEC-REST NOT = 0 ) AND ( FEC-ITM1 > 28 )
+                   MOVE 28 TO FEC-ITM1.
+       FER-PRO-VFIN-FO.
+           MOVE FEC-ITM1 TO RFO-DPVC(RFO-IMVC).
+           MOVE FEC-ITM2 TO RFO-MPVC(RFO-IMVC).
+           MOVE FEC-ITM3 TO RFO-SPVC(RFO-IMVC).
+           MOVE FEC-ITM4 TO RFO-APVC(RFO-IMVC).
+
+           IF OPC-IND-AFER IN OPC NOT = 'S'
+               GO TO FPV-PRO-VFIN-FO.
+
+           MOVE FEC-FBLK-N  TO FEC-FBLK.
+           MOVE FEC-CHOY-N  TO FEC-CHOY.
+           MOVE FEC-VHBL-S  TO FEC-VHBL.
+           MOVE FEC-VAL-FEC TO FEC-CMND.
+           PERFORM PRO-FEC.
+           IF NOT FEC-STAT-OKS AND NOT FEC-STAT-FER
+               MOVE MSG-COD-MENS TO RFO-CMSG
+               GO TO FIN-PRO-VFIN-FO.
+
+           IF NOT FEC-STAT-FER
+               GO TO FPV-PRO-VFIN-FO.
+
+           MOVE FEC-FORM-FEC TO FEC-FORM.
+           MOVE FEC-SIG-HBL  TO FEC-CMND.
+           PERFORM CAL-FEC.
+           IF NOT FEC-STAT-OKS
+               MOVE MSG-COD-MENS TO RFO-CMSG
+               GO TO FIN-PRO-VFIN-FO.
+       FPV-PRO-VFIN-FO.
+
+           MOVE FEC-ITM1 TO RFO-DFPV(RFO-IMVC).
+           MOVE FEC-ITM2 TO RFO-MFPV(RFO-IMVC).
+           MOVE FEC-ITM3 TO RFO-SFPV(RFO-IMVC).
+           MOVE FEC-ITM4 TO RFO-AFPV(RFO-IMVC).
+           GO TO LUP-PRO-VFIN-FO.
+
+       CAL-PRO-VFIN-FO.
+           DIVIDE RFO-VCAP BY RFO-FTOR GIVING RFO-VFIN ROUNDED.
+      *Se redondea y se deja sin decimales el valor final
+           IF RFO-PESO-SI
+               MOVE RFO-VFIN TO PES-SGV-DECI IN PES-VARI
+               PERFORM PES-SCTV
+               MOVE PES-SGV-ENTE IN PES-VARI TO RFO-VFIN.
+      *
+      *Calculo de interes sobre el valor capital
+           MULTIPLY OPC-VAL-SCRE IN OPC BY RFO-TIQN GIVING
+                                           RFO-VCAP ROUNDED.
+           IF RFO-VCAP NOT > RFO-VFIN
+               MOVE 0 TO RFO-IDNI
+               SUBTRACT RFO-VCAP FROM RFO-VFIN GIVING RFO-VCAP
+           ELSE
+               MOVE RFO-VCAP     TO   RFO-IDNI
+               SUBTRACT RFO-VFIN FROM RFO-IDNI
+               MOVE 0 TO RFO-VCAP.
+      *Redondea capital e intereses no incluidos
+           IF RFO-PESO-SI
+               MOVE RFO-VCAP TO PES-SGV-DECI IN PES-VARI
+               PERFORM PES-SCTV
+               MOVE PES-SGV-ENTE IN PES-VARI TO RFO-VCAP
+               MOVE RFO-IDNI TO PES-SGV-DECI IN PES-VARI
+               PERFORM PES-SCTV
+               MOVE PES-SGV-ENTE IN PES-VARI TO RFO-IDNI.
+       FIN-PRO-VFIN-FO.
+           EXIT.
+
+      *Busca Registros EVC.
+       BUS-REVC SECTION.
+       INI-BUS-REVC.
+           MOVE SPACES TO RFO-CMSG RFO-MENS.
+           MOVE 0 TO RFO-INDI.
+           MOVE OPC-CIC-IOPC IN OPC TO EVC-CIC-IOPC IN EVC.
+           MOVE ZEROES              TO EVC-NUM-IEVC IN EVC.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+       LUP-BUS-REVC.
+           PERFORM COL-FIO-EVC.
+           IF NOT ( FIO-STAT-OKS AND
+                    EVC-CIC-IOPC IN EVC = OPC-CIC-IOPC IN OPC )
+               GO TO FIN-BUS-REVC.
+           ADD 1 TO RFO-INDI.
+           IF RFO-INDI > RFO-LEVC
+               MOVE 'EVCIEVCOVFLW' TO RFO-CMSG
+               GO TO FIN-BUS-REVC.
+           MOVE EVC TO RFO-REVC(RFO-INDI).
+      *Busca el CIC de EVC-MSC-TCVE en TAB CVC ( en sist COL )
+           MOVE 'COL' TO TAB-COD-SIST FIO-SIST.
+           MOVE 'CVC' TO TAB-COD-TTAB IN TAB.
+           MOVE EVC-MSC-TCVE IN EVC TO TAB-COD-CTAB IN TAB.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM GNS-FIO-TAB.
+           IF NOT FIO-STAT-OKS
+               MOVE 'CICTCVENEX' TO RFO-CMSG
+               MOVE TAB-COD-TABL TO RFO-MENS
+               GO TO FIN-BUS-REVC.
+           IF TAB-CIC-CTAB IN TAB NOT = 'FO'
+               MOVE 'CICTCVENOFO'       TO RFO-CMSG
+               MOVE EVC-NUM-IEVC IN EVC TO RFO-MENS
+               GO TO FIN-BUS-REVC.
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           GO TO LUP-BUS-REVC.
+       FIN-BUS-REVC.
+           MOVE RFO-INDI TO RFO-MEFO.
+       EXT-BUS-REVC.
+           EXIT.
+
+      *Busca Registro DLC.
+       BUS-RDLC SECTION.
+       INI-BUS-RDLC.
+           MOVE SPACES TO RFO-CMSG RFO-MENS.
+           MOVE OPC-CIC-IOPC IN OPC TO DLC-CIC-IOPC IN DLC.
+           MOVE ZEROES              TO DLC-NUM-IDLC IN DLC.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM COL-FIO-DLC.
+           IF NOT ( FIO-STAT-OKS AND
+                    DLC-CIC-IOPC IN DLC = OPC-CIC-IOPC IN OPC )
+               MOVE 'DLC    NEX'        TO RFO-CMSG
+               MOVE OPC-CIC-IOPC IN OPC TO RFO-MENS.
+       FIN-BUS-RDLC.
+           EXIT.
+
+       BUS-VPER-EVC SECTION.
+       INI-BUS-VPER-EVC.
+           MOVE 0 TO RFO-INDI.
+       LUP-BUS-VPER-EVC.
+           ADD 1 TO RFO-INDI.
+           IF RFO-INDI > RFO-MEFO
+               GO TO FIN-BUS-VPER-EVC.
+           MOVE RFO-REVC(RFO-INDI) TO EVC.
+           MOVE EVC-IND-UTSV IN EVC TO INT-IPER.
+           PERFORM PRO-IPER.
+           IF INT-CMSG > SPACES
+               MOVE INT-CMSG TO RFO-CMSG
+               GO TO FIN-BUS-VPER-EVC.
+           MOVE EVC-NUM-SEVE IN EVC TO RFO-SEVE(RFO-INDI).
+           MOVE INT-IPER            TO RFO-UTSV(RFO-INDI).
+           MOVE EVC-NUM-VIGU IN EVC TO RFO-VIGU(RFO-INDI).
+           MOVE EVC-NUM-DPVC IN EVC TO RFO-DPVC(RFO-INDI).
+           MOVE EVC-NUM-MPVC IN EVC TO RFO-MPVC(RFO-INDI).
+           MOVE EVC-NUM-SPVC IN EVC TO RFO-SPVC(RFO-INDI).
+           MOVE EVC-NUM-APVC IN EVC TO RFO-APVC(RFO-INDI).
+           MOVE RFO-FPVC(RFO-INDI)  TO RFO-FFPV(RFO-INDI).
+           MOVE EVC-NUM-DPVE IN EVC TO RFO-DVEN(RFO-INDI).
+           GO TO LUP-BUS-VPER-EVC.
+       FIN-BUS-VPER-EVC.
+           EXIT.
+
+       CHK-AFER-EVC SECTION.
+       INI-CHK-AFER-EVC.
+           MOVE 0 TO RFO-INDI.
+       LUP-CHK-AFER-EVC.
+           ADD 1 TO RFO-INDI.
+           IF RFO-INDI > RFO-MEFO
+               GO TO FIN-CHK-AFER-EVC.
+
+           MOVE RFO-DPVC(RFO-INDI) TO FEC-ITM1.
+           MOVE RFO-MPVC(RFO-INDI) TO FEC-ITM2.
+           MOVE RFO-SPVC(RFO-INDI) TO FEC-ITM3.
+           MOVE RFO-APVC(RFO-INDI) TO FEC-ITM4.
+
+           MOVE FEC-VHBL-S   TO FEC-VHBL.
+           MOVE FEC-FBLK-N   TO FEC-FBLK.
+           MOVE FEC-CHOY-N   TO FEC-CHOY.
+           MOVE FEC-FORM-FEC TO FEC-FORM.
+           MOVE FEC-VAL-FEC  TO FEC-CMND.
+           PERFORM PRO-FEC.
+           IF ( NOT FEC-STAT-OKS ) AND ( NOT FEC-STAT-FER )
+               MOVE MSG-COD-MENS TO RFO-CMSG
+               GO TO FIN-CHK-AFER-EVC.
+           IF FEC-STAT-FER
+               MOVE FEC-FORM-FEC TO FEC-FORM
+               MOVE FEC-SIG-HBL  TO FEC-CMND
+               PERFORM CAL-FEC
+               IF FEC-STAT-OKS
+                   MOVE FEC-ITM1 TO RFO-DFPV(RFO-INDI)
+                   MOVE FEC-ITM2 TO RFO-MFPV(RFO-INDI)
+                   MOVE FEC-ITM3 TO RFO-SFPV(RFO-INDI)
+                   MOVE FEC-ITM4 TO RFO-AFPV(RFO-INDI)
+               ELSE
+                   MOVE MSG-COD-MENS TO RFO-CMSG
+                   GO TO FIN-CHK-AFER-EVC.
+           GO TO LUP-CHK-AFER-EVC.
+       FIN-CHK-AFER-EVC.
+           EXIT.
+
+       BUS-MEVC SECTION.
+       INI-BUS-MEVC.
+           MOVE ZEROES TO RFO-FMVC.
+           MOVE ZEROES TO RFO-IMVC.
+           MOVE 0 TO RFO-INDI.
+       LUP-BUS-MEVC.
+           ADD 1 TO RFO-INDI.
+           IF RFO-INDI > RFO-MEFO
+               GO TO FIN-BUS-MEVC.
+           IF ( RFO-FFPV(RFO-INDI) < RFO-FMVC OR RFO-FMVC = ZEROES ) AND
+              RFO-VIGU(RFO-INDI) > ZEROES
+               MOVE RFO-FFPV(RFO-INDI) TO RFO-FMVC
+               MOVE RFO-INDI           TO RFO-IMVC.
+           GO TO LUP-BUS-MEVC.
+       FIN-BUS-MEVC.
+           EXIT.

@@ -1,0 +1,75 @@
+$! -------------------------------------------------------
+$! Procedimiento para generar programas de ingreso tipo
+$! plantillas COLPIOPC,DAPPIOPD,etc
+$! -------------------------------------------------------
+$
+$ 'BAT'
+$
+$!1.- Exige obligatoriamente los tres pametros
+$!============================================
+$ INI:
+$	IF P3 .NES. "" THEN GOTO PROC
+$	WRITE SYS$OUTPUT "Debe ingresar obligatoriamente 3 parametros"
+$	IF F$MODE() .EQS. "BATCH" THEN WRITE SYS$OUTPUT "Aborto"
+$	IF F$MODE() .EQS. "BATCH" THEN EXIT
+$	INQUIRE P1 "Formulario                                 ? "
+$	INQUIRE P2 "Desea generar modulo de manejo    ( S/N )  ? "
+$	INQUIRE P3 "Desea generar programa de ingreso ( S/N )  ? "
+$	GOTO INI
+$ PROC:
+$	MM = GNS$PRY + "BW" + P1
+$	PI = GNS$PRY + "PI" + P1
+$	WRITE SYS$OUTPUT "============================================"
+$	WRITE SYS$OUTPUT "Parametros de proceso"
+$	WRITE SYS$OUTPUT "============================================"
+$	WRITE SYS$OUTPUT "Formulario                          " + P1
+$	WRITE SYS$OUTPUT "Generar modulo de manejo    ( S/N ) " + P2
+$	WRITE SYS$OUTPUT "Generar programa de ingreso ( S/N ) " + P3
+$	WRITE SYS$OUTPUT "============================================"
+$ 
+$!2.- No permite operar si el formulario esta en el directorio
+$!============================================================
+$	IF F$SEARCH("''P1'.FRM") .EQS. "" THEN GOTO P1
+$	WRITE SYS$OUTPUT " No debe existir ''P1'.FRM en directorio []"
+$	WRITE SYS$OUTPUT " Aborto "
+$	EXIT
+$ P1:
+$	IF P2 .EQS. "N" .OR. P2 .EQS. "n" THEN GOTO PI
+$!3.- Extrae formulario desde FMS a archivo texto y edita alli
+$!    los campos de plantilla que se consideran como llaves
+$!    para el programa de ingreso.
+$!    Luego a partir del texto editado obtiene nuevo formulario
+$!    para GENFRM ( Edita _IKY_ a campos especificados en 
+$!    archivo de comandos )
+$!=============================================================
+$	FMS/DESC/FULL FMS/FORM_NAME='P1'/OUT='P1'.FLG
+$	EDITT/COMMAND='GNS$PRY'COM:'GNS$PRY'BW'P1'EDT.COM 'P1'.FLG
+$	FMS/TRANS 'P1'
+$	DELETE/NOLOG 'P1'.FLG;*
+$!	DELETE/LOG 'P1'.LIS;*
+$!4.- Hace GENFRM dejando solo modulo 'GNS$PRY'BQ'P1'
+$!    renombrado COMO 'BW' Y EDITADO para que tome codigo adicional
+$!    de archivo 'BW'.TXT
+$!    Elimina incluso formulario generado en punto 2
+$!    Simbolo temporal EDTFRM hace eliminaciones necesarias
+$!=============================================================
+$	EDTFRM :== "@DAPCOM:EDTFRMPI.COM"
+$	GENFRM 'P1' /OPT=ALL
+$	EDTFRM :== "@GNSCOMAIU:EDTFRMV31.COMAIU"
+$	DELETE/NOLOG 'P1'.FRM;
+$	RENAME 'GNS$PRY'BQ'P1'.AIU 'MM'.AIU
+$	EDITT/COMMAND='GNS$PRY'COM:'PI'EDT.COM 'MM'.AIU
+$	GENSRC 'MM'
+$!	GENJOB 'MM'.SRCAIU 'MM'.JOB
+$!	PUT 'MM'.SRCAIU
+$!	RJE 'MM'.JOB
+$ PI:
+$!5.- Genera programa de ingreso, lo edita para que use el modulo
+$!    de manejo obtenido con RENAME de punto 4
+$!=============================================================
+$	IF P3 .EQS. "N" .OR. P3 .EQS. "n" THEN EXIT
+$	GENPGM 'GNS$PRY'PA'P1' /CPP=ING/OUT='PI'/OPT=CON/CDA='PI'
+$	EDITT/COMMAND='GNS$PRY'COM:'PI'EDT.COM 'PI'.PGD
+$!	GENJOB 'PI'.PGD 'PI'.JOB
+$!	PUT 'PI'.PGD
+$!	RJE 'PI'.JOB

@@ -1,0 +1,114 @@
+Codigo adicional para busqueda y validacion de cliente cuando este es parte de las llaves
+
+Codigo adicional en programa
+
+*% IF WSS
+      *<<<< WSS
+      *Entidades de SGC
+       COPY SGCBRDBC.
+
+       COPY GNSWGCPT.
+       COPY GNSWGSTR.
+      *>>>> WSS
+*% END
+*% IF WSS_DTC
+      *<<<< WSS_DTC
+      *Entidades de SGC
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-DBC-REQA==.
+      *>>>> WSS_DTC
+*% END
+*% IF EOF
+      *<<<< EOF
+
+      *Entidades de SGC
+       COPY SGCBFDBC.
+       COPY GNSBGCPT.
+       COPY GNSBGSTR.
+      *>>>> EOF
+*% END
+
+Codigo adicional en modulos de manejo
+
+
+*% IF DBC_NUM_ICLI 
+      *<<<< DBC_NUM_ICLI 
+           IF DBC-NUM-ICLI IN {frm}-FLD > ZEROES
+               PERFORM VAL-ICLI.
+      *>>>> DBC_NUM_ICLI 
+*% END
+*% IF INI_PUT_DBC_{ent}
+      *<<<< INI_PUT_DBC_{ent}
+      * La variable SCR-IND-MCLI se usa para cuando existen multiples
+      * clientes
+           IF SCR-IND-MCLI = 'M'
+               MOVE ZEROES TO RCC-NUM-DIRE IN {ent}-FLD
+               MOVE ZEROES TO DBC-NUM-ICLI IN {ent}-FLD
+               MOVE SPACES TO DBC-VRF-ICLI IN {ent}-FLD
+               MOVE SPACES TO DBC-GLS-ICLI IN {ent}-FLD
+      * ISP: {ent} con multiples clientes
+               MOVE {sis} TO MSG-COD-SIST
+               MOVE '{ent}    MCLI' TO MSG-COD-MENS
+               PERFORM GET-MSG
+               MOVE 'M' TO DBC-IND-ICLI IN {ent}-FLD
+               MOVE MSG-GLS-DESC TO DBC-GLS-NOMC IN {ent}-FLD
+               GO TO FIN-PUT-DBC-{ent}.
+
+           IF SCR-IND-MCLI NOT = 'M'
+               MOVE DBC-GLS-NOMC IN DBC TO CPT-STRN
+               PERFORM CPT-BLKS
+               MOVE CPT-STRN TO DBC-GLS-NOMC IN DBC.
+      *>>>>
+*% END
+*% IF EOF
+      *<<<< EOF
+       VAL-ICLI SECTION.
+       INI-VAL-ICLI.
+           IF DBC-IND-ICLI IN {frm}-FLD = 'M'
+               MOVE ZEROES TO DBC-NUM-ICLI IN {frm}-FLD
+               MOVE SPACES TO DBC-VRF-ICLI IN {frm}-FLD
+               MOVE SPACES TO DBC-GLS-ICLI IN {frm}-FLD
+      *        Operacion con multiples clientes
+               MOVE {sis} TO MSG-COD-SIST
+               MOVE '{ent}    MCLI' TO MSG-COD-MENS
+               PERFORM GET-MSG
+               MOVE MSG-GLS-DESC TO DBC-GLS-NOMC IN {frm}-FLD
+               GO TO FIN-VAL-ICLI.
+         
+      * si el cliente es obligatorio
+               MOVE IDC-ZERO-N TO IDC-ZERO.
+      * si el cliente no es obligatorio
+               MOVE IDC-ZERO-S TO IDC-ZERO.
+
+      *VAL-RUT Valida Rut
+           MOVE DBC-NUM-ICLI IN {frm}-FLD TO IDC-NUM-RUTV.
+           MOVE DBC-VRF-ICLI IN {frm}-FLD TO IDC-VRF-RUTV.
+           PERFORM VAL-RUT.
+           IF MSG-COD-MENS > SPACES
+               GO TO ERR-VAL-ICLI.
+      
+           MOVE DBC-NUM-ICLI IN {frm}-FLD TO DBC-NUM-ICLI IN DBC.
+           MOVE DBC-IND-ICLI IN {frm}-FLD TO DBC-IND-ICLI IN DBC.
+           MOVE DBC-GLS-ICLI IN {frm}-FLD TO DBC-GLS-ICLI IN DBC.
+           MOVE 'DBC-IDC-ICLI'  TO FIO-AKEY.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM SGC-FIO-DBC.
+           MOVE FIO-STAT TO PGM-STAT-DBC.
+           IF NOT FIO-STAT-OKS
+      *        cliente inexistente
+               MOVE 'CLI    NEX' TO MSG-COD-MENS
+               MOVE SPACES       TO DBC-GLS-NOMC IN {frm}-FLD
+               GO TO ERR-VAL-ICLI.
+
+
+      *     PERFORM PUT-DBC-OPD.
+           GO TO FIN-VAL-ICLI.
+       ERR-VAL-ICLI.
+           MOVE {sis} TO MSG-COD-SIST.
+           PERFORM GET-MSG.
+           MOVE MSG-GLS-DESC TO FRM-MENS.
+           MOVE FRM-SUAR-MAL TO FRM-SUAR.
+       FIN-VAL-ICLI.
+           EXIT.
+
+      *>>>>
+*% END

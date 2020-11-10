@@ -1,0 +1,1162 @@
+       IDENTIFICATION DIVISION.
+      *************************
+       PROGRAM-ID.     COLPLS42.
+      *AUTHOR.         KARINA CERPA JAMES.
+      *                DATE-WRITTEN,  07/07/1999.
+      ******************************************************************
+      *  Sistema  : Colocaciones                                       *
+      *  Subsist. :                                                    *
+      *  Objetivo : Genera listado con operaciones que tienen spread   *
+      *             menor al spread minimo.                            *
+      *                                                                *
+      *  Archivos :                                                    *
+      *   Entrada : COLSL41: Operaciones con spread menor al spread    *
+      *                      minimo, ordenado por Banca, Moneda y Tasa *
+      *             TAB 210: Tablas                                    *
+      *             TXC 150:                                           *
+      *             CAM 150:                                           *
+      *             DBC 100:                                           *
+      *                                                                *
+      *   Salida  : LISTADO : Operaciones de Coloc. en Mon. Nac. Com   *
+      *                       y Bajo Spread Minimo.                    *
+      *                                                                *
+      *  Mantenciones                                                  *
+      *  ============                                                  *
+      *            Programador: ...........................            *
+      *            Fecha      : dd/mm/aa                               *
+      *            Cambio     : ....................................   *
+      *                         ....................................   *
+      *                         ....................................   *
+      *                                                                *
+      ******************************************************************
+       ENVIRONMENT DIVISION.
+      *--------------------*
+       CONFIGURATION SECTION.
+      *---------------------*
+       SPECIAL-NAMES.
+           C01 IS CANAL-1
+           DECIMAL-POINT IS COMMA.
+
+       INPUT-OUTPUT SECTION.
+      *--------------------*
+       FILE-CONTROL.
+      *------------*
+           SELECT COLSL41     ASSIGN       TO COLSL41
+                              FILE STATUS  IS WR-FS-COLSL41.
+           SELECT LISTADO     ASSIGN       TO LISTADO
+                              FILE STATUS  IS WR-FS-LISTADO.
+
+       DATA DIVISION.
+      *-------------*
+       FILE SECTION.
+      *------------*
+       FD  COLSL41
+           LABEL RECORD IS STANDARD
+           BLOCK CONTAINS 0 RECORDS.
+       01  REG-COLSL41.
+           05 SL41-IDC-CIC-IOPC.
+              07 SL41-IDC-COD-IOPC            PIC  X(01).
+              07 SL41-IDC-COD-COPC            PIC  X(03).
+              07 SL41-IDC-IIC-IOPC            PIC  X(08).
+           05 SL41-IDC-IDC-RUTC.
+              07 SL41-IDC-IDC-ICLI            PIC  X(12).
+              07 SL41-IDC-VRF-ICLI            PIC  X(01).
+           05 SL41-IDC-COD-EJEC               PIC  X(12).
+           05 SL41-IDC-COD-TBAN.
+              07 SL41-IDC-COD-TBAN-1          PIC  X(01).
+              07 SL41-IDC-COD-TBAN-2          PIC  X(02).
+           05 SL41-IDC-COD-VCOC               PIC  X(06).
+           05 SL41-IDC-TIP-TASA               PIC  X(01).
+           05 SL41-IDC-FEC-FCOL.
+              07 SL41-IDC-FEC-SCOL            PIC  9(02).
+              07 SL41-IDC-FEC-ACOL            PIC  9(02).
+              07 SL41-IDC-FEC-MCOL            PIC  9(02).
+              07 SL41-IDC-FEC-DCOL            PIC  9(02).
+           05 SL41-IDC-VAL-CRED               PIC S9(11)V9(04).
+           05 SL41-IDC-PLZ-DIAS               PIC S9(08) COMP-3.
+           05 SL41-IDC-NUM-VCOR               PIC  9(03).
+           05 SL41-IDC-COD-COOC               PIC  X(06).
+           05 SL41-IDC-SPREAD                 PIC S9(03)V9(04).
+           05 SL41-IDC-SPREAD-MIN             PIC S9(03)V9(04).
+           05 SL41-IDC-PERDIDA                PIC S9(12)V9(02).
+           05 SL41-IDC-OFI-COD-REGI           PIC  X(03).
+           05 SL41-IDC-OFI-GLS-REGI           PIC  X(25).
+           05 SL41-IDC-OFI-GLS-DESC           PIC  X(10).
+
+       FD  LISTADO
+           LABEL RECORD IS STANDARD
+           BLOCK CONTAINS 0 RECORDS.
+       01  REG-LISTADO      PIC X(133).
+
+       WORKING-STORAGE SECTION.
+      *-----------------------*
+       01  W-SWITCHES.
+           05 WS-FIN-SL41                   PIC X(02) VALUE 'NO'.
+              88  WS-FIN-SL41-SI                      VALUE 'SI'.
+              88  WS-FIN-SL41-NO                      VALUE 'NO'.
+           05 WS-PROCESO                    PIC 9(01) VALUE 0.
+              88 WS-PROCESO-OK                        VALUE 0.
+              88 WS-PROCESO-ERROR                     VALUE 1.
+           05 WS-SIGUE                      PIC X(02) VALUE 'SI'.
+              88  WS-SIGUE-SI                         VALUE 'SI'.
+              88  WS-SIGUE-NO                         VALUE 'NO'.
+
+       01  W-CONTADORES-Y-ACUMULADORES.
+           05 WA-G-LIS                      PIC 9(06) VALUE 0.
+           05 WA-G-SEL                      PIC 9(06) VALUE 0.
+           05 WA-L-SL41                     PIC 9(06) VALUE 0.
+           05 WA-L-TAB                      PIC 9(06) VALUE 0.
+           05 WA-L-DBC                      PIC 9(06) VALUE 0.
+           05 WA-N-DBC                      PIC 9(06) VALUE 0.
+           05 WA-N-TAB                      PIC 9(06) VALUE 0.
+           05 WA-L-TXC                      PIC 9(06) VALUE 0.
+           05 WA-N-TXC                      PIC 9(06) VALUE 0.
+           05 WA-L-CAM                      PIC 9(06) VALUE 0.
+           05 WA-N-CAM                      PIC 9(06) VALUE 0.
+
+       01  W-REGISTROS-DE-TRABAJO.
+           05 WR-FS-COLSL41                 PIC  9(02) VALUE 0.
+           05 WR-FS-LISTADO                 PIC  9(02) VALUE 0.
+           05 WR-CONT-L                     PIC  9(02) VALUE 80.
+           05 WR-CONT-P                     PIC  9(03) VALUE 0.
+           05 WR-IDC-COD-VCOC               PIC  X(06) VALUE SPACES.
+           05 WR-IDC-OFI-COD-REGI           PIC  X(03) VALUE SPACES.
+           05 WR-IDC-OFI-GLS-REGI           PIC  X(25) VALUE SPACES.
+           05 WR-IDC-GLS-VCOC               PIC  X(05) VALUE SPACES.
+           05 WR-DBC-GLS-NOMC               PIC  X(70) VALUE SPACES.
+           05 WR-VAL-TMC                    PIC S9(03)V9(04) VALUE +0.
+           05 WR-IDC-SPREAD-MIN-AUX         PIC S9(01)V9(04) VALUE +0.
+           05 WR-CAM-SGV-VCAM               PIC S9(11)V9(04) VALUE +0.
+           05 WR-MTO-UF                     PIC S9(11)V9(04) VALUE +0.
+           05 WR-GLS-TIP-OPE                PIC  X(40) VALUE SPACES.
+           05 WR-PERDIDA                    PIC S9(12)V9(02) VALUE +0.
+           05 WR-PERDIDA-T                  PIC S9(12)V9(02) VALUE +0.
+           05 WR-PERDIDA-T1                 PIC S9(12)V9(02) VALUE +0.
+           05 WR-PERDIDA-T2                 PIC S9(12)V9(02) VALUE +0.
+           05 WR-MTO-AUTORIZADO-T           PIC S9(12)V9(02) VALUE +0.
+           05 WR-MTO-AUTORIZADO-T1          PIC S9(12)V9(02) VALUE +0.
+           05 WR-MTO-AUTORIZADO-T2          PIC S9(12)V9(02) VALUE +0.
+           05 WR-ENTERO                     PIC S9(12)       VALUE +0.
+           05 WR-FECHA-INI.
+              10 WR-ANO-I                   PIC 9(04).
+              10 WR-MES-I                   PIC 9(02).
+              10 WR-DIA-I                   PIC 9(02).
+           05 WR-FECHA-FIN.
+              10 WR-ANO-F                   PIC 9(04).
+              10 WR-MES-F                   PIC 9(02).
+              10 WR-DIA-F                   PIC 9(02).
+           05 WR-FECHA-HOY.
+              10 WR-HOY-AA                  PIC X(02).
+              10 WR-HOY-MM                  PIC X(02).
+              10 WR-HOY-DD                  PIC X(02).
+           05 WR-MENSAJES.
+              10 WR-PARRAFO                 PIC X(35).
+              10 WR-ARCHIVO                 PIC X(30).
+              10 WR-OPERACI                 PIC X(30).
+              10 WR-FILE-ST                 PIC X(02).
+              10 WR-MENSAJE                 PIC X(50).
+           05 WR-LINEA-L1.
+              10 WR-FILLER1-L1              PIC X(51) VALUE SPACES.
+              10 WR-FILLER2-L1              PIC X(31) VALUE
+                 'BCI - BANCO CREDITO INVERSIONES'.
+              10 WR-FILLER3-L1              PIC X(51) VALUE SPACES.
+           05 WR-LINEA-L2.
+              10 WR-FILLER1-L2              PIC X(01) VALUE SPACES.
+              10 WR-DIA-CUR-L2              PIC X(02).
+              10 WR-FILLER2-L2              PIC X(01) VALUE '/'.
+              10 WR-MES-CUR-L2              PIC X(02).
+              10 WR-FILLER3-L2              PIC X(01) VALUE '/'.
+              10 WR-ANO-CUR-L2              PIC X(02).
+              10 WR-FILLER4-L2              PIC X(26) VALUE SPACES.
+              10 WR-FILLER5-L2              PIC X(35) VALUE
+                     'OPERACIONES DE COLOC. EN MON. NAC. '.
+              10 WR-FILLER6-L2              PIC X(24) VALUE
+                     'COM Y BAJO SPREAD MINIMO'.
+              10 WR-FILLER7-L2              PIC X(27) VALUE SPACES.
+              10 WR-FILLER8-L2              PIC X(09) VALUE
+                 'PAGINA : '.
+              10 WR-PAGINA-L2               PIC ZZ9.
+           05 WR-LINEA-L3.
+              10 WR-FILLER1-L3              PIC X(01) VALUE SPACES.
+              10 WR-FILLER2-L3              PIC X(14) VALUE
+                 'REGIONAL    : '.
+              10 WR-COD-REG-L3              PIC X(03).
+              10 WR-FILLER3-L3              PIC X(01) VALUE SPACES.
+              10 WR-GLS-REG-L3              PIC X(25).
+              10 WR-FILLER4-L3              PIC X(07) VALUE SPACES.
+              10 WR-FILLER5-L3              PIC X(06) VALUE
+                 'DEL : '.
+              10 WR-FECINI-L3               PIC X(10).
+              10 WR-FILLER6-L3              PIC X(06) VALUE
+                 ' AL : '.
+              10 WR-FECFIN-L3               PIC X(10).
+              10 WR-FILLER7-L3              PIC X(51) VALUE SPACES.
+           05 WR-LINEA-L4.
+              10 WR-FILLER1-L4              PIC X(01)  VALUE SPACES.
+              10 WR-FILLER2-L4              PIC X(132) VALUE ALL '-'.
+           05 WR-LINEA-L5.
+              10 WR-FILLER1-L5              PIC X(05) VALUE SPACES.
+              10 WR-FILLER2-L5              PIC X(07) VALUE 'OFICINA'.
+              10 WR-FILLER3-L5              PIC X(03) VALUE SPACES.
+              10 WR-FILLER4-L5              PIC X(06) VALUE 'CODIGO'.
+              10 WR-FILLER5-L5              PIC X(02) VALUE SPACES.
+              10 WR-FILLER6-L5              PIC X(03) VALUE 'BAN'.
+              10 WR-FILLER7-L5              PIC X(01) VALUE SPACES.
+              10 WR-FILLER8-L5              PIC X(06) VALUE 'SPREAD'.
+              10 WR-FILLER9-L5              PIC X(03) VALUE SPACES.
+              10 WR-FILLER10-L5             PIC X(03) VALUE 'COD'.
+              10 WR-FILLER11-L5             PIC X(04) VALUE SPACES.
+              10 WR-FILLER12-L5             PIC X(03) VALUE 'TIP'.
+              10 WR-FILLER13-L5             PIC X(02) VALUE SPACES.
+              10 WR-FILLER14-L5             PIC X(09) VALUE 'OPERACION'.
+              10 WR-FILLER15-L5             PIC X(03) VALUE SPACES.
+              10 WR-FILLER16-L5             PIC X(05) VALUE 'FECHA'.
+              10 WR-FILLER17-L5             PIC X(09) VALUE SPACES.
+              10 WR-FILLER18-L5             PIC X(05) VALUE 'PLAZO'.
+              10 WR-FILLER19-L5             PIC X(02) VALUE SPACES.
+              10 WR-FILLER20-L5             PIC X(04) VALUE 'NRO.'.
+              10 WR-FILLER21-L5             PIC X(04) VALUE SPACES.
+              10 WR-FILLER22-L5             PIC X(06) VALUE 'SPREAD'.
+              10 WR-FILLER23-L5             PIC X(13) VALUE SPACES.
+              10 WR-FILLER24-L5             PIC X(05) VALUE 'MONTO'.
+              10 WR-FILLER25-L5             PIC X(13) VALUE SPACES.
+              10 WR-FILLER26-L5             PIC X(07) VALUE 'PERDIDA'.
+           05 WR-LINEA-L6.
+              10 WR-FILLER1-L6              PIC X(15) VALUE SPACES.
+              10 WR-FILLER2-L6              PIC X(05) VALUE 'EJEC.'.
+              10 WR-FILLER3-L6              PIC X(03) VALUE SPACES.
+              10 WR-FILLER4-L6              PIC X(02) VALUE 'CA'.
+              10 WR-FILLER5-L6              PIC X(02) VALUE SPACES.
+              10 WR-FILLER6-L6              PIC X(06) VALUE 'MINIMO'.
+              10 WR-FILLER7-L6              PIC X(03) VALUE SPACES.
+              10 WR-FILLER8-L6              PIC X(03) VALUE 'MON'.
+              10 WR-FILLER9-L6              PIC X(04) VALUE SPACES.
+              10 WR-FILLER10-L6             PIC X(03) VALUE 'TAS'.
+              10 WR-FILLER11-L6             PIC X(14) VALUE SPACES.
+              10 WR-FILLER12-L6             PIC X(05) VALUE 'CURSE'.
+              10 WR-FILLER13-L6             PIC X(10) VALUE SPACES.
+              10 WR-FILLER14-L6             PIC X(04) VALUE 'DIAS'.
+              10 WR-FILLER15-L6             PIC X(01) VALUE SPACES.
+              10 WR-FILLER16-L6             PIC X(05) VALUE 'VCTOS'.
+              10 WR-FILLER17-L6             PIC X(22) VALUE SPACES.
+              10 WR-FILLER18-L6             PIC X(07) VALUE 'CURSADO'.
+              10 WR-FILLER19-L6             PIC X(18) VALUE SPACES.
+           05 WR-LINEA-L7.
+              10 WR-FILLER1-L7              PIC X(01) VALUE SPACES.
+              10 WR-IDC-COD-COPC-L7         PIC X(03).
+              10 WR-FILLER2-L7              PIC X(01) VALUE ':'.
+              10 WR-IDC-OFI-GLS-DESC-L7     PIC X(09).
+              10 WR-FILLER3-L7              PIC X(01) VALUE SPACES.
+              10 WR-IDC-COD-EJEC-L7         PIC X(07).
+              10 WR-FILLER4-L7              PIC X(01) VALUE SPACES.
+              10 WR-IDC-COD-TBAN-L7         PIC X(03).
+              10 WR-FILLER5-L7              PIC X(01) VALUE SPACES.
+              10 WR-IDC-SPREAD-MIN-L7       PIC 9,9999.
+              10 WR-FILLER6-L7              PIC X(03) VALUE SPACES.
+              10 WR-IDC-GLS-VCOC-L7         PIC X(05).
+              10 WR-FILLER7-L7              PIC X(02) VALUE SPACES.
+              10 WR-IDC-TIP-TASA-L7         PIC X(01).
+              10 WR-FILLER8-L7              PIC X(03) VALUE SPACES.
+              10 WR-IDC-CIC-IOPC-L7         PIC X(12).
+              10 WR-FILLER9-L7              PIC X(01) VALUE SPACES.
+              10 WR-IDC-FEC-FCOL-L7         PIC X(08).
+              10 WR-FILLER10-L7             PIC X(05) VALUE SPACES.
+              10 WR-IDC-PLZ-DIAS-L7         PIC ZZZZ9.
+              10 WR-FILLER11-L7             PIC X(03) VALUE SPACES.
+              10 WR-IDC-NUM-VCOR-L7         PIC ZZ9.
+              10 WR-FILLER12-L7             PIC X(02) VALUE SPACES.
+              10 WR-IDC-SPREAD-L7           PIC ZZ9,9999-.
+              10 WR-FILLER13-L7             PIC X(02) VALUE SPACES.
+              10 WR-IDC-VAL-CRED-L7         PIC ZZ.ZZZ.ZZZ.ZZ9,99.
+              10 WR-FILLER14-L7             PIC X(02) VALUE SPACES.
+              10 WR-IDC-PERDIDA-L7          PIC ZZ.ZZZ.ZZZ.ZZ9,99.
+           05 WR-LINEA-L8.
+              10 WR-FILLER1-L8              PIC X(01) VALUE SPACES.
+              10 WR-IDC-IDC-NOMC-L8         PIC X(69).
+              10 WR-FILLER2-L8              PIC X(01) VALUE SPACES.
+              10 WR-FILLER3-L8              PIC X(04) VALUE 'TMC='.
+              10 WR-VAL-TMC-L8              PIC ZZ9,9999-.
+              10 WR-FILLER4-L8              PIC X(01) VALUE SPACES.
+              10 WR-FILLER5-L8              PIC X(08) VALUE
+                 'TIP/OPE='.
+              10 WR-GLS-TIP-OPE-L8          PIC X(40).
+           05 WR-LINEA-L9.
+              10 WR-FILLER1-L9              PIC X(96) VALUE SPACES.
+              10 WR-FILLER2-L9              PIC X(37) VALUE ALL '-'.
+           05 WR-LINEA-L10.
+              10 WR-FILLER1-L10             PIC X(01) VALUE SPACES.
+              10 WR-FILLER2-L10             PIC X(11).
+              10 WR-FILLER3-L10             PIC X(24) VALUE SPACES.
+              10 WR-IDC-GLS-VCOC-L10        PIC X(05).
+              10 WR-FILLER4-L10             PIC X(55) VALUE SPACES.
+              10 WR-IDC-VAL-CRED-L10        PIC ZZZ.ZZZ.ZZZ.ZZ9,99.
+              10 WR-FILLER5-L10             PIC X(01) VALUE SPACES.
+              10 WR-IDC-PERDIDA-L10         PIC ZZZ.ZZZ.ZZZ.ZZ9,99.
+           05 WR-LINEA-L11.
+              10 WR-FILLER1-L11             PIC X(133) VALUE SPACES.
+
+       01  W-PARAMETROS.
+           05 FILLER                        PIC X(20).
+           05 WP-FECHAS.
+              10 WP-FECHA-INI.
+                 15 WP-DIA-I                PIC 9(02).
+                 15 FILLER                  PIC X(01).
+                 15 WP-MES-I                PIC 9(02).
+                 15 FILLER                  PIC X(01).
+                 15 WP-ANO-I                PIC 9(04).
+              10 FILLER                     PIC X(20).
+              10 WP-FECHA-FIN.
+                 15 WP-DIA-F                PIC 9(02).
+                 15 FILLER                  PIC X(01).
+                 15 WP-MES-F                PIC 9(02).
+                 15 FILLER                  PIC X(01).
+                 15 WP-ANO-F                PIC 9(04).
+
+       01  WB-UIB.
+           05 FILLER                        PIC X(32) VALUE 'COLPLS42'.
+
+       01  WB-REQ-CAM-AREA.
+           02 WB-REQ-CAM-CMD                PIC X(5) VALUE 'REDKX'.
+           02 FILLER                        PIC X(3) VALUE 'CAM'.
+           02 FILLER                        PIC X(5) VALUE 'CAM00'.
+           02 WB-REQ-CAM-RC                 PIC X(2) VALUE SPACES.
+           02 FILLER                        PIC X(1).
+           02 FILLER                        PIC S9(4) COMP VALUE +150.
+           02 FILLER                        PIC X(58).
+           02 WB-REQ-CAM-KEY-VALUE.
+              03 WB-REQ-CAM-KEY-FE1         PIC 9(08).
+              03 WB-REQ-CAM-KEY-FE2         PIC 9(08).
+              03 WB-REQ-CAM-KEY-COD1        PIC X(06).
+              03 WB-REQ-CAM-KEY-COD2        PIC X(06).
+
+       01  WB-REQ-TAB-AREA.
+           02 WB-REQ-TAB-CMD                PIC X(5) VALUE 'REDKX'.
+           02 FILLER                        PIC X(3) VALUE 'TAB'.
+           02 FILLER                        PIC X(5) VALUE 'TAB00'.
+           02 WB-REQ-TAB-RC                 PIC X(2) VALUE SPACES.
+           02 FILLER                        PIC X(1).
+           02 FILLER                        PIC S9(4) COMP VALUE +210.
+           02 FILLER                        PIC X(58).
+           02 WB-REQ-TAB-KEY-VALUE.
+              03 WB-REQ-TAB-KEY-VALUE-1     PIC X(03).
+              03 WB-REQ-TAB-KEY-VALUE-2     PIC X(12).
+
+       01  WB-REQ-DBC-AREA.
+           02 WB-REQ-DBC-CMD                PIC X(5) VALUE 'REDKX'.
+           02 FILLER                        PIC X(3) VALUE 'DBC'.
+           02 FILLER                        PIC X(5) VALUE 'DBC02'.
+           02 WB-REQ-DBC-RC                 PIC X(2) VALUE SPACES.
+           02 FILLER                        PIC X(1).
+           02 FILLER                        PIC S9(4) COMP VALUE +100.
+           02 FILLER                        PIC X(58).
+           02 WB-REQ-DBC-KEY-VALUE.
+              03 WB-REQ-DBC-KEY-CIC         PIC X(12).
+
+       01  REG-CAM.
+      *    COPYDD TAB-R-CAM.TAB-E-CAM00(PROD),01,D.
+      *                             EQUIVALENTE AL REGISTRO CAM
+           02  TAB-E-CAM00.
+      *                             REGISTRO DE VALORES DE CAMBIOS
+               03  CAM.
+      *                             FILLER COMPATIBILIDAD VSAM/MVS
+                   04  CAM-GLS-FLAG PICTURE X(1).
+      *                             CLAVE PRIMARIA REGISTRO
+                   04  CAM-KEY-IREG.
+      *                             KEY     FECHA 1 + FECHA 2 + VALOR 1
+                       05  CAM-KEY-CAMB.
+      *                             FECHA DE CAMBIO
+                       06  CAM-FEC-CAMB.
+      *                             FECHA 1 + FECHA 2
+                       07  CAM-FEC-FCAM
+                                        OCCURS 2 TIMES.
+                       08  CAM-NUM-SCAM
+                                    PICTURE 9(2).
+                       08  CAM-NUM-ACAM
+                                    PICTURE 9(2).
+                       08  CAM-NUM-MCAM
+                                    PICTURE 9(2).
+                       08  CAM-NUM-DCAM
+                                    PICTURE 9(2).
+      *                             CODIGO VALOR DE CAMBIO
+                       06  CAM-COD-CAMB.
+      *                             VALOR 1 + VALOR 2
+                       07  CAM-COD-VCAM
+                                        OCCURS 2 TIMES.
+      *                             TIPO VALOR                   TAB TVA
+                       08  CAM-MSC-TVAL
+                                    PICTURE X(1).
+      *                             CODIGO VALOR
+                       08  CAM-COD-CVAL
+                                    PICTURE X(3).
+      *                             TIPO CAMBIO
+                       08  CAM-COD-TCAM
+                                    PICTURE X(2).
+      *                             TIME STAMP TRANSACCION
+                       05  CAM-STP-ITRN.
+      *                             FECHA TRANSACCION
+                       06  CAM-FEC-FTRN.
+                       07  CAM-NUM-STRN
+                                    PICTURE 9(2).
+                       07  CAM-NUM-ATRN
+                                    PICTURE 9(2).
+                       07  CAM-NUM-MTRN
+                                    PICTURE 9(2).
+                       07  CAM-NUM-DTRN
+                                    PICTURE 9(2).
+      *                             HORA TRANSACCION
+                       06  CAM-HRA-HRTR.
+                       07  CAM-NUM-HHTR
+                                    PICTURE 9(2).
+                       07  CAM-NUM-MMTR
+                                    PICTURE 9(2).
+                       07  CAM-NUM-SSTR
+                                    PICTURE 9(2).
+      *                             INDICADOR TIPO ACCION
+                   04  CAM-MSC-TACC PICTURE X(1).
+      *                             INDICADOR STATUS
+                   04  CAM-MSC-STAT PICTURE X(1).
+      *                             INDICADOR VIGENCIA
+                   04  CAM-IND-VIGE
+                             REDEFINES CAM-MSC-STAT
+                                    PICTURE X(1).
+      *                             CODIGO ORIGEN TRANSACCION
+                   04  CAM-COD-OTRN.
+      *                             INDICADOR TIPO ORIGEN
+                       05  CAM-MSC-TTRN
+                                    PICTURE X(1).
+      *                             CODIGO TIPO ORIGEN
+                       05  CAM-COD-TTRN
+                                    PICTURE X(3).
+      *                             AUTOR TRANSACCION
+                   04  CAM-COD-ATRN PICTURE X(12).
+      *                             VALOR DE CAMBIO
+                   04  CAM-SGV-VCAM PICTURE S9(11)V9(4)
+                                        COMPUTATIONAL-3.
+      *                             DISPONIBLE
+                   04  CAM-GLS-DISP PICTURE X(6).
+       01  REG-TAB.
+      *    COPYDD TAB-R-TAB.TAB-E-TAB00(PROD),01,D.
+      *                             EQUIVALENTE AL REGISTRO TAB
+           02  TAB-E-TAB00.
+      *                             REGISTRO GENERICO DE TABLAS
+               03  TAB.
+      *                             FILLER COMPATIBILIDAD VSAM/MVS
+                   04  TAB-GLS-FLAG PICTURE X(1).
+      *                             CLAVE PRIMARIA REGISTRO
+                   04  TAB-KEY-IREG.
+      *                             KEY     TIPO + CODIGO ( LLAVE PRIMAR
+                       05  TAB-COD-TABL.
+      *                             CODIGO TIPO TABLA
+                       06  TAB-COD-TTAB
+                                    PICTURE X(3).
+      *                             CODIGO TABLA
+                       06  TAB-COD-CTAB
+                                    PICTURE X(12).
+      *                             TIME STAMP TRANSACCION
+                       05  TAB-STP-ITRN.
+      *                             FECHA TRANSACCION
+                       06  TAB-FEC-FTRN.
+                       07  TAB-NUM-STRN
+                                    PICTURE 9(2).
+                       07  TAB-NUM-ATRN
+                                    PICTURE 9(2).
+                       07  TAB-NUM-MTRN
+                                    PICTURE 9(2).
+                       07  TAB-NUM-DTRN
+                                    PICTURE 9(2).
+      *                             HORA TRANSACCION
+                       06  TAB-HRA-HRTR.
+                       07  TAB-NUM-HHTR
+                                    PICTURE 9(2).
+                       07  TAB-NUM-MMTR
+                                    PICTURE 9(2).
+                       07  TAB-NUM-SSTR
+                                    PICTURE 9(2).
+      *                             INDICADOR TIPO ACCION
+                   04  TAB-MSC-TACC PICTURE X(1).
+      *                             INDICADOR STATUS
+                   04  TAB-MSC-STAT PICTURE X(1).
+      *                             INDICADOR VIGENCIA
+                   04  TAB-IND-VIGE
+                             REDEFINES TAB-MSC-STAT
+                                    PICTURE X(1).
+      *                             CODIGO ORIGEN TRANSACCION
+                   04  TAB-COD-OTRN.
+      *                             INDICADOR TIPO ORIGEN
+                       05  TAB-MSC-TTRN
+                                    PICTURE X(1).
+      *                             CODIGO TIPO ORIGEN
+                       05  TAB-COD-TTRN
+                                    PICTURE X(3).
+      *                             AUTOR TRANSACCION
+                   04  TAB-COD-ATRN PICTURE X(12).
+      *                             KEY TIPO + CODIGO ( INTERNO COMPUTAC
+                   04  TAB-CIC-TABL.
+      *                             CODIGO TIPO TABLA
+                       05  TAB-CIC-TTAB
+                                    PICTURE X(3).
+      *                             CODIGO TABLA
+                       05  TAB-CIC-CTAB
+                                    PICTURE X(12).
+      *                             CODIGO EXTERNO
+                   04  TAB-EXT-TABL.
+      *                             CODIGO TIPO TABLA
+                       05  TAB-EXT-TTAB
+                                    PICTURE X(3).
+      *                             CODIGO TABLA
+                       05  TAB-EXT-CTAB
+                                    PICTURE X(5).
+      *                             DESCRIPCION CORTA
+                   04  TAB-GLS-DCOR PICTURE X(12).
+      *                             ABREVIACION DESCRIPCION
+                   04  TAB-GLS-ABRV PICTURE X(5).
+      *                             DESCRIPCION DEL CODIGO
+                   04  TAB-GLS-DESC PICTURE X(40).
+      *                             DATOS ANEXOS
+                   04  TAB-GLS-DATA PICTURE X(60).
+      *                             CLAVE SOUNDEX
+                   04  TAB-SNX-TABL.
+                       05  TAB-SNX-TTAB
+                                    PICTURE X(3).
+                       05  TAB-SNX-CTAB
+                                    PICTURE X(3).
+               03  TAB-REDEF REDEFINES TAB
+                                    PICTURE X(194).
+       01  REG-DBC.
+      *    COPYDD DGC-R-DBC.DGC-E-DBC00(PROD),01,D.
+      *                             EQUIVALENTE AL REGISTRO DBC
+           02  DGC-E-DBC00.
+      *                             DATOS BASICOS DEL CLIENTE
+               03  DBC.
+      *                             FILLER COMPATIBILIDAD VSAM/MVS
+                   04  DBC-GLS-FLAG PICTURE X(1).
+      *                             KEY CLAVE PRIMARIA REGISTRO
+                   04  DBC-KEY-IREG.
+      *                             IDENTIFICACION DATOS BASICOS CLIENTE
+                       05  DBC-KEY-IDBC.
+      *                             COD. INT. COMP. CLIENTE
+                       06  DBC-CIC-ICLI.
+      *                             CENTRO ASIGNACION IDENTIFICACION
+                       07  DBC-CAI-ICLI.
+                       08  DBC-COD-TCLI
+                                    PICTURE X(1).
+                       08  DBC-COD-CCLI
+                                    PICTURE X(3).
+      *                             IDENT. INTERNA COMPUTACIONAL
+                       07  DBC-IIC-ICLI
+                                    PICTURE X(8).
+      *                             TIME STAMP TRANSACCION
+                       05  DBC-STP-ITRN.
+      *                             FECHA TRANSACCION
+                       06  DBC-FEC-FTRN.
+                       07  DBC-NUM-STRN
+                                    PICTURE 9(2).
+                       07  DBC-NUM-ATRN
+                                    PICTURE 9(2).
+                       07  DBC-NUM-MTRN
+                                    PICTURE 9(2).
+                       07  DBC-NUM-DTRN
+                                    PICTURE 9(2).
+      *                             HORA TRANSACCION
+                       06  DBC-HRA-HRTR.
+                       07  DBC-NUM-HHTR
+                                    PICTURE 9(2).
+                       07  DBC-NUM-MMTR
+                                    PICTURE 9(2).
+                       07  DBC-NUM-SSTR
+                                    PICTURE 9(2).
+      *                             INDICADOR TIPO ACCION
+                   04  DBC-MSC-TACC PICTURE X(1).
+      *                             INDICADOR STATUS
+                   04  DBC-MSC-STAT PICTURE X(1).
+      *                             CODIGO ORIGEN TRANSACCION
+                   04  DBC-COD-OTRN.
+      *                             INDICADOR TIPO ORIGEN
+                       05  DBC-MSC-TTRN
+                                    PICTURE X(1).
+      *                             CODIGO TIPO ORIGEN
+                       05  DBC-COD-TTRN
+                                    PICTURE X(3).
+      *                             AUTOR TRANSACCION
+                   04  DBC-COD-ATRN PICTURE X(12).
+      *                             KEY RUT CLIENTE + INDICADOR O CALIFI
+                   04  DBC-IDC-ICLI.
+      *                             RUT CLIENTE
+                       05  DBC-NUM-ICLI
+                                    PICTURE X(8).
+      *                             INDICADOR TIPO RUT
+                       05  DBC-IND-ICLI
+                                    PICTURE X(1).
+      *                             EXTENSION DEL RUT
+                       05  DBC-GLS-ICLI
+                                    PICTURE X(3).
+      *                             KEY DIGITO VERIFICADOR DEL RUT
+                   04  DBC-VRF-ICLI PICTURE X(1).
+      *                             KEY NOMBRE CLIENTE GENERICO (PERSONA
+                   04  DBC-GLS-NOMC.
+                       05  DBC-GLS-APAT
+                                    PICTURE X(25).
+                       05  DBC-GLS-AMAT
+                                    PICTURE X(25).
+                       05  DBC-GLS-NOMB
+                                    PICTURE X(25).
+      *                             SOUNDEX DEL NOMBRE DE CLIENTE
+                   04  DBC-SNX-NOMC.
+                       05  DBC-SNX-APAT
+                                    PICTURE X(3).
+                       05  DBC-SNX-AMAT
+                                    PICTURE X(3).
+                       05  DBC-SNX-NOMB
+                                    PICTURE X(3).
+      *                             NUMERO DE DIRECCION DE ENVIO CORRESP
+                   04  DBC-NUM-DCOR PICTURE 9(2).
+      *                             OPR IND TIPO CLIENTE ( PERSONA O EMP
+                   04  DBC-IND-TICL PICTURE X(1).
+      *                             TIPO CLIENTE (POTENCIAL,NO CLIENTE,G
+                   04  DBC-COD-TICL PICTURE X(2).
+      *                             CODIGO CLASIFICACION COMERCIAL
+                   04  DBC-COD-CLCM PICTURE X(2).
+      *                             RCM CODIGO DEL EJECUTIVO ENCARGADO D
+                   04  DBC-COD-EJEC PICTURE X(12).
+      *                             OPR CODIGO DE OFICINA DONDE OPERA EL
+                   04  DBC-COD-OFIC PICTURE X(3).
+      *                             RCM INDICADOR SI OPERA EN OTRA OFICI
+                   04  DBC-IND-OOFI PICTURE X(1).
+      *                             EXT CODIGO ACTIVIDAD ECONOMICA
+                   04  DBC-COD-ACTI PICTURE X(9).
+      *                             EXT ORIGEN Y DESTINO SECT (COMP.INST
+                   04  DBC-COD-ODSE PICTURE X(3).
+      *                             INF FECHA INGRESO AL PLAN
+                   04  DBC-FEC-FPLN.
+                       05  DBC-NUM-SPLN
+                                    PICTURE 9(2).
+                       05  DBC-NUM-APLN
+                                    PICTURE 9(2).
+                       05  DBC-NUM-MPLN
+                                    PICTURE 9(2).
+                       05  DBC-NUM-DPLN
+                                    PICTURE 9(2).
+      *                             CODIGO DE SEGMENTO
+                   04  DBC-COD-SETO PICTURE X(5).
+      *                             PERIODO DE SEGMENTO (SSAAMM)
+                   04  DBC-PDO-SETO PICTURE X(6).
+      *                             INF INDICADOR DE MULTAS BANCO CENTRA
+                   04  DBC-IND-MUBC PICTURE X(1).
+      *                             INF INDICADOR DE JUICIOS BANCO CENTR
+                   04  DBC-IND-JUBC PICTURE X(1).
+      *                             EXT CODIGO ESTADO CLIENTE ( COMO DEU
+                   04  DBC-MSC-SCLI PICTURE X(1).
+      *                             FECHA ESTADO CLIENTE
+                   04  DBC-FEC-FSCL.
+                       05  DBC-NUM-SSCL
+                                    PICTURE 9(2).
+                       05  DBC-NUM-ASCL
+                                    PICTURE 9(2).
+                       05  DBC-NUM-MSCL
+                                    PICTURE 9(2).
+                       05  DBC-NUM-DSCL
+                                    PICTURE 9(2).
+      *                             CODIGO DE BLOQUEO DEL CLIENTE
+                   04  DBC-COD-BLOC PICTURE X(2).
+      *                             NUMERO TOTAL DE DIRECCIONES
+                   04  DBC-NUM-TDIR PICTURE 9(2).
+      *                             NUMERO TOTAL DE COMENTARIOS
+                   04  DBC-NUM-TCMT PICTURE 9(3).
+      *                             FECHA INICIO OPERACION
+                   04  DBC-FEC-FIOP.
+                       05  DBC-NUM-SIOP
+                                    PICTURE 9(2).
+                       05  DBC-NUM-AIOP
+                                    PICTURE 9(2).
+                       05  DBC-NUM-MIOP
+                                    PICTURE 9(2).
+                       05  DBC-NUM-DIOP
+                                    PICTURE 9(2).
+      *                             FECHA TERMINO OPERACION
+                   04  DBC-FEC-FTOP.
+                       05  DBC-NUM-STOP
+                                    PICTURE 9(2).
+                       05  DBC-NUM-ATOP
+                                    PICTURE 9(2).
+                       05  DBC-NUM-MTOP
+                                    PICTURE 9(2).
+                       05  DBC-NUM-DTOP
+                                    PICTURE 9(2).
+      *                             NUMERO OPERACIONES FECHA TERMINO NUL
+                   04  DBC-NUM-OFTN PICTURE 9(3).
+      *                             FECHA INGRESO DE DATOS A LA BASE DE
+                   04  DBC-FEC-FINP.
+                       05  DBC-NUM-SINP
+                                    PICTURE 9(2).
+                       05  DBC-NUM-AINP
+                                    PICTURE 9(2).
+                       05  DBC-NUM-MINP
+                                    PICTURE 9(2).
+                       05  DBC-NUM-DINP
+                                    PICTURE 9(2).
+
+       01  WB-ELEM-LIS                      PIC X(11).
+
+       COPY RTNWCALE.
+       COPY TABWGTXC.
+
+       PROCEDURE DIVISION.
+      *------------------*
+           ENTRY 'DBMSCBL'.
+           PERFORM 010-ABRIR-ARCHIVOS.
+           PERFORM 020-CARGAR-CALEND.
+           PERFORM 040-VALIDA-PARAMETRO.
+           PERFORM 050-LEER-COLSL41.
+           MOVE    SL41-IDC-COD-VCOC     TO WR-IDC-COD-VCOC
+           MOVE    SL41-IDC-OFI-COD-REGI TO WR-IDC-OFI-COD-REGI
+           MOVE    SL41-IDC-OFI-GLS-REGI TO WR-IDC-OFI-GLS-REGI
+           PERFORM 060-BUSCAR-GLS-MONEDA
+           PERFORM 070-PROCESA-COLSL41 UNTIL WS-FIN-SL41-SI
+           PERFORM 150-TOTAL-POR-MONEDA
+           PERFORM 160-TOTAL-POR-REGIONAL
+           PERFORM 170-TOTAL-FINAL
+           PERFORM 190-ESTADISTICAS.
+           PERFORM 200-TERMINAR.
+
+       010-ABRIR-ARCHIVOS.
+      *------------------*
+           OPEN INPUT  COLSL41
+           IF  WR-FS-COLSL41 NOT = 0
+               MOVE '010-ABRIR-ARCHIVOS'    TO WR-PARRAFO
+               MOVE 'COLSL41'               TO WR-ARCHIVO
+               MOVE 'OPEN'                  TO WR-OPERACI
+               MOVE WR-FS-COLSL41           TO WR-FILE-ST
+               MOVE SPACES                  TO WR-MENSAJE
+               PERFORM 180-DISPLAY-ERROR
+           END-IF.
+           OPEN OUTPUT LISTADO
+           IF  WR-FS-LISTADO NOT = 0
+               MOVE '010-ABRIR-ARCHIVOS'    TO WR-PARRAFO
+               MOVE 'LISTADO'               TO WR-ARCHIVO
+               MOVE 'OPEN'                  TO WR-OPERACI
+               MOVE WR-FS-LISTADO           TO WR-FILE-ST
+               MOVE SPACES                  TO WR-MENSAJE
+               PERFORM 180-DISPLAY-ERROR
+           END-IF.
+
+       020-CARGAR-CALEND.
+      *-----------------*
+           MOVE 'CARGAR'                TO CALEAREA-FUNCION.
+           MOVE ALL '0'                 TO CALEAREA-FECHA-1.
+           PERFORM 030-CALL-RUTUCALE.
+
+       030-CALL-RUTUCALE.
+      *-----------------*
+           CALL 'RUTUCALE' USING RTNWCALE.
+           IF (CALEAREA-COD-RET NOT = 0 OR CALEAREA-FUNCION = 'CANCEL')
+               MOVE '030-CALL-RUTUCALE' TO WR-PARRAFO
+               MOVE 'RUTUCALE'          TO WR-ARCHIVO
+               MOVE CALEAREA-FUNCION    TO WR-OPERACI
+               MOVE CALEAREA-FECHA-1    TO WR-MENSAJE
+               MOVE CALEAREA-COD-RET    TO WR-FILE-ST
+               PERFORM 180-DISPLAY-ERROR
+           END-IF.
+
+       040-VALIDA-PARAMETRO.
+      *--------------------*
+           ACCEPT W-PARAMETROS
+           MOVE WP-DIA-I           TO CALEAREA-FECHA-1-D WR-DIA-I
+           MOVE WP-MES-I           TO CALEAREA-FECHA-1-M WR-MES-I
+           MOVE WP-ANO-I           TO CALEAREA-FECHA-1-A WR-ANO-I
+           MOVE 'INFO'             TO CALEAREA-FUNCION.
+           MOVE ALL '0'            TO CALEAREA-FECHA-2.
+           PERFORM 030-CALL-RUTUCALE.
+           MOVE WP-DIA-F           TO CALEAREA-FECHA-1-D WR-DIA-F
+           MOVE WP-MES-F           TO CALEAREA-FECHA-1-M WR-MES-F
+           MOVE WP-ANO-F           TO CALEAREA-FECHA-1-A WR-ANO-F
+           MOVE 'INFO'             TO CALEAREA-FUNCION.
+           MOVE ALL '0'            TO CALEAREA-FECHA-2.
+           PERFORM 030-CALL-RUTUCALE.
+           IF (WR-FECHA-INI > WR-FECHA-FIN)
+               MOVE '040-VALIDA-PARAMETRO'  TO WR-PARRAFO
+               MOVE 'SYSIN      '           TO WR-ARCHIVO
+               MOVE '*RANGO DE FECHA INV*'  TO WR-MENSAJE
+               PERFORM 180-DISPLAY-ERROR
+           END-IF.
+           ACCEPT WR-FECHA-HOY FROM DATE
+           MOVE WR-HOY-DD TO WR-DIA-CUR-L2
+           MOVE WR-HOY-MM TO WR-MES-CUR-L2
+           MOVE WR-HOY-AA TO WR-ANO-CUR-L2.
+
+       050-LEER-COLSL41.
+      *----------------*
+           READ COLSL41 AT END MOVE 'SI' TO WS-FIN-SL41.
+           IF WS-FIN-SL41-NO
+              ADD 1             TO WA-L-SL41
+           END-IF.
+
+       060-BUSCAR-GLS-MONEDA.
+      *----------------------*
+           IF WR-IDC-COD-VCOC = '0999  '
+              MOVE 'PESOS' TO WR-IDC-GLS-VCOC
+           ELSE
+           IF WR-IDC-COD-VCOC = '0998  '
+              MOVE 'U.F. ' TO WR-IDC-GLS-VCOC
+           END-IF
+           END-IF.
+
+       070-PROCESA-COLSL41.
+      *-------------------*
+           IF SL41-IDC-COD-VCOC NOT = WR-IDC-COD-VCOC OR
+              SL41-IDC-OFI-COD-REGI NOT = WR-IDC-OFI-COD-REGI
+              IF SL41-IDC-OFI-COD-REGI NOT = WR-IDC-OFI-COD-REGI
+                 PERFORM 150-TOTAL-POR-MONEDA
+                 PERFORM 160-TOTAL-POR-REGIONAL
+                 MOVE 80 TO WR-CONT-L
+              ELSE
+                 PERFORM 150-TOTAL-POR-MONEDA
+              END-IF
+              MOVE SL41-IDC-OFI-COD-REGI TO WR-IDC-OFI-COD-REGI
+              MOVE SL41-IDC-OFI-GLS-REGI TO WR-IDC-OFI-GLS-REGI
+              MOVE SL41-IDC-COD-VCOC     TO WR-IDC-COD-VCOC
+              PERFORM 060-BUSCAR-GLS-MONEDA
+           END-IF.
+           PERFORM 080-TITULOS
+           MOVE  SL41-IDC-COD-COPC        TO WR-IDC-COD-COPC-L7
+           MOVE  SL41-IDC-OFI-GLS-DESC    TO WR-IDC-OFI-GLS-DESC-L7
+           MOVE  SL41-IDC-COD-EJEC        TO WR-IDC-COD-EJEC-L7
+           MOVE  SL41-IDC-COD-TBAN        TO WR-IDC-COD-TBAN-L7
+           MOVE  SL41-IDC-SPREAD-MIN      TO WR-IDC-SPREAD-MIN-AUX
+           MOVE  WR-IDC-SPREAD-MIN-AUX    TO WR-IDC-SPREAD-MIN-L7
+           MOVE  WR-IDC-GLS-VCOC          TO WR-IDC-GLS-VCOC-L7
+           MOVE  SL41-IDC-TIP-TASA        TO WR-IDC-TIP-TASA-L7
+           MOVE  SL41-IDC-CIC-IOPC        TO WR-IDC-CIC-IOPC-L7
+           MOVE  SL41-IDC-FEC-FCOL        TO WR-IDC-FEC-FCOL-L7
+           MOVE  SL41-IDC-PLZ-DIAS        TO WR-IDC-PLZ-DIAS-L7
+           MOVE  SL41-IDC-NUM-VCOR        TO WR-IDC-NUM-VCOR-L7
+           MOVE  SL41-IDC-SPREAD          TO WR-IDC-SPREAD-L7
+           MOVE  SL41-IDC-VAL-CRED        TO WR-IDC-VAL-CRED-L7
+           MOVE  SL41-IDC-PERDIDA         TO WR-IDC-PERDIDA-L7
+           MOVE WR-LINEA-L7          TO REG-LISTADO
+           PERFORM 090-GRABAR-LISTADO
+           PERFORM 100-BUSCAR-NOMBRE-CLIENTE
+           MOVE WR-DBC-GLS-NOMC      TO WR-IDC-IDC-NOMC-L8
+           PERFORM 110-BUSCAR-TASA-MAX-CONVEN
+           MOVE WR-VAL-TMC           TO WR-VAL-TMC-L8
+           PERFORM 140-BUSCAR-GLS-TIPO-OPERACION
+           MOVE WR-GLS-TIP-OPE       TO WR-GLS-TIP-OPE-L8
+           MOVE WR-LINEA-L8          TO REG-LISTADO
+           PERFORM 090-GRABAR-LISTADO
+           MOVE WR-LINEA-L11         TO REG-LISTADO
+           PERFORM 090-GRABAR-LISTADO
+           ADD   3                   TO WR-CONT-L
+           ADD   1                   TO WA-G-SEL
+           ADD SL41-IDC-VAL-CRED     TO WR-MTO-AUTORIZADO-T
+           ADD SL41-IDC-PERDIDA      TO WR-PERDIDA-T
+           PERFORM 050-LEER-COLSL41.
+
+       080-TITULOS.
+      *-----------*
+           IF WR-CONT-L > 62
+              ADD   1                     TO WR-CONT-P
+              MOVE  WR-CONT-P             TO WR-PAGINA-L2
+              MOVE  WR-IDC-OFI-COD-REGI   TO WR-COD-REG-L3
+              MOVE  WR-IDC-OFI-GLS-REGI   TO WR-GLS-REG-L3
+              MOVE  WP-FECHA-INI          TO WR-FECINI-L3
+              MOVE  WP-FECHA-FIN          TO WR-FECFIN-L3
+              MOVE WR-LINEA-L1          TO REG-LISTADO
+              PERFORM 090-GRABAR-LISTADO
+              MOVE WR-LINEA-L2          TO REG-LISTADO
+              PERFORM 090-GRABAR-LISTADO
+              MOVE WR-LINEA-L3          TO REG-LISTADO
+              PERFORM 090-GRABAR-LISTADO
+              MOVE WR-LINEA-L4          TO REG-LISTADO
+              PERFORM 090-GRABAR-LISTADO
+              MOVE WR-LINEA-L5          TO REG-LISTADO
+              PERFORM 090-GRABAR-LISTADO
+              MOVE WR-LINEA-L6          TO REG-LISTADO
+              PERFORM 090-GRABAR-LISTADO
+              MOVE WR-LINEA-L4          TO REG-LISTADO
+              PERFORM 090-GRABAR-LISTADO
+              MOVE  7                     TO WR-CONT-L
+           END-IF.
+
+       090-GRABAR-LISTADO.
+      *------------------*
+           WRITE REG-LISTADO
+           IF  WR-FS-LISTADO = 0
+               ADD 1                        TO WA-G-LIS
+           ELSE
+               MOVE '090-GRABAR-LISTADO'    TO WR-PARRAFO
+               MOVE 'LISTADO'               TO WR-ARCHIVO
+               MOVE 'WRITE'                 TO WR-OPERACI
+               MOVE WR-FS-LISTADO           TO WR-FILE-ST
+               MOVE SPACES                  TO WR-MENSAJE
+               PERFORM 180-DISPLAY-ERROR
+           END-IF.
+
+       100-BUSCAR-NOMBRE-CLIENTE.
+      *--------------------------*
+           MOVE SPACES                TO WR-DBC-GLS-NOMC
+           MOVE SPACES                TO WB-REQ-DBC-RC
+           MOVE 'DBC00'               TO WB-ELEM-LIS
+           MOVE SL41-IDC-IDC-ICLI     TO WB-REQ-DBC-KEY-CIC
+           CALL 'DBNTRY' USING WB-UIB WB-REQ-DBC-AREA DBC WB-ELEM-LIS
+           IF  WB-REQ-DBC-RC = SPACES
+               ADD 1 TO WA-L-DBC
+               MOVE DBC-GLS-NOMC           TO WR-DBC-GLS-NOMC
+           ELSE
+           IF  WB-REQ-DBC-RC = '14'
+               DISPLAY 'No existe cliente : ' SL41-IDC-IDC-ICLI
+                ' en DBC'
+               ADD 1 TO WA-N-DBC
+           ELSE
+               MOVE '100-BUSCAR-NOMBRE-CLIENTE' TO WR-PARRAFO
+               MOVE 'DBC'                       TO WR-ARCHIVO
+               MOVE WB-REQ-DBC-CMD              TO WR-OPERACI
+               MOVE WB-REQ-DBC-RC               TO WR-FILE-ST
+               MOVE WB-REQ-DBC-KEY-VALUE        TO WR-MENSAJE
+               PERFORM 180-DISPLAY-ERROR
+           END-IF
+           END-IF.
+
+       110-BUSCAR-TASA-MAX-CONVEN.
+      *--------------------------*
+           MOVE 'SI'              TO WS-SIGUE
+           MOVE SL41-IDC-FEC-DCOL TO TXC-DEC1
+           MOVE SL41-IDC-FEC-MCOL TO TXC-MEC1
+           MOVE SL41-IDC-FEC-SCOL TO TXC-SEC1
+           MOVE SL41-IDC-FEC-ACOL TO TXC-AEC1
+           MOVE 0                 TO TXC-FEC2
+           MOVE SL41-IDC-COD-VCOC TO TXC-VCOC
+           MOVE SPACES            TO TXC-PLZO
+      *HZF-INI 2000
+      *    MOVE 0                 TO TXC-MNTO
+           MOVE SL41-IDC-VAL-CRED TO TXC-MNTO
+      *HZF-FIN 2000
+           IF TXC-VCOC = '0999  '
+      *HZF-INI 2000
+              PERFORM 120-CONVERTIR-A-UF
+      *HZF-FIN 2000
+              IF SL41-IDC-PLZ-DIAS < 90
+                 MOVE 'C1'        TO TXC-PLZO
+      *HZF-INI 2000
+      *       ELSE
+      *          PERFORM 120-CONVERTIR-A-UF
+      *HZF-FIN 2000
+              END-IF
+              PERFORM 130-LEER-TXC
+           ELSE
+           IF TXC-VCOC = '0998  '
+              PERFORM 130-LEER-TXC
+           ELSE
+              MOVE 0        TO WR-VAL-TMC
+           END-IF
+           END-IF.
+
+       120-CONVERTIR-A-UF.
+      *------------------*
+           MOVE SL41-IDC-FEC-FCOL  TO WB-REQ-CAM-KEY-FE1
+           MOVE SL41-IDC-FEC-FCOL  TO WB-REQ-CAM-KEY-FE2
+           MOVE '0998  '           TO WB-REQ-CAM-KEY-COD1
+           MOVE '0999  '           TO WB-REQ-CAM-KEY-COD2
+           MOVE 'CAM00'            TO WB-ELEM-LIS
+           CALL 'DBNTRY' USING WB-UIB WB-REQ-CAM-AREA REG-CAM
+                               WB-ELEM-LIS
+           IF WB-REQ-CAM-RC = SPACES
+              ADD 1 TO WA-L-CAM
+              MOVE CAM-SGV-VCAM             TO WR-CAM-SGV-VCAM
+              COMPUTE WR-MTO-UF = SL41-IDC-VAL-CRED / WR-CAM-SGV-VCAM
+              MOVE WR-MTO-UF                TO TXC-MNTO
+           ELSE
+              ADD  1                        TO WA-N-CAM
+              MOVE 0                        TO WR-VAL-TMC
+              MOVE 'NO'                     TO WS-SIGUE
+              DISPLAY ' '
+              DISPLAY '******************************'
+              DISPLAY '** ERROR AL REDKX TABLA CAM **'
+              DISPLAY ' ESTATUS : ' WB-REQ-CAM-RC
+              DISPLAY ' CLAVE   : ' WB-REQ-CAM-KEY-VALUE
+              DISPLAY '******************************'
+           END-IF.
+
+       130-LEER-TXC.
+      *------------*
+           IF WS-SIGUE-SI
+              CALL 'TABPBTXC' USING TXC-CMMA
+              IF TXC-CMSG = SPACES
+                 ADD 1 TO WA-L-TXC
+                 MOVE TXC-VTXC TO WR-VAL-TMC
+              ELSE
+                 MOVE 0        TO WR-VAL-TMC
+                 ADD  1        TO WA-N-TXC
+                 DISPLAY ' '
+                 DISPLAY '******************************'
+                 DISPLAY '**  ERROR AL CALL TABPBTXC  **'
+                 DISPLAY ' ESTATUS  : ' TXC-CMSG
+                 DISPLAY ' TXC-PLZO : ' TXC-PLZO
+                 DISPLAY ' TXC-VCOC : ' TXC-VCOC
+                 DISPLAY ' TXC-FEC1 : ' TXC-FEC1
+                 DISPLAY ' TXC-FEC2 : ' TXC-FEC2
+                 DISPLAY '******************************'
+              END-IF
+           END-IF.
+
+       140-BUSCAR-GLS-TIPO-OPERACION.
+      *-----------------------------*
+           MOVE SPACES            TO WB-REQ-TAB-RC
+           MOVE 'TAB00'           TO WB-ELEM-LIS
+           MOVE 'AUX'             TO WB-REQ-TAB-KEY-VALUE-1
+           MOVE SL41-IDC-COD-COOC TO WB-REQ-TAB-KEY-VALUE-2
+           CALL 'DBNTRY' USING WB-UIB WB-REQ-TAB-AREA REG-TAB
+                         WB-ELEM-LIS
+           IF  WB-REQ-TAB-RC = SPACES
+               MOVE TAB-GLS-DESC  TO WR-GLS-TIP-OPE
+               ADD 1 TO WA-L-TAB
+           ELSE
+           IF  WB-REQ-TAB-RC = '14'
+               ADD 1 TO WA-N-TAB
+               MOVE 'SIN DESCRIPCION'       TO WR-GLS-TIP-OPE
+           ELSE
+               MOVE '120-BUSCAR-GLS-TIPO'   TO WR-PARRAFO
+               MOVE 'TAB'                   TO WR-ARCHIVO
+               MOVE WB-REQ-TAB-CMD          TO WR-OPERACI
+               MOVE WB-REQ-TAB-RC           TO WR-FILE-ST
+               MOVE WB-REQ-TAB-KEY-VALUE    TO WR-MENSAJE
+               PERFORM 180-DISPLAY-ERROR
+           END-IF
+           END-IF.
+
+       150-TOTAL-POR-MONEDA.
+      *--------------------*
+           PERFORM 080-TITULOS
+           MOVE SPACES                 TO WR-FILLER2-L10
+           MOVE WR-IDC-GLS-VCOC        TO WR-IDC-GLS-VCOC-L10
+           MOVE WR-MTO-AUTORIZADO-T    TO WR-IDC-VAL-CRED-L10
+           MOVE WR-PERDIDA-T           TO WR-IDC-PERDIDA-L10
+           MOVE WR-LINEA-L9            TO REG-LISTADO
+           PERFORM 090-GRABAR-LISTADO
+           MOVE WR-LINEA-L10           TO REG-LISTADO
+           PERFORM 090-GRABAR-LISTADO
+           MOVE WR-LINEA-L9            TO REG-LISTADO
+           PERFORM 090-GRABAR-LISTADO
+           ADD WR-MTO-AUTORIZADO-T     TO WR-MTO-AUTORIZADO-T1
+           ADD WR-PERDIDA-T            TO WR-PERDIDA-T1
+           ADD   3                     TO WR-CONT-L
+           MOVE 0                      TO WR-MTO-AUTORIZADO-T
+                                          WR-PERDIDA-T.
+
+       160-TOTAL-POR-REGIONAL.
+      *----------------------*
+           PERFORM 080-TITULOS
+           MOVE SPACES                 TO WR-FILLER2-L10
+           MOVE SPACES                 TO WR-IDC-GLS-VCOC-L10
+           MOVE WR-MTO-AUTORIZADO-T1   TO WR-IDC-VAL-CRED-L10
+           MOVE WR-PERDIDA-T1          TO WR-IDC-PERDIDA-L10
+           MOVE WR-LINEA-L9            TO REG-LISTADO
+           PERFORM 090-GRABAR-LISTADO
+           MOVE WR-LINEA-L10           TO REG-LISTADO
+           PERFORM 090-GRABAR-LISTADO
+           MOVE WR-LINEA-L9            TO REG-LISTADO
+           PERFORM 090-GRABAR-LISTADO
+           ADD WR-MTO-AUTORIZADO-T1    TO WR-MTO-AUTORIZADO-T2
+           ADD WR-PERDIDA-T1           TO WR-PERDIDA-T2
+           ADD   3                     TO WR-CONT-L
+           MOVE 0                      TO WR-MTO-AUTORIZADO-T1
+                                          WR-PERDIDA-T1.
+
+       170-TOTAL-FINAL.
+      *---------------*
+           MOVE 80                   TO WR-CONT-L
+           PERFORM 080-TITULOS
+           MOVE 'GRAND TOTAL'        TO WR-FILLER2-L10
+           MOVE SPACES               TO WR-IDC-GLS-VCOC-L10
+           MOVE WR-MTO-AUTORIZADO-T2 TO WR-IDC-VAL-CRED-L10
+           MOVE WR-PERDIDA-T2        TO WR-IDC-PERDIDA-L10
+           MOVE WR-LINEA-L9          TO REG-LISTADO
+           PERFORM 090-GRABAR-LISTADO
+           MOVE WR-LINEA-L10         TO REG-LISTADO
+           PERFORM 090-GRABAR-LISTADO
+           MOVE WR-LINEA-L9          TO REG-LISTADO
+           PERFORM 090-GRABAR-LISTADO.
+
+       180-DISPLAY-ERROR.
+      *-----------------*
+           SET WS-PROCESO-ERROR             TO TRUE
+           DISPLAY ' '
+           DISPLAY '    *** ERROR EN PROCESO *** '
+           DISPLAY '   PARRAFO         : ' WR-PARRAFO
+           DISPLAY '   ARCHIVO         : ' WR-ARCHIVO
+           DISPLAY '   OPERACION       : ' WR-OPERACI
+           DISPLAY '   FILE STATUS     : ' WR-FILE-ST
+           DISPLAY '   LLAVE           : ' WR-MENSAJE
+           PERFORM 190-ESTADISTICAS.
+           PERFORM 200-TERMINAR.
+
+       190-ESTADISTICAS.
+      *----------------*
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY 'INFORMES'
+           DISPLAY '--------'
+           DISPLAY ' '
+           DISPLAY
+           'Operaciones de Coloc. en Mon. Nac. Com y Bajo Spread Minimo'
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY 'ESTADISTICAS DE PROCESO PROGRAMA COLPLS42 FECHA '
+                    WR-FECHA-HOY
+           DISPLAY '------------------------------------------------'
+           DISPLAY '            GENERA LISTADO                 '
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY ' REG. LEIDOS DE COLSL41        : ' WA-L-SL41
+           DISPLAY ' REG. LEIDOS DE TABLA AUX      : ' WA-L-TAB
+           DISPLAY ' REG. NO LEIDOS DE TABLA AUX   : ' WA-N-TAB
+           DISPLAY ' REG. LEIDOS DE TABLA TXC      : ' WA-L-TXC
+           DISPLAY ' REG. NO LEIDOS DE TABLA TXC   : ' WA-N-TXC
+           DISPLAY ' REG. LEIDOS DE TABLA CAM      : ' WA-L-CAM
+           DISPLAY ' REG. NO LEIDOS DE TABLA CAM   : ' WA-N-CAM
+           DISPLAY ' REG. LEIDOS DE TABLA DBC      : ' WA-L-DBC
+           DISPLAY ' REG. NO LEIDOS DE TABLA DBC   : ' WA-N-DBC
+           DISPLAY ' REG. IMPRESOS EN LISTADO      : ' WA-G-SEL
+           DISPLAY ' LINEAS GRABADAS EN LISTADO    : ' WA-G-LIS
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY 'TARJETAS DE PARAMETROS'
+           DISPLAY '----------------------'
+           DISPLAY ' '
+           DISPLAY W-PARAMETROS
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY 'MENSAJES PARA EL EXPLOTADOR'
+           DISPLAY '---------------------------'
+           DISPLAY ' '
+           IF WS-PROCESO-OK
+               DISPLAY 'NO HAY MENSAJES PARA EL EXPLOTADOR'
+           ELSE
+               DISPLAY 'HAY MENSAJES PARA EL EXPLOTADOR'
+           END-IF.
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY ' '.
+
+       200-TERMINAR.
+      *------------*
+           CLOSE COLSL41 LISTADO
+           IF WS-PROCESO-ERROR
+              MOVE 100                      TO RETURN-CODE
+              DISPLAY ' '
+              DISPLAY ' '
+              DISPLAY '**********************************************'
+              DISPLAY '**********************************************'
+              DISPLAY '********                              ********'
+              DISPLAY '******** TERMINO ERRONEO DEL PROCESO  ********'
+              DISPLAY '********                              ********'
+              DISPLAY '**********************************************'
+              DISPLAY '**********************************************'
+           ELSE
+              DISPLAY ' '
+              DISPLAY ' '
+              DISPLAY '*****PROCESO TERMINO EN FORMA NORMAL*****'
+           END-IF.
+           GOBACK.

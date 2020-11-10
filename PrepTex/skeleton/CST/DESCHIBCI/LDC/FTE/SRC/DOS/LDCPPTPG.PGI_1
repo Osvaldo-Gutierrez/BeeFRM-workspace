@@ -1,0 +1,642 @@
+       IDENTIFICATION DIVISION.
+      *========================
+       PROGRAM-ID. LDCPPTPG.
+       AUTHOR. BEE.
+       DATE-WRITTEN.  3-APR-2002 09:19:21
+      *
+      * PROGRAMA TRADUCTOR DEUDORES
+      * VERSION DEMO
+      *
+       ENVIRONMENT DIVISION.
+       CONFIGURATION SECTION.
+      *----------------------
+       SPECIAL-NAMES.
+               DECIMAL-POINT IS COMMA.
+       DATA DIVISION.
+
+       WORKING-STORAGE SECTION.
+      *------------------------
+
+       01 WSS-COD-CREQ-BCI             PIC X(15).
+      *  COPY MTXWGR08.
+
+       COPY LDCMXWS1.
+       COPY LDCMXWS2.
+       COPY LDCMXWS3.
+       77  WSS-ULT-REG      VALUE ZEROES        PIC 9(02).
+
+       COPY DEUWXDEU.
+
+       COPY GNSWGSEG.
+       COPY GNSWGHOY.
+       COPY GNSWGTSK.
+      * COPY MTXWGSYS.
+       COPY GNSWVNUM.
+       COPY GNSWCNUM.
+       COPY GNSWGSYS.
+
+       COPY LDCBRTDI.
+       COPY MTXWGTDI.
+       COPY GNSWGTDI.
+
+       COPY LDCBRTDO.
+       COPY MTXWGTDO.
+       COPY GNSWGTDO.
+
+       COPY GNSWCFIO.
+       COPY GNSWVFIO.
+       COPY GNSWGQUE.
+       COPY GNSWGFRM.
+       COPY GNSWVSCR.
+      *
+       COPY MTXWG001.
+      *
+       01  WSS-VARI.
+           03 WSS-TOT-OCC-OPD     VALUE 01 PIC 9(05).
+           03 WSS-TOT-OCC-RCC     VALUE 02 PIC 9(05).
+           03 WSS-TOT-OCC-CAD     VALUE 03 PIC 9(05).
+
+           03 WSS-BKP-RCV     VALUE SPACES PIC X(5120).
+
+           03 WSS-NUM-LDC                  PIC 9(02).
+           03 TPG-IDX                      PIC 9(02).
+           03 WSS-LRG-OPD        VALUE 236 PIC 9(05).
+           03 WSS-LRG-RCC        VALUE 071 PIC 9(05).
+           03 WSS-LRG-CAD        VALUE 108 PIC 9(05).
+           03 WSS-LRG-VRF        VALUE  54 PIC 9(05).
+
+      *  Variables que indican la primera posicion que ocupa
+      *  cada panatalla (CAD,RCC,..) en la estructura TX
+      *  Estos largos se obtienen,
+      *  Largo-INI = largo entidad anterior +
+      *              largo entidad actual * (num ocur en TX)
+
+           03 WSS-INI-OPD     VALUE    1  PIC 9(05).
+           03 WSS-INI-RCC     VALUE  237  PIC 9(05).
+           03 WSS-INI-CAD     VALUE  379  PIC 9(05).
+           03 WSS-INI-VRF     VALUE  703  PIC 9(05).
+
+           03 WSS-ITX-DEST  VALUE ZEROES  PIC 9(05).
+           03 WSS-ITX-ORIG  VALUE ZEROES  PIC 9(05).
+           03 WSS-ITX-LARG  VALUE ZEROES  PIC 9(05).
+           03 WSS-ITX-INDX  VALUE ZEROES  PIC 9(05).
+           03 I                           PIC 9(02).
+           03 J                           PIC 9(02).
+           03 WSS-VAL-EDIT                PIC ZZ.ZZZ.ZZZ.ZZ9,9999.
+      *
+
+       LINKAGE SECTION.
+      *----------------
+       01  DFHCOMMAREA.
+           02 FILLER                                  PIC X(06).
+       COPY GNSLGFIO.
+
+       PROCEDURE DIVISION.
+      *===================
+       MAIN SECTION.
+       INI-MAIN.
+      * RECIBO IDENTIFICACION DEL PC QUE ENVIO EL MSG.
+           MOVE DFHCOMMAREA(1:EIBCALEN) TO SCR-NOM-TCPIP.
+
+           MOVE +9000   TO TDI-LTDI.
+           MOVE +9000   TO TDO-LTDO.
+           PERFORM GET-TSK-TERM.
+           MOVE 'ABCD'  TO TSK-TERM-ALF.
+
+           MOVE 'GNSPPMTD'   TO SYS-PROG.
+           MOVE 0            TO SYS-TCMA.
+           MOVE SPACES       TO SYS-CMMA.
+
+           MOVE SPACES           TO WSS-RCV.
+           MOVE SPACES           TO WSS-SND.
+           PERFORM GNS-ERR-QUE.
+
+           MOVE SCR-NOM-TCPIP    TO WSS-PTR-COD-TYPE.
+
+           PERFORM DEL-TSS.
+
+           PERFORM PROCESO-LEE-TS.
+
+           PERFORM PRO-REQ.
+           PERFORM SND-TS-MSSG.
+
+       FIN-MAIN.
+           EXEC CICS RETURN END-EXEC.
+       EXT-MAIN.
+           EXIT.
+
+
+       PRO-REQ SECTION.
+       INI-PRO-REQ.
+
+           MOVE WSS-RCV-CREQ TO WSS-COD-CREQ.
+
+      *     MOVE 'DS' TO QUE-COLA.
+      *     MOVE +100 TO QUE-LITM.
+      *     MOVE WSS-COD-CREQ TO QUE-ITEM.
+
+      *         EXEC CICS WRITEQ TS
+      *               QUEUE(QUE-COLA)
+      *               FROM(QUE-ITEM)
+      *               LENGTH(QUE-LITM)
+      *               AUXILIARY
+      *         END-EXEC
+
+      *         EXEC CICS READQ TS
+      *               QUEUE(QUE-COLA)
+      *               INTO(QUE-ITEM)
+      *               LENGTH(QUE-LITM)
+      *               ITEM(QUE-NITM)
+      *        END-EXEC
+
+           IF WSS-COD-CREQ = '003'
+              PERFORM PRO-REQ-003
+           ELSE
+           IF WSS-COD-CREQ = '005'
+              PERFORM PRO-REQ-005
+           ELSE
+           IF WSS-COD-CREQ = '008'
+              PERFORM PRO-REQ-008
+           ELSE
+      *         Error en Requerimiento.
+              MOVE SPACES TO WSS-SND
+              MOVE '1' TO WSS-SND-STAT
+              MOVE 'ERROR EN CODIGO DE REQUERIMIENTO' TO WSS-SND-MENS.
+       FIN-PRO-REQ.
+           EXIT.
+
+       PRO-REQ-003 SECTION.
+       INI-PRO-REQ-003.
+      * CLF,CON
+           IF PT-003-01-CLF-CAI-ICLF = SPACES AND
+              PT-003-01-CLF-IIC-ICLF = SPACES
+              PERFORM MOV-GNS-003-01
+              PERFORM MOV-PT-TX-003-01
+              PERFORM PUT-TDI
+              PERFORM LNK-MTD
+              PERFORM GET-TDO
+              PERFORM MOV-XT-TP-003-01
+              MOVE SPACES TO WSS-RCV
+              IF TDO-COD-STAT = '0'
+                 MOVE TP-003-01-CLF-CAI-ICLF TO
+                      PT-003-01-CLF-CAI-ICLF
+                 MOVE TP-003-01-CLF-IIC-ICLF TO
+                      PT-003-01-CLF-IIC-ICLF
+              ELSE
+                 GO TO FIN-PRO-REQ-003.
+
+           MOVE SPACES TO WSS-SND.
+           PERFORM MOV-GNS-003-01.
+           PERFORM MOV-PT-TX-003-01.
+           PERFORM MOV-GNS-003-02.
+           MOVE PT-003-01-CLF-CAI-ICLF TO
+                TX-003-02-CLF-CAI-ICLF.
+           MOVE PT-003-01-CLF-IIC-ICLF TO
+                TX-003-02-CLF-IIC-ICLF.
+           PERFORM PUT-TDI.
+           PERFORM LNK-MTD.
+           PERFORM GET-TDO.
+           PERFORM MOV-XT-TP-003-01.
+           PERFORM MOV-XT-TP-003-02.
+       FIN-PRO-REQ-003.
+           EXIT.
+
+
+       PRO-REQ-005 SECTION.
+       INI-PRO-REQ-005.
+      * LDC,ARC,ARG,CON
+           MOVE 1 TO TPG-I.
+           PERFORM MOV-GNS-005-01.
+           PERFORM MOV-PT-TX-005-01.
+
+           MOVE WSS-RCV TO WSS-BKP-RCV.
+
+           PERFORM PUT-TDI.
+           PERFORM LNK-MTD.
+           PERFORM GET-TDO.
+           PERFORM MOV-XT-TP-005-01.
+
+           IF TDO-COD-STAT = '0'
+              MOVE TP-005-01-LDC-NUM-ILDC(1) TO NUM-NUME
+              MOVE NUM-ZERO-S                TO NUM-ZERO
+              MOVE NUM-SGNO-N                TO NUM-SGNO
+              MOVE 2 TO NUM-NENT
+              MOVE 0 TO NUM-NDCM
+              PERFORM VAL-NUM
+              IF NUM-STAT-OKS
+                 MOVE NUM-NN9N  TO WSS-NUM-LDC IN WSS-VARI
+           ELSE
+              GO TO FIN-PRO-REQ-005.
+
+           MOVE SPACES TO WSS-SND.
+           MOVE WSS-BKP-RCV TO WSS-RCV.
+
+           MOVE 1 TO TPG-IDX.
+           PERFORM CARGA-TX VARYING TPG-IDX FROM 1 BY 1
+                UNTIL TPG-IDX > WSS-NUM-LDC IN WSS-VARI.
+
+           PERFORM PUT-TDI.
+           PERFORM LNK-MTD.
+           PERFORM GET-TDO.
+
+           MOVE 1 TO TPG-I.
+           PERFORM MOV-LDC VARYING TPG-I FROM 1 BY 1
+               UNTIL TPG-I > 6.
+       FIN-PRO-REQ-005.
+           EXIT.
+
+
+       CARGA-TX SECTION.
+       INI-CARGA-TX.
+           MOVE TPG-IDX TO TPG-I.
+
+           PERFORM MOV-GNS-005-01.
+           PERFORM MOV-PT-TX-005-01.
+           MOVE TPG-IDX TO
+                TX-005-01-LDC-NUM-ILDC(TPG-IDX).
+
+           PERFORM MOV-GNS-005-02.
+           MOVE PT-005-01-LDC-CAI-ICLF TO
+                TX-005-02-LDC-CAI-ICLF(TPG-IDX).
+           MOVE PT-005-01-LDC-IIC-ICLF TO
+                TX-005-02-LDC-IIC-ICLF(TPG-IDX).
+           MOVE TPG-IDX TO
+                TX-005-02-LDC-NUM-ILDC(TPG-IDX).
+
+           PERFORM MOV-GNS-005-03.
+           MOVE PT-005-01-LDC-CAI-ICLF TO
+                TX-005-03-LDC-CAI-ICLF(TPG-IDX).
+           MOVE PT-005-01-LDC-IIC-ICLF TO
+                TX-005-03-LDC-IIC-ICLF(TPG-IDX).
+           MOVE TPG-IDX TO
+                TX-005-03-LDC-NUM-ILDC(TPG-IDX).
+       FIN-CARGA-TX.
+           EXIT.
+
+
+       MOV-LDC SECTION.
+       INI-MOV-LDC.
+           PERFORM MOV-XT-TP-005-01.
+           PERFORM MOV-XT-TP-005-02.
+           PERFORM MOV-XT-TP-005-03.
+       FIN-MOV-LDC.
+           EXIT.
+
+       PRO-REQ-008 SECTION.
+       INI-PRO-REQ-008.
+      * CLC,CON
+           PERFORM MOV-GNS-008-01.
+           PERFORM MOV-PT-TX-008-01.
+           PERFORM PUT-TDI.
+           PERFORM LNK-MTD.
+           PERFORM GET-TDO.
+           PERFORM MOV-XT-TP-008-01.
+       FIN-PRO-REQ-008.
+           EXIT.
+
+       LNK-MTD SECTION.
+       INI-LNK-MTD.
+           MOVE 'GNSPPMTD'      TO SYS-PROG.
+      *     MOVE 0               TO SYS-TCMA.
+      *     MOVE SPACES          TO SYS-CMMA.
+           MOVE SYS-LINK        TO SYS-CMND.
+           PERFORM GNS-PRO-SYS.
+           MOVE SPACES TO WSS-SND.
+       FIN-LNK-MTD.
+           EXIT.
+
+      *
+       PUT-TDI SECTION.
+       INI-PUT-TDI.
+           MOVE 1                      TO TDI-NUM-RECO.
+           MOVE FIO-DEL                TO FIO-CMND.
+           PERFORM GNS-FIO-TDI.
+           MOVE 1                      TO TDI-NUM-RECO.
+           MOVE FIO-PUT                TO FIO-CMND.
+           MOVE WSS-SND TO TDI-GLS-DESC.
+           PERFORM GNS-FIO-TDI.
+       FIN-PUT-TDI.
+           EXIT.
+
+
+       PROCESO-LEE-TS SECTION.
+       INI-PROCESO-LEE-TS.
+           MOVE ZEROES   TO WSS-NITM-TSPT.
+           MOVE +1025    TO WSS-LEN-TSPT.
+           PERFORM GET-TSPT.
+       FIN-PROCESO-LEE-TS.
+           EXIT.
+
+       GET-TSPT SECTION.
+       INI-GET-TSPT.
+           ADD 1 TO WSS-NITM-TSPT.
+           MOVE SCR-NOM-TCPIP     TO WSS-PTR-COD-TYPE.
+           MOVE WSS-PTR-GLS-COLA  TO QUE-COLA.
+           MOVE WSS-NITM-TSPT     TO QUE-NITM.
+           MOVE WSS-LEN-TSPT      TO QUE-LITM.
+           MOVE QUE-GET           TO QUE-CMND.
+           PERFORM GNS-PRO-QUE.
+           IF QUE-STAT = QUE-STAT-OKS
+               MOVE QUE-ITEM      TO WSS-ITEM-TSPT
+               MOVE WSS-DATA-TSPT TO WSS-ELE-SEGR (WSS-NITM-TSPT)
+               GO TO INI-GET-TSPT.
+       FIN-GET-TSPT.
+           EXIT.
+
+       GET-TDO SECTION.
+       INI-GET-TDO.
+           MOVE 1                       TO TDO-NUM-RECO.
+           MOVE FIO-GET-KEY             TO FIO-CMND.
+           PERFORM GNS-FIO-TDO.
+           IF QUE-STAT = QUE-STAT-OKS
+               MOVE TDO-COD-STAT   TO WSS-SND-STAT
+               MOVE TDO-GLS-MENS   TO WSS-SND-MENS
+               MOVE TDO-DESC-OCC   TO WSS-RCV.
+       FIN-GET-TDO.
+           EXIT.
+
+       PRO-TO SECTION.
+       INI-PRO-TO.
+           MOVE 'TO' TO QUE-COLA.
+           MOVE QUE-DEL TO QUE-CMND.
+           PERFORM GNS-PRO-QUE.
+
+           MOVE 'TO' TO QUE-COLA.
+           MOVE +1025 TO QUE-LITM.
+           MOVE WSS-SND TO QUE-ITEM.
+           MOVE QUE-PUT TO QUE-CMND.
+           PERFORM GNS-PRO-QUE.
+       FIN-PRO-TO.
+           EXIT.
+
+       SND-TS-MSSG SECTION.
+       INI-SND-TS-MSSG.
+      * Borra TS si esta ya existe
+           PERFORM BUS-ULT-ELEM.
+           MOVE SEG-NOM-TSSEG  TO QUE-COLA.
+           MOVE 'TO'           TO QUE-COLA.
+           MOVE QUE-DEL        TO QUE-CMND.
+           PERFORM GNS-PRO-QUE.
+           MOVE ZEROES TO SEG-NUM-ITEM.
+       LUP-SND-TS-MSSG.
+           ADD 1 TO SEG-NUM-ITEM.
+           MOVE WSS-ELE-SEGS(SEG-NUM-ITEM) TO QUE-ITEM.
+           MOVE SEG-NOM-TSSEG              TO QUE-COLA.
+           MOVE 'TO'                       TO QUE-COLA.
+           MOVE SEG-LEN-TSSEG              TO QUE-LITM.
+           MOVE QUE-PUT                    TO QUE-CMND.
+           PERFORM GNS-PRO-QUE.
+           IF WSS-ULT-REG > SEG-NUM-ITEM
+              GO TO LUP-SND-TS-MSSG.
+       FIN-SND-TS-MSSG.
+           EXIT.
+      *
+       BUS-ULT-ELEM SECTION.
+       INI-BUS-ULT-ELEM.
+      * Borra TS si esta ya existe
+           MOVE SEG-MAX-ELEM TO SEG-NUM-ITEM.
+           MOVE 1 TO WSS-ULT-REG.
+       LUP-BUS-ULT-ELEM.
+           IF SEG-NUM-ITEM NOT > ZEROES
+              GO TO FIN-BUS-ULT-ELEM.
+           IF WSS-ELE-SEGS(SEG-NUM-ITEM) > SPACES
+              MOVE SEG-NUM-ITEM TO WSS-ULT-REG
+           ELSE
+              SUBTRACT 1 FROM SEG-NUM-ITEM
+              GO TO LUP-BUS-ULT-ELEM.
+       FIN-BUS-ULT-ELEM.
+           EXIT.
+
+       COPY GNSBVNUM.
+       COPY GNSBPNUM.
+       COPY GNSBGHOY.
+       COPY GNSBHSYS.
+       COPY GNSBGSYS.
+       COPY GNSBIABT.
+       COPY LDCBFTDI.
+       COPY LDCBFTDO.
+       COPY GNSBGTSK.
+
+       COPY LDCMXPD1.
+       COPY LDCMXPD2.
+       COPY LDCMXPD3.
+
+       COPY GNSBGEND.
+
+
+      *Modulo Generico Manejo de DEUas
+       GNS-CHK-QUEU SECTION.
+       INI-GNS-CHK-QUEU.
+           MOVE 1 TO QUE-NITM.
+           MOVE QUE-GET TO QUE-CMND.
+           PERFORM GNS-PRO-QUE.
+       FIN-GNS-CHK-QUEU.
+           EXIT.
+
+       GNS-QUE-EOQ SECTION.
+       INI-GNS-QUE-EOQ.
+           MOVE QUE-STAT-EOQ TO QUE-STAT.
+           GO TO FIN-GNS-PRO-QUE.
+       FIN-GNS-QUE-EOQ.
+           EXIT.
+
+       GNS-QUE-NEX SECTION.
+       INI-GNS-QUE-NEX.
+           MOVE QUE-STAT-NEX TO QUE-STAT.
+           GO TO FIN-GNS-PRO-QUE.
+       FIN-GNS-QUE-NEX.
+           EXIT.
+
+      **************************************************************
+       GNS-ERR-QUE SECTION.
+       INI-GNS-ERR-QUE.
+           EXEC CICS HANDLE CONDITION
+                     QIDERR (GNS-QUE-NEX)
+                     ITEMERR(GNS-QUE-EOQ)
+                     LENGERR(GNS-QUE-NEX)
+           END-EXEC.
+       FIN-GNS-ERR-QUE.
+           EXIT.
+
+       GNS-PRO-QUE SECTION.
+       INI-GNS-PRO-QUE.
+           MOVE QUE-STAT-OKS TO QUE-STAT.
+           IF QUE-CMND = QUE-PUT
+               GO TO GNS-PUT-QUE
+           ELSE
+           IF QUE-CMND = QUE-GET
+               GO TO GNS-GET-QUE
+           ELSE
+           IF QUE-CMND = QUE-MOD
+               GO TO GNS-MOD-QUE
+           ELSE
+           IF QUE-CMND = QUE-DEL
+               GO TO GNS-DEL-QUE.
+           MOVE 'Comando invalido :' TO QUE-MEN1.
+           MOVE QUE-CMND             TO QUE-MEN2.
+           EXEC CICS XCTL
+                     PROGRAM('GNSPPABT')
+                     COMMAREA(QUE-MENS)
+                     LENGTH(+79)
+           END-EXEC.
+
+       GNS-PUT-QUE.
+           IF WSS-IND-QUE = '   '
+               EXEC CICS WRITEQ TS
+                     QUEUE(QUE-COLA)
+                     FROM(QUE-ITEM)
+                     LENGTH(QUE-LITM)
+                     AUXILIARY
+              END-EXEC
+           ELSE
+           IF WSS-IND-QUE = 'TDI'
+               EXEC CICS WRITEQ TS
+                     QUEUE(QUE-COLA)
+                     FROM(TDI-GLS-DESC-1)
+                     LENGTH(QUE-LITM)
+                     AUXILIARY
+               END-EXEC
+               EXEC CICS WRITEQ TS
+                     QUEUE(QUE-COLA)
+                     FROM(TDI-GLS-DESC-2)
+                     LENGTH(QUE-LITM)
+                     AUXILIARY
+              END-EXEC
+           ELSE
+           IF WSS-IND-QUE = 'TDO'
+               EXEC CICS WRITEQ TS
+                     QUEUE(QUE-COLA)
+                     FROM(TDO-GLS-DESC-1)
+                     LENGTH(QUE-LITM)
+                     AUXILIARY
+               END-EXEC
+               EXEC CICS WRITEQ TS
+                     QUEUE(QUE-COLA)
+                     FROM(TDO-GLS-DESC-2)
+                     LENGTH(QUE-LITM)
+                     AUXILIARY
+              END-EXEC.
+       FIN-GNS-PUT-QUE.
+           GO TO FIN-GNS-PRO-QUE.
+
+       GNS-GET-QUE.
+           IF WSS-IND-QUE = '   '
+               EXEC CICS READQ TS
+                     QUEUE(QUE-COLA)
+                     INTO(QUE-ITEM)
+                     LENGTH(QUE-LITM)
+                     ITEM(QUE-NITM)
+              END-EXEC
+           ELSE
+           IF WSS-IND-QUE = 'TDI'
+               EXEC CICS READQ TS
+                     QUEUE(QUE-COLA)
+                     INTO(TDI-GLS-DESC-1)
+                     LENGTH(QUE-LITM)
+                     ITEM(QUE-NITM)
+               END-EXEC
+               ADD 1  TO  QUE-NITM
+               EXEC CICS READQ TS
+                     QUEUE(QUE-COLA)
+                     INTO(TDI-GLS-DESC-2)
+                     LENGTH(QUE-LITM)
+                     ITEM(QUE-NITM)
+              END-EXEC
+           ELSE
+           IF WSS-IND-QUE = 'TDO'
+               EXEC CICS READQ TS
+                     QUEUE(QUE-COLA)
+                     INTO(TDO-GLS-DESC-1)
+                     LENGTH(QUE-LITM)
+                     ITEM(QUE-NITM)
+               END-EXEC
+               ADD 1   TO  QUE-NITM
+               EXEC CICS READQ TS
+                     QUEUE(QUE-COLA)
+                     INTO(TDO-GLS-DESC-2)
+                     LENGTH(QUE-LITM)
+                     ITEM(QUE-NITM)
+              END-EXEC.
+       FIN-GNS-GET-QUE.
+           GO TO FIN-GNS-PRO-QUE.
+
+       GNS-MOD-QUE.
+           IF WSS-IND-QUE = SPACES
+               EXEC CICS WRITEQ TS
+                     QUEUE(QUE-COLA)
+                     FROM(QUE-ITEM)
+                     LENGTH(QUE-LITM)
+                     ITEM(QUE-NITM)
+                     REWRITE
+               END-EXEC
+           ELSE
+           IF WSS-IND-QUE = 'TDI'
+               EXEC CICS WRITEQ TS
+                     QUEUE(QUE-COLA)
+                     FROM(TDI-GLS-DESC)
+                     LENGTH(QUE-LITM)
+                     ITEM(QUE-NITM)
+                     REWRITE
+               END-EXEC
+           ELSE
+           IF WSS-IND-QUE = 'TDO'
+               EXEC CICS WRITEQ TS
+                     QUEUE(QUE-COLA)
+                     FROM(TDO-GLS-DESC)
+                     LENGTH(QUE-LITM)
+                     ITEM(QUE-NITM)
+                     REWRITE
+               END-EXEC.
+       FIN-GNS-MOD-QUE.
+           GO TO FIN-GNS-PRO-QUE.
+
+       GNS-DEL-QUE.
+           EXEC CICS DELETEQ TS
+                     QUEUE(QUE-COLA)
+           END-EXEC.
+       FIN-GNS-DEL-QUE.
+           GO TO FIN-GNS-PRO-QUE.
+
+       FIN-GNS-PRO-QUE.
+           EXIT.
+
+       PUT-CHR-TO-CHR SECTION.
+       INI-PUT-CHR-TO-CHR.
+           MOVE TX-TAB-CHR(WSS-ITX-ORIG)  TO
+                TX-TAB-CHR(WSS-ITX-DEST).
+           MOVE SPACES TO TX-TAB-CHR(WSS-ITX-ORIG).
+           ADD 1 TO WSS-ITX-ORIG.
+           ADD 1 TO WSS-ITX-DEST.
+       FIN-PUT-CHR-TO-CHR.
+           EXIT.
+
+       DEL-TSS SECTION.
+       INI-DEL-TSS.
+            MOVE 'PL01' TO QUE-TERM.
+            MOVE TSK-TERM-ALF TO QUE-TYPE.
+            MOVE QUE-DEL TO QUE-CMND.
+            PERFORM GNS-PRO-QUE.
+
+            MOVE 'PL02' TO QUE-TERM.
+            MOVE TSK-TERM-ALF TO QUE-TYPE.
+            MOVE QUE-DEL TO QUE-CMND.
+            PERFORM GNS-PRO-QUE.
+
+            MOVE 'TSI ' TO QUE-TYPE.
+            MOVE TSK-TERM-ALF TO QUE-TERM.
+            MOVE QUE-DEL TO QUE-CMND.
+            PERFORM GNS-PRO-QUE.
+
+            MOVE 'TSO ' TO QUE-TYPE.
+            MOVE TSK-TERM-ALF TO QUE-TERM.
+            MOVE QUE-DEL TO QUE-CMND.
+            PERFORM GNS-PRO-QUE.
+
+            MOVE 'SIS '       TO QUE-TYPE.
+            MOVE TSK-TERM-ALF TO QUE-TERM.
+            MOVE QUE-DEL      TO QUE-CMND.
+            PERFORM GNS-PRO-QUE.
+       FIN-DEL-TSS.
+           EXIT.
+
+

@@ -1,0 +1,1055 @@
+000000 IDENTIFICATION DIVISION.
+000000 PROGRAM-ID. DAPPGEST.
+000000 AUTHOR.     P CONCHA L.
+000000*REMARKS.
+      ******************************************************************
+      *  INTERSOFT                                                     *
+      *  MIGRACION A COBOL OS/390                                      *
+      *  FECHA: 30 DE MARZO DE 1998                                    *
+      ******************************************************************
+000000******************************************************************
+000000*  SISTEMA    : DEPOSITOS A PLAZO
+000000*  SUB-SISTEMA: INFORMES FINANZAS
+000000*  ANALISTA   : C PIZARRO Z.
+000000*  OBJETIVO :
+000000*           - GENERAR ARCHIVO ACUMULATIVO CON DATOS ESTADISTICOS
+000000*             POR FECHA, OFICINA, MONEDA Y PLAZO
+000000*             PARA INFORMES DE FINANZAS.
+000000*           - EFECTUAR AUTOMATICAMENTE LA MANTENCION DEL ARCHIVO
+000000*             (CADA PROCESO DE FIN DE MES SE ELIMINAN TODOS LOS
+000000*             REGISTROS DE SALDOS DIARIOS DE UN ANO ATRAS.
+000000*  ARCHIVOS :
+000000*  INP      :
+000000*             DAPDOPD ARCHIVO IMAGEN DE TABLA OPD + VEN (SAM)
+000000*  OUT      :
+000000*             DAPDEST  ARCHIVO DE DATOS.
+000000*  WRK      :
+000000*             FSORT    ARCHIVO PARA ORDENAMIENTO
+000000*
+000000*  FECHA    : NOV/93.
+000000*
+000000*
+000000******************************************************************
+000000* MANTENCION:  P CONCHA L    13/04/94
+000000* - SE CORRIGE PROBLEMA EN CALCULO DE PLAZO EN DIAS PARA LOS
+000000*   DOCUMENTOS EN QUE EL PLAZO NO VIENE EXPRESADO EN DIAS.
+000000* - SE ACTIVA PROCESO AUTOMATICO DE ELIMINACION DE INFORMACION.
+000000*   LA INFORMACION PERMANENTE ES LA REFERIDA A LOS ULTIMOS DOCE
+000000*   MESES.
+000000******************************************************************
+000000* MANTENCION:  P CONCHA L       12/95
+000000* - SE INCORPORA EN EL PROCESO DE SELECCION LAS RENOVACIONES DE
+000000*   DOCUMENTOS EFECTUADAS EL DIAS NO HABILES INMEDIATAMENTE
+000000*   ANTERIORES.
+000000*   EJ.: EL LUNES CONSIDERA LAS RENOVACIONES DE SABADO Y DOMINGO
+000000*        ADEMAS DE LAS DEL LUNES.
+000000******************************************************************
+000000     EJECT
+000000 ENVIRONMENT DIVISION.
+000000 CONFIGURATION SECTION.
+000000 SPECIAL-NAMES.
+000000     C01 IS CANAL-1
+000000     DECIMAL-POINT IS COMMA.
+000000*
+000000 INPUT-OUTPUT SECTION.
+000000 FILE-CONTROL.
+000000     SELECT DAPDOPD  ASSIGN UT-S-DAPDOPD.
+000000     SELECT FSORT    ASSIGN UT-S-SORTWK1.
+000000     SELECT DAPDEST  ASSIGN TO   DAPDEST
+000000        ORGANIZATION IS INDEXED
+000000        ACCESS       IS DYNAMIC
+000000        RECORD KEY   IS DAPDEST-KEY-IEST
+000000        FILE STATUS  IS FS-DAPDEST.
+000000     EJECT
+000000 DATA DIVISION.
+000000*
+000000 FILE SECTION.
+000000*
+000000 FD  DAPDOPD
+000000     RECORDING MODE IS F
+000000     LABEL RECORD STANDARD
+000000     BLOCK CONTAINS    0 RECORDS.
+000000 01  REG-DAPDOPD.
+000000*    COPYDD DAP-R-OPD.DAP-E-OPD00(PROD),02,D
+      *                             EQUIVALENTE AL REGISTRO OPD
+           02  DAP-E-OPD00.
+      *                             OPERACION DEPOSITO A PLAZO
+               04  OPD.
+      *                             FILLER COMPATIBILIDAD VSAM/MVS
+                   06  OPD-GLS-FLAG PICTURE X(1).
+      *                             IDENTIFICACION OPERACION DAP
+                   06  OPD-KEY-IOPD.
+      *                             COD. INT. COMP. OPERACION DAP
+                       08  OPD-CIC-IOPD.
+      *                             CENTRO ASIGNACION IDENTIFICACION
+                       10  OPD-CAI-IOPD
+                                    PICTURE X(4).
+      *                             IDENT. INTERNA COMPUTACIONAL
+                       10  OPD-IIC-IOPD
+                                    PICTURE X(8).
+      *                             TIME STAMP TRANSACCION
+                   06  OPD-STP-ITRN.
+      *                             FECHA TRANSACCION
+                       08  OPD-FEC-FTRN
+                                    PICTURE 9(8).
+      *                             HORA TRANSACCION
+                       08  OPD-HRA-HRTR
+                                    PICTURE 9(6).
+      *                             INDICADOR TIPO ACCION
+                   06  OPD-COD-TACC PICTURE X(1).
+      *                             INDICADOR STATUS
+                   06  OPD-COD-STAT PICTURE X(1).
+      *                             CODIGO ORIGEN TRANSACCION
+                   06  OPD-COD-OTRN PICTURE X(4).
+      *                             AUTOR TRANSACCION
+                   06  OPD-COD-ATRN PICTURE X(12).
+      *                             VALOR DE CAMBIO OPERACION DAP
+                   06  OPD-COD-VCAM.
+      *                             MISCELANEO TIPO VALOR
+                       08  OPD-MSC-TVAL
+                                    PICTURE X(1).
+      *                             CODIGO VALOR
+                       08  OPD-COD-CVAL
+                                    PICTURE X(3).
+      *                             CODIGO TIPO CAMBIO
+                       08  OPD-COD-TCAM
+                                    PICTURE X(2).
+      *                             CODIGO CLASE OPERACION DAP
+                   06  OPD-COD-COPD.
+      *                             CODIGO TIPO OPERACION
+                       08  OPD-COD-TOPD
+                                    PICTURE X(3).
+      *                             CODIGO AUXILIAR OPERACION
+                       08  OPD-COD-AOPD
+                                    PICTURE X(3).
+      *                             CODIGO OFICINA OPERACION DAP
+                   06  OPD-COD-OFIC PICTURE X(3).
+      *                             RESPONSABLE MANTENCION OPERACION DAP
+                   06  OPD-COD-EJEC PICTURE X(12).
+      *                             COD. INT. COMP. SERIAL CDP
+                   06  OPD-CIC-ISER.
+      *                             CENTRO ASIGNACION IDENTIFICACION
+                       08  OPD-CAI-ISER
+                                    PICTURE X(4).
+      *                             IDENT. INTERNA COMPUTACIONAL
+                       08  OPD-IIC-ISER
+                                    PICTURE X(8).
+      *                             FECHA CAPTACION REAL
+                   06  OPD-FEC-FREA.
+                       08  OPD-NUM-SREA
+                                    PICTURE 9(2).
+                       08  OPD-NUM-AREA
+                                    PICTURE 9(2).
+                       08  OPD-NUM-MREA
+                                    PICTURE 9(2).
+                       08  OPD-NUM-DREA
+                                    PICTURE 9(2).
+      *                             FECHA EMISION CONTABLE
+                   06  OPD-FEC-FCTB.
+                       08  OPD-NUM-SCTB
+                                    PICTURE 9(2).
+                       08  OPD-NUM-ACTB
+                                    PICTURE 9(2).
+                       08  OPD-NUM-MCTB
+                                    PICTURE 9(2).
+                       08  OPD-NUM-DCTB
+                                    PICTURE 9(2).
+      *                             FECHA INGRESO COMPUTACIONAL
+                   06  OPD-FEC-FCMP.
+                       08  OPD-NUM-SCMP
+                                    PICTURE 9(2).
+                       08  OPD-NUM-ACMP
+                                    PICTURE 9(2).
+                       08  OPD-NUM-MCMP
+                                    PICTURE 9(2).
+                       08  OPD-NUM-DCMP
+                                    PICTURE 9(2).
+      *                             MONTO CAPTACION
+                   06  OPD-VAL-CAPT PICTURE S9(11)V9(4)
+                                        COMPUTATIONAL-3.
+      *                             SALDO VALOR CAPTACION
+                   06  OPD-VAL-SCAP PICTURE S9(11)V9(4)
+                                        COMPUTATIONAL-3.
+      *                             MONTO A PAGAR POR CAJA
+                   06  OPD-VAL-CAJA PICTURE S9(11)V9(4)
+                                        COMPUTATIONAL-3.
+      *                             ANALISIS FERIADOS (S/N)
+                   06  OPD-COD-AFER PICTURE X(1).
+      *                             CONDICION GARANTIA
+                   06  OPD-COD-GARA PICTURE X(1).
+      *                             CODIGO UBICACION FISICA CDP
+                   06  OPD-COD-UBFD.
+                       08  OPD-COD-IUBF
+                                    PICTURE X(3).
+                       08  OPD-COD-CUBF
+                                    PICTURE X(3).
+                       08  OPD-COD-SUBF
+                                    PICTURE X(3).
+      *                             NUMERO PROXIMO VENCIMIENTO
+                   06  OPD-NUM-IVEN PICTURE 9(3).
+      *                             FECHA PROXIMO VENCIMIENTO
+                   06  OPD-FEC-FPVC.
+                       08  OPD-NUM-SPVC
+                                    PICTURE 9(2).
+                       08  OPD-NUM-APVC
+                                    PICTURE 9(2).
+                       08  OPD-NUM-MPVC
+                                    PICTURE 9(2).
+                       08  OPD-NUM-DPVC
+                                    PICTURE 9(2).
+      *                             CODIGO TIPO TASA INTERES
+                   06  OPD-COD-TINT.
+      *                             CODIGO TIPO TASA
+                       08  OPD-COD-TIPT.
+      *                             BASE CALCULO TASA INTERES
+                       10  OPD-COD-BCTI
+                                    PICTURE X(1).
+      *                             PERIODO BASE TASA INTERES
+                       10  OPD-COD-PBTI
+                                    PICTURE X(1).
+      *                             MODALIDAD CALCULO TASA INTERES
+                       10  OPD-COD-MCTI.
+      *                             BAJO PERIODO BASE TASA
+                       12  OPD-COD-BPBT
+                                    PICTURE X(1).
+      *                             SOBRE PERIODO BASE TASA
+                       12  OPD-COD-SPBT
+                                    PICTURE X(1).
+      *                             CODIGO VALOR TASA INTERES
+                       08  OPD-COD-CVTI
+                                    PICTURE X(3).
+      *                             TIPO FECHA PERIODO REPACTO
+                       08  OPD-COD-TFPR
+                                    PICTURE X(1).
+      *                             NUMERO PERIODO REPACTO
+                       08  OPD-NUM-PREP
+                                    PICTURE 9(3).
+      *                             UNIDAD TIEMPO OPD-NUM-PREP
+                       08  OPD-MSC-PREP
+                                    PICTURE X(1).
+      *                             VALOR SPREAD
+                   06  OPD-SGV-SPRD PICTURE S9(5)V9(4)
+                                        COMPUTATIONAL.
+      *                             VALOR TASA
+                   06  OPD-SGV-TINT PICTURE S9(5)V9(4)
+                                        COMPUTATIONAL.
+      *                             RETENCION DOCUMENTO
+                   06  OPD-NUM-RETD PICTURE 9(3).
+      *                             UNIDAD TIEMPO OPD-NUM-RETD
+                   06  OPD-IND-RETD PICTURE X(1).
+      *                             IND DEVOLUCION DINERO DOC S/FONDOS
+                   06  OPD-COD-DEVL PICTURE X(1).
+      *                             INDICADOR CUSTODIA
+                   06  OPD-COD-CUST PICTURE X(1).
+      *                             CONDICION GARANTIA ( EN POD )
+                   06  OPD-COD-GPOD PICTURE X(1).
+      *                             SEPARACION ENTRE VENCIMIENTOS
+                   06  OPD-NUM-SEVE PICTURE 9(4)
+                                        COMPUTATIONAL.
+      *                             UNIDAD DE TIEMPO OPD-NUM-SEVE
+                   06  OPD-IND-SEVE PICTURE X(1).
+      *                             DURACION VENCIMIENTOS
+                   06  OPD-NUM-DURV PICTURE 9(4)
+                                        COMPUTATIONAL.
+      *                             UNIDAD DE TIEMPO OPD-NUM-DURV
+                   06  OPD-IND-DURV PICTURE X(1).
+      *                             NUMERO VENCIMIENTOS NO LIQUIDADOS
+                   06  OPD-NUM-VNLQ PICTURE 9(3).
+      *                             NUMERO VENCIMIENTOS LIQUIDADOS
+                   06  OPD-NUM-VSLQ PICTURE 9(3).
+      *                             MODALIDAD DE RETIRO
+                   06  OPD-COD-MORE PICTURE X(2).
+      *                             MONTO O PORCENTAJE DEL RETIRO
+                   06  OPD-SGV-MPRE PICTURE S9(11)V9(4)
+                                        COMPUTATIONAL-3.
+      *                             INDICADOR ORDEN NO PAGO
+                   06  OPD-COD-IONP PICTURE X(1).
+      *                             SITUACION CONTABLE
+                   06  OPD-COD-SCTB PICTURE X(3).
+      *                             INDICADOR RENOVABILIDAD
+                   06  OPD-COD-RENO PICTURE X(1).
+      *                             INDICADOR ENDOSABILIDAD
+                   06  OPD-COD-ENDO PICTURE X(1).
+      *                             VALOR REAJUSTES DEVENGADOS
+                   06  OPD-VAL-READ PICTURE S9(11)V9(4)
+                                        COMPUTATIONAL-3.
+      *                             VALOR INTERESES DEVENGADOS
+                   06  OPD-VAL-INTD PICTURE S9(11)V9(4)
+                                        COMPUTATIONAL-3.
+      *                             USUARIO QUE AUTORIZA TASA ESPECIAL
+                   06  OPD-COD-EATE PICTURE X(12).
+      *                             TASA PERIODO
+                   06  OPD-VAL-SINT PICTURE S9(11)V9(4)
+                                        COMPUTATIONAL-3.
+      *                             FECHA DEVENGO ( ULTIMO PAGO TOTAL IN
+                   06  OPD-FEC-FDEV.
+                       08  OPD-NUM-SDEV
+                                    PICTURE 9(2).
+                       08  OPD-NUM-ADEV
+                                    PICTURE 9(2).
+                       08  OPD-NUM-MDEV
+                                    PICTURE 9(2).
+                       08  OPD-NUM-DDEV
+                                    PICTURE 9(2).
+      *                             FECHA TERMINO DE LA OPERACION
+                   06  OPD-FEC-FTER.
+                       08  OPD-NUM-STER
+                                    PICTURE 9(2).
+                       08  OPD-NUM-ATER
+                                    PICTURE 9(2).
+                       08  OPD-NUM-MTER
+                                    PICTURE 9(2).
+                       08  OPD-NUM-DTER
+                                    PICTURE 9(2).
+      *                             TIPO CERTIF DAP
+                   06  OPD-COD-TCDP PICTURE X(3).
+      *                             CODIGO RESCATE
+                   06  OPD-COD-RESC PICTURE X(1).
+      *                             CODIGO PLAZO PAGO RESCATE
+                   06  OPD-COD-PLPA PICTURE X(1).
+      *                             PLAZO RESCATE
+                   06  OPD-NUM-PLRE PICTURE 9(3).
+      *                             UNIDAD TIEMPO PLAZO RESCATE
+                   06  OPD-IND-PLRE PICTURE X(1).
+      *                             PERIODO NEGOCIACION TASA ESPECIAL
+                   06  OPD-NUM-PNTE PICTURE 9(3).
+      *                             UNIDAD TIEMPO OPD-NUM-PNTE
+                   06  OPD-IND-PNTE PICTURE X(1).
+      *                             PLAZO CONTABLE
+                   06  OPD-COD-PLZO PICTURE X(2).
+      *                             RESERVADO SAFE
+                   06  OPD-GLS-SAFE PICTURE X(18).
+      *                             FECHA DE CAPTACION ORIGINAL
+                   06  OPD-FEC-FPCO.
+                       08  OPD-NUM-SPCO
+                                    PICTURE 9(2).
+                       08  OPD-NUM-APCO
+                                    PICTURE 9(2).
+                       08  OPD-NUM-MPCO
+                                    PICTURE 9(2).
+                       08  OPD-NUM-DPCO
+                                    PICTURE 9(2).
+      *                             PERIODO PRIMER VENCIMIENTO
+                   06  OPD-NUM-PVEN PICTURE 9(5)
+                                        COMPUTATIONAL-3.
+      *                             UNIDAD TIEMPO OPD-NUM-PVEN
+                   06  OPD-IND-PVEN PICTURE X(1).
+      *                             NUMERO DE OPERACION QUE GENERO RENOV
+                   06  OPD-CIC-GREN.
+                       08  OPD-CAI-GREN
+                                    PICTURE X(4).
+                       08  OPD-IIC-GREN
+                                    PICTURE X(8).
+      *                             INDICADOR ABONO AUTOMATICO A CUENTA
+                   06  OPD-COD-AACC PICTURE X(1).
+      *                             NUMERO DE OPERACION ORIGINAL
+                   06  OPD-CIC-ORIG.
+                       08  OPD-CAI-ORIG
+                                    PICTURE X(4).
+                       08  OPD-IIC-ORIG
+                                    PICTURE X(8).
+      *                             MULTIPLES CLIENTES ?
+                   06  OPD-IND-MCLI PICTURE X(1).
+      *                             INGRESO NO LINEA ? ( S = ODB, N = OD
+                   06  OPD-IND-IDIF PICTURE X(1).
+      *                             MONTO CAPTACION EN PESOS
+                   06  OPD-VAL-IPES PICTURE S9(11)V9(4)
+                                        COMPUTATIONAL-3.
+      *                             INDICADOR CUSTODIA ORIGINAL
+                   06  OPD-COD-CUSO PICTURE X(1).
+      *                             GLOSA DISPONIBLE
+                   06  OPD-GLS-DISP PICTURE X(9).
+000000*    COPYDD DAP-R-VEN.DAP-E-VEN00(PROD),02,D
+      *                             EQUIVALENTE AL REGISTRO VEN
+           02  DAP-E-VEN00.
+      *                             VENCIMIENTOS DAP
+               04  VEN.
+      *                             FILLER COMPATIBILIDAD VSAM/MVS
+                   06  VEN-GLS-FLAG PICTURE X(1).
+      *                             CLAVE PRIMARIA REGISTRO
+                   06  VEN-KEY-IVEN.
+      *                             COD. INT. COMP. OPERAC. DAP
+                       08  VEN-CIC-IOPD.
+      *                             CENTRO ASIGNAC. IDENTIFICACION
+                       10  VEN-CAI-IOPD
+                                    PICTURE X(4).
+      *                             IDENT. INTERNA COMPUTACIONAL
+                       10  VEN-IIC-IOPD
+                                    PICTURE X(8).
+      *                             NUM. IDENTIFICACION VENCIMIENTO
+                       08  VEN-NUM-IVEN
+                                    PICTURE 9(3).
+      *                             TIME STAMP TRANSACCION
+                   06  VEN-STP-ITRN.
+      *                             FECHA TRANSACCION
+                       08  VEN-FEC-FTRN
+                                    PICTURE 9(8).
+      *                             HORA TRANSACCION
+                       08  VEN-HRA-HRTR
+                                    PICTURE 9(6).
+      *                             INDICADOR TIPO ACCION
+                   06  VEN-COD-TACC PICTURE X(1).
+      *                             INDICADOR STATUS
+                   06  VEN-COD-STAT PICTURE X(1).
+      *                             CODIGO ORIGEN TRANSACCION
+                   06  VEN-COD-OTRN PICTURE X(4).
+      *                             AUTOR TRANSACCION
+                   06  VEN-COD-ATRN PICTURE X(12).
+      *                             FECHA VENCIMIENTO
+                   06  VEN-FEC-FVEN.
+                       08  VEN-NUM-SVEN
+                                    PICTURE 9(2).
+                       08  VEN-NUM-AVEN
+                                    PICTURE 9(2).
+                       08  VEN-NUM-MVEN
+                                    PICTURE 9(2).
+                       08  VEN-NUM-DVEN
+                                    PICTURE 9(2).
+      *                             VALOR CAPITAL VENCIMIENTO ORIGINAL
+                   06  VEN-VAL-CAPI PICTURE S9(11)V9(4)
+                                        COMPUTATIONAL-3.
+      *                             SALDO VALOR CAPITAL VCMTO.
+                   06  VEN-VAL-SCAP PICTURE S9(11)V9(4)
+                                        COMPUTATIONAL-3.
+      *                             INT DEVENGADOS NO LIQUIDADOS
+                   06  VEN-VAL-IDNI PICTURE S9(11)V9(4)
+                                        COMPUTATIONAL-3.
+      *                             VALOR FINAL VENCIMIENTO
+                   06  VEN-VAL-FINA PICTURE S9(11)V9(4)
+                                        COMPUTATIONAL-3.
+      *                             SALDO VALOR FINAL VCMTO.
+                   06  VEN-VAL-SFIN PICTURE S9(11)V9(4)
+                                        COMPUTATIONAL-3.
+      *                             SITUACION CONTABLE
+                   06  VEN-COD-SCTB PICTURE X(3).
+      *                             GLOSA DISPONIBLE
+                   06  VEN-GLS-DISP PICTURE X(20).
+000000*
+      *
+       FD  DAPDEST
+      ******************************************************************
+      * ARCHIVO: DAPDEST    TIPO: VSAM KSDS   REGISTRO: FIJO
+      *
+      * ARCHIVO DE DATOS ESTADISTICOS DEPOSITOS A PLAZO
+      *
+      * LARGO REGISTRO             130 BYTES
+      ******************************************************************
+           LABEL RECORD STANDARD.
+       01  REG-DAPDEST.
+           05 DAPDEST-KEY-IEST.
+              10 DAPDEST-FEC-FPRO.
+                 15 DAPDEST-NUM-SPRO     PIC 9(02).
+                 15 DAPDEST-NUM-APRO     PIC 9(02).
+                 15 DAPDEST-NUM-MPRO     PIC 9(02).
+                 15 DAPDEST-NUM-DPRO     PIC 9(02).
+              10 DAPDEST-COD-OFIC        PIC X(03).
+              10 DAPDEST-COD-VCAM        PIC X(06).
+              10 DAPDEST-NUM-DURV        PIC 9(05).
+           05 DAPDEST-OPE-SALD-TOTA      PIC S9(13)V9(04) COMP-3.
+           05 DAPDEST-OPE-NUME-TOTA      PIC S9(11)       COMP-3.
+           05 DAPDEST-OPE-SALD-TPLA      PIC S9(13)V9(04) COMP-3.
+           05 DAPDEST-OPE-NUME-TPLA      PIC S9(11)       COMP-3.
+           05 DAPDEST-OPE-SALD-TAUT      PIC S9(13)V9(04) COMP-3.
+           05 DAPDEST-OPE-NUME-TAUT      PIC S9(11)       COMP-3.
+           05 DAPDEST-OPE-TASA-MINI      PIC S9(05)V9(04) COMP-3.
+           05 DAPDEST-OPE-TASA-MAXI      PIC S9(05)V9(04) COMP-3.
+           05 DAPDEST-OPE-SUMA-MIXTI     PIC S9(13)V9(04) COMP-3.
+           05 DAPDEST-OPE-PROM-PLZO      PIC S9(05)       COMP-3.
+           05 DAPDEST-OPE-SUMA-MIXPI     PIC S9(13)V9(04) COMP-3.
+           05 FILLER                     PIC X(32).
+      *
+000000 SD  FSORT.
+000000 01  REG-FSORT.
+000000     05 FSORT-COD-OFIC                PIC X(03).
+000000     05 FSORT-COD-VCAM                PIC X(06).
+000000     05 FSORT-NUM-DURV                PIC S9(05)       COMP-3.
+000000     05 FSORT-VAL-CAPT                PIC S9(13)V9(04) COMP-3.
+000000     05 FSORT-COD-EATE                PIC X(12).
+000000     05 FSORT-SGV-TINT                PIC S9(05)V9(04) COMP-3.
+000000     05 FSORT-VAL-SINT                PIC S9(05)V9(04) COMP-3.
+000000     05 FSORT-PLZ-DIAS                PIC S9(05)       COMP-3.
+000000*
+000000     EJECT
+000000 WORKING-STORAGE SECTION.
+000000*
+000000     COPY BIBBAUD1.
+000000*
+000000 01  W-CONTADORES.
+000000     05 CNT-DAPDOPD-L        PIC 9(08) VALUE 0.
+000000     05 CNT-DAPDOPD-S        PIC 9(08) VALUE 0.
+000000     05 CNT-FSORT-G          PIC 9(08) VALUE 0.
+000000     05 CNT-FSORT-L          PIC 9(08) VALUE 0.
+000000     05 CNT-DAPDEST-G        PIC 9(08) VALUE 0.
+000000     05 CNT-DAPDEST-L        PIC 9(08) VALUE 0.
+000000     05 CNT-DAPDEST-D        PIC 9(08) VALUE 0.
+000000*
+000000 01  F-FILE-STATUS.
+000000     05 FS-DAPDOPD           PIC 9(01) VALUE 0.
+000000     05 FS-FSORT             PIC 9(01) VALUE 0.
+000000     05 FS-DAPDEST           PIC 9(02) VALUE 0.
+000000*
+000000 01  W-VARIABLES.
+000000     05 SW-CANCEL            PIC 9(01) VALUE 0.
+000000     05 SW-FIN-MES           PIC 9(01) VALUE 0.
+000000*
+000000 01  W-REGISTROS-DE-TRABAJO.
+000000     05 WR-COD-OFIC     PIC X(03)  VALUE SPACES.
+000000     05 WR-COD-VCAM     PIC X(06)  VALUE SPACES.
+000000     05 WR-NUM-DURV     PIC S9(05) VALUE +0.
+111111* FECHA SUPERIOR EN RANGO DE SELECCION
+000000     05 WS-FEC-FSUP.
+000000        10 WS-NUM-SSUP  PIC X(02).
+000000        10 WS-NUM-ASUP  PIC X(02).
+000000        10 WS-NUM-MSUP  PIC X(02).
+000000        10 WS-NUM-DSUP  PIC X(02).
+111111* FECHA INFERIOR EN RANGO DE SELECCION
+000000     05 WS-FEC-FINF.
+000000        10 WS-NUM-SINF  PIC X(02).
+000000        10 WS-NUM-AINF  PIC X(02).
+000000        10 WS-NUM-MINF  PIC X(02).
+000000        10 WS-NUM-DINF  PIC X(02).
+000000     05 WS-FEC-FMIN.
+000000        10 WS-NUM-SMIN           PIC 9(02).
+000000        10 WS-NUM-AMIN           PIC 9(02).
+000000        10 WS-NUM-MMIN           PIC 9(02).
+000000        10 WS-NUM-DMIN           PIC 9(02).
+000000     05 WS-FEC-FMAX.
+000000        10 WS-NUM-SMAX           PIC 9(02).
+000000        10 WS-NUM-AMAX           PIC 9(02).
+000000        10 WS-NUM-MMAX           PIC 9(02).
+000000        10 WS-NUM-DMAX           PIC 9(02).
+000000     05 WR-TASA-MINI    PIC S9(05)V9(04) COMP-3 VALUE +99999,9999.
+000000     05 WR-TASA-MAXI    PIC S9(05)V9(04) COMP-3 VALUE +0.
+000000     05 DS-FECAPT       PIC S9(07)       COMP-3 VALUE +0.
+000000*
+000000 01  ACM-PLZO.
+000000     05 ACM-PLZO-NUME-TOTA     PIC S9(11)       COMP-3.
+000000     05 ACM-PLZO-CAPT-TOTA     PIC S9(13)V9(04) COMP-3.
+000000     05 ACM-PLZO-NUME-TPLA     PIC S9(11)       COMP-3.
+000000     05 ACM-PLZO-CAPT-TPLA     PIC S9(13)V9(04) COMP-3.
+000000     05 ACM-PLZO-NUME-TAUT     PIC S9(11)       COMP-3.
+000000     05 ACM-PLZO-CAPT-TAUT     PIC S9(13)V9(04) COMP-3.
+000000     05 ACM-PLZO-SUMA-MIXTI    PIC S9(13)V9(04) COMP-3.
+000000     05 ACM-PLZO-SUMA-PLZO     PIC S9(11)       COMP-3.
+000000     05 ACM-PLZO-PROM-PLZO     PIC S9(05)       COMP-3.
+000000     05 ACM-PLZO-SUMA-MIXPI    PIC S9(13)V9(04) COMP-3.
+000000*
+000000 01  W-PARAMETRO.
+000000     05 WP-FEC-FPRI.
+000000        10 WP-NUM-DPRI         PIC X(02).
+000000        10 WP-NUM-MPRI         PIC X(02).
+000000        10 WP-NUM-SPRI         PIC X(02).
+000000        10 WP-NUM-APRI         PIC X(02).
+000000*
+000000     EJECT
+000000* AREA DE COMUNICACION CON RUTINA RUTUVALF
+000000 01  RUTWVALF.
+000000     05 RUTWVALF-FECHA.
+000000        10 RUTWVALF-FECHA-D        PIC 9(02).
+000000        10 RUTWVALF-FECHA-M        PIC 9(02).
+000000        10 RUTWVALF-FECHA-A.
+000000           15 RUTWVALF-FECHA-AM    PIC 9(02).
+000000           15 RUTWVALF-FECHA-AA    PIC 9(02).
+000000     05 RUTWVALF-CODRET            PIC 9(01)  VALUE 0.
+000000*
+000000     EJECT
+000000     COPY RTNWCALE.
+000000     EJECT
+000000*
+000000* MODULO DE CONTROL
+000000*
+000000 PROCEDURE DIVISION.
+000000*
+000000 A-CONTROL SECTION.
+000000     COPY BIBBAUD2.
+000000*
+000000 AA-INICIALIZACION.
+000000     PERFORM B-INICIALIZAR.
+000000*
+000000 AB-PROCESAMIENTO.
+000000     PERFORM C-PROCESAR.
+000000*
+000000 AC-TERMINACION.
+000000     PERFORM D-TERMINAR.
+000000*
+000000 AZZ-FIN-PROC.
+000000     STOP RUN.
+000000     EJECT
+000000*
+000000*
+000000*
+000000 B-INICIALIZAR SECTION.
+000000*
+000000 BA-CONTROL-PROCESO.
+000000     PERFORM BB-ACCEPT-TARJETA
+000000     PERFORM BC-PROC-CALENDARIO
+000000     PERFORM BD-PROC-FECHA
+000000     PERFORM BM-ABRE-ARCH
+000000     PERFORM BZ-VERIFICA
+000000     GO TO BZZ-FIN-SECC.
+000000*
+000000 BB-ACCEPT-TARJETA.
+000000     DISPLAY ' '.
+000000     DISPLAY 'INICIO CAPTURA DE PARAMETROS'.
+000000     DISPLAY ' '.
+000000     DISPLAY 'INGRESE FECHA DE PROCESO (DDMMSSAA) : '.
+000000     ACCEPT WP-FEC-FPRI
+000000     DISPLAY WP-FEC-FPRI
+000000*
+000000     DISPLAY 'FIN    CAPTURA    DE PARAMETROS'.
+000000     DISPLAY ' '.
+000000     DISPLAY 'INICIO VALIDACION DE PARAMETROS'.
+000000*
+000000*VAL-FEC VALIDA FECHA DE PROCESO
+000000     DISPLAY WP-FEC-FPRI
+000000     MOVE WP-NUM-DPRI TO RUTWVALF-FECHA-D
+000000     MOVE WP-NUM-MPRI TO RUTWVALF-FECHA-M
+000000     MOVE WP-NUM-SPRI TO RUTWVALF-FECHA-AM
+000000     MOVE WP-NUM-APRI TO RUTWVALF-FECHA-AA
+000000     CALL 'RUTUVALF' USING RUTWVALF-FECHA RUTWVALF-CODRET
+000000     IF RUTWVALF-CODRET NOT = 0
+000000        DISPLAY
+000000           '* FECHA PROCESO INVALIDA. ' WP-FEC-FPRI
+000000        MOVE 1 TO SW-CANCEL.
+000000*
+000000     DISPLAY 'FIN VALIDACION PARAMETROS'.
+000000*
+000000 BC-PROC-CALENDARIO.
+000000     MOVE 'CARGAR' TO CALEAREA-FUNCION
+000000     MOVE ALL '0'  TO CALEAREA-FECHA-1
+000000     CALL 'RUTUCALE' USING RTNWCALE
+000000     IF CALEAREA-FUNCION = 'CANCEL'
+000000        DISPLAY
+000000           'ERROR EN CARGA CALENDARIO FS= ' CALEAREA-COD-RET
+000000        MOVE 1 TO SW-CANCEL.
+000000*
+000000 BD-PROC-FECHA.
+000000     MOVE WP-NUM-DPRI TO WS-NUM-DSUP
+000000     MOVE WP-NUM-MPRI TO WS-NUM-MSUP
+000000     MOVE WP-NUM-SPRI TO WS-NUM-SSUP
+000000     MOVE WP-NUM-APRI TO WS-NUM-ASUP.
+000000* DETERMINA FECHA INFERIOR PARA RANGO DE PROCESO
+000000* BUSCA FECHA DE DIA HABIL ANTERIOR
+000000     MOVE 'BDHA'                 TO CALEAREA-FUNCION
+000000     MOVE WP-NUM-DPRI            TO CALEAREA-FECHA-1-D
+000000     MOVE WP-NUM-MPRI            TO CALEAREA-FECHA-1-M
+000000     MOVE WP-NUM-SPRI            TO CALEAREA-FECHA-1-AM
+000000     MOVE WP-NUM-APRI            TO CALEAREA-FECHA-1-AA
+000000     CALL 'RUTUCALE' USING RTNWCALE
+000000     IF CALEAREA-COD-RET > 0
+000000        DISPLAY ' '
+000000        DISPLAY
+000000           '* ERROR EN FECHA DE PROCESO.   ' RTNWCALE
+000000        MOVE 1                   TO SW-CANCEL
+000000     ELSE
+000000* INCREMENTA EN 1 EL HABIL ANTERIOR
+000000* ESTA NUEVA FECHA PUEDE SER:
+000000* IGUAL A LA FECHA SUPERIOR (PROCESO ES DIA HABIL NORMAL)
+000000* DISTINTA A LA SUPERIOR (HAY DIAS FERIADOS ANTERIORES A SUPERIOR
+000000* QUE DEBEN TOMARSE EN CUENTA PARA EL PROCESO)
+000000        MOVE 'AVNDC'                TO CALEAREA-FUNCION
+000000        MOVE CALEAREA-FECHA-2       TO CALEAREA-FECHA-1
+000000        MOVE 1                      TO CALEAREA-NUM-DIA
+000000        CALL 'RUTUCALE' USING RTNWCALE
+000000        IF CALEAREA-COD-RET > 0
+000000           DISPLAY ' '
+000000           DISPLAY
+000000              '* ERROR BUSQUEDA DE FECHA.   ' RTNWCALE
+000000           MOVE 1                   TO SW-CANCEL
+000000        ELSE
+000000           MOVE CALEAREA-FECHA-2-AM TO WS-NUM-SINF
+000000           MOVE CALEAREA-FECHA-2-AA TO WS-NUM-AINF
+000000           MOVE CALEAREA-FECHA-2-M  TO WS-NUM-MINF
+000000           MOVE CALEAREA-FECHA-2-D  TO WS-NUM-DINF
+000000           DISPLAY '* RANGO DE FECHAS A PROCESAR:'
+000000           DISPLAY '* DEL ' WS-FEC-FINF
+000000                   '   AL ' WS-FEC-FSUP.
+000000*
+000000*FECHA ULTIMO DIA HABIL CORRESPONDIENTE A FECHA PROCESO
+000000     MOVE 'BUDHM'                TO CALEAREA-FUNCION
+000000     MOVE WP-NUM-DPRI            TO CALEAREA-FECHA-1-D
+000000     MOVE WP-NUM-MPRI            TO CALEAREA-FECHA-1-M
+000000     MOVE WP-NUM-SPRI            TO CALEAREA-FECHA-1-AM
+000000     MOVE WP-NUM-APRI            TO CALEAREA-FECHA-1-AA
+000000     CALL 'RUTUCALE' USING RTNWCALE
+000000     IF CALEAREA-COD-RET > 0
+000000        DISPLAY ' '
+000000        DISPLAY
+000000           '* ERROR EN FECHA DE PROCESO.   ' RTNWCALE
+000000        MOVE 1                   TO SW-CANCEL
+000000     ELSE
+000000        IF CALEAREA-FECHA-1 = CALEAREA-FECHA-2
+000000           MOVE 1 TO SW-FIN-MES
+000000           PERFORM BD1-DETERMINA-BORRE.
+000000*
+000000     DISPLAY 'FIN VALIDACION PARAMETROS'.
+000000*
+000000 BD1-DETERMINA-BORRE.
+000000* A PARTIR DE LA FECHA DE PROCESO, SE VERIFICA QUE ESTA SEA DEL
+000000* PROCESO DE FIN DE MES (ULTIMO DIA HABIL).
+000000* SI ES ASI, SE CALCULAN LAS SIGUIENTES FECHAS:
+000000* FECHA MAXIMA = ULTIMO DIA CALENDARIO DE MES Y ANO DE PROCESO MEN
+000000* OS DOCE MESES.  (SENALA FECHA DE TERMINO DE PROCESO DE BORRE)
+000000* SE BORRARAN TODOS LOS REGISTROS CON FECHA MENOR O IGUAL A ESTA.
+000000*
+000000     DISPLAY ' '
+000000     DISPLAY '*** PROCESO DE FIN DE MES ***'
+000000* RETROCEDE DOCE MESES EN CALENDARIO
+000000     MOVE 01                     TO CALEAREA-FECHA-2-D
+000000     MOVE WP-NUM-MPRI            TO CALEAREA-FECHA-2-M
+000000     MOVE WP-NUM-SPRI            TO CALEAREA-FECHA-2-AM
+000000     MOVE WP-NUM-APRI            TO CALEAREA-FECHA-2-AA
+000000     SUBTRACT 1 FROM                CALEAREA-FECHA-2-A
+000000     PERFORM BD2-BUSCA-UDCM
+000000     MOVE CALEAREA-FECHA-2-D     TO WS-NUM-DMAX
+000000     MOVE CALEAREA-FECHA-2-M     TO WS-NUM-MMAX
+000000     MOVE CALEAREA-FECHA-2-AM    TO WS-NUM-SMAX
+000000     MOVE CALEAREA-FECHA-2-AA    TO WS-NUM-AMAX
+000000     DISPLAY '*** SE BORRAN REGISTROS DE SALDOS DIARIOS '
+000000     DISPLAY 'CON FECHA MENOR O IGUAL AL ' WS-FEC-FMAX
+000000     DISPLAY ' '.
+000000*
+000000 BD2-BUSCA-UDCM.
+000000* BUSCA ULTIMO DIA CALENDARIO DE MES
+000000     MOVE 'BUDCM'                TO CALEAREA-FUNCION
+000000     MOVE CALEAREA-FECHA-2       TO CALEAREA-FECHA-1
+000000     CALL 'RUTUCALE' USING RTNWCALE
+000000     IF CALEAREA-COD-RET > 0
+000000        DISPLAY ' '
+000000        DISPLAY
+000000           '* ERROR EN FECHA UDCM.         ' RTNWCALE
+000000        MOVE 1                   TO SW-CANCEL.
+000000*
+000000 BM-ABRE-ARCH.
+000000     OPEN INPUT  DAPDOPD
+000000          I-O    DAPDEST.
+000000     IF FS-DAPDEST > 0
+000000        DISPLAY '*** ERROR OPEN DAPDEST. FS=' FS-DAPDEST
+000000        MOVE 1 TO SW-CANCEL.
+000000*
+000000 BZ-VERIFICA.
+000000     IF SW-CANCEL = 1
+000000        DISPLAY '*** ERRORES EN INICIALIZACION ***'
+000000        PERFORM D-TERMINAR.
+000000*
+000000 BZZ-FIN-SECC.
+000000     EXIT.
+000000     EJECT
+000000*
+000000*
+000000*
+000000 C-PROCESAR SECTION.
+000000*
+000000 CA-CONTROL.
+000000     SORT FSORT
+000000        ASCENDING KEY
+000000           FSORT-COD-OFIC
+000000           FSORT-COD-VCAM
+000000           FSORT-NUM-DURV
+000000        INPUT  PROCEDURE  E-ENTRADA-SORT
+000000        OUTPUT PROCEDURE  F-SALIDA-SORT.
+000000*
+000000     IF SORT-RETURN NOT = 0
+000000        DISPLAY '******************************'
+000000        DISPLAY '**  HUBO ERROR EN SORT      **'
+000000        DISPLAY '******************************'
+000000        MOVE 1 TO SW-CANCEL
+000000        GO TO CZZ-FIN-SECC.
+000000*
+000000     IF SW-FIN-MES = 1
+000000        PERFORM G-ELIMINA.
+000000*
+000000 CZZ-FIN-SECC.
+000000     EXIT.
+000000     EJECT
+000000*
+000000*
+000000*
+000000 D-TERMINAR  SECTION.
+000000*
+000000 DA-TOTALES.
+000000     CLOSE DAPDOPD DAPDEST
+000000     DISPLAY ' '
+000000     DISPLAY '+---------------------------------------------+'
+000000     DISPLAY '+ ESTADISTICAS DE PROCESO.  PROGRAMA DAPPGEST +'
+000000     DISPLAY '+---------------------------------------------+'
+000000     DISPLAY ' '
+000000     DISPLAY 'REG DAPDOPD LEIDOS..................' CNT-DAPDOPD-L
+000000     DISPLAY 'REG DAPDOPD SELECC..................' CNT-DAPDOPD-S
+000000     DISPLAY 'REG FSORT   GRABAD..................' CNT-FSORT-G
+000000     DISPLAY 'REG FSORT   LEIDOS..................' CNT-FSORT-L
+000000     DISPLAY 'REG DAPDEST CREADO..................' CNT-DAPDEST-G
+000000     DISPLAY ' '
+000000     IF SW-FIN-MES = 1
+000000        DISPLAY 'PROCESO MENSUAL DE BORRE'
+000000        DISPLAY
+000000           'REG DAPDEST LEIDOS..................' CNT-DAPDEST-L
+000000        DISPLAY
+000000           'REG DAPDEST BORRAD..................' CNT-DAPDEST-D
+000000     DISPLAY ' '.
+000000     DISPLAY '***********************************************'
+000000     DISPLAY ' '
+000000     IF SW-CANCEL    = 1
+000000        DISPLAY ' HAY MENSAJES PARA EL EXPLOTADOR'
+000000        DISPLAY ' '
+000000        DISPLAY '************************************************'
+000000        DISPLAY '************************************************'
+000000        DISPLAY '****                                        ****'
+000000        DISPLAY '****      TERMINO ERRONEO DEL PROCESO       ****'
+000000        DISPLAY '****                                        ****'
+000000        DISPLAY '************************************************'
+000000        DISPLAY '************************************************'
+000000        MOVE 100 TO RETURN-CODE
+000000        STOP RUN
+000000     ELSE
+000000        DISPLAY ' NO HAY MENSAJES PARA EL EXPLOTADOR'
+000000        DISPLAY ' '
+000000        DISPLAY '*** PROCESO TERMINO EN FORMA NORMAL ***'.
+000000*
+000000 DZZ-FIN-SECC.
+000000     EXIT.
+000000     EJECT
+000000*
+000000*
+000000*
+000000 E-ENTRADA-SORT SECTION.
+000000*
+000000 EA-LEER-DAPDOPD.
+000000     READ DAPDOPD AT END MOVE 1 TO FS-DAPDOPD.
+000000     IF FS-DAPDOPD = 0
+000000        ADD 1 TO CNT-DAPDOPD-L.
+000000*
+000000 EC-CTRL-PROC.
+000000     PERFORM ED-CTRL-SELEC UNTIL
+000000        FS-DAPDOPD = 1
+000000     GO TO EZZ-FIN-SECC.
+000000*
+000000 ED-CTRL-SELEC.
+000000** SELECCIONA REGISTROS PARA CARGARLOS EN EL SORT
+000000     IF OPD-COD-STAT = 'G' AND
+000000        OPD-COD-SCTB = 'VIG'
+000000           PERFORM EE-SELECCIONA.
+000000     PERFORM EA-LEER-DAPDOPD.
+000000*
+000000 EE-SELECCIONA.
+000000     IF OPD-COD-RENO = 'N'
+000000* CAPTACION DE DAP FIJO
+000000        IF OPD-FEC-FREA NOT < WS-FEC-FINF AND
+000000           OPD-FEC-FREA NOT > WS-FEC-FSUP
+000000              ADD 1                    TO CNT-DAPDOPD-S
+000000              PERFORM EN-GRABA-FSORT
+000000        ELSE
+000000           NEXT SENTENCE
+000000     ELSE
+000000* CAPTACION DE DAP RENOVABLE
+000000        IF OPD-CIC-GREN = '    00000000'
+000000           IF OPD-FEC-FREA NOT < WS-FEC-FINF AND
+000000              OPD-FEC-FREA NOT > WS-FEC-FSUP
+000000                 ADD 1                    TO CNT-DAPDOPD-S
+000000                 PERFORM EN-GRABA-FSORT
+000000           ELSE
+000000              NEXT SENTENCE
+000000        ELSE
+000000* RENOVACION DE DAP
+000000              IF OPD-FEC-FREA NOT < WS-FEC-FINF AND
+000000                 OPD-FEC-FREA NOT > WS-FEC-FSUP
+000000                    ADD 1                    TO CNT-DAPDOPD-S
+000000                    PERFORM EN-GRABA-FSORT.
+000000*
+000000 EN-GRABA-FSORT.
+000000     MOVE OPD-COD-OFIC           TO FSORT-COD-OFIC
+000000     MOVE OPD-COD-VCAM           TO FSORT-COD-VCAM
+000000     MOVE OPD-VAL-CAPT           TO FSORT-VAL-CAPT
+000000     MOVE OPD-COD-EATE           TO FSORT-COD-EATE
+000000     MOVE OPD-SGV-TINT           TO FSORT-SGV-TINT
+000000     MOVE OPD-VAL-SINT           TO FSORT-VAL-SINT
+000000* SI PLAZO ES EN DIAS, SE CARGA
+000000     IF OPD-IND-DURV = 'D'
+000000        MOVE OPD-NUM-DURV        TO FSORT-NUM-DURV
+000000        MOVE OPD-NUM-DURV        TO FSORT-PLZ-DIAS
+000000     ELSE
+000000* SI PLAZO NO ES EN DIAS, SE CALCULA ESTE EN BASE A LA DIFERENCIA
+000000* ENTRE LA FECHA DE VENCIMIENTO Y LA DE CAPTACION
+000000        MOVE 'CDCEF'             TO CALEAREA-FUNCION
+000000* FECHA DE VENCIMIENTO
+000000        MOVE OPD-NUM-DTER        TO CALEAREA-FECHA-1-D
+000000        MOVE OPD-NUM-MTER        TO CALEAREA-FECHA-1-M
+000000        MOVE OPD-NUM-STER        TO CALEAREA-FECHA-1-AM
+000000        MOVE OPD-NUM-ATER        TO CALEAREA-FECHA-1-AA
+000000* FECHA DE CAPTACION
+000000        MOVE OPD-NUM-DREA        TO CALEAREA-FECHA-2-D
+000000        MOVE OPD-NUM-MREA        TO CALEAREA-FECHA-2-M
+000000        MOVE OPD-NUM-SREA        TO CALEAREA-FECHA-2-AM
+000000        MOVE OPD-NUM-AREA        TO CALEAREA-FECHA-2-AA
+000000        CALL 'RUTUCALE' USING RTNWCALE
+000000        MOVE CALEAREA-NUM-DIA    TO FSORT-NUM-DURV
+000000                                    FSORT-PLZ-DIAS.
+000000     IF FSORT-NUM-DURV > 365
+000000        MOVE 999                 TO FSORT-NUM-DURV.
+000000     RELEASE REG-FSORT
+000000     ADD 1                       TO CNT-FSORT-G.
+000000*
+000000 EZZ-FIN-SECC.
+000000     EXIT.
+000000     EJECT
+000000*
+000000*
+000000*
+000000 F-SALIDA-SORT SECTION.
+000000*
+000000 FA-LEER-FSORT.
+000000     RETURN FSORT AT END MOVE 1 TO FS-FSORT.
+000000     IF FS-FSORT = 0
+000000        ADD 1 TO CNT-FSORT-L.
+000000*
+000000 FB-CTRL-PROC.
+000000     PERFORM FC-CTRL-X-OFIC UNTIL
+000000        FS-FSORT = 1
+000000     GO TO FZZ-FIN-SECC.
+000000*
+000000 FC-CTRL-X-OFIC.
+000000     MOVE FSORT-COD-OFIC  TO WR-COD-OFIC
+000000     PERFORM FE-CTRL-X-VCAM UNTIL
+000000        FSORT-COD-OFIC NOT = WR-COD-OFIC OR
+000000           FS-FSORT = 1.
+000000*
+000000 FE-CTRL-X-VCAM.
+000000     MOVE FSORT-COD-VCAM  TO WR-COD-VCAM
+000000     PERFORM FG-CTRL-X-DURV UNTIL
+000000        FSORT-COD-OFIC NOT = WR-COD-OFIC OR
+000000           FSORT-COD-VCAM NOT = WR-COD-VCAM OR
+000000              FS-FSORT = 1.
+000000*
+000000 FG-CTRL-X-DURV.
+000000     INITIALIZE ACM-PLZO
+000000     MOVE FSORT-NUM-DURV TO WR-NUM-DURV
+000000     MOVE +99999,9999    TO WR-TASA-MINI
+000000     MOVE +0             TO WR-TASA-MAXI
+000000     PERFORM FH-ACUMULA-REGISTRO UNTIL
+000000        FSORT-COD-OFIC NOT = WR-COD-OFIC OR
+000000           FSORT-COD-VCAM NOT = WR-COD-VCAM OR
+000000              FSORT-NUM-DURV NOT = WR-NUM-DURV  OR
+000000                 FS-FSORT = 1
+000000     PERFORM FI-CALCULOS
+000000     PERFORM FJ-GRABAR-DAPDEST.
+000000*
+000000 FH-ACUMULA-REGISTRO.
+000000*  ACUMULA CANTIDADES Y MONTOS MIENTRAS SEA LA MISMA MONEDA,
+000000*  OFICINA Y PLAZO
+000000     ADD FSORT-VAL-CAPT    TO ACM-PLZO-CAPT-TOTA
+000000     ADD 1                 TO ACM-PLZO-NUME-TOTA
+000000     IF FSORT-COD-EATE = SPACES
+000000        ADD FSORT-VAL-CAPT TO ACM-PLZO-CAPT-TPLA
+000000        ADD 1              TO ACM-PLZO-NUME-TPLA
+000000     ELSE
+000000        ADD FSORT-VAL-CAPT TO ACM-PLZO-CAPT-TAUT
+000000        ADD 1              TO ACM-PLZO-NUME-TAUT.
+000000     IF FSORT-COD-VCAM = '0999  '
+000000        PERFORM FH1-ACUMULA-REGISTRO
+000000     ELSE
+000000        PERFORM FH2-ACUMULA-REGISTRO.
+000000* ACUMULA PLAZO EN DIAS (PARA CALCULO DEL PLAZO PROMEDIO)
+000000     COMPUTE ACM-PLZO-SUMA-PLZO  ROUNDED =
+000000        ACM-PLZO-SUMA-PLZO +
+000000           FSORT-PLZ-DIAS.
+000000* ACUMULA MI*PI (MONTO * PLAZO)
+000000     COMPUTE ACM-PLZO-SUMA-MIXPI ROUNDED =
+000000        ACM-PLZO-SUMA-MIXPI +
+000000           (FSORT-VAL-CAPT * FSORT-PLZ-DIAS).
+000000     PERFORM FA-LEER-FSORT.
+000000*
+000000 FH1-ACUMULA-REGISTRO.
+000000* PESOS
+000000* SUMATORIA DE MONTOS * TASAS
+000000* SE UTILIZA LA TASA REFERENCIAL DE  30 DIAS
+000000     COMPUTE ACM-PLZO-SUMA-MIXTI ROUNDED =
+000000        ACM-PLZO-SUMA-MIXTI +
+000000           FSORT-VAL-CAPT * FSORT-SGV-TINT.
+000000* DETECTA TASA MINIMA
+000000     IF FSORT-SGV-TINT < WR-TASA-MINI
+000000        MOVE FSORT-SGV-TINT TO WR-TASA-MINI.
+000000* DETECTA TASA MAXIMA
+000000     IF FSORT-SGV-TINT > WR-TASA-MAXI
+000000        MOVE FSORT-SGV-TINT TO WR-TASA-MAXI.
+000000*
+000000 FH2-ACUMULA-REGISTRO.
+000000* UEFES Y DOLAR
+000000* SUMATORIA DE MONTOS * TASAS
+000000* SE UTILIZA LA TASA REFERENCIAL DE 365 DIAS
+000000     COMPUTE ACM-PLZO-SUMA-MIXTI ROUNDED =
+000000        ACM-PLZO-SUMA-MIXTI +
+000000           FSORT-VAL-CAPT * FSORT-SGV-TINT.
+000000* DETECTA TASA MINIMA
+000000     IF FSORT-SGV-TINT < WR-TASA-MINI
+000000        MOVE FSORT-SGV-TINT TO WR-TASA-MINI.
+000000* DETECTA TASA MAXIMA
+000000     IF FSORT-SGV-TINT > WR-TASA-MAXI
+000000        MOVE FSORT-SGV-TINT TO WR-TASA-MAXI.
+000000*
+000000 FI-CALCULOS.
+000000* CALCULA PLAZO PROMEDIO EN DIAS
+000000     COMPUTE ACM-PLZO-PROM-PLZO  ROUNDED =
+000000        ACM-PLZO-SUMA-PLZO / ACM-PLZO-NUME-TOTA.
+000000*
+000000 FJ-GRABAR-DAPDEST.
+000000     MOVE SPACES                 TO REG-DAPDEST
+000000     MOVE WP-NUM-DPRI            TO DAPDEST-NUM-DPRO
+000000     MOVE WP-NUM-MPRI            TO DAPDEST-NUM-MPRO
+000000     MOVE WP-NUM-SPRI            TO DAPDEST-NUM-SPRO
+000000     MOVE WP-NUM-APRI            TO DAPDEST-NUM-APRO
+000000     MOVE WR-COD-OFIC            TO DAPDEST-COD-OFIC
+000000     MOVE WR-COD-VCAM            TO DAPDEST-COD-VCAM
+000000     MOVE WR-NUM-DURV            TO DAPDEST-NUM-DURV
+000000     MOVE ACM-PLZO-CAPT-TOTA     TO DAPDEST-OPE-SALD-TOTA
+000000     MOVE ACM-PLZO-NUME-TOTA     TO DAPDEST-OPE-NUME-TOTA
+000000     MOVE ACM-PLZO-CAPT-TPLA     TO DAPDEST-OPE-SALD-TPLA
+000000     MOVE ACM-PLZO-NUME-TPLA     TO DAPDEST-OPE-NUME-TPLA
+000000     MOVE ACM-PLZO-CAPT-TAUT     TO DAPDEST-OPE-SALD-TAUT
+000000     MOVE ACM-PLZO-NUME-TAUT     TO DAPDEST-OPE-NUME-TAUT
+000000     MOVE WR-TASA-MINI           TO DAPDEST-OPE-TASA-MINI
+000000     MOVE WR-TASA-MAXI           TO DAPDEST-OPE-TASA-MAXI
+000000     MOVE ACM-PLZO-SUMA-MIXTI    TO DAPDEST-OPE-SUMA-MIXTI
+000000     MOVE ACM-PLZO-PROM-PLZO     TO DAPDEST-OPE-PROM-PLZO
+000000     MOVE ACM-PLZO-SUMA-MIXPI    TO DAPDEST-OPE-SUMA-MIXPI
+000000     WRITE REG-DAPDEST
+000000     IF FS-DAPDEST = 0
+000000        ADD 1 TO  CNT-DAPDEST-G
+000000     ELSE
+000000        DISPLAY '** ERROR GRAB DAPDEST. FS= ' FS-DAPDEST
+000000                ' CLAVE: ' DAPDEST-KEY-IEST.
+000000*
+000000 FZZ-FIN-SECC.
+000000     EXIT.
+000000     EJECT
+000000*
+000000*
+000000*
+000000 G-ELIMINA SECTION.
+000000*
+000000 GA-CONTROL.
+000000     MOVE LOW-VALUE   TO DAPDEST-KEY-IEST
+000000     START DAPDEST KEY NOT < DAPDEST-FEC-FPRO
+000000     IF FS-DAPDEST = 0
+000000        PERFORM GB-LEER-DAPDEST
+000000        PERFORM GC-DELE-DAPDEST UNTIL
+000000           DAPDEST-FEC-FPRO > WS-FEC-FMAX OR
+000000              FS-DAPDEST = 10.
+000000     GO TO GZZ-FIN-SECC.
+000000*
+000000 GB-LEER-DAPDEST.
+000000     READ DAPDEST NEXT RECORD
+000000     IF FS-DAPDEST = 0
+000000        ADD 1 TO CNT-DAPDEST-L.
+000000*
+000000 GC-DELE-DAPDEST.
+000000     IF DAPDEST-FEC-FPRO > WS-FEC-FMAX
+000000        SUBTRACT 1 FROM CNT-DAPDEST-L
+000000     ELSE
+000000        DELETE DAPDEST RECORD
+000000        IF FS-DAPDEST = 0
+000000           ADD 1 TO CNT-DAPDEST-D.
+000000     PERFORM GB-LEER-DAPDEST.
+000000*
+000000 GZZ-FIN-SECC.
+000000     EXIT.
+000000     EJECT

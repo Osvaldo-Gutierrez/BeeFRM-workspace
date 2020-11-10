@@ -1,0 +1,288 @@
+       IDENTIFICATION DIVISION.
+      *=======================
+       PROGRAM-ID.      GARPGSE4.
+       AUTHOR.          R. CHIANG.
+       DATE-WRITTEN     06-JUN-2003.
+      
+       ENVIRONMENT DIVISION.
+      *====================
+       CONFIGURATION SECTION.
+       SPECIAL-NAMES.
+      *        DECIMAL-POINT IS COMMA.
+      
+       DATA DIVISION.
+      *=============
+       WORKING-STORAGE SECTION.
+      *-----------------------
+      
+       COPY GARBRGCL.
+       COPY GARBRSGV.
+       COPY GARBRSGM.
+      
+       COPY TABBRCAM.
+       COPY GNSBRTAB.
+       COPY GNSBRMSG.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-CAM-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-MSG-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-TAB-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-TAG-REQA==.
+       COPY GNSWGRQA.
+       COPY GNSWGUIB.
+       COPY GNSWGELS.
+       COPY GNSWVIDD.
+       COPY GNSWCFIO.
+       COPY GNSWVFIO.
+       COPY GNSWGSYS.
+      
+       01  VARIABLES.
+           03 WSS-LEIDOS-GCL    VALUE ZEROES      PIC 9(05).
+           03 WSS-LEIDOS-SGV    VALUE ZEROES      PIC 9(05).
+           03 WSS-LEIDOS-DBS    VALUE ZEROES      PIC 9(05).
+           03 WSS-LEIDOS-DDS    VALUE ZEROES      PIC 9(05).
+           03 WSS-GRABAR-SGM    VALUE ZEROES      PIC 9(05).
+           03 WSS-CONTADOR      VALUE ZEROES      PIC 9(04).
+           03 WSS-RUT           VALUE ZEROES      PIC 9(04).
+           03 WSS-LIM-RUT       VALUE ZEROES      PIC 9(02).
+           03 WSS-SW1           VALUE ZEROES      PIC 9(01).
+           03 WSS-SW2           VALUE ZEROES      PIC 9(01).
+           03 WSS-21            VALUE ZEROES      PIC 9(02).
+      
+      * VECTOR  DE RUT
+           03  WSGM-RUT-CLI OCCURS 20 TIMES.
+               04 WSGM-IDC-ICLI.
+      *        RUT CLIENTE
+                  05 WSGM-NUM-ICLI              PIC X(08).
+      *        INDICADOR TIPO RUT
+                  05 WSGM-IND-ICLI              PIC X(01).
+      *        EXTENSION DEL RUT
+                  05 WSGM-GLS-ICLI              PIC X(03).
+      *        KEY DIGITO VERIFICADOR DEL RUT
+               04 WSGM-VRF-ICLI                 PIC X(01).
+      
+      
+       PROCEDURE DIVISION.
+      *==================
+      
+       MAIN SECTION.
+       MAIN-INI.
+       COPY GNSBGEDB.
+           ENTRY 'DBMSCBL'
+           MOVE "GARPGSEG" TO FIO-PROG.
+           PERFORM GNS-BUS-IDD.
+           PERFORM OPEN-FILE.
+           MOVE 0 TO WSS-SW1.
+       PROCES.
+           MOVE 0 TO WSS-LIM-RUT.
+           PERFORM LIMPIA-CAMPOS-RUT.
+           MOVE 0 TO WSS-CONTADOR.
+           PERFORM LEER-SEG-GAR-VEN.
+           IF NOT FIO-STAT-OKS
+              GO TO TERMINO.
+           PERFORM PROCESO.
+           IF NOT FIO-STAT-OKS
+              PERFORM GRABAR-ARCHIVO
+              GO TO TERMINO
+           ELSE
+              GO TO PROCES.
+       TERMINO.
+           PERFORM ESTADISTICAS.
+           PERFORM CLOSE-FILE.
+           PERFORM GNS-PRO-END.
+       FIN-MAIN.
+           EXIT.
+      *
+      ******************************************************************
+      *
+       OPEN-FILE SECTION.
+       INI-OPEN-FILE.
+      *    DISPLAY 'INI-OPEN-FILE'.
+           MOVE 'GAR'   TO FIO-SIST.
+           MOVE FIO-INP TO FIO-CMND.
+           PERFORM GAR-FIO-GCL.
+           MOVE FIO-INP TO FIO-CMND.
+           PERFORM GAR-FIO-SGV.
+           MOVE FIO-OUT TO FIO-CMND.
+           PERFORM GAR-FIO-SGM.
+      *    DISPLAY 'FIN-OPEN-FILE'.
+       FIN-OPEN-FILE.
+           EXIT.
+      *
+      ******************************************************************
+      *
+       PROCESO SECTION.
+       INI-PROCESO.
+           IF WSS-SW1 = 0
+              PERFORM LEER-GARAN-CLIENTE
+              IF NOT FIO-STAT-OKS
+                 GO TO FIN-PROCESO.
+       DOS-PROCESO.
+           IF SGV-CLV-CSS-1 = GCL-CLV-CSS-1
+              PERFORM MOVER-CAMPOS-RUT
+              MOVE 0 TO WSS-SW1
+              GO TO INI-PROCESO
+           ELSE
+              IF SGV-CLV-CSS-1 > GCL-CLV-CSS-1
+                 MOVE 0 TO WSS-SW1
+                 GO TO INI-PROCESO
+              ELSE
+                 IF SGV-CLV-CSS-1 < GCL-CLV-CSS-1
+                    PERFORM GRABAR-ARCHIVO
+                    MOVE 1 TO WSS-SW1.
+       FIN-PROCESO.
+           EXIT.
+      *
+      ******************************************************************
+      *
+       LEER-SEG-GAR-VEN SECTION.
+       INI-LEER-SEG-GAR-VEN.
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM GAR-FIO-SGV.
+           IF FIO-STAT-OKS
+              ADD 1 TO WSS-LEIDOS-SGV.
+       FIN-LEER-SER-GAR-VEN.
+           EXIT.
+      *
+      *****************************************************************
+      *
+       LEER-GARAN-CLIENTE SECTION.
+       INI-GARAN-CLIENTE.
+            MOVE FIO-GET-NXT TO FIO-CMND.
+            PERFORM GAR-FIO-GCL.
+            ADD 1 TO WSS-LEIDOS-GCL.
+        FIN-LEER-GARAN-CLIENTE.
+           EXIT.
+      *
+      ****************************************************************
+      *
+       MOVER-CAMPOS-RUT SECTION.
+       INI-MOVER-CAMPOS-RUT.
+      *    IF GCL-IDC-ICLI NOT < SPACES
+              ADD 1 TO WSS-CONTADOR.
+              MOVE GCL-NUM-ICLI TO WSGM-NUM-ICLI(WSS-CONTADOR).
+              MOVE GCL-IND-ICLI TO WSGM-IND-ICLI(WSS-CONTADOR).
+              MOVE GCL-GLS-ICLI TO WSGM-GLS-ICLI(WSS-CONTADOR).
+              MOVE GCL-VRF-ICLI TO WSGM-VRF-ICLI(WSS-CONTADOR).
+       FIN-MOVER-CAMPOS-RUT.
+           EXIT.
+      *
+      ****************************************************************
+      *
+       LIMPIA-CAMPOS-RUT SECTION.
+       INI-LIMPIA-CAMPOS-RUT.
+      
+           ADD 1 TO WSS-LIM-RUT.
+           MOVE SPACES TO SGM-NUM-ICLI(WSS-LIM-RUT).
+           MOVE SPACES TO SGM-IND-ICLI(WSS-LIM-RUT).
+           MOVE SPACES TO SGM-GLS-ICLI(WSS-LIM-RUT).
+           MOVE SPACES TO SGM-VRF-ICLI(WSS-LIM-RUT).
+           IF WSS-LIM-RUT < 20
+              GO TO INI-LIMPIA-CAMPOS-RUT.
+       FIN-LIMPIA-CAMPOS-RUT.
+           EXIT.
+      *
+      **************************************************
+      *
+       GRABAR-ARCHIVO SECTION.
+       INI-GRABAR-ARCHIVO.
+           IF WSS-CONTADOR > 21
+              MOVE 'S'  TO SGM-IND-EXC
+           ELSE
+              MOVE 'N'  TO SGM-IND-EXC.
+           PERFORM MOVER-SGV-A-SGM.
+           MOVE 0 TO WSS-RUT
+           PERFORM TRASPASA-RUT.
+           MOVE FIO-PUT TO FIO-CMND.
+           PERFORM GAR-FIO-SGM.
+           ADD 1 TO WSS-GRABAR-SGM.
+           MOVE 0 TO WSS-CONTADOR.
+       FIN-GRABAR-ARCHIVO.
+           EXIT.
+      *
+      *****************************************************************
+      *
+       MOVER-SGV-A-SGM SECTION.
+       INI-MOVER-SGV-A-SGM.
+           MOVE SGV-NUM-SIS    IN SGV TO  SGM-NUM-SIS    IN SGM.
+           MOVE SGV-COD-CRR    IN SGV TO  SGM-COD-CRR    IN SGM.
+           MOVE SGV-TIP-OPE    IN SGV TO  SGM-TIP-OPE    IN SGM.
+           MOVE SGV-STP-OPE    IN SGV TO  SGM-STP-OPE    IN SGM.
+           MOVE SGV-COD-PLZ    IN SGV TO  SGM-COD-PLZ    IN SGM.
+           MOVE SGV-FA-VTO-SEG IN SGV TO  SGM-FA-VTO-SEG IN SGM.
+           MOVE SGV-FM-VTO-SEG IN SGV TO  SGM-FM-VTO-SEG IN SGM.
+           MOVE SGV-FD-VTO-SEG IN SGV TO  SGM-FD-VTO-SEG IN SGM.
+           MOVE SGV-MON-SEG    IN SGV TO  SGM-MON-SEG    IN SGM.
+           MOVE SGV-VAL-SEG    IN SGV TO  SGM-VAL-SEG    IN SGM.
+       FIN-MOVER-SGV-A-SGM.
+           EXIT.
+      *
+      ******************************************************************
+      *
+       TRASPASA-RUT SECTION.
+       INI-TRASPASA-RUT.
+           ADD 1 TO WSS-RUT
+           MOVE WSGM-NUM-ICLI(WSS-RUT) TO SGM-NUM-ICLI(WSS-RUT).
+           MOVE WSGM-IND-ICLI(WSS-RUT) TO SGM-IND-ICLI(WSS-RUT).
+           MOVE WSGM-GLS-ICLI(WSS-RUT) TO SGM-GLS-ICLI(WSS-RUT).
+           MOVE WSGM-VRF-ICLI(WSS-RUT) TO SGM-VRF-ICLI(WSS-RUT).
+           MOVE SPACES                 TO WSGM-NUM-ICLI(WSS-RUT).
+           MOVE SPACES                 TO WSGM-IND-ICLI(WSS-RUT).
+           MOVE SPACES                 TO WSGM-GLS-ICLI(WSS-RUT).
+           MOVE SPACES                 TO WSGM-VRF-ICLI(WSS-RUT).
+           IF WSS-RUT < 20
+              GO TO INI-TRASPASA-RUT.
+       FIN-TRASPASA-RUT.
+           EXIT.
+      *
+      ******************************************************************
+      *
+       ESTADISTICAS SECTION.
+       INI-ESTADISTICAS.
+           DISPLAY 'REGISTROS LEIDOS DE GCL   : ' WSS-LEIDOS-GCL.
+           DISPLAY 'REGISTROS LEIDOS DE SGV   : ' WSS-LEIDOS-SGV.
+           DISPLAY 'REGISTROS GRABADOS DE SGM : ' WSS-GRABAR-SGM.
+       FIN-ESTADISTICAS.
+           EXIT.
+      *
+      ******************************************************************
+      *
+       CLOSE-FILE SECTION.
+       INI-CLOSE-FILE.
+           MOVE FIO-CLO TO FIO-CMND.
+           PERFORM GAR-FIO-GCL.
+           MOVE FIO-CLO TO FIO-CMND.
+           PERFORM GAR-FIO-SGV.
+           MOVE FIO-CLO TO FIO-CMND.
+           PERFORM GAR-FIO-SGM.
+       FIN-CLOSE-FILE.
+           EXIT.
+      *
+      ******************************************************************
+      *
+       PRG-ABT SECTION.
+       INI-PRG-ABT.
+            DISPLAY 'ABORTANDO EN PRG-ABT '.
+            DISPLAY 'FIO-MENS : ' FIO-MENS.
+            MOVE 100 TO RETURN-CODE.
+            GOBACK.
+       FIN-PRG-ABT.
+            EXIT.
+      *
+      ******************************************************************
+      *
+       COPY GARBFGCL.
+       COPY GARBFSGV.
+       COPY GARBFSGM.
+      
+       COPY GNSBGDTC.
+       COPY GNSBGIDD.
+       COPY GNSBGEND.
+       COPY GNSBGABT.
+       COPY GNSBVTAB.
+      
+       COPY GNSBFTAB.
+       COPY TABBFCAM.
+       COPY GNSBFMSG.
+       COPY GNSBBMSG.
+       COPY GNSBBTAB.
+       COPY GNSBBSYS.
+      *

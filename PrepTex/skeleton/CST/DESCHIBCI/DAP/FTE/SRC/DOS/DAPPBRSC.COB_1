@@ -1,0 +1,1228 @@
+       IDENTIFICATION DIVISION.
+      *=======================
+       PROGRAM-ID.      DAPPBRSC.
+       AUTHOR.          CONSIST.
+       DATE-WRITTEN.     21-AUG-1991 20:57:02.
+
+      * PROGRAMA BATCH QUE ACTIVA LAS LIQUIDACIONES ANTICIPADAS SIN SORT
+
+      *  30-APR-1993 08:19:46 ==>> ELIMINA CAD ASOCIADA A LIQ EN REVERSA
+      *     DE SLA NO CONCRETADAS
+      *
+      *  10-SEP-1993  CECILIA PIZARRO ==>> REVERSA SLA CON ONP O GAR
+      *
+       ENVIRONMENT DIVISION.
+      *====================
+       CONFIGURATION SECTION.
+      *---------------------
+       SPECIAL-NAMES.
+            DECIMAL-POINT IS COMMA.
+       INPUT-OUTPUT SECTION.
+      *--------------------
+       FILE-CONTROL.
+
+       DATA DIVISION.
+      *=============
+       FILE SECTION.
+      *------------
+
+       WORKING-STORAGE SECTION.
+      *-----------------------
+       COPY GNSWGRQA.
+       COPY GNSWGUIB.
+       COPY GNSWGELS.
+       COPY GNSWGIFD.
+       COPY GNSWCFIO.
+       COPY GNSWVFIO.
+       COPY GNSWGSYS.
+       COPY GNSWVNUM.
+       COPY GNSWCNUM.
+       COPY GNSWGPES.
+       COPY DAPWG004.
+
+      *Entidades  de GNS
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-TAB-REQA==.
+       COPY GNSBRTAB.
+
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-MSG-REQA==.
+       COPY GNSBRMSG.
+
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-MSC-REQA==.
+       COPY GNSBRMSC.
+
+       COPY GNSBRCIC.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-CIC-REQA==.
+       COPY GNSWGCIC.
+       COPY GNSWCVRF.
+       COPY GNSWVVRF.
+       COPY GNSWGFEC.
+       COPY GNSWGHOY.
+       COPY GNSWGINT.
+
+      *Entidades  de DAP
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-OPD-REQA==.
+       COPY DAPBROPD.
+       COPY DAPWIOPD.
+
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-RCC-REQA==.
+       COPY DAPBRRCC.
+
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-CAD-REQA==.
+       COPY DAPBRCAD.
+
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-PTD-REQA==.
+       COPY DAPBRPTD.
+
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-VEN-REQA==.
+       COPY DAPBRVEN.
+
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-LIQ-REQA==.
+       COPY DAPBRLIQ.
+
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-MVO-REQA==.
+       COPY DAPBRMVO.
+
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-LIC-REQA==.
+       COPY DAPBRLIC.
+       COPY DAPBRGAR.
+       COPY DAPBRIPA.
+
+      *Entidades  de TAB
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-CAM-REQA==.
+       COPY TABBRCAM.
+
+      *Entidades  de SGC
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-DBC-REQA==.
+       COPY SGCBRDBC.
+
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-RCD-REQA==.
+       COPY SGCBRRCD.
+
+       01  SCR-VARI.
+           02 SCR-CMND    VALUE 'ODL'   PIC X(03).
+           02 SCR-CIC-VCAM.
+              04 SCR-CIC-TVAL           PIC X(01).
+              04 SCR-CIC-CVAL           PIC X(03).
+              04 SCR-CIC-TCAM           PIC X(08).
+           02 SCR-CIC-MORE              PIC X(02).
+           02 SCR-SON-S                 PIC X(01).
+           02 SCR-CIC-CTBL              PIC X(05).
+
+       01  WSS-VARI.
+           03 WSS-PROG                                PIC X(12).
+           03 WSS-IND-TRC VALUE 'S'                   PIC X(001).
+           03 TRC-GLS-MEN1                            PIC X(80).
+           03 TRC-GLS-MEN2                            PIC X(80).
+           03 WSS-VEN-VAL-CAPI                        PIC 9(11)V9(04).
+           03 WSS-GLS-SECC                            PIC X(40).
+           03 WSS-GLS-MEN1                            PIC X(80).
+           03 WSS-GLS-MEN2                            PIC X(80).
+           03 DSP-FIO-STAT          VALUE 'N'         PIC X(01).
+              88 DESPLIEGA-FIO-STAT VALUE 'S'.
+           03 PGM-STAT-LIC           VALUE '23'       PIC X(02).
+              88 PGM-STAT-LIC-OKS    VALUE '00'.
+              88 PGM-STAT-LIC-NUL    VALUE '  '.
+
+           03 WSS-LIQ-STAT            VALUE SPACES   PIC X(01).
+           03 WSS-LIC-SGV-TPAG COMP-3 VALUE ZEROES   PIC S9(11)V9(04).
+           03 WSS-LIQ-SGV-FINA COMP-3 VALUE ZEROES   PIC S9(11)V9(04).
+           03 WSS-LIQ-NUM-TLIQ COMP-3 VALUE ZEROES   PIC S9(03).
+
+      *FECHA INICIAL DE RANGO DE BUSQUEDA BUSQUEDA ( FECHA PROCESO + 1 )
+           03  WSS-FEC-FINI.
+               05  WSS-NUM-SINI                      PIC 9(02).
+               05  WSS-NUM-AINI                      PIC 9(02).
+               05  WSS-NUM-MINI                      PIC 9(02).
+               05  WSS-NUM-DINI                      PIC 9(02).
+      *FECHA FINAL DE RANGO DE BUSQUEDA BUSQUEDA ( FINI + TODOS
+      *DIAS NO HABILES CONSECUTIVOS
+           03  WSS-FEC-FFIN.
+               05  WSS-NUM-SFIN                      PIC 9(02).
+               05  WSS-NUM-AFIN                      PIC 9(02).
+               05  WSS-NUM-MFIN                      PIC 9(02).
+               05  WSS-NUM-DFIN                      PIC 9(02).
+
+      *FECHA INGRESADA COMO PARAMETRO
+           03  WSS-FEC-FPRO.
+               05  WSS-NUM-DPRO                      PIC 9(02).
+               05  WSS-NUM-MPRO                      PIC 9(02).
+               05  WSS-NUM-SPRO                      PIC 9(02).
+               05  WSS-NUM-APRO                      PIC 9(02).
+      *FECHA PROCESO EN FORMATO SSAAMMDD
+           03  WSS-FEC-FTRA.
+               05  WSS-NUM-STRA                      PIC 9(02).
+               05  WSS-NUM-ATRA                      PIC 9(02).
+               05  WSS-NUM-MTRA                      PIC 9(02).
+               05  WSS-NUM-DTRA                      PIC 9(02).
+      *FECHA TERMINO INTERESES PAGADOS (FTER - 1) SSAAMMDD
+           03  WSS-FEC-FTIP.
+               05  WSS-NUM-STIP                      PIC 9(02).
+               05  WSS-NUM-ATIP                      PIC 9(02).
+               05  WSS-NUM-MTIP                      PIC 9(02).
+               05  WSS-NUM-DTIP                      PIC 9(02).
+      *FECHA DE PASO
+           03  WSS-FEC-FPAS.
+               05  WSS-NUM-DPAS                      PIC 9(02).
+               05  WSS-NUM-MPAS                      PIC 9(02).
+               05  WSS-NUM-SPAS                      PIC 9(02).
+               05  WSS-NUM-APAS                      PIC 9(02).
+      *FECHA TRABAJO
+           03  WSS-FEC-FMOV.
+               05  WSS-NUM-SMOV                      PIC 9(02).
+               05  WSS-NUM-AMOV                      PIC 9(02).
+               05  WSS-NUM-MMOV                      PIC 9(02).
+               05  WSS-NUM-DMOV                      PIC 9(02).
+           03  WSS-DMA-FMVO.
+               05  WSS-NUM-DMVO                      PIC 9(02).
+               05  WSS-NUM-MMVO                      PIC 9(02).
+               05  WSS-NUM-AMVO.
+                   07  WSS-NUM-AMVO-1                PIC 9(01).
+                   07  WSS-NUM-AMVO-2                PIC 9(01).
+           03  WSS-FEC-FMVO REDEFINES WSS-DMA-FMVO PIC 9(06).
+
+           03  WSS-FEC-FCMP                          PIC X(08).
+           03  WSS-CIC-PER                           PIC X(01).
+           03  WSS-DIA-HBL                           PIC 9(05).
+           03  WSS-NUM-PER                           PIC 9(05).
+           03  WSS-NDIA                              PIC 9(04).
+           03  WSS-NUM-NDREA                         PIC 9(05).
+           03  WSS-COD-LIQ             VALUE ZEROES  PIC 9(01).
+           03  WSS-STAT-RCC            VALUE ZEROES  PIC 9(01).
+           03  WSS-IND-MCLI            VALUE SPACES  PIC X(01).
+           03  WSS-GLS-COMU            VALUE SPACES  PIC X(20).
+           03  WSS-CAD                 VALUE SPACES  PIC X(96).
+           03  WSS-RCC                 VALUE SPACES  PIC X(92).
+           03  WSS-BKP-LIQ             VALUE SPACES  PIC X(15).
+           03  WSS-BKP-OPD             VALUE SPACES  PIC X(12).
+           03  WSS-BKP-VEN             VALUE SPACES  PIC X(15).
+           03  WSS-BKP-CAD             VALUE SPACES  PIC X(16).
+           03  WSS-BKP-RCC             VALUE SPACES  PIC X(24).
+           03  WSS-SGV-VCAM-FLIQ       VALUE ZEROES  PIC S9(11)V9(05).
+           03  WSS-COD-LUGA.
+               05 WSS-IND-LUGA                       PIC 9(03).
+               05 WSS-COD-PAIS                       PIC X(01).
+           03  WSS-NUM-LUGA REDEFINES WSS-COD-LUGA PIC 9(04).
+           03  WSS-COD-MONE.
+               05 WSS-MSC-TVAL                       PIC X(01).
+               05 WSS-COD-CVAL                       PIC X(03).
+           03  WSS-NUM-MONE REDEFINES WSS-COD-MONE PIC 9(04).
+           03  WSS-LEI-LIQ             VALUE ZEROES  PIC 9(06).
+           03  WSS-GRA-LIQ             VALUE ZEROES  PIC 9(06).
+           03  WSS-GRA-OPD             VALUE ZEROES  PIC 9(06).
+           03  WSS-PRO-RSC             VALUE ZEROES  PIC 9(06).
+           03  WSS-GEN-IPA             VALUE ZEROES  PIC 9(06).
+           03  WSS-REV-SLA             VALUE ZEROES  PIC 9(06).
+
+       COPY GNSWGCVI.
+
+       PROCEDURE DIVISION.
+      *==================
+
+       MAIN SECTION.
+       INI-MAIN.
+       COPY GNSBGEDB.
+           MOVE 'DAPPBRSC' TO FIO-PROG
+                              WSS-PROG.
+           PERFORM BUS-FSIS.
+       INI-INP-SRT.
+           DISPLAY ' '.
+           DISPLAY ' INICIO CAPTURA PARAMETROS '.
+           PERFORM GET-FHOY.
+           PERFORM GET-SON.
+
+           PERFORM ACC-FPRO.
+
+           MOVE FIO-UPD TO FIO-CMND.
+           PERFORM DAP-FIO-OPD.
+
+           MOVE FIO-UPD TO FIO-CMND.
+           PERFORM DAP-FIO-VEN.
+
+           MOVE FIO-UPD TO FIO-CMND.
+           PERFORM DAP-FIO-LIQ.
+
+           MOVE FIO-UPD TO FIO-CMND.
+           PERFORM DAP-FIO-CAD.
+
+           MOVE FIO-UPD TO FIO-CMND.
+           PERFORM DAP-FIO-RCC.
+
+           MOVE FIO-UPD TO FIO-CMND.
+           PERFORM DAP-FIO-IPA.
+
+           MOVE FIO-OUT TO FIO-CMND.
+           PERFORM DAP-FIO-MVO.
+
+      *Proceso PRO-SLA por FCMP
+           MOVE WSS-FEC-FTRA IN WSS-VARI TO LIQ-FEC-FCMP IN LIQ.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           MOVE 'LIQ-FEC-FCMP' TO FIO-AKEY.
+           PERFORM DAP-FIO-LIQ.
+           PERFORM PRO-SLA UNTIL
+               ( NOT FIO-STAT-OKS ) OR
+               ( LIQ-FEC-FCMP IN LIQ > WSS-FEC-FFIN ).
+
+       FIN-MAIN.
+           DISPLAY ' '.
+           DISPLAY ' FIN PROCESO '.
+           MOVE FIO-CLO TO FIO-CMND.
+           PERFORM DAP-FIO-OPD.
+           PERFORM DAP-FIO-IPA.
+           PERFORM DAP-FIO-MVO.
+
+           DISPLAY ' '.
+           DISPLAY ' ESTADISTICAS DAPPBRSC '.
+           DISPLAY ' ===================== '.
+           DISPLAY ' '.
+           DISPLAY ' REGISTROS LIQ LEIDOS         : ' WSS-LEI-LIQ.
+           DISPLAY ' REGISTROS ACTIVADOS          : ' WSS-PRO-RSC.
+           DISPLAY ' REGISTROS IPA GENERADOS      : ' WSS-GEN-IPA.
+           DISPLAY ' REGISTROS REVERSADOS         : ' WSS-REV-SLA.
+           DISPLAY '  '.
+           PERFORM GNS-PRO-END.
+
+       PRO-SLA SECTION.
+       INI-PRO-SLA.
+           MOVE '23' TO PGM-STAT-LIC.
+           MOVE LIQ-FEC-FCMP IN LIQ TO WSS-FEC-FCMP IN WSS-VARI.
+           MOVE LIQ-KEY-ILIQ IN LIQ TO WSS-BKP-LIQ  IN WSS-VARI.
+
+           IF LIQ-COD-LIQU IN LIQ NOT = 'RC'
+              GO TO END-PRO-SLA.
+
+           MOVE LIQ-CIC-IOPD IN LIQ TO OPD-CIC-IOPD IN OPD.
+           MOVE FIO-GET-KEY-UPD TO FIO-CMND.
+           PERFORM DAP-FIO-OPD.
+           IF NOT FIO-STAT-OKS
+              DISPLAY ' '
+              DISPLAY ' PROCESO CANCELADO '
+              DISPLAY ' ERROR NO EXISTE OPERACION PARA LIQ: '
+                        LIQ-KEY-ILIQ IN LIQ ' FS: ' FIO-STAT
+              PERFORM GNS-PRO-ABT.
+           MOVE OPD-KEY-IOPD IN OPD TO WSS-BKP-OPD IN WSS-VARI.
+
+           ADD 1 TO WSS-LEI-LIQ IN WSS-VARI.
+           DISPLAY '  '.
+           DISPLAY '>> LIQ SELECCIONADA (SLA) : '
+            LIQ-KEY-ILIQ IN LIQ ' ESTADO: ' LIQ-COD-STAT IN LIQ.
+
+      * Obtiene Codigo de Moneda SCR-CIC-VCAM
+           PERFORM GET-COD-CIC-OPD.
+
+      * Determina Forma de Abono "A"utomatico o "S"afe (Caja)
+           MOVE SPACES TO WSS-LIQ-STAT IN WSS-VARI.
+           MOVE LIQ-CIC-IOPD IN LIQ TO CAD-CIC-IOPD IN CAD.
+           MOVE LIQ-NUM-ILIQ IN LIQ TO CAD-NUM-ILIQ IN CAD.
+           MOVE SPACES              TO CAD-NUM-ICAD IN CAD.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM DAP-FIO-CAD.
+           IF NOT ( FIO-STAT-OKS AND
+                    CAD-CIC-IOPD IN CAD = LIQ-CIC-IOPD IN LIQ )
+               DISPLAY ' '
+               DISPLAY ' PROCESO CANCELADO '
+               DISPLAY ' NO EXISTE CAD PARA LIQ: '
+                         LIQ-KEY-ILIQ IN LIQ ' FS:' FIO-STAT
+               PERFORM GNS-PRO-ABT.
+           MOVE 'TAB'  TO MSC-COD-SIST.
+           MOVE 'TCYA' TO MSC-COD-TMSC IN MSC.
+           MOVE CAD-IND-TCAD IN CAD TO MSC-COD-CMSC IN MSC.
+           PERFORM BUS-MSC.
+           IF MSC-CIC-MSCL IN MSC = 'TCYACAJA'
+               MOVE 'S' TO WSS-LIQ-STAT IN WSS-VARI
+           ELSE
+               MOVE 'A' TO WSS-LIQ-STAT IN WSS-VARI.
+
+       PRO-CON-SLA.
+           IF LIQ-COD-STAT IN LIQ = 'P' AND
+              LIQ-FEC-FCMP IN LIQ > WSS-FEC-FINI
+              IF  (OPD-COD-IONP IN OPD = 'S' ) OR
+                  (OPD-COD-GARA IN OPD NOT = 'N' )
+                  PERFORM DEL-LIQ-CAD
+                  GO TO   END-PRO-SLA
+              ELSE
+               DISPLAY '  '
+               DISPLAY '>> PROCESA PRO-RSC: '
+                                         LIQ-KEY-ILIQ IN LIQ
+                PERFORM PRO-RSC
+           ELSE
+                MOVE FIO-ULK-REC TO FIO-CMND
+                PERFORM DAP-FIO-OPD
+                IF NOT FIO-STAT-OKS
+                   DISPLAY ' ERROR AL LIBERAR OPD '
+                   GO TO FIN-PRO-SLA.
+
+      * Procesa liquidaciones anticipas para el mismo dia (solo falta
+      * informar IPA) y liquidaciones futuras.
+           IF LIQ-FEC-FCMP IN LIQ NOT > WSS-FEC-FTIP
+              IF LIQ-COD-STAT IN LIQ = 'A'
+                 DISPLAY '  '
+                 DISPLAY '>> COMPLETA IPA : ' LIQ-KEY-ILIQ IN LIQ
+                 PERFORM CMP-IPA
+              ELSE
+      * Liquidaciones anticipadas por Cta. Cte del dia
+                IF WSS-LIQ-STAT IN WSS-VARI = 'A'
+                   DISPLAY ' '
+                   DISPLAY ' PROCESO CANCELADO '
+                   DISPLAY ' LIQUIDACION ANTICIPADA DEL DIA NO PAGADA '
+                             LIQ-KEY-ILIQ IN LIQ
+                   PERFORM GNS-PRO-ABT
+                ELSE
+      * Liquidaciones anticipadas del dia por CAJA no pagadas (REVERSAR)
+                   PERFORM PRO-REV-SLA.
+
+       END-PRO-SLA.
+           MOVE WSS-FEC-FCMP IN WSS-VARI TO LIQ-FEC-FCMP IN LIQ.
+           MOVE 'LIQ-FEC-FCMP' TO FIO-AKEY.
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM DAP-FIO-LIQ.
+       FIN-PRO-SLA.
+           EXIT.
+
+       COPY TABBFCAM.
+       COPY DAPBFOPD.
+       COPY DAPBFRCC.
+       COPY DAPBFCAD.
+       COPY DAPBFPTD.
+       COPY DAPBFVEN.
+       COPY DAPBFLIQ.
+       COPY DAPBFLIC.
+       COPY DAPBFMVO.
+       COPY DAPBFIPA.
+       COPY SGCBFDBC.
+       COPY SGCBFRCD.
+       COPY DAPBG004.
+       COPY GNSBGDTC.
+       COPY GNSBGIFD.
+       COPY GNSBTABT.
+       COPY GNSBBSYS.
+       COPY GNSBVTAB.
+       COPY GNSBBTAB.
+       COPY GNSBFTAB.
+       COPY GNSBFCIC.
+      *COPY GNSBGCIC.
+       COPY GNSBBCIC.
+       COPY GNSBGCAM.
+       COPY GNSBFMSG.
+       COPY GNSBFMSC.
+       COPY GNSBBMSC.
+       COPY GNSBGEND.
+
+      *<<<< EOF
+      *Entidades  de GNS
+       COPY GNSBGABT.
+       COPY GNSBGINT.
+       COPY GNSBGFEC.
+       COPY GNSBPFEC.
+       COPY GNSBGHOY.
+       COPY GNSBGPES.
+       COPY GNSBBMSG.
+
+       CMP-IPA SECTION.
+       INI-CMP-IPA.
+           ADD 1 TO WSS-GEN-IPA IN WSS-VARI.
+           MOVE OPD-CIC-ISER IN OPD TO IPA-CIC-ISER IN IPA.
+           MOVE LIQ-FEC-FCMP IN LIQ TO IPA-FEC-FVEN IN IPA.
+           MOVE FIO-GET-KEY-UPD TO FIO-CMND.
+           PERFORM DAP-FIO-IPA.
+           IF NOT FIO-STAT-OKS
+      * Carga interfaz de intereses ganados
+              PERFORM PRO-IPA
+              GO TO FIN-CMP-IPA.
+
+           MOVE LIQ-COD-OFIC IN LIQ TO IPA-COD-OFLI IN IPA.
+           MOVE LIQ-SGV-TPAG IN LIQ TO IPA-VAL-CAPT IN IPA.
+           MOVE LIQ-FEC-FCMP IN LIQ TO IPA-FEC-FLIQ IN IPA.
+      *     DISPLAY 'CMP-IPA ' IPA.
+           MOVE FIO-MOD TO FIO-CMND.
+           PERFORM DAP-FIO-IPA.
+           IF NOT FIO-STAT-OKS
+              DISPLAY ' '
+              DISPLAY ' PROCESO CANCELADO '
+              DISPLAY ' ERROR ACTUALIZACION IPA: '
+                        IPA-KEY-IPAV IN IPA ' FS: ' FIO-STAT
+              PERFORM GNS-PRO-ABT.
+       FIN-CMP-IPA.
+           EXIT.
+
+       PRO-RSC SECTION.
+       INI-PRO-RSC.
+           ADD 1 TO WSS-PRO-RSC IN WSS-VARI.
+      *LEE DE UPD VEN Y OPD
+           MOVE LIQ-CIC-IOPD IN LIQ TO VEN-CIC-IOPD IN VEN.
+           MOVE '001'               TO VEN-NUM-IVEN IN VEN.
+           MOVE FIO-GET-KEY-UPD TO FIO-CMND.
+           PERFORM DAP-FIO-VEN.
+           IF NOT FIO-STAT-OKS
+              DISPLAY ' '
+              DISPLAY ' PROCESO CANCELADO '
+              DISPLAY ' ERROR NO EXISTE VENCIMIENTO YA SELECCIONADO: '
+                        VEN-KEY-IVEN IN VEN ' FS: ' FIO-STAT
+              PERFORM GNS-PRO-ABT.
+
+           MOVE WSS-BKP-LIQ TO LIQ-KEY-ILIQ IN LIQ.
+           MOVE FIO-GET-KEY-UPD TO FIO-CMND.
+           PERFORM DAP-FIO-LIQ.
+           IF NOT FIO-STAT-OKS
+              DISPLAY ' '
+              DISPLAY ' PROCESO CANCELADO '
+              DISPLAY ' ERROR NO EXISTE LIQUIDACION YA SELECCIONADA: '
+                        LIQ-KEY-ILIQ IN LIQ ' FS: ' FIO-STAT
+              PERFORM GNS-PRO-ABT.
+
+           IF WSS-LIQ-STAT IN WSS-VARI = 'A'
+              MOVE 'A' TO LIQ-COD-STAT IN LIQ
+           ELSE
+              MOVE 'S' TO LIQ-COD-STAT IN LIQ.
+
+           MOVE FIO-MOD TO FIO-CMND.
+           PERFORM DAP-FIO-LIQ.
+           IF NOT FIO-STAT-OKS
+              DISPLAY ' '
+              DISPLAY ' PROCESO CANCELADO '
+              DISPLAY ' ERROR ACTUALIZACION LIQ: '
+                        LIQ-KEY-ILIQ IN LIQ ' FS: ' FIO-STAT
+              PERFORM GNS-PRO-ABT.
+
+      * Determina forma de Abono Cta. Cte. ("A") o Caja ("S")
+           IF WSS-LIQ-STAT IN WSS-VARI = 'A'
+              PERFORM PUT-MVO
+           ELSE
+              IF WSS-LIQ-STAT IN WSS-VARI = 'S'
+                 PERFORM GEN-LIC.
+
+           MOVE ZEROES TO VEN-VAL-SCAP IN VEN
+                          VEN-VAL-SFIN IN VEN.
+
+           MOVE FIO-MOD TO FIO-CMND.
+           PERFORM DAP-FIO-VEN.
+           IF NOT FIO-STAT-OKS
+              DISPLAY ' '
+              DISPLAY ' PROCESO CANCELADO '
+              DISPLAY ' ERROR ACTUALIZACION VEN: '
+                        VEN-KEY-IVEN IN VEN ' FS: ' FIO-STAT
+              PERFORM GNS-PRO-ABT.
+
+           MOVE ZEROES TO OPD-VAL-SCAP IN OPD.
+           MOVE 'CAN'  TO OPD-COD-SCTB IN OPD.
+           MOVE 'L'    TO OPD-COD-STAT IN OPD.
+
+           MOVE FIO-MOD TO FIO-CMND.
+           PERFORM DAP-FIO-OPD.
+           IF NOT FIO-STAT-OKS
+              DISPLAY ' '
+              DISPLAY ' PROCESO CANCELADO '
+              DISPLAY ' ERROR ACTUALIZACION OPD: '
+                        OPD-KEY-IOPD IN OPD ' FS: ' FIO-STAT
+              PERFORM GNS-PRO-ABT.
+       FIN-PRO-RSC.
+           EXIT.
+
+       PRO-REV-SLA SECTION.
+       INI-PRO-REV-SLA.
+           IF LIQ-COD-STAT IN LIQ NOT = 'S'
+               DISPLAY 'INTENTO FALLIDO DE REVERSAR '
+                       'LIQUIDACIONES DEL DIA NO PAGADAS : '
+                       LIQ-CIC-IOPD IN LIQ
+               DISPLAY ' ESTADO : ' LIQ-COD-STAT IN LIQ
+           ELSE
+              MOVE OPD-CIC-ISER IN OPD TO LIC-CIC-ISER IN LIC
+              MOVE FIO-GET-KEY-UPD TO FIO-CMND
+              PERFORM DAP-FIO-LIC
+              MOVE FIO-STAT TO PGM-STAT-LIC
+              IF NOT PGM-STAT-LIC-OKS
+                 DISPLAY ' '
+                 DISPLAY ' PROCESO CANCELADO '
+                 DISPLAY ' NO EXISTE LIC A REVERSAR: '
+                        LIC-CIC-ISER IN LIC ' FS: ' FIO-STAT
+                 PERFORM GNS-PRO-ABT
+              ELSE
+              IF LIC-COD-STAT IN LIC NOT = 'S'
+                 DISPLAY ' PROCESO CANCELADO '
+                 DISPLAY ' ESTADO INVALIDO LIC : '
+                  LIC-COD-STAT IN LIC
+                 PERFORM GNS-PRO-ABT
+              ELSE
+                 DISPLAY '  '
+                 ADD 1 TO WSS-REV-SLA IN WSS-VARI
+                 PERFORM PRO-LIC
+                 PERFORM PRO-SLD
+                 DISPLAY '>> LIQ REVERSADA: ' LIQ-CIC-IOPD IN LIQ
+                                  ' ESTADO: ' LIQ-COD-STAT IN LIQ.
+       FIN-PRO-REV-SLA.
+           EXIT.
+
+       PRO-LIC SECTION.
+       INI-PRO-LIC.
+           MOVE LIQ-SGV-TPAG IN LIQ TO WSS-LIC-SGV-TPAG.
+
+           IF SCR-CIC-TVAL = PDB-CIC-MNAC
+               MOVE LIQ-SGV-PESO IN LIQ TO WSS-LIC-SGV-TPAG
+           ELSE
+               MOVE LIQ-SGV-TPAG IN LIQ TO WSS-LIC-SGV-TPAG.
+
+           SUBTRACT WSS-LIC-SGV-TPAG FROM ZEROES
+                                        GIVING WSS-LIC-SGV-TPAG.
+
+           ADD WSS-LIC-SGV-TPAG TO LIC-SGV-TPAG IN LIC.
+           IF LIC-SGV-TPAG IN LIC = ZEROES
+                 MOVE FIO-DEL TO FIO-CMND
+           ELSE
+                 DISPLAY ' '
+                 DISPLAY ' PROCESO CANCELADO '
+                 DISPLAY ' ERROR DE COMPATIBILIDAD DE MONTOS'
+                         ' ENTRE LIQ Y LIC'
+                 PERFORM GNS-PRO-ABT.
+
+           PERFORM DAP-FIO-LIC.
+           IF NOT FIO-STAT-OKS
+      * Error inconsistencia en el ingreso : hacer LOGTB e informar
+                DISPLAY ' '
+                DISPLAY ' PROCESO CANCELADO '
+                DISPLAY ' ERROR AL MODIFICAR LIC: '
+                          LIC-CIC-ISER IN LIC ' FS: ' FIO-STAT
+                PERFORM GNS-PRO-ABT
+            ELSE
+               DISPLAY ' '
+               DISPLAY ' ENTIDAD LIC ELIMINADA'.
+       FIN-PRO-LIC.
+           EXIT.
+
+       PRO-SLD SECTION.
+       INI-PRO-SLD.
+           MOVE LIQ-CIC-IOPD IN LIQ TO OPD-CIC-IOPD IN OPD.
+           MOVE FIO-GET-KEY-UPD TO FIO-CMND.
+           PERFORM DAP-FIO-OPD.
+           IF NOT FIO-STAT-OKS
+              DISPLAY ' '
+              DISPLAY ' PROCESO CANCELADO '
+              DISPLAY ' NO EXISTE OPD YA SELECCIONADA: '
+                        OPD-CIC-IOPD IN OPD ' FS: ' FIO-STAT
+              PERFORM GNS-PRO-ABT.
+
+           MOVE LIQ-CIC-IOPD IN LIQ TO VEN-CIC-IOPD IN VEN.
+           MOVE 1                   TO VEN-NUM-IVEN IN VEN.
+           MOVE FIO-GET-KEY-UPD TO FIO-CMND.
+           PERFORM DAP-FIO-VEN.
+           IF NOT FIO-STAT-OKS
+              DISPLAY ' '
+              DISPLAY ' PROCESO CANCELADO '
+              DISPLAY ' NO EXISTE VEN YA SELECCIONADA: '
+                        OPD-CIC-IOPD IN OPD ' FS: ' FIO-STAT
+              PERFORM GNS-PRO-ABT.
+
+           MOVE VEN-VAL-FINA IN VEN TO VEN-VAL-SFIN IN VEN.
+           MOVE VEN-VAL-CAPI IN VEN TO VEN-VAL-SCAP IN VEN.
+
+           MOVE FIO-MOD TO FIO-CMND.
+           PERFORM DAP-FIO-VEN.
+           IF NOT FIO-STAT-OKS
+              DISPLAY ' '
+              DISPLAY ' PROCESO CANCELADO '
+              DISPLAY ' ERROR EN MODIFICACION REG VEN: '
+                        VEN-KEY-IVEN IN VEN ' FS: ' FIO-STAT
+              PERFORM GNS-PRO-ABT
+           ELSE
+              DISPLAY ' '
+              DISPLAY ' ENTIDAD VEN REVERSADA'.
+
+           ADD LIQ-SGV-CAPI IN LIQ   OPD-VAL-SCAP IN OPD
+                                    GIVING OPD-VAL-SCAP IN OPD.
+           MOVE 'G' TO OPD-COD-STAT IN OPD.
+           MOVE 'VIG' TO OPD-COD-SCTB IN OPD .
+
+           SUBTRACT LIQ-NUM-TLIQ IN LIQ FROM ZEROES GIVING
+                                              WSS-LIQ-NUM-TLIQ.
+      *ISP-RVM-BEE-INI 25-08-1997
+      *    SUBTRACT WSS-LIQ-NUM-TLIQ FROM OPD-NUM-VNLQ IN OPD.
+      *ISP-RVM-BEE-FIN 25-08-1997
+           ADD WSS-LIQ-NUM-TLIQ      TO   OPD-NUM-VSLQ IN OPD.
+
+
+           MOVE FIO-MOD TO FIO-CMND.
+           PERFORM DAP-FIO-OPD.
+           IF NOT FIO-STAT-OKS
+              DISPLAY ' '
+              DISPLAY ' PROCESO CANCELADO '
+              DISPLAY ' ERROR EN MODIFICACION REG OPD: '
+                        OPD-CIC-IOPD IN OPD ' FS: ' FIO-STAT
+              PERFORM GNS-PRO-ABT
+           ELSE
+              DISPLAY ' '
+              DISPLAY ' ENTIDAD OPD REVERSADA'.
+
+           MOVE WSS-BKP-LIQ IN WSS-VARI TO LIQ-KEY-ILIQ IN LIQ.
+           MOVE FIO-GET-KEY-UPD TO FIO-CMND.
+           PERFORM DAP-FIO-LIQ.
+           IF NOT FIO-STAT-OKS
+              DISPLAY ' '
+              DISPLAY ' PROCESO CANCELADO '
+              DISPLAY ' NO EXISTE LIQ YA SELECCIONADA: '
+                        LIQ-KEY-ILIQ IN LIQ ' FS: ' FIO-STAT
+              PERFORM GNS-PRO-ABT.
+
+           MOVE FIO-DEL TO FIO-CMND.
+           PERFORM DAP-FIO-LIQ.
+           IF NOT FIO-STAT-OKS
+              DISPLAY ' '
+              DISPLAY ' PROCESO CANCELADO '
+              DISPLAY ' ERROR EN ELIMINACION REG LIQ: '
+                        LIQ-KEY-ILIQ IN LIQ ' FS: ' FIO-STAT
+              PERFORM GNS-PRO-ABT
+           ELSE
+              DISPLAY ' '
+              DISPLAY ' ENTIDAD LIQ ELIMINADA'.
+
+           MOVE LIQ-CIC-IOPD IN LIQ TO CAD-CIC-IOPD IN CAD.
+           MOVE LIQ-NUM-ILIQ IN LIQ TO CAD-NUM-ILIQ IN CAD.
+           MOVE SPACES              TO CAD-NUM-ICAD IN CAD.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM DAP-FIO-CAD.
+           IF ( FIO-STAT-OKS AND
+                CAD-CIC-IOPD IN CAD = LIQ-CIC-IOPD IN LIQ AND
+                CAD-NUM-ILIQ IN CAD = LIQ-NUM-ILIQ IN LIQ )
+                MOVE FIO-GET-KEY-UPD TO FIO-CMND
+                PERFORM DAP-FIO-CAD
+                MOVE FIO-DEL TO FIO-CMND
+                PERFORM DAP-FIO-CAD
+           ELSE
+               DISPLAY ' '
+               DISPLAY LIQ-KEY-ILIQ IN LIQ
+                      ' NO EXISTE CAD ASOCIADA A LIQ A REVERSAR '.
+       FIN-PRO-SLD.
+           EXIT.
+
+       DEL-LIQ-CAD SECTION.
+      * BCI CPZ 08.09.93  REVERSA CUANDO HAY ONP O GAR.
+           MOVE FIO-ULK-REC TO FIO-CMND
+           PERFORM DAP-FIO-OPD
+           IF NOT FIO-STAT-OKS
+              DISPLAY ' '
+              DISPLAY ' PROCESO CANCELADO '
+              DISPLAY ' ERROR AL LIBERAR OPD :'
+                 WSS-BKP-LIQ IN WSS-VARI
+              PERFORM GNS-PRO-ABT.
+           MOVE WSS-BKP-LIQ IN WSS-VARI TO LIQ-KEY-ILIQ IN LIQ.
+           MOVE FIO-GET-KEY-UPD TO FIO-CMND.
+           PERFORM DAP-FIO-LIQ.
+           IF NOT FIO-STAT-OKS
+              DISPLAY ' '
+              DISPLAY ' PROCESO CANCELADO '
+              DISPLAY ' NO EXISTE LIQ YA SELECCIONADA: '
+                        LIQ-KEY-ILIQ IN LIQ ' FS: ' FIO-STAT
+              PERFORM GNS-PRO-ABT.
+
+           MOVE FIO-DEL TO FIO-CMND.
+           PERFORM DAP-FIO-LIQ.
+           IF NOT FIO-STAT-OKS
+              DISPLAY ' '
+              DISPLAY ' PROCESO CANCELADO '
+              DISPLAY ' ERROR EN ELIMINACION REG LIQ: '
+                        LIQ-KEY-ILIQ IN LIQ ' FS: ' FIO-STAT
+              PERFORM GNS-PRO-ABT
+           ELSE
+              DISPLAY ' '
+              DISPLAY ' ENTIDAD LIQ ELIMINADA'.
+
+           MOVE LIQ-CIC-IOPD IN LIQ TO CAD-CIC-IOPD IN CAD.
+           MOVE LIQ-NUM-ILIQ IN LIQ TO CAD-NUM-ILIQ IN CAD.
+           MOVE SPACES              TO CAD-NUM-ICAD IN CAD.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM DAP-FIO-CAD.
+           IF ( FIO-STAT-OKS AND
+                CAD-CIC-IOPD IN CAD = LIQ-CIC-IOPD IN LIQ AND
+                CAD-NUM-ILIQ IN CAD = LIQ-NUM-ILIQ IN LIQ )
+                MOVE FIO-GET-KEY-UPD TO FIO-CMND
+                PERFORM DAP-FIO-CAD
+                MOVE FIO-DEL TO FIO-CMND
+                PERFORM DAP-FIO-CAD
+           ELSE
+               DISPLAY ' '
+               DISPLAY LIQ-KEY-ILIQ IN LIQ
+                      ' NO EXISTE CAD ASOCIADA A LIQ A REVERSAR '.
+       FIN-DEL-LIQ-CAD.
+           EXIT.
+       GET-CUR-AUT SECTION.
+       INI-GET-CUR-AUT.
+           MOVE OPD-CIC-IOPD IN OPD TO CAD-CIC-IOPD IN CAD.
+           MOVE LIQ-NUM-ILIQ IN LIQ TO CAD-NUM-ILIQ IN CAD.
+           MOVE 1                   TO CAD-NUM-ICAD IN CAD.
+           MOVE 'CAD-KEY-ICAD' TO FIO-AKEY.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM DAP-FIO-CAD.
+       FIN-GET-CUR-AUT.
+           EXIT.
+
+       PUT-MVO SECTION.
+       INI-PUT-MVO.
+           MOVE 5                   TO MVO-COD-TIPO IN MVO.
+           MOVE CAD-IIC-ICAD IN CAD TO MVO-NUM-CCTE IN MVO.
+           MOVE 9                   TO MVO-COD-IMPU IN MVO.
+           MOVE SPACES              TO MVO-GLS-DIS1 IN MVO.
+           MOVE CAD-SGV-LIQU IN CAD TO MVO-VAL-MONT IN MVO.
+           MOVE 'E'                 TO MVO-COD-MVTO IN MVO.
+           MOVE 00                  TO MVO-COD-CBCO IN MVO.
+           MOVE SPACES              TO MVO-GLS-DIS2 IN MVO.
+
+           MOVE LIQ-FEC-FCMP IN LIQ TO WSS-FEC-FMOV IN WSS-VARI.
+           MOVE WSS-NUM-DMOV IN WSS-VARI   TO WSS-NUM-DMVO IN WSS-VARI.
+           MOVE WSS-NUM-MMOV IN WSS-VARI   TO WSS-NUM-MMVO IN WSS-VARI.
+           MOVE WSS-NUM-AMOV IN WSS-VARI   TO WSS-NUM-AMVO IN WSS-VARI.
+           MOVE WSS-NUM-DMVO IN WSS-VARI   TO MVO-NUM-DMOV IN MVO.
+           MOVE WSS-NUM-MMVO IN WSS-VARI   TO MVO-NUM-MMOV IN MVO.
+           MOVE WSS-NUM-AMVO-2 IN WSS-VARI TO MVO-NUM-AMOV IN MVO.
+
+           MOVE SPACES              TO MVO-GLS-DIS3 IN MVO.
+           MOVE OPD-COD-OFIC IN OPD TO MVO-COD-SMOV IN MVO.
+           MOVE SPACES              TO MVO-GLS-DIS4 IN MVO.
+           DISPLAY 'PUT MVO ' MVO.
+
+           MOVE FIO-PUT TO FIO-CMND.
+           PERFORM DAP-FIO-MVO.
+           IF NOT FIO-STAT-OKS
+              DISPLAY ' '
+              DISPLAY ' PROCESO CANCELADO '
+              DISPLAY ' ERROR AL GRABAR MVO: '
+                        MVO ' FS: ' FIO-STAT
+              PERFORM GNS-PRO-ABT.
+       FIN-PUT-MVO.
+           EXIT.
+
+       GEN-LIC SECTION.
+       INI-GEN-LIC.
+           MOVE OPD-CIC-ISER IN OPD TO LIC-CIC-ISER IN LIC.
+           MOVE FIO-GET-KEY-UPD TO FIO-CMND.
+           PERFORM DAP-FIO-LIC.
+           IF NOT FIO-STAT-OKS
+              MOVE SPACES              TO LIC-GLS-FLAG IN LIC
+              MOVE ZEROES              TO LIC-FEC-FLIQ IN LIC
+              MOVE 'S'                 TO LIC-COD-STAT IN LIC
+              MOVE SPACES              TO LIC-COD-OFIC IN LIC
+              MOVE OPD-COD-VCAM IN OPD TO LIC-COD-VCAM IN LIC
+              MOVE OPD-CIC-IOPD IN OPD TO LIC-CIC-IOPD IN LIC
+              MOVE SPACES              TO LIC-GLS-DISP IN LIC
+              IF SCR-CIC-TVAL = PDB-CIC-MNAC
+                   MOVE LIQ-SGV-PESO IN LIQ TO LIC-SGV-TPAG IN LIC
+                   MOVE FIO-PUT TO FIO-CMND
+              ELSE
+                   MOVE LIQ-SGV-TPAG IN LIQ TO LIC-SGV-TPAG IN LIC
+                   MOVE FIO-PUT TO FIO-CMND
+           ELSE
+              IF SCR-CIC-TVAL = PDB-CIC-MNAC
+                   ADD LIQ-SGV-PESO IN LIQ TO LIC-SGV-TPAG IN LIC
+                   MOVE FIO-MOD TO FIO-CMND
+              ELSE
+                   ADD LIQ-SGV-TPAG IN LIQ TO LIC-SGV-TPAG IN LIC
+                   MOVE FIO-MOD TO FIO-CMND.
+
+           PERFORM DAP-FIO-LIC.
+           IF NOT FIO-STAT-OKS
+              DISPLAY ' '
+              DISPLAY ' PROCESO CANCELADO '
+              DISPLAY ' ERROR AL GRABAR LIQUIDACION EN CAJA: '
+                         LIC  ' FS: ' FIO-STAT
+              PERFORM GNS-PRO-ABT.
+       FIN-GEN-LIC.
+           EXIT.
+
+       PRO-IPA SECTION.
+       INI-PRO-IPA.
+           MOVE WSS-BKP-OPD IN WSS-VARI TO OPD-CIC-IOPD IN OPD.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM DAP-FIO-OPD.
+           IF NOT FIO-STAT-OKS
+               DISPLAY ' '
+               DISPLAY ' PROCESO CANCELADO '
+               DISPLAY ' OPD INEXISTENTE EN PRO-IPA : CIC= '
+                         OPD-CIC-IOPD IN OPD ' FS: ' FIO-STAT
+               PERFORM GNS-PRO-ABT.
+
+           MOVE WSS-BKP-LIQ IN WSS-VARI TO LIQ-KEY-ILIQ IN LIQ.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM DAP-FIO-LIQ.
+           IF NOT FIO-STAT-OKS
+               DISPLAY ' '
+               DISPLAY ' PROCESO CANCELADO '
+               DISPLAY ' LIQ INEXISTENTE EN PRO-IPA : CIC= '
+                         LIQ-CIC-IOPD IN LIQ ' FS: ' FIO-STAT
+               PERFORM GNS-PRO-ABT.
+
+           MOVE WSS-BKP-OPD IN WSS-VARI TO VEN-CIC-IOPD IN VEN.
+           MOVE '001'                   TO VEN-NUM-IVEN IN VEN.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM DAP-FIO-VEN.
+           IF NOT FIO-STAT-OKS
+               DISPLAY ' '
+               DISPLAY ' PROCESO CANCELADO '
+               DISPLAY ' VEN INEXISTENTE EN PRO-IPA : CIC= '
+                         VEN-KEY-IVEN IN VEN ' FS: ' FIO-STAT
+               PERFORM GNS-PRO-ABT.
+
+           PERFORM PRO-LOAD-IPA.
+       FIN-PRO-IPA.
+           EXIT.
+
+       PRO-LOAD-IPA SECTION.
+       INI-PRO-LOAD-IPA.
+      *    IPA Registro
+           MOVE ZEROES TO IPA.
+      *
+      *    Serial de la operacion captacion
+           MOVE OPD-CIC-ISER IN OPD TO IPA-CIC-ISER IN IPA.
+      *
+      *    Fecha de Vencimiento
+           MOVE VEN-FEC-FVEN IN VEN TO IPA-FEC-FVEN IN IPA.
+      *
+      *    Clase de Operacion
+           MOVE OPD-COD-COPD IN OPD TO IPA-COD-COPD IN IPA.
+      *
+      *    Monto de la Captacion
+           MOVE OPD-VAL-CAPT IN OPD TO IPA-VAL-CAPT IN IPA.
+      *
+      *    Monto Intereses Periodo
+           COMPUTE IPA-VAL-INTS IN IPA =
+                      OPD-VAL-CAPT IN OPD - VEN-VAL-CAPI IN VEN
+                    + VEN-VAL-IDNI IN VEN.
+      *     IF ( SCR-CIC-TVAL = PDB-CIC-MNAC AND
+      *          SCR-CIC-VCAM NOT = PDB-CIC-0999 )
+      *        PERFORM OBT-VCAM-FLIQ
+      *        MULTIPLY IPA-VAL-INTS IN IPA BY WSS-SGV-VCAM-FLIQ
+      *                               GIVING IPA-VAL-INTS IN IPA.
+      *
+      *     MOVE IPA-VAL-INTS IN IPA TO PES-SGV-DECI.
+      *     MOVE SCR-CIC-VCAM TO PES-CIC-VCAM.
+      *     PERFORM PES-SCTV.
+      *     MOVE PES-SGV-ENTE TO IPA-VAL-INTS IN IPA.
+      *
+      *    Monto Captacion Inicial
+           MOVE OPD-VAL-READ IN OPD TO IPA-VAL-CAIN IN IPA.
+
+      *    Monto Liquidado
+           MOVE LIQ-SGV-TPAG IN LIQ TO IPA-VAL-MLIQ IN IPA.
+
+      *    Oficina de Liquidacion
+           MOVE LIQ-COD-OFIC IN LIQ TO IPA-COD-OFLI IN IPA.
+
+      *    Fecha de liquidacion
+           MOVE LIQ-FEC-FCMP IN LIQ TO IPA-FEC-FLIQ IN IPA.
+
+      *    Calcula Diferencia en Dias
+           MOVE LIQ-NUM-DCMP IN LIQ TO FEC-DEC1.
+           MOVE LIQ-NUM-MCMP IN LIQ TO FEC-MEC1.
+           MOVE LIQ-NUM-SCMP IN LIQ TO FEC-SEC1.
+           MOVE LIQ-NUM-ACMP IN LIQ TO FEC-AEC1.
+           MOVE LIQ-NUM-DREA IN LIQ TO FEC-DEC2.
+           MOVE LIQ-NUM-MREA IN LIQ TO FEC-MEC2.
+           MOVE LIQ-NUM-SREA IN LIQ TO FEC-SEC2.
+           MOVE LIQ-NUM-AREA IN LIQ TO FEC-AEC2.
+           MOVE FEC-FORM-FEC TO FEC-FORM.
+           MOVE FEC-DIF-DIA  TO FEC-CMND.
+           PERFORM CAL-FEC.
+           IF NOT FEC-STAT-OKS
+              DISPLAY 'ERROR CAL-FEC PRO-IPA ' FEC-MENS
+              MOVE ZEROES TO FEC-NDIA.
+      *    Plazo en Dias
+           MOVE FEC-NDIA TO IPA-NUM-PLZO IN IPA.
+
+      *    Codigo de Moneda
+           MOVE OPD-MSC-TVAL IN OPD TO WSS-MSC-TVAL IN WSS-VARI.
+           MOVE OPD-COD-CVAL IN OPD TO WSS-COD-CVAL IN WSS-VARI.
+           MOVE WSS-NUM-MONE IN WSS-VARI TO IPA-NUM-TVAL IN IPA.
+
+      *    Valor Tasa
+           MOVE OPD-VAL-SINT IN OPD TO IPA-SGV-TINT IN IPA.
+
+      *    Fecha de Captacion
+           MOVE OPD-FEC-FREA IN OPD TO IPA-FEC-FCAP IN IPA.
+
+      *    Obtiene datos de clientes
+           PERFORM GET-CUR-RCC.
+           IF WSS-STAT-RCC IN WSS-VARI = 0
+              PERFORM GET-RCC-DBC
+              MOVE DBC-NUM-ICLI IN DBC TO IPA-NUM-CLI1 IN IPA
+              MOVE DBC-VRF-ICLI IN DBC TO IPA-VRF-CLI1 IN IPA
+              MOVE DBC-GLS-NOMC IN DBC TO IPA-GLS-NOM1 IN IPA
+              PERFORM GET-RCC-RCD
+              MOVE RCD-GLS-DIRE IN RCD TO IPA-GLS-DIR1 IN IPA
+              MOVE WSS-IND-LUGA        TO IPA-COD-CIU1 IN IPA
+              PERFORM GET-NXT-RCC
+              IF WSS-IND-MCLI IN WSS-VARI = 'M'
+                 PERFORM GET-RCC-DBC
+                 MOVE DBC-NUM-ICLI IN DBC TO IPA-NUM-CLI2 IN IPA
+                 MOVE DBC-VRF-ICLI IN DBC TO IPA-VRF-CLI2 IN IPA
+                 MOVE DBC-GLS-NOMC IN DBC TO IPA-GLS-NOM2 IN IPA
+                 PERFORM GET-RCC-RCD
+                 MOVE RCD-GLS-DIRE IN RCD TO IPA-GLS-DIR1 IN IPA
+                 MOVE WSS-IND-LUGA        TO IPA-COD-CIU1 IN IPA
+              ELSE
+                 MOVE ZEROES TO IPA-NUM-CLI2 IN IPA
+                 MOVE ZEROES TO IPA-VRF-CLI2 IN IPA
+                 MOVE SPACES TO IPA-GLS-NOM2 IN IPA
+                 MOVE SPACES TO IPA-GLS-DIR2 IN IPA
+                 MOVE ZEROES TO IPA-COD-CIU2 IN IPA
+           ELSE
+              MOVE ZEROES TO IPA-NUM-CLI1 IN IPA
+              MOVE ZEROES TO IPA-VRF-CLI1 IN IPA
+              MOVE SPACES TO IPA-GLS-NOM1 IN IPA
+              MOVE SPACES TO IPA-GLS-DIR1 IN IPA
+              MOVE ZEROES TO IPA-COD-CIU1 IN IPA
+              MOVE ZEROES TO IPA-NUM-CLI2 IN IPA
+              MOVE ZEROES TO IPA-VRF-CLI2 IN IPA
+              MOVE SPACES TO IPA-GLS-NOM2 IN IPA
+              MOVE SPACES TO IPA-GLS-DIR2 IN IPA
+              MOVE ZEROES TO IPA-COD-CIU2 IN IPA.
+
+      *     DISPLAY 'PRO-IPA ' IPA.
+
+           MOVE FIO-PUT TO FIO-CMND.
+           PERFORM DAP-FIO-IPA.
+           IF NOT FIO-STAT-OKS
+              DISPLAY ' '
+              DISPLAY ' PROCESO CANCELADO '
+              DISPLAY ' ERROR FIO-PUT IPA: '
+                        IPA-KEY-IPAV IN IPA ' FS: ' FIO-STAT
+              PERFORM GNS-PRO-ABT.
+       FIN-PRO-LOAD-IPA.
+           EXIT.
+
+       OBT-VCAM-FLIQ SECTION.
+       INI-OBT-VCAM-FLIQ.
+           MOVE ZEROES TO WSS-SGV-VCAM-FLIQ.
+           MOVE PDB-CIC-0999        TO TAB-CIC-CTAB IN TAB.
+           MOVE OPD-COD-VCAM IN OPD TO TAB-COD-CTAB IN TAB.
+           MOVE LIQ-NUM-DCMP IN LIQ TO TAB-NUM-DTRN IN TAB.
+           MOVE LIQ-NUM-MCMP IN LIQ TO TAB-NUM-MTRN IN TAB.
+           MOVE LIQ-NUM-SCMP IN LIQ TO TAB-NUM-STRN IN TAB.
+           MOVE LIQ-NUM-ACMP IN LIQ TO TAB-NUM-ATRN IN TAB.
+           PERFORM GET-VCAM.
+           IF MSG-COD-MENS = SPACES
+               MOVE CAM-SGV-VCAM IN CAM TO WSS-SGV-VCAM-FLIQ
+           ELSE
+               DISPLAY ' '
+               DISPLAY ' PROCESO CANCELADO '
+               DISPLAY ' NO EXISTE V. DE CAMBIO PARA OPD : '
+                         OPD-CAI-IOPD IN OPD '-' OPD-IIC-IOPD IN OPD
+                       ' F. LIQ. COMP.: ' LIQ-FEC-FCMP IN LIQ
+                       ' Y MONEDA : ' OPD-COD-VCAM IN OPD
+               PERFORM GNS-PRO-ABT.
+       FIN-OBT-VCAM-FLIQ.
+           EXIT.
+
+       GET-CUR-RCC SECTION.
+       INI-GET-CUR-RCC.
+           MOVE 0  TO WSS-STAT-RCC IN WSS-VARI.
+           MOVE OPD-CAI-IOPD IN OPD TO RCC-CAI-IOPD IN RCC.
+           MOVE OPD-IIC-IOPD IN OPD TO RCC-IIC-IOPD IN RCC.
+           MOVE 'RCC-KEY-IOPD' TO FIO-AKEY.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM DAP-FIO-RCC.
+           IF NOT FIO-STAT-OKS
+              MOVE 1 TO WSS-STAT-RCC IN WSS-VARI.
+       FIN-GET-CUR-RCC.
+           EXIT.
+
+       GET-NXT-RCC SECTION.
+       INI-GET-NXT-RCC.
+           MOVE 'RCC-KEY-IOPD' TO FIO-AKEY.
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM DAP-FIO-RCC.
+           IF FIO-STAT-OKS AND
+              OPD-CAI-IOPD IN OPD = RCC-CAI-IOPD IN RCC AND
+              OPD-IIC-IOPD IN OPD = RCC-IIC-IOPD IN RCC
+                MOVE 'M'    TO WSS-IND-MCLI IN WSS-VARI
+           ELSE
+                MOVE SPACES TO WSS-IND-MCLI IN WSS-VARI.
+       FIN-GET-NXT-RCC.
+           EXIT.
+
+      * Lee con CIC CLIENTE archivo DBC
+       GET-RCC-DBC SECTION.
+       INI-GET-RCC-DBC.
+           MOVE RCC-CIC-ICLI IN RCC TO DBC-CIC-ICLI IN DBC.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM SGC-FIO-DBC.
+           IF NOT FIO-STAT-OKS
+              PERFORM RST-DBC.
+       FIN-GET-RCC-DBC.
+           EXIT.
+
+      * Limpia datos cliente desde DBC
+       RST-DBC SECTION.
+       INI-RST-DBC.
+           MOVE SPACES TO DBC-GLS-NOMC IN DBC.
+           MOVE SPACES TO DBC-NUM-ICLI IN DBC.
+           MOVE SPACES TO DBC-VRF-ICLI IN DBC.
+       FIN-RST-DBC.
+           EXIT.
+
+      * Lee con CIC CLIENTE archivo RCD
+       GET-RCC-RCD SECTION.
+       INI-GET-RCC-RCD.
+           MOVE RCC-CIC-ICLI IN RCC TO RCD-CIC-ICLI IN RCD.
+           MOVE RCC-NUM-DIRE IN RCC TO RCD-NUM-DIRE IN RCD.
+           MOVE 'RCD-KEY-IRCD' TO FIO-AKEY.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM SGC-FIO-RCD.
+           IF NOT FIO-STAT-OKS
+              PERFORM RST-RCD
+           ELSE
+              MOVE RCD-COD-LUGA IN RCD TO WSS-COD-LUGA IN WSS-VARI.
+       FIN-GET-RCC-RCD.
+           EXIT.
+
+      * Limpia datos cliente desde RCD
+       RST-RCD SECTION.
+       INI-RST-RCD.
+           MOVE SPACES TO RCD-GLS-DIRE IN RCD.
+           MOVE ZEROES TO WSS-NUM-LUGA IN WSS-VARI.
+       FIN-RST-RCD.
+           EXIT.
+
+       VAL-LUGA SECTION.
+       INI-VAL-LUGA.
+           MOVE RCD-COD-LUGA IN RCD TO WSS-COD-LUGA IN WSS-VARI.
+           IF WSS-IND-LUGA IN WSS-VARI = 'P'
+               MOVE 'PAI' TO TAB-COD-TTAB
+               MOVE WSS-COD-PAIS IN WSS-VARI TO TAB-COD-CTAB IN TAB
+           ELSE
+               MOVE 'COM' TO TAB-COD-TTAB
+               MOVE WSS-COD-LUGA IN WSS-VARI TO TAB-COD-CTAB IN TAB.
+           MOVE 'TAB' TO TAB-COD-SIST.
+           PERFORM VAL-TAB.
+           IF MSG-COD-MENS NOT = 'COD    NEX' AND
+              RCD-COD-LUGA IN RCD > SPACES
+               MOVE TAB-GLS-DESC IN TAB TO WSS-GLS-COMU IN WSS-VARI
+           ELSE
+               MOVE SPACES TO WSS-GLS-COMU IN WSS-VARI.
+       FIN-VAL-LUGA.
+           EXIT.
+
+
+       ACC-FPRO SECTION.
+       INI-ACC-FPRO.
+      * ISP: ACEPTA COMO PARAMETRO LA FECHA DE PROCESO,
+      *      DETERMINA EL RANGO DE BUSQUEDA PARA GENERAR RENOVACIONES Y
+      *      LIQUIDACIONES COMO :
+      *      [ FECHA DE PROCESO = FECHA DE INICIO,
+      *      FECHA DE TERMINO ! DONDE FECHA DE TERMINO ES EL PROXIMO DIA
+      *      HABIL A FECHA DE PROCESO
+
+           DISPLAY 'INGRESE FECHA DE PROCESO (DDMMSSAA) : '.
+           ACCEPT  WSS-FEC-FPRO IN WSS-VARI.
+
+      *VAL-FEC Valida Fecha de proceso
+           MOVE WSS-FEC-FPRO IN WSS-VARI TO FEC-FECH.
+           MOVE FEC-FORM-FEC TO FEC-FORM.
+           MOVE FEC-FBLK-N   TO FEC-FBLK.
+           MOVE FEC-CHOY-LE  TO FEC-CHOY.
+           MOVE FEC-VHBL-N   TO FEC-VHBL.
+           MOVE FEC-VAL-FEC  TO FEC-CMND.
+           PERFORM PRO-FEC.
+           IF NOT FEC-STAT-OKS
+              DISPLAY ' '
+              DISPLAY ' PROCESO CANCELADO '
+              DISPLAY ' ERROR VALIDACION EN FECHA DE PROCESO '
+                        WSS-FEC-FPRO IN WSS-VARI ' FS: ' FIO-STAT
+               PERFORM GNS-PRO-ABT
+           ELSE
+               MOVE WSS-NUM-DPRO TO WSS-NUM-DTRA
+                                    WSS-NUM-DINI
+                                    WSS-NUM-DTIP
+               MOVE WSS-NUM-MPRO TO WSS-NUM-MTRA
+                                    WSS-NUM-MINI
+                                    WSS-NUM-MTIP
+               MOVE WSS-NUM-SPRO TO WSS-NUM-STRA
+                                    WSS-NUM-SINI
+                                    WSS-NUM-STIP
+               MOVE WSS-NUM-APRO TO WSS-NUM-ATRA
+                                    WSS-NUM-AINI
+                                    WSS-NUM-ATIP
+      * ISP: OBTIENE FECHA DE MANANA ( YA ESTA CARGADO FEC-FECH )
+               MOVE FEC-SUM-DIA  TO FEC-CMND
+               MOVE 1            TO FEC-NDIA
+               MOVE FEC-FORM-FEC TO FEC-FORM
+               PERFORM CAL-FEC
+               IF NOT FEC-STAT-OKS
+                  DISPLAY ' '
+                  DISPLAY ' PROCESO CANCELADO '
+                  DISPLAY ' FIN DE PROCESO EN OBT FECHA MANANA '
+                            FEC-MENS ' FS: ' FEC-STAT
+                  PERFORM GNS-PRO-ABT.
+       CIC-ACC-FPRO.
+      * ISP: YA ESTA CARGADO FEC-FECH
+           MOVE FEC-FORM-FEC TO FEC-FORM
+           MOVE FEC-FBLK-N  TO FEC-FBLK
+           MOVE FEC-CHOY-N  TO FEC-CHOY
+           MOVE FEC-VHBL-S  TO FEC-VHBL
+           MOVE FEC-VAL-FEC TO FEC-CMND
+           PERFORM PRO-FEC
+           IF NOT FEC-STAT-HBL
+              MOVE FEC-ITM1    TO WSS-NUM-DTIP
+              MOVE FEC-ITM2    TO WSS-NUM-MTIP
+              MOVE FEC-ITM3    TO WSS-NUM-STIP
+              MOVE FEC-ITM4    TO WSS-NUM-ATIP
+              MOVE FEC-SUM-DIA  TO FEC-CMND
+              MOVE 1            TO FEC-NDIA
+              MOVE FEC-FORM-FEC TO FEC-FORM
+              PERFORM CAL-FEC
+              IF NOT FEC-STAT-OKS
+                 DISPLAY ' '
+                 DISPLAY ' PROCESO CANCELADO '
+                 DISPLAY ' FIN DE PROCESO EN OBT FECHA MANANA '
+                           FEC-MENS ' FS: ' FEC-STAT
+                 PERFORM GNS-PRO-ABT
+              ELSE
+                 GO TO CIC-ACC-FPRO
+           ELSE
+              MOVE FEC-ITM1    TO WSS-NUM-DFIN
+              MOVE FEC-ITM2    TO WSS-NUM-MFIN
+              MOVE FEC-ITM3    TO WSS-NUM-SFIN
+              MOVE FEC-ITM4    TO WSS-NUM-AFIN.
+
+           DISPLAY 'FECHA DE PROCESO           : ' WSS-FEC-FPRO.
+           DISPLAY ' '.
+           DISPLAY 'FECHA INICIO SELECCION     : ' WSS-NUM-DINI
+              '/' WSS-NUM-MINI '/' WSS-NUM-SINI WSS-NUM-AINI.
+           DISPLAY 'FECHA TERMINO DE SELECCION : ' WSS-NUM-DFIN
+              '/' WSS-NUM-MFIN '/' WSS-NUM-SFIN WSS-NUM-AFIN.
+           DISPLAY 'FECHA TERMINO INT. PAGADOS : ' WSS-NUM-DTIP
+              '/' WSS-NUM-MTIP '/' WSS-NUM-STIP WSS-NUM-ATIP.
+           DISPLAY ' '.
+       FIN-ACC-FPRO.
+           EXIT.
+
+       GET-SON SECTION.
+       INI-GET-SON.
+           MOVE 'GNS' TO TAB-COD-SIST.
+           MOVE 'SON' TO TAB-CIC-TTAB IN TAB.
+           MOVE 'S'   TO TAB-CIC-CTAB IN TAB.
+           MOVE 'TAB-CIC-TABL' TO FIO-AKEY.
+           PERFORM VAL-TAB.
+           IF MSG-COD-MENS > SPACES
+              DISPLAY ' '
+              DISPLAY ' PROCESO CANCELADO '
+              DISPLAY ' ERROR EN VALIDACION EN FECHA DE PROCESO '
+                        MSG-COD-MENS
+               PERFORM GNS-PRO-ABT
+           ELSE
+               MOVE TAB-COD-CTAB IN TAB TO SCR-SON-S
+               DISPLAY ' INDICADOR AFIRMATIVO ' TAB-COD-CTAB IN TAB.
+       FIN-GET-SON.
+           EXIT.
+
+       GET-COD-CIC-OPD SECTION.
+       INI-GET-COD-CIC-OPD.
+           MOVE 'TAB'               TO TAB-COD-SIST.
+           MOVE 'VLR'               TO TAB-COD-TTAB IN TAB.
+           MOVE OPD-COD-VCAM IN OPD TO TAB-COD-CTAB IN TAB.
+           PERFORM VAL-TAB.
+      *SE DEBE VERIFICAR QUE BUSQUEDA DE CODIGO DE MONEDA SEA EXITOSO
+      *EXISTENTE Y VIGENTE
+           IF MSG-COD-MENS > SPACES
+               DISPLAY ' '
+               DISPLAY ' PROCESO CANCELADO EN GET-COD-CIC-OPD '
+               DISPLAY ' NO EXISTE MONEDA PARA OPERACION '
+                                              MSG-COD-MENS
+               PERFORM GNS-PRO-ABT.
+           MOVE TAB-CIC-CTAB IN TAB TO SCR-CIC-VCAM.
+       FIN-GET-COD-CIC-OPD.
+           EXIT.

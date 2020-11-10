@@ -1,0 +1,284 @@
+*%! Codigo adicional para archivo GRDPQQTE
+*% IF SETTAG
+*% FNCPQ = "COBRJUDICIAL"
+*% VSNPQ = "05.11.22.1"
+*% END
+*% LARGO_MI_COMMAREA = 20
+*% PGM_PTC = TRUE
+*% IF MI_QTEMAREA
+      *<<<< MI_COMMAREA
+           03 CMA-VARI.
+              05 SCR-IMAX      COMP                   PIC S9(04).
+              05 SCR-I         COMP                   PIC S9(04).
+      *>>>>
+*% END
+*% IF WSS
+      *<<<< WSS
+       COPY GRDWGQTE.
+       COPY GNSBRMSC.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-MSC-REQA==.
+       COPY GNSWGPES.
+       COPY TABBRCAM.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-CAM-REQA==.
+    
+       01  WSS-VARI.
+           03  WSS-I                              PIC 9(02).
+      *>>>>
+*% END
+*% IF INI_FIO
+      *<<<< INI_FIO                                                     
+           IF SCR-OFRM-SRV                                              
+              MOVE TSK-TERM-ALF TO QTE-COD-TERM                         
+              MOVE TSK-TERM-ALF TO QTE-COD-TERM-MAS                     
+                                                                        
+           ELSE                                                         
+              MOVE EIBTRMID     TO QTE-COD-TERM                         
+              MOVE EIBTRMID     TO QTE-COD-TERM-MAS.                    
+      *>>>>                                                             
+*% END
+*% IF PFS_SCR_ACC
+      *<<<< PFS_SCR_ACC
+           IF FRM-FFLD = FRM-FFLD-PF6
+                    OR   FRM-FFLD-PF5
+               PERFORM VAL-NUM-KEY-QTE
+               PERFORM VAL-NUM-FLD-QTE
+               PERFORM RST-STAT
+               PERFORM FND-SCR-KEY THRU FIN-SCR-KEY
+               IF SCR-STAT NOT = SCR-STAT-ABT
+                   PERFORM SCR-TRL
+               ELSE
+                   PERFORM DESSCRTRL
+                   GO TO FIN-SCR-ACC.
+      *>>>>
+*% END
+*% IF INI_FND_KEY
+      *<<<< INI_FND_KEY
+           MOVE SPACES TO FRM-MEN1.
+           IF FRM-FFLD = FRM-FFLD-PF5
+               MOVE PGM-SNUL TO PGM-STAT-RRO
+               SUBTRACT 1 FROM SCR-I GIVING QTE-I
+               IF QTE-I NOT > ZEROES
+                   MOVE 'QTE RROPRV' TO MSG-COD-MENS
+                   GO TO ERR-FND-KEY
+               ELSE
+                   GO TO CARGA-QTE
+           ELSE
+           IF FRM-FFLD = FRM-FFLD-PF6
+               MOVE PGM-SNUL TO PGM-STAT-RRO
+               ADD 1 SCR-I GIVING QTE-I
+               IF QTE-I > SCR-IMAX
+                   MOVE 'QTE RRONXT' TO MSG-COD-MENS
+                   GO TO ERR-FND-KEY
+               ELSE
+                   GO TO CARGA-QTE.
+           GO TO CON-FND-KEY.
+
+      *>>>>
+*% END
+*% IF FIN_FND_KEY
+      *<<<< FIN_FND_KEY
+           IF NOT FIO-STAT-OKS
+               GO TO FIN-FND-KEY.
+       CON-FND-KEY.
+      *
+           MOVE ZEROES TO SCR-IMAX.
+           MOVE 1 TO SCR-I.
+           MOVE '00' TO FIO-STAT.
+           PERFORM OBT-DAT-TS.
+           MOVE 1 TO SCR-I.
+           MOVE SCR-I TO QTE-I.
+       CARGA-QTE.
+           MOVE SPACES TO MSG-COD-MENS.
+           IF NOT SCR-OFRM-SRV
+           PERFORM PUT-TAB-QTE.
+           MOVE '00' TO FIO-STAT.
+           GO TO FIN-FND-KEY.
+      *
+       ERR-FND-KEY.
+           MOVE SCR-STAT-CON TO SCR-STAT.
+     
+           MOVE 'GRD' TO MSG-COD-SIST.
+           PERFORM GET-MSG.
+           MOVE MSG-GLS-DESC TO FRM-MEN1.
+           MOVE '00' TO FIO-STAT.
+           GO TO FIN-FND-KEY.
+      *>>>>
+*% END
+*% IF PFS_GET_CON OR PFS_GET_ACC
+      *<<<< PFS_GET_CON OR PFS_GET_ACC
+           IF NOT (FRM-FFLD = FRM-FFLD-PF6
+                         OR   FRM-FFLD-PF5)
+      *>>>>
+*% END
+*% IF EOF
+      *<<<< EOF
+       COPY GNSBFMSC.
+       COPY GNSBGPES.
+       COPY TABBFCAM.
+
+       CAR-MOV-QTE SECTION.
+       INI-CAR-MOV-QTE.
+       FIN-CAR-MOV-QTE.
+           EXIT.
+
+   
+       OBT-DAT-TS SECTION.
+       INI-OBT-DAT-TS.
+           EXEC CICS HANDLE CONDITION QIDERR(CON-OBT-DAT-TS)
+                                     ITEMERR(CON-OBT-DAT-TS)
+           END-EXEC.
+
+      *     EXEC CICS DELETEQ TS QUEUE(QTE-NAME-QUE)
+      *     END-EXEC.
+      *<<<<
+           MOVE QTE-NOM-TSQTE     TO QUE-COLA.
+           MOVE QUE-DEL           TO QUE-CMND.
+           PERFORM GNS-PRO-QUE.
+      *>>>>
+       CON-OBT-DAT-TS.
+           MOVE QTE-SI-IMP TO QTE-IMP.
+           PERFORM CLR-VEC-TS VARYING QTE-I FROM 1 BY 1 UNTIL
+                   QTE-I > QTE-IMAX-MTX.
+           MOVE 1 TO QTE-I.
+           PERFORM CAR-MOV-QTE.
+      
+       NXT-OBT-DAT-TS.
+           IF QTE-IMP = QTE-SI-IMP
+               PERFORM WRT-TS.
+       FIN-OBT-DAT-TS.
+           EXIT.
+
+       PUT-TAB-QTE SECTION.
+       INI-PUT-TAB-QTE.
+           PERFORM RED-TS.
+           PERFORM LLE-DAT-PNT VARYING QTE-I FROM 1 BY 1
+                   UNTIL QTE-I > QTE-IMAX.
+       FIN-PUT-TAB-QTE.
+           EXIT.
+
+       LLE-DAT-PNT SECTION.
+       INI-LLE-DAT-PNT.
+           MOVE QTE-GLS-IOPC(QTE-I) TO FRM-GLS-IOPC IN QTE-FLD(QTE-I).
+           MOVE QTE-COD-PROD(QTE-I) TO FRM-COD-PROD IN QTE-FLD(QTE-I).
+           MOVE QTE-IND-AVAL(QTE-I) TO FRM-IND-AVAL IN QTE-FLD(QTE-I).
+           MOVE QTE-COD-VCOC(QTE-I) TO FRM-COD-VCOC IN QTE-FLD(QTE-I).
+           MOVE QTE-FEC-FMOR(QTE-I) TO FRM-FEC-FMOR IN QTE-FLD(QTE-I).
+           MOVE QTE-NUM-CUOT(QTE-I) TO FRM-NUM-CUOT IN QTE-FLD(QTE-I).
+           MOVE QTE-NUM-DIAS(QTE-I) TO FRM-NUM-DIAS IN QTE-FLD(QTE-I).
+           MOVE QTE-SGV-CAPI(QTE-I) TO FRM-SGV-CAPI IN QTE-FLD(QTE-I).
+           MOVE QTE-SGV-ICTE(QTE-I) TO FRM-SGV-ICTE IN QTE-FLD(QTE-I).
+           MOVE QTE-SGV-IMOR(QTE-I) TO FRM-SGV-IMOR IN QTE-FLD(QTE-I).
+           MOVE QTE-SGV-HONO(QTE-I) TO FRM-SGV-HONO IN QTE-FLD(QTE-I).
+           MOVE QTE-SGV-SINS(QTE-I) TO FRM-SGV-SINS IN QTE-FLD(QTE-I).
+           MOVE QTE-FEC-FTRN(QTE-I) TO FRM-FEC-FTRN IN QTE-FLD(QTE-I).
+           MOVE QTE-CIC-ILIQ(QTE-I) TO FRM-CIC-ILIQ IN QTE-FLD(QTE-I).
+           MOVE QTE-FEC-FINI(QTE-I) TO FRM-FEC-FINI IN QTE-FLD(QTE-I).
+           MOVE QTE-COD-ABOG(QTE-I) TO FRM-COD-ABOG IN QTE-FLD(QTE-I).
+           MOVE QTE-COD-ESTA(QTE-I) TO FRM-COD-ESTA IN QTE-FLD(QTE-I).
+           MOVE QTE-COD-ORIG(QTE-I) TO FRM-COD-ORIG IN QTE-FLD(QTE-I).
+           MOVE QTE-IND-OASO(QTE-I) TO FRM-IND-OASO IN QTE-FLD(QTE-I).
+           MOVE QTE-FEC-FTER(QTE-I) TO FRM-FEC-FTER IN QTE-FLD(QTE-I).
+       FIN-LLE-DAT-PNT.
+           EXIT.
+
+       INC-REG-TS SECTION.
+       INI-INC-REG-TS.
+            MOVE QTE-SI-IMP TO QTE-IMP.
+            IF SCR-OFRM-SRV
+              MOVE QTE-SGV-CAPI(QTE-I) TO QTE-VAL-CPTO-EDT
+              MOVE QTE-VAL-CPTO-EDT TO QTE-SGV-CAPI-ALF(QTE-I)
+              MOVE QTE-SGV-ICTE(QTE-I) TO QTE-VAL-CPTO-EDT
+              MOVE QTE-VAL-CPTO-EDT TO QTE-SGV-ICTE-ALF(QTE-I)
+              MOVE QTE-SGV-IMOR(QTE-I) TO QTE-VAL-CPTO-EDT
+              MOVE QTE-VAL-CPTO-EDT TO QTE-SGV-IMOR-ALF(QTE-I)
+              MOVE QTE-SGV-HONO(QTE-I) TO QTE-VAL-CPTO-EDT
+              MOVE QTE-VAL-CPTO-EDT TO QTE-SGV-HONO-ALF(QTE-I)
+              MOVE QTE-SGV-SINS(QTE-I) TO QTE-VAL-CPTO-EDT
+              MOVE QTE-VAL-CPTO-EDT TO QTE-SGV-SINS-ALF(QTE-I).
+           ADD 1 TO QTE-I.
+           IF QTE-I > QTE-IMAX
+               PERFORM WRT-TS
+               PERFORM CLR-VEC-TS VARYING QTE-I FROM 1 BY 1
+                                     UNTIL QTE-I > QTE-IMAX
+               MOVE 1 TO QTE-I
+               MOVE QTE-NO-IMP TO QTE-IMP.
+       FIN-INC-REG-TS.
+           EXIT.
+
+      *<<<<
+      *>>>>
+
+       WRT-TS SECTION.
+       INI-WRT-TS.
+           ADD 1 TO SCR-IMAX.
+      *     EXEC CICS WRITEQ TS QUEUE(QTE-NAME-QUE)
+      *                         FROM(QTE-TS)
+      *                         LENGTH(QTE-LONG-TS)
+      *     END-EXEC.
+      *<<<<
+           MOVE QTE-NOM-TSQTE  TO QUE-COLA.
+           MOVE QTE-TS         TO QUE-ITEM.
+           MOVE QTE-LEN-TSQTE  TO QUE-LITM.
+           MOVE QUE-PUT        TO QUE-CMND.
+           PERFORM GNS-PRO-QUE.
+      *>>>>
+       FIN-WRT-TS.
+           EXIT.
+
+       RED-TS SECTION.
+       INI-RED-TS.
+           MOVE QTE-I TO SCR-I.
+           EXEC CICS HANDLE CONDITION QIDERR(FIN-RED-TS)
+                                     ITEMERR(FIN-RED-TS)
+           END-EXEC.
+      *     EXEC CICS READQ TS QUEUE(DEC-NAME-QUE)
+      *                         INTO(DEC-TS)
+      *                          LENGTH(DEC-LONG-TS)
+      *                         ITEM(DEC-I)
+      *     END-EXEC.
+      *<<<<
+           MOVE QTE-NOM-TSQTE      TO QUE-COLA.
+           MOVE QTE-TS             TO QUE-ITEM.
+           MOVE QTE-LEN-TSQTE      TO QUE-LITM.
+           MOVE QTE-I              TO QUE-NITM.
+           MOVE QUE-GET            TO QUE-CMND.
+           PERFORM GNS-PRO-QUE.
+           MOVE QUE-ITEM          TO QTE-TS.
+      *>>>>
+       FIN-RED-TS.
+           EXIT.
+
+       CLR-VEC-TS SECTION.
+       INI-CLR-VEC-TS.
+           MOVE SPACES TO QTE-GLS-IOPC(QTE-I). 
+           MOVE SPACES TO QTE-COD-PROD(QTE-I). 
+           MOVE SPACES TO QTE-IND-AVAL(QTE-I). 
+           MOVE SPACES TO QTE-COD-VCOC(QTE-I). 
+           MOVE ZEROES TO QTE-FEC-FMOR(QTE-I). 
+           MOVE ZEROES TO QTE-NUM-CUOT(QTE-I). 
+           MOVE ZEROES TO QTE-NUM-DIAS(QTE-I). 
+           MOVE ZEROES TO QTE-SGV-CAPI(QTE-I). 
+           MOVE ZEROES TO QTE-SGV-ICTE(QTE-I). 
+           MOVE ZEROES TO QTE-SGV-IMOR(QTE-I). 
+           MOVE ZEROES TO QTE-SGV-HONO(QTE-I). 
+           MOVE ZEROES TO QTE-SGV-SINS(QTE-I). 
+           MOVE ZEROES TO QTE-FEC-FTRN(QTE-I).
+           MOVE SPACES TO QTE-CIC-ILIQ(QTE-I).
+           MOVE ZEROES TO QTE-FEC-FINI(QTE-I).
+           MOVE SPACES TO QTE-COD-ABOG(QTE-I).
+           MOVE SPACES TO QTE-COD-ESTA(QTE-I).
+           MOVE SPACES TO QTE-COD-ORIG(QTE-I).
+           MOVE SPACES TO QTE-IND-OASO(QTE-I).
+           MOVE ZEROES TO QTE-FEC-FTER(QTE-I).
+       FIN-CLR-VEC-TS.
+           EXIT.
+
+       RST-STAT SECTION.
+       INI-RST-STAT.
+           MOVE SCR-STPP     TO SCR-STAT.
+           MOVE SCR-MFLD-NOT TO SCR-MFLD.
+       FIN-RST-STAT.
+           EXIT.
+
+      *>>>>
+*% END

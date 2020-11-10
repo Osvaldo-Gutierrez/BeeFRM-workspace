@@ -1,0 +1,1023 @@
+                        CALCULO CUPO DISPONIBLE
+                        -----------------------
+
+Supuestos
+---------
+
+1 CLF por cliente
+
+1 LCR - n ARC
+
+1 LCR - n ARG
+
+Los ARC y ARG se relacionan entre sí solo mediante la LCR
+
+Las ARG de una LCR se relacionan entre ellas solo con Y o con O, pero
+no una mezcla de ambos conectores.
+
+Solo se consideran ocurrencias vigentes de entidades.
+
+   A partir del vencimiento de una LCR o desde que se marca como "no
+   vigente", esta deja de existir para efectos del calculo de cupos, de modo
+   que en cada momento, TODAS las OPCs vigentes se "distribuyen" solo entre 
+   las LCR vigentes y no vencidas (Ind. Vig. = "S" y Fec.Ven > Fec.Proceso).
+
+El calculo de cupos se efectua cada vez que se invoca a la rutina,
+"procesando" todas las OPCs vigentes, mas la OPC "en curse"
+(si corresponde) y todas las garantias vigentes del cliente. Los cupos
+de las LCR y las garantias se van utilizando/asignando "dinamicamente"
+de acuerdo a una prioridad preestablecida y fija, aunque esto no
+garantice una asignacion optima.
+Esto significa que el "proceso" de cada OPC (en cuanto a utilizacion
+de cupos de LCR y garantias), SOLO depende de los cupos disponibles 
+que dejaron las OPCs asignadas anteriormente y NO de lo que van a
+requerir las OPCs que se procesaran a continuacion de ella.
+
+La CLF cubre todas las operaciones vigentes del cliente
+(no hay operaciones cursadas "dentro" de la CLF y operaciones cursadas
+"fuera" de la CLF). Para evitar problemas futuros, al crear una CLF
+(en el CMD VRF), se verificara (mediante esta misma rutina) que todas
+las OPCs vigentes "entran" bien en la CLF que se esta creando,
+considerando las garantias existentes en ese momento. (no queda ninguna
+OPC "no cubierta", o con fecha de vencimiento mayor que la CLF, ninguna 
+LCR "sobregirada", ni la CLF "sobregirada", etc.)
+
+Nota : En COL, al cursar una nueva OPC que quede "fuera" de la CLF
+       (por cobertura, cupo, o vencimiento), podria implementarse una
+       forma de "forzar" su curse (por ejemplo via un comando especial),
+       pero en cada nueva llamada la rutina seguira "acusando" la 
+       situacion anomala mientras esta no se regularice. Alternativamente,
+       podria "marcarse" la OPC en curse como "fuera" de la CLF, en cuyo
+       caso no se considera nunca mas "compitiendo" con el resto dentro
+       de la CLF.
+
+Las garantias y fianzas se utilizan dentro de sus restricciones de
+cobertura y monto.
+
+Supuestos para la Etapa 1
+-------------------------
+
+    - No hay grupos de clientes ni CLF para multiples clientes
+
+    - No hay "familias de productos", entendidos como conjuntos de dos o mas
+      productos especificos.
+
+    - La CLF cubre solo la deuda directa del cliente
+
+    - El calculo de cupos se efectua bajo el supuesto de la "asignacion 
+      dinamica" de las OPCs en cada llamada a la rutina (no bajo el supuesto
+      de que las OPC quedan asignadas en forma "fija" al curse)
+
+    - El calculo de cupos se efectua bajo el supuesto de que TODAS las OPCs
+      del cliente "compiten" en la CLF.(no hay OPCs "marcadas" como "fuera"
+      de la CLF)
+  
+    - No se considera en esta etapa el tratamiento "correcto" para el caso de
+      que la OPC en curse corresponda a una prorroga/renovacion/novacion de 
+      otras OPCs existentes del cliente. (no se rebajara en el calculo de la 
+      utilizacion de cupos en la CLF/LCR/GAR el monto "cancelado" de la(s) 
+      OPC(s) prorrogada/renovada/novada).
+
+    - Las garantias o fianzas solidarias multiples (que cubren a mas de un 
+      cliente), se consideraran con su monto total asignable al cliente de la
+      CLF que se esta analizando.(no se disminuye su monto por efecto de las 
+      OPCs de los otros clientes a los cuales pueden eventualmente cubrir)
+
+    - Para efectos de "cupos disponibles" de las fianzas solidarias, no se
+      considerara la deuda indirecta del cliente de la CLF.
+
+Filosofía
+---------
+
+Priorizar las LCR's de forma de ocupar :
+ describir A) B) C) D) que ya no estan con esas letras en este docto.
+
+Consideraciones a tener presente en version futura (flb)
+--------------------------------------------------
+
+Manejo de garantías específicas.
+        Las OPC que tienen definida una garantía específica determinada,
+        utilizan cupo de LCR, pero no ocupan las garantías definidas en la LCR.
+
+        Si el monto de la garantía específica es menor que el monto de la OPC
+        el resto de la OPC ocupa garantías de LCR.
+
+        No se puede asignar a una LCR una garantía específica (sola o multiple
+        que es ?) que a su vez esté definida como garantía específica de una 
+        OPC en particular.
+
+        En caso de garantías específicas genéricas debe definirse si se
+        acepta o no como ARG.
+
+Manejo de garantías personales.
+        Avales como fianzas
+
+Casos de rebaja de cupos y otras modificaciones del estado del sistema.
+        Decidir si se validan y rechazan o se acepta con errores.
+
+Fianzas de deudas indirectas limitadas a un monto.
+        (Deben incluirse las deudas indirectas en el cálculo del monto de
+         garantía disponible ?) Si se incluyen, ojo con considerarlas más de
+         una vez, pues la misma fianza puede estar definida como condición de
+         garantía en más de una LCR...
+
+Conector Y no debiera permitir puros '*' en un ARG.
+
+		ESPECIFICACION RUTINA
+		---------------------
+
+                   Version preliminar : 26/05/92
+                   (revisada con PGV el 24/05/92)
+
+1.- Parametros de entrada :
+    ----------------------
+
+    - Identificacion CLF
+    - Identificacion OPC en curse (opcional)
+
+2.- Parametros de salida :
+    --------------------
+
+    - Para la CLF
+      + Situacion (codigos de mensaje )
+        00 : CLF OK
+        01 : CLF no existe
+        02 : CLF no vigente (no activada, cerrada, vencida, etc.)
+        03 : CLF no tiene LCRs vigentes
+        04 : CLF excedida
+        05 : Existe una o mas LCR excedida(s) por creditos
+        06 : Existe una o mas LCR excedida(s) por garantias
+        07 : Existen DLC no cubiertas por la CLF
+        08 : Existen DLC con DLC-FMAV > FVEN-LCR
+        10 : Producto de OPC en curse no cubierto
+        11 : Fecha venc. DLC en curse > Fecha venc. CLF
+        12 : OPC en curse excede CLF
+        13 : OPC en curse excede LCR
+        14 : OPC en curse sobre  LCR no vigente
+        15 : OPC en curse sobre  LCR vencida
+        16 : Fecha venc. DLC en curse > Fecha revision CLF
+        nn : otros
+      + Monto Utilizado CLF
+    
+    - Para cada LCR vigente y no vencida
+      + Situacion (codigos de mensaje )
+        00 : LCR OK
+        01 : LCR excedida por creditos
+        02 : LCR excedida por garantias
+        10 : OPC en curse excede LCR
+        nn : otros
+      + Cupo  total (cupo maximo ajustado por garantias)
+      + Monto utilizado
+      + Cupo  disponible
+
+      Nota : La "situacion" de la CLF y de cada LCR sera un solo campo,
+             en cuyo caso debe definirse una prioridad para informar errores.
+
+
+3.- Tipos de llamadas a la rutina
+    -----------------------------
+    
+    Tipo   Programas   OPC en curse   Requiere inf. CLF   Requiere inf. LCR
+   ------------------------------------------------------------------------
+     1     COLPPOPC        SI                 SI                 NO
+           (LIQ/ACA)
+ 
+     2     LDCPQCLC        NO                 SI                 SI
+           LDCPL*
+           DEUPLRDE
+
+     3     DEUPLRDB        NO                 SI                 NO
+           DEUPQRDE
+   
+
+
+4.-                        ALGORITMO 
+                           ---------
+
+Leer la CLF.
+
+Validar existencia y estado CLF
+Si no existe o estado distinto de "A", 
+    termina y devuelve COD-SIT-CLF = "01" o "02" y montos/cupos en 0.
+
+
+4.1 Caso sin OPC en curse
+    ---------------------
+
+Carga inicial de arreglos en memoria 
+
+Calculo inicial de cupos para cada LCR
+    Calcular DISP-LCR con garantías iniciales
+
+Procesa todos los DLCs vigentes del cliente, en orden cronologico
+(por fecha de ingreso OPC), "utilizando" los cupos de lineas y de garantias
+que van dejando disponibles los DLCs ya procesados.
+
+Ciclo sobre RDC
+
+    Seleccionar DLC vigente (con saldo > 1)
+
+    Procesa DLC hasta SCPA = cero o se terminan las LCR
+
+        Busca LCR mas prioritaria según restrictividad ARC y clase de ARG's
+
+        if existe LEF prioritaria
+            Asignar DLC en LEF según ARG y GAR
+        else
+            if SCPA = total del DLC
+                no acumula UTIL-CLF, 
+                setea COD-SIT-CLF = "07" o "08" segun corresponda y
+               * deberia decirse cual(es) DLC no se asignaron y sumar su monto 
+               * para devolverlo
+                continua con el siguiente DLC directo de RDC
+
+            else
+                * lo "mete" a la fuerza en la ultima LCR analizada, y setea
+                COD-SIT-LCR = "01" o "02". Continua con siguiente DLC
+
+
+Una vez procesadas todas las OPCs, analiza la situacion final de
+cada LCR y de la CLF.
+
+Calculo final de cupos para cada LCR
+    Calcular DISP-LCR con remanente de garantías
+    Calcular Cupo CLF
+
+Llena los parametros de salida y termina
+
+5.-             DETALLE DE PARTES DEL ALGORITMO
+                -------------------------------
+
+
+Carga inicial de arreglos en memoria 
+------------------------------------
+
+    Cargar LCR de CLF
+        Cargar ARC de LCR's de CLF
+
+        Cargar ARG de LCR's de CLF 
+
+    Valida que exista al menos una LCR vigente y no vencida.
+    Si no existe ninguna, termina y devuelve COD-SIT-CLF = "03" y 
+    montos/cupos en 0.
+
+    Cargar GAR activadas de DBC
+
+    Cargar FIA activadas de DBC
+        Si no estan limitadas por monto, el valor de la fianza es "infinito".
+
+    Cargar AVL de LCR's de DBC 
+
+Cargar LCR's de CLF
+-------------------
+
+(Arreglo LCR) 
+	Cic LCR, FVEN-LCR, MAX-LCR, Conector LCR, DISP-LCR, UTIL-LCR
+        marca con numero de empate(1)
+        marca con numero de empate(2)
+        marca con numero de empate(3)
+(Arreglo ARC) 
+	Cic LCR, Conector LCR, Mon ARC, Top ARC, Aux ARC
+(Arreglo ARG) 
+	Cic LCR, Conector LCR, DISP-ARG, Top ARG, Aux ARG
+
+Ciclo sobre LCR
+    Si vigente
+        Llenar Arreglo LCR
+
+        Ciclo sobre ARC
+            Llenar Arreglo ARC
+
+        Ciclo sobre ARG
+            Llenar Arreglo ARG
+		Incluye el conector de la LCR en el arreglo
+
+Cargar GAR de DBC
+-----------------
+(Arreglo GAR) 
+	Cic GAR, Vpon GAR, Mon GAR, Top GAR, Aux GAR
+
+Ciclo sobre GDD
+    Buscar GAR
+    Si vigente
+        Si GDG general
+            Llenar Arreglo GAR
+        else
+            ajustar GAR a deudas (Ojo, hecho para BCI, no BNL)
+            Llenar Arreglo GAR
+
+
+Calculo inicial de cupos para cada LCR
+--------------------------------------
+
+Compara garantias "requeridas" con las existentes.
+
+indicador rebaja GAR utilizada = 'N'
+
+Ciclo sobre arreglo LCR hasta fin
+
+
+    CUPO-CRD = MAX-LCR 
+    obtiene DISP-LCR ajustado por garantias
+
+      Optimizacion que no se hara ahora y que hay que depurar
+
+      una vez encontrada la suma de garantias de una ARG
+      buscar las otras ocurrencias y usar la suma sin recalcular
+
+      Optimizacion que no se hara ahora
+        
+Ciclo sobre RDC (se descompone en sus funciones)
+---------------
+
+Seleccionar DLC vigente (con saldo > 1)
+-----------------------
+
+    Cic DLC, Scre DLC, Mon DLC, Top DLC, Aux DLC
+
+    Filtrar DLC indirectos
+    Buscar DLC
+    Si vigente
+        Scre DLC = Scre DLC * % RDC
+        Llenar Arreglo DLC
+        Llenar arreglo AVLDLC 
+        SCPA = Scre DLC (SCPA = Saldo DLC por asignar)
+        Inicializar arreglo LCR como utilizable
+        Indicador rebaja garantia utilizada = 'S'
+
+Busca LCR mas prioritaria según restrictividad ARC y clase de ARG's
+-------------------------------------------------------------------
+
+Busca ARC mas restrictiva hasta fin ARC o encuentra alguna.
+
+Si no existe ninguna LCR a la cual asignar el DLC
+    mensaje no existe LCR a la cual asignar el DLC
+    termina Busca LCR mas prioritaria.
+
+if se encontro LCR+ARC mas prioritaria (una sola)
+   (switch empate apagdo)
+    mensaje existe cupo disponible
+    termino por A
+    termina Busca LCR mas prioritaria.
+
+Guarda posicion del primer empatado ARC
+
+Desempata segun criterio B hasta fin empate(1)
+
+if DISP-LCR = cero (de todos los empatados)
+    incrementa en 1 posicion ARC
+    vuelve a Busca ARC mas restrictiva hasta fin ARC o encuentra alguna.
+
+if se encontro LCR+ARC mas prioritaria
+   (switch empate apagdo)
+    mensaje existe cupo disponible
+    termino por B
+    termina Busca LCR mas prioritaria.
+
+Desempata segun criterio C hasta fin empate(2)
+
+if FIN-LCR
+   * no debe ocurrir
+    incrementa en 1 posicion ARC
+    vuelve a Busca ARC mas restrictiva hasta fin ARC o encuentra alguna.
+
+if se encontro LCR+ARC mas prioritaria
+    mensaje existe cupo disponible
+    termino por C
+    termina Busca LCR mas prioritaria.
+
+Desempata segun criterio D hasta fin empate(3)
+
+mensaje existe cupo disponible
+termino por A
+termina Busca LCR mas prioritaria.
+
+Busca ARC mas restrictiva hasta fin ARC o encuentra alguna
+----------------------------------------------------------
+
+mensaje no existe LCR que cubre DLC
+Busca primer item arreglo ARC que cubre DLC
+
+if not encuentra 
+    fin.
+
+mensaje no existe cupo disponible
+Ciclo 1 sobre arreglo ARC hasta fin
+
+    Posiciona en arreglo LCR
+    if FVEN-LCR < DLC-FMAV
+         marca item arreglo LCR como no utilizable
+         busca siguiente LCR en arreglo ARC o termina.
+
+    Deja item ARC como el mas prioritario de la LCR (LCR + ARC)
+       	Cic LCR, Conector LCR,
+       	Mon ARC, Top ARC, Aux ARC
+    Deja LCR+ARC como LCR prioritaria 
+
+    Busca siguiente item arreglo ARC de la misma LCR 
+    hasta fin u otra LCR
+       if encuentra y es mas prioritario que el anterior
+           deja item ARC como el mas prioritario de la LCR
+           Deja LCR+ARC como LCR prioritaria .
+
+    if fin 
+        fin.
+    if otra LCR
+        sigue ciclo.
+
+    Decide si LCR + item ARC es mas prioritario que 
+              LCR prioritario segun la siguiente tabla de prioridades :
+
+           Prior.  Idc OPC   Moneda   Tipo Op.   Cod. Aux
+           -----------------------------------------------
+             1       OPC       -          -         -
+             2        -       ESP        ESP       ESP
+             3        -        -         ESP       ESP
+             4        -        -         ESP        -
+             5        -        -          -         -
+
+    if LCR + item ARC es prioritario unico
+        apaga switch empate
+        marca LCR con numero de empate(1) incrementado en 1
+        guarda posicion arreglo LCR
+        LCR prioritaria
+    else
+    if hay un empate
+        marca LCR que empata con numero de empate(1)
+        prende switch empate.
+
+Desempata segun criterio B hasta fin empate(1)
+----------------------------------------------
+
+Ubica primer LCR empatado(1)
+Llamada = ciclo 2
+
+Busca empatado(1) hasta FIN LCR o DISP-LCR > cero
+
+    CUPO-CRD = MAX-LCR - UTIL-LCR, con tope SCPA 
+    Obtiene prioridad segun ARG's
+    ( devuelve prioridad encontrada (1,2,3 FHA))
+    ( devuelve DISP-LCR )
+
+if FIN LCR 
+   (todos los empatados tienen DISP-LCR = cero)
+     termina Desempata segun criterio B hasta fin empate(1).
+
+mas prioritario <== prioridad encontrada
+lo asigna como el mas prioritario
+apaga switch empate
+marca LCR con numero de empate(2) incrementado en 1
+guarda posicion arreglo LCR
+LCR prioritaria.
+
+Busca siguiente LCR empatado(1) hasta fin empate(1)
+
+       CUPO-CRD = MAX-LCR - UTIL-LCR, con tope SCPA 
+       Obtiene prioridad segun ARG's
+ 
+       if DISP-LCR not > cero
+           repite Busca siguiente LCR empatado.
+
+       Decide si LCR es mas prioritario segun la siguiente tabla :
+
+           Prior.     Condicion de garantias en la ARG
+           -----------------------------------------------
+             1        Sin Garantias (0 ARG)
+             2        Garantia especifica existente para la LCR
+                      (en 1 ARG o n ARG tipo "o") 
+             3        % requerido (para MY, la suma. Para MO, el menor)
+
+        if prioridad encontrada < mas prioritario
+           ( LCR es prioritaria unica )
+            mas prioritario <== prioridad encontrada
+            apaga switch empate
+            marca LCR con numero de empate(2) incrementado en 1
+            guarda posicion arreglo LCR
+            LCR prioritaria
+        else
+        if hay un empate
+            marca LCR que empata con numero de empate(2)
+            prende switch empate.
+
+Desempata segun criterio C hasta fin empate(2)
+----------------------------------------------
+
+Ubica primer LCR empatado(2)
+Llamada = ciclo 3
+
+Busca primer empatado(2) o hasta FIN LCR
+
+    CUPO-CRD = MAX-LCR - UTIL-LCR, con tope SCPA 
+    Obtiene prioridad segun ARG's
+    ( devuelve prioridad encontrada (1,2,3 FHA))
+
+if FIN LCR 
+   * inconsistencia
+    termina Desempata segun criterio B hasta fin empate(1).
+
+Si prioridad del empate anterior = 2
+    % requerido como prioritario
+else
+    deja TIP + STP como prioritario.
+mas prioritario <== prioridad encontrada
+apaga switch empate
+marca LCR con numero de empate(3) incrementado en 1
+guarda posicion arreglo LCR
+LCR prioritaria
+
+Busca siguiente LCR empatado(2) hasta fin empate(2)
+
+    CUPO-CRD = MAX-LCR - UTIL-LCR, con tope SCPA 
+    Obtiene prioridad segun ARG's
+    ( devuelve prioridad encontrada (1,2,3 FHA))
+
+        Si prioridad del empate(2) anterior = 2 (% requerido)
+            if % requerido > % prioritario
+                deja % requerido como prioritario
+                apaga switch empate
+                marca LCR con numero de empate(3) incrementado en 1
+                guarda posicion arreglo LCR
+                LCR prioritaria
+            else
+            if % requerido = % prioritario
+                marca LCR que empata con numero de empate(3)
+                prende switch empate
+            else
+        else
+        Si prioridad del empate(2) anterior = 3
+            * priorizar por "nivel de especificidad" de la ARG,
+               segun la siguiente tabla :
+               
+               Prior  Especificacion de la ARG
+               -------------------------------
+                 1       ESP       ESP
+                 2       ESP        -
+                 3        -         -
+
+            Nota : Para LCRs con multiples ARGs tipo "y", la prioridad "por
+                  nivel de especifidad" de el ARG, la determina el ARG con
+                  menor prioridad.
+                  Para LCRs con multiples ARGs tipo "o", la prioridad "por
+                  nivel de especifidad" de el ARG, la determina el ARG con
+                  mayor prioridad.
+                  (para estos efectos, 1 > 2 ...)
+         
+            
+            ojo  programar
+
+
+            if TIP + STP mas prioritario que TIP + STP prioritario
+                deja TIP + STP como prioritario
+                apaga switch empate
+                marca LCR con numero de empate(3) incrementado en 1
+                guarda posicion arreglo LCR
+                LCR prioritaria
+            else
+            if TIP + STP = prioritario que TIP + STP prioritario
+                marca LCR que empata con numero de empate(3)
+                prende switch empate.
+
+Desempata segun criterio D hasta fin empate(3)
+----------------------------------------------
+
+Ubica primer LCR empatado(3)
+
+Deja DISP-LCR como prioritario
+
+Busca siguiente LCR empatado(3) hasta fin empate    
+
+if DISP-LCR > prioritario
+    deja DISP-LCR como prioritario
+    LCR prioritaria.
+
+Obtiene prioridad segun ARG's
+-----------------------------
+
+indicador rebaja GAR utilizada = 'N'
+
+if conector LCR = sin garantias
+    prioridad encontrada = 1
+    DISP-LCR = CUPO-CRD 
+    termina obtiene prioridad segun ARG's.
+
+if conector LCR = Y 
+    suma % req = cero
+    DISP-LCR = CUPO-CRD 
+else
+if conector ARC = O or U
+    DISP-LCR = cero
+    if llamada = ciclo 3
+        if ciclo 2 termino en prioridad 2
+            %req <== % requerido 
+        else
+        if Tip ARG > spaces and Stp ARG > spaces
+            prioridad encontrada = 1
+        else
+        if Tip ARG > spaces 
+            prioridad encontrada = 2
+        else
+            prioridad encontrada = 3.
+
+SUMA-GAR = cero
+Ubicar LCR en arreglo ARG
+Ciclo sobre arreglo ARG mientras se mantenga en la LCR o se fuerza termino
+
+    if Llamada = ciclo 2
+        Buscar elemento ARG en GAR (devuelve DISP-ARG) (con perform)
+
+    if conector LCR = Y
+        if DISP-ARG < DISP-LCR
+            DISP-LCR <== DISP-ARG 
+            if DISP-LCR = cero
+                se fuerza termino.
+
+    if conector LCR = Y 
+        if llamada = ciclo 2
+            prioridad encontrada = 3
+            suma % req = suma % req + % requerido
+        else
+        if llamada = ciclo 3
+            if ciclo 2 termino en prioridad 2
+                suma % req = suma % req + % requerido
+            else
+            if Tip ARG > spaces and Stp ARG > spaces
+                prioridad encontrada = 1
+            else
+            if Tip ARG > spaces 
+                prioridad encontrada = 2
+            else
+               prioridad encontrada = 3
+   else
+   if conector ARC = O or U
+
+       if llamada = ciclo 2
+           if es garantia especifica para la LCR
+               prioridad encontrada = 2
+           else
+               if prioridad encontrada = 3
+                   if % ARG requerido < % req 
+                       %req <== % requerido 
+                   else
+               else
+       else
+       if llamada = ciclo 3
+           if ciclo 2 termino en prioridad 2
+               if % ARG requerido > % req 
+                   %req <== % requerido 
+               else
+           else
+               if Tip ARG > spaces and Stp ARG > spaces
+                   prioridad encontrada = 1
+               else
+               if Tip ARG > spaces and prioridad anterior > 2
+                   prioridad encontrada = 2.
+
+Si DISP-LCR > CUPO-CRD
+    DISP-LCR = CUPO-CRD.
+
+Obtiene DISP-LCR ajustado por garantias
+---------------------------------------
+
+Recibe CUPO-CRD > cero
+
+if conector LCR = sin garantias
+    DISP-LCR = CUPO-CRD 
+    termina obtiene DISP-LCR.
+
+Ubicar LCR en arreglo ARG
+Obtiene DISP-GAR analizando garantias requeridas (ARGs de la LCR)
+
+if indicador rebaja GAR utilizada = 'S' y
+   n ARG tipo "Y" y
+   DISP-LCR > cero
+   
+   * ahora corresponde hacer la "utilizacion" real
+    Utiliza GAR en n ARG tipo "Y".
+
+Si DISP-LCR > CUPO-CRD
+    DISP-LCR = CUPO-CRD.
+ 
+Obtiene DISP-GAR analizando garantias requeridas (ARGs de la LCR)
+-----------------------------------------------------------------
+
+* Llega posicionado en primer ARG de LCR en arreglo ARG
+
+if conector LCR = Y 
+    DISP-LCR = CUPO-CRD 
+else
+if conector ARC = O or U
+    DISP-LCR = cero.
+
+SUMA-GAR = cero
+Ciclo sobre arreglo ARG mientras se mantenga en la LCR o se fuerza termino
+
+    if conector LCR = Y
+
+       * nunca se rebaja en esta etapa, luego no se distingue 
+       *    indicador rebaja GAR utilizada 
+       * las prioriza por nivel de especificidad en su definicion 
+       * (no lo estoy haciendo) y calcula DISP-LCR = menor DISP-LCRi
+
+        Buscar elemento ARG en GAR (devuelve DISP-ARG)
+        if DISP-ARG < DISP-LCR
+            DISP-LCR <== DISP-ARG 
+            if DISP-LCR = cero
+                se fuerza termino
+            else
+        else
+    else
+        if indicador rebaja GAR utilizada = 'N' or
+           ( indicador rebaja GAR utilizada = 'S' and
+           la LCR se selecciono solo por el criterio de prioridad A :)
+            Buscar elemento ARG en GAR (devuelve DISP-LCR)
+            if DISP-LCR >= CUPO-CRD
+                se fuerza termino
+            else
+        else
+            * la LCR se selecciono por criterio de prioridad B/C :
+            if ARG = ARG que condiciono la seleccion
+                Buscar elemento ARG en GAR (devuelve DISP-LCR)
+                se fuerza termino
+            else
+                no debe suceder.
+
+Asignar DLC en LCR según ARG y GAR
+----------------------------------
+
+Una vez determinada la LCR "mas prioritaria", trata de "meter" toda o
+parte del DLC analizado en esa LCR. 
+
+indicador rebaja GAR utilizada = 'S'
+CUPO-CRD = MAX-LCR - UTIL-LCR, con tope SCPA 
+obtiene DISP-LCR ajustado por garantias
+if no tiene DISP-LCR
+    termina Asignar DLC en LCR según ARG y GAR.
+
+if SCPA not > DISP-LCR
+    UTIL-LCR = UTIL-LCR + SCPA
+    SCPA = cero
+else
+    UTIL-LCR = UTIL-LCR + DISP-LCR
+    SCPA = SCPA - DISP-LCR.
+
+Buscar elemento ARG en GAR
+--------------------------
+
+* en conector "Y" opera al nivel de ARG
+
+* en conector "O" opera acumulando los ARG's
+
+if elemento ARG = cualquier garantia
+    Partir de primer GAR
+else
+    Recorrer arreglo GAR hasta encontrar segun ARG.
+Guardar posicion inicial de GAR.
+
+DISP-ARG = cero
+Ciclo sobre GAR hasta fin o cambio de Tip,Stp o no hay mas que rebajar
+
+    if not n ARG tipo "Y" 
+
+        SUMA-GAR = SUMA-GAR + Vpon GAR
+        DISP-LCR = SUMA-GAR / % requerido
+        if DISP-LCR not < CUPO-CRD
+            DISP-LCR <== CUPO-CRD 
+            if indicador rebaja GAR utilizada = 'S'
+                AUX = ( DISP-LCR - CUPO-CRD ) * % requerido
+                Vpon GAR = Vpon GAR - AUX
+                se fuerza termino
+            else
+                se fuerza termino
+        else
+            if indicador rebaja GAR utilizada = 'S'
+                Vpon GAR = cero 
+            else
+
+                      Cuando la ARG tiene una especificacion "generica",
+                      pueden haber varias garantias del cliente que cumplan
+                      dicha especificacion. En este caso, priorizar por el
+                      monto disponible de las garantias alternativas
+                      Nota FLB: no lo hare por el momento
+
+                      Nota : Lo ideal seria no utilizar las garantias que
+                             van a ser requeridas por otras OPCs que se
+                             van a procesar mas adelante, pero eso esta
+                             descartado en los supuestos de esta etapa. 
+    else
+        DISP-ARG = DISP-ARG + Vpon GAR.
+
+if conector LCR = Y
+    DISP-ARG = DISP-ARG / % requerido.
+
+Utiliza GAR en n ARG tipo "Y"
+-----------------------------
+
+Recupera posicion inicial de arreglo GAR.
+
+SUMA-GAR = cero
+Ciclo sobre GAR hasta fin o cambio de Tip,Stp o no hay mas que rebajar
+
+        SUMA-GAR = SUMA-GAR + Vpon GAR
+        DISP-AUX = SUMA-GAR / % requerido
+
+        if DISP-AUX not < DISP-LCR
+            AUX = ( DISP-AUX - DISP-LCR ) * % requerido
+            Vpon GAR = Vpon GAR - AUX
+            se fuerza termino
+        else
+            if indicador rebaja GAR utilizada = 'S'
+                Vpon GAR = cero.
+
+Calculo final de cupos para cada LCR
+------------------------------------
+
+indicador rebaja GAR utilizada = 'N'
+
+Ciclo sobre arreglo LCR
+
+    CUPO-CRD = MAX-LCR - UTIL-LCR
+    obtiene DISP-LCR ajustado por garantias
+
+    Calcular Cupo CLF
+        Sumar DISP-LCR
+        Cupo disponible CLF = min(Cupo max CLF, Suma DISP-LCR)
+
+Ubicar LCR en arreglo ARG
+-------------------------
+
+if conector LCR = sin garantias
+    fin ubicar LCR en arreglo ARG.
+
+if id LCR = id LCR(ARG)
+    ver ARG anterior hasta < 1 or id LCR not = id LCR(ARG)
+    poner en siguiente ARG
+else 
+if id LCR < id LCR(ARG)
+    ver ARG siguiente hasta < max ARG or id LCR = id LCR(ARG)
+    if id LCR = id LCR(ARG)
+        fin ubicar LCR en arreglo ARG.
+partir en primer LCR(ARG).
+ver ARG siguiente hasta < max ARG or id LCR = id LCR(ARG)
+if max arg
+    inconsistencia.
+
+4.- Pendiente
+    ---------
+
+En rutina calcula DISP-GAR
+    Cuando se asigna DLC la GAR utilizada solo sirve para la LCR pertinente
+    En cambio cuando se calcula cupo LCR sin asignar DLC's, la GAR
+    utilizada sirve para todas las LCR's pertinentes. Es esto equivalente
+    a no restar de GAR en el segundo caso ?
+
+ajustar GAR a deudas (Ojo, hecho para BCI, no BNL)
+            hacer ? etapa 2 ?
+
+Programar priorizar por "nivel de especificidad" de la ARG,
+        Si prioridad del empate(2) anterior = 3
+               segun la siguiente tabla :
+               
+               Prior  Especificacion de la ARG
+               -------------------------------
+                 1       ESP       ESP
+                 2       ESP        -
+                 3        -         -
+
+Meter a la fuerza el 'cachito' de DLC que no alcanzo a entrar
+
+Cargar AVL de LCR's de DBC Como se usa ?
+
+GAR y FIA estan en el mismo arreglo ? tiene diferencias su tratamiento ?
+
+Validacion de Avales
+    Aval Generico
+    Aval Especifico
+
+Llena los parametros de salida y termina
+
+mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm
+ Proceso con OPC en curse
+ -------------------------
+
+    - Efectua lo mismo que en "Proceso sin OPC en curse", con las siguientes
+      consideraciones adicionales :
+
+      + Previo al proceso de las OPCs existentes, efectua las siguientes 
+        validaciones para la OPC en curse :
+
+        - Cobertura al producto en curse, verificando que exista al menos 
+          una LCR con al menos un ARC (o sin ARC) que cubra ese producto, 
+          y que cumpla con :
+          - IND-VIG = "S"
+          - VEN-LCR >= Hoy
+          - VEN-LCR >= VEN-OPC 
+
+          Si no existe ninguna, termina y devuelve COD-SIT-CLF = "10" y
+          montos/cupos en 0.
+
+        - Vencimiento OPC v/s vencimiento CLF
+          Si VEN-OPC > VEN-CLF, termina y devuelve COD-SIT-CLF = "11" y
+          montos/cupos en 0.
+
+      + Terminado el proceso de las OPCs existentes, dependiendo del resultado
+        obtenido para estas, termina o efectua el proceso para la OPC en curse
+        Las posibilidades (por decidir) son :
+        - Efectua proceso OPC en curse siempre
+        - Efectua proceso OPC en curse solo si todo ok (COD-SIT-CLF = "00")
+        - Efectua proceso OPC en curse salvo situaciones especificas (por
+          ejemplo si la CLF ya esta "sobregirada" con las OPCs existentes)
+
+      + El proceso para la OPC en curse (cuando se efectua) es similar al
+        descrito para las OPCs existentes, (como si fuera la ultima OPC
+        existente del cliente), salvo lo siguiente :
+        - Calcular al inicio UTIL-CLF = UTIL-CLF + SCRE
+        - Si UTIL-CLF > MAX-CLF ==> terminar y devolver COD-SIT-CLF = "12"
+        - Si se "sobregira" una LCR producto de la OPC en curse ==> terminar
+          y devolver COD-SIT-CLF = "13" y COD-SIT-LCR = "10" (de la LCR que
+          se sobregira)
+
+5.- Etapa 2
+    -------    
+
+    - Incorporar al calculo de cupos el descuento de los montos cancelados 
+      cuando la OPC en curse es producto de una prorroga/renovacione/novacion
+      de otra(s) OPC(s) del cliente.
+
+    - Ampliar la rutina para considerar el caso de multiples clientes asociados
+      a una CLF. En este caso, las OPCs de todos los clientes "cubiertos" por
+      la CLF comun, van ocupando cupos de la misma CLF/LCR, pero utilizando
+      solo las garantias propias de cada cual (salvo que sean multiples).
+      Ojo con el "cruce" de deudas...
+
+    - Ampliar la rutina para que pueda analizar la CLF creada para un 
+      grupo de clientes, de forma similar a lo anterior. De esta forma, las
+      pantallas de consultas y reportes podran mostrar la "posicion
+      consolidada" del grupo en su CLF. Asi mismo, al cursar una nueva OPC
+      para un cliente que pertenezca a un grupo, se llamara a la rutina dos
+      veces : una para la CLF del cliente y otra para la CLF del grupo, con
+      lo cual se puede "controlar" el endeudamiento global del grupo.
+
+    - Resolver el tema de garantias y (fianzas solidarias ?) multiples
+      (para mas de un cliente)
+
+    - Resolver el tema de fianzas solidarias sobre deudas directas e indirectas
+
+    - Ampliar el sistema LDC y la rutina para manejo de "familias de productos"?
+
+    - Ampliar la CLF a las deudas indirectas/complementarias del cliente ??
+ 
+    - Ampliar la rutina para considerar OPCs cursadas "fuera" de la CLF ??
+
+    - Modificar la rutina para considerar "asignacion fija" de las OPCs a las 
+      LCRs en la instancia de curse. 
+
+6.- Prioridad de Construccion de la rutina
+    --------------------------------------
+
+    - Etapa 1, para llamada tipo 2
+    - Etapa 1, para llamadas tipo 1 y 3
+    - Etapa 2, para llamadas tipo 1,2 y 3   
+
+
+Obtiene DISP-INI-GAR analizando garantias requeridas (ARGs de la LCR)
+-----------------------------------------------------------------
+
+* Llega posicionado en primer ARG de LCR en arreglo ARG
+
+if conector LCR = Y 
+    DISP-LCR = CUPO-CRD 
+else
+if conector ARC = O or U
+    DISP-LCR = cero.
+
+SUMA-GAR = cero
+Ciclo sobre arreglo ARG mientras se mantenga en la LCR o se fuerza termino
+
+    if conector LCR = Y
+
+       * las prioriza por nivel de especificidad en su definicion 
+       * (no lo estoy haciendo) y calcula DISP-LCR = menor DISP-LCRi
+
+        Buscar elemento ARG en GAR (devuelve DISP-ARG)
+        if DISP-ARG < DISP-LCR
+            DISP-LCR <== DISP-ARG 
+            if DISP-LCR = cero
+                se fuerza termino
+            else
+        else
+    else
+        if indicador rebaja GAR utilizada = 'N' or
+           ( indicador rebaja GAR utilizada = 'S' and
+           la LCR se selecciono solo por el criterio de prioridad A :)
+            Buscar elemento ARG en GAR (devuelve DISP-LCR)
+            if DISP-LCR >= CUPO-CRD
+                se fuerza termino
+            else
+        else
+            * la LCR se selecciono por criterio de prioridad B/C :
+            if ARG = ARG que condiciono la seleccion
+                Buscar elemento ARG en GAR (devuelve DISP-LCR)
+                se fuerza termino
+            else
+                no debe suceder.
+

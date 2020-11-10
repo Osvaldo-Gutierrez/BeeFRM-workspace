@@ -1,0 +1,914 @@
+       IDENTIFICATION DIVISION.
+      *========================
+       PROGRAM-ID.   GARPPVCG.
+       AUTHOR.       CONSIST.
+       DATE-WRITTEN.  25-JUL-1991 16:24:03
+
+      * VALIDA CONSISTENCIA GENERAL DE UNA GARANTIA
+      * Subrutina Pone Estado Garantia Completa
+      * Este programa es invocado desde cualquier programa de actualizac
+      *   de garantias, y su funcion es chequear que la gtia tenga ingre
+      *   las entidades (obligatorias y opcionales) que corresponde segu
+      *   la tabla TAG. Si tiene entidades que no corresponde, ellas se
+      *   eliminan. Tambien graba registros GMO para cada entidad
+      *   ingresada, que corresponde.
+
+      * SI HAY UN ERROR DEVUELVE MSG-COD-MENS CON EL CODIGO DEL MENSAJE
+      * EL ERROR SE MANEJA EN PROGRAMA LLAMADOR
+      * MARCA GAR-IND-CPL EN GDG.
+
+       ENVIRONMENT DIVISION.
+      *=====================
+       CONFIGURATION SECTION.
+      *----------------------
+       SPECIAL-NAMES.
+               DECIMAL-POINT IS COMMA.
+
+       DATA DIVISION.
+      *==============
+
+       WORKING-STORAGE SECTION.
+      *------------------------
+       COPY GNSWGRQA.
+       COPY GNSWGUIB.
+       COPY GNSWGELS.
+       COPY GNSBRMSG.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-MSG-REQA==.
+       COPY GNSWVIDD.
+       COPY GNSWCFIO.
+       COPY GNSWVFIO.
+       COPY GNSWGHOY.
+       COPY GNSWGSYS.
+       COPY GNSWGFRM.
+       01  SCR-VARI.
+           03 SCR-SIST             VALUE 'GAR' PIC X(03).
+           03 SCR-QIDD                         PIC X(08).
+           03 SCR-LIDD                    COMP PIC S9(04).
+
+       COPY GARBRGAP.
+       COPY GARBRGDD.
+       COPY GARBRGDG.
+       COPY GARBRGDO.
+       COPY GARBRGDP.
+       COPY GARBRGES.
+       COPY GARBRGIN.
+       COPY GARBRGLE.
+       COPY GARBRGMO.
+       COPY GARBRGSE.
+       COPY GARBRGSI.
+       COPY GARBRGTP.
+       COPY GARBRGUB.
+       COPY GARBRGVT.
+       COPY GARBRTAG.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-GAP-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-GDD-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-GDG-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-GDO-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-GDP-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-GES-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-GIN-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-GLE-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-GMO-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-GSE-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-GSI-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-GTP-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-GUB-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-GVT-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-TAG-REQA==.
+
+       COPY GARWGVCG.
+
+       01  WSS-VARI.
+           03 WSS-IMAL                  VALUE 0           PIC 9(01).
+      *FLB CST 22-SEP-1993
+           03 WSS-COD-GRA                             PIC 9(01).
+           03 WSS-COD-PRD-ACR                         PIC 9(02).
+
+       LINKAGE SECTION.
+      *----------------
+       01  DFHCOMMAREA.
+           02 FILLER                               PIC X(50).
+       COPY GNSLGFIO.
+
+       PROCEDURE DIVISION.
+      *===================
+
+       MAIN SECTION.
+       INI-MAIN.
+           PERFORM INI.
+      *FLB CST  1-DEC-1993 
+           IF MSG-COD-MENS > SPACES
+               GO TO EXT-MAIN.
+
+           MOVE ZEROES TO GAR-CRR-MOV IN GMO.
+
+           IF GAR-IND-CPL IN GDG = 'S'
+               MOVE 'GDG    AGAYA' TO MSG-COD-MENS
+               GO TO EXT-MAIN.
+
+           IF GAR-ES1 IN GDG < '10' OR
+              GAR-ES1 IN GDG NOT < '20'
+               MOVE 'GAR    NOVIG' TO MSG-COD-MENS
+               GO TO EXT-MAIN.
+
+           MOVE GAR-TIP-OPE IN GDG TO GAR-TIP-OPE IN TAG.
+           MOVE GAR-STP-OPE IN GDG TO GAR-STP-OPE IN TAG.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM GAR-FIO-TAG.
+           IF NOT FIO-STAT-OKS
+               MOVE 'TAG    NEX' TO MSG-COD-MENS
+               GO TO EXT-MAIN.
+
+           IF GAR-COD-LIM  IN GDG = 'E'
+               MOVE 'S' TO GAR-IND-EXG-GES IN TAG
+           ELSE
+               MOVE 'N' TO GAR-IND-EXG-GES IN TAG.
+
+           IF GAR-COD-GRA IN GDG > '1'
+               MOVE 'S' TO GAR-IND-EXG-GAP IN TAG
+           ELSE
+               MOVE 'N' TO GAR-IND-EXG-GAP IN TAG.
+
+           IF GAR-IND-OBL-INS IN GDG = 'S'
+               MOVE 'S' TO GAR-IND-EXG-GIN IN TAG
+           ELSE
+               MOVE 'N' TO GAR-IND-EXG-GIN IN TAG.
+
+           MOVE '1' TO GAR-COD-MOV IN GMO.
+
+           IF GAR-IND-EXG-GAP IN TAG = 'S' AND
+              GAR-IND-EXI-GAP IN GDG NOT = 'S'
+               MOVE 'GAP    NEX' TO MSG-COD-MENS
+               GO TO EXT-MAIN.
+
+      *FLB CST 22-SEP-1993
+           IF GAR-COD-GRA IN GDG > '1'
+               PERFORM VAL-GAP
+               IF MSG-COD-MENS > SPACES
+                   GO TO EXT-MAIN.
+      *FLB CST 22-SEP-1993
+
+      *FLB CST  13-JUN-1994
+      *     IF GAR-IND-EXG-GDD IN TAG = 'S' AND
+      *        GAR-IND-EXI-GDD IN GDG NOT = 'S'
+      *         MOVE 'GDD    NEX' TO MSG-COD-MENS
+      *         GO TO EXT-MAIN.
+           PERFORM VAL-GDD.
+           IF MSG-COD-MENS > SPACES
+               GO TO EXT-MAIN.
+      *FLB CST  13-JUN-1994
+
+           IF GAR-IND-EXG-GDO IN TAG = 'S' AND
+              GAR-IND-EXI-GDO IN GDG NOT = 'S'
+               MOVE 'GDO    NEX' TO MSG-COD-MENS
+               GO TO EXT-MAIN.
+
+           IF GAR-IND-EXG-GDP IN TAG = 'S' AND
+              GAR-IND-EXI-GDP IN GDG NOT = 'S'
+               MOVE 'GDP    NEX' TO MSG-COD-MENS
+               GO TO EXT-MAIN.
+
+           IF GAR-IND-EXG-GES IN TAG = 'S' AND
+              GAR-IND-EXI-GES IN GDG NOT = 'S'
+               MOVE 'GES    NEX' TO MSG-COD-MENS
+               GO TO EXT-MAIN.
+
+           IF GAR-IND-EXG-GIN IN TAG = 'S' AND
+              GAR-IND-EXI-GIN IN GDG NOT = 'S'
+               MOVE 'GIN    NEX' TO MSG-COD-MENS
+               GO TO EXT-MAIN.
+
+           IF GAR-IND-EXG-GLE IN TAG = 'S' AND
+              GAR-IND-EXI-GLE IN GDG NOT = 'S'
+               MOVE 'GLE    NEX' TO MSG-COD-MENS
+               GO TO EXT-MAIN.
+
+           IF GAR-IND-EXG-GSE IN TAG = 'S' AND
+              GAR-IND-EXI-GSE IN GDG NOT = 'S'
+               MOVE 'GSE    NEX' TO MSG-COD-MENS
+               GO TO EXT-MAIN.
+
+           IF GAR-IND-EXG-GSI IN TAG = 'S' AND
+              GAR-IND-EXI-GSI IN GDG NOT = 'S'
+               MOVE 'GSI    NEX' TO MSG-COD-MENS
+               GO TO EXT-MAIN.
+
+           IF GAR-IND-EXG-GTP IN TAG = 'S' AND
+              GAR-IND-EXI-GTP IN GDG NOT = 'S'
+               MOVE 'GTP    NEX' TO MSG-COD-MENS
+               GO TO EXT-MAIN.
+
+           IF GAR-IND-EXG-GUB IN TAG = 'S' AND
+              GAR-IND-EXI-GUB IN GDG NOT = 'S'
+               MOVE 'GUB    NEX' TO MSG-COD-MENS
+               GO TO EXT-MAIN.
+
+      *FLB CST  19-OCT-1993 DISTINGUE GVT NO INGRESADA DE TASACION NO
+      *   ACTIVADA EN TASACIONES PARCIALES                     
+           MOVE GAR-NUM-SIS IN GDG TO GAR-NUM-SIS IN GVT.
+           MOVE GAR-COD-CRR IN GDG TO GAR-COD-CRR IN GVT.
+           MOVE GAR-COD-TSN IN GDG TO GAR-COD-TSN IN GVT.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM GAR-FIO-GVT.
+           IF NOT FIO-STAT-OKS
+               MOVE 'GVT    NEX' TO MSG-COD-MENS
+               GO TO EXT-MAIN.
+
+           IF GAR-IND-EXG-GVT IN TAG = 'S' AND
+              GAR-IND-EXI-GVT IN GDG NOT = 'S'
+               IF GVT-MSC-STAT IN GVT NOT = 'A' 
+                   MOVE 'ATANO' TO MSG-COD-MENS
+                   GO TO EXT-MAIN
+               ELSE
+                   MOVE 'PGM    ERR' TO MSG-COD-MENS
+                   GO TO EXT-MAIN.
+
+      * GENERA GMO DE GDG
+           PERFORM INI-GMO.
+           MOVE 'GDG001' TO GAR-COD-CPO IN GMO.
+           MOVE '1' TO GAR-COD-MOV IN GMO.
+           MOVE 'N' TO GAR-IND-VAL IN GMO.
+           MOVE 'S' TO GAR-IND-CLV IN GMO.
+           MOVE GAR-ES1 IN GDG TO GAR-COD-CLV-NVO IN GMO.
+           MOVE FIO-PUT TO FIO-CMND.
+           PERFORM GAR-FIO-GMO.
+           IF NOT FIO-STAT-OKS
+               MOVE 'GMO    PUT' TO MSG-COD-MENS
+               GO TO EXT-MAIN.
+
+      *    PERFORM GET-FHOY.
+      *FLB CST  17-NOV-1993 SE TRASLADA EL CODIGO QUE HABIA AQUI
+      *         A ANTES DEL FIO-MOD
+           MOVE FIO-GET-KEY-UPD TO FIO-CMND.
+           PERFORM GAR-FIO-GDG.
+           IF NOT FIO-STAT-OKS
+               MOVE 'GDG   KEYUPD' TO MSG-COD-MENS
+               GO TO EXT-MAIN.
+
+           IF GAR-IND-EXG-GVT IN TAG = 'N' AND
+              GAR-IND-EXI-GVT IN GDG = 'S'
+      *FLB CST  17-NOV-1993 SE LIMPIA EL INDICADOR
+               MOVE SPACES TO GAR-IND-EXI-GVT IN GDG
+               PERFORM ELI-GVT
+           ELSE
+           IF GAR-IND-EXI-GVT IN GDG = 'S'
+      *FLB CST  19-OCT-1993 SE TRASLADO EL BUS-GVT (NO SECTION)
+               PERFORM ESC-GMO-GVT
+               IF MSG-COD-MENS > SPACES
+                   GO TO EXT-MAIN
+               ELSE
+                   NEXT SENTENCE
+           ELSE
+               GO TO EXT-MAIN.
+
+           IF GAR-IND-EXG-GDD IN TAG = 'N' AND
+              GAR-IND-EXI-GDD IN GDG = 'S'
+      *FLB CST  17-NOV-1993 SE LIMPIA EL INDICADOR
+               MOVE SPACES TO GAR-IND-EXI-GDD IN GDG
+               PERFORM ELI-GDD
+           ELSE
+           IF GAR-IND-EXI-GDD IN GDG = 'S'
+               PERFORM ESC-GMO-GDD
+               IF MSG-COD-MENS > SPACES
+                   GO TO EXT-MAIN.
+
+           IF GAR-IND-EXG-GES IN TAG = 'N' AND
+              GAR-IND-EXI-GES IN GDG = 'S'
+      *FLB CST  17-NOV-1993 SE LIMPIA EL INDICADOR
+               MOVE SPACES TO GAR-IND-EXI-GES IN GDG
+               PERFORM ELI-GES
+           ELSE
+           IF GAR-IND-EXI-GES IN GDG = 'S'
+               PERFORM ESC-GMO-GES
+               IF MSG-COD-MENS > SPACES
+                   GO TO EXT-MAIN.
+
+           IF GAR-IND-EXG-GLE IN TAG = 'N' AND
+              GAR-IND-EXI-GLE IN GDG = 'S'
+      *FLB CST  17-NOV-1993 SE LIMPIA EL INDICADOR
+               MOVE SPACES TO GAR-IND-EXI-GLE IN GDG
+               PERFORM ELI-GLE
+           ELSE
+           IF GAR-IND-EXI-GLE IN GDG = 'S'
+               PERFORM ESC-GMO-GLE
+               IF MSG-COD-MENS > SPACES
+                   GO TO EXT-MAIN.
+
+           IF GAR-IND-EXG-GDO IN TAG = 'N' AND
+              GAR-IND-EXI-GDO IN GDG = 'S'
+      *FLB CST  17-NOV-1993 SE LIMPIA EL INDICADOR
+               MOVE SPACES TO GAR-IND-EXI-GDO IN GDG
+               PERFORM ELI-GDO
+           ELSE
+           IF GAR-IND-EXI-GDO IN GDG = 'S'
+               PERFORM ESC-GMO-GDO
+               IF MSG-COD-MENS > SPACES
+                   GO TO EXT-MAIN.
+
+           IF GAR-IND-EXG-GSE IN TAG = 'N' AND
+              GAR-IND-EXI-GSE IN GDG = 'S'
+      *FLB CST  17-NOV-1993 SE LIMPIA EL INDICADOR
+               MOVE SPACES TO GAR-IND-EXI-GSE IN GDG
+               PERFORM ELI-GSE
+           ELSE
+           IF GAR-IND-EXI-GSE IN GDG = 'S'
+               PERFORM ESC-GMO-GSE
+               IF MSG-COD-MENS > SPACES
+                   GO TO EXT-MAIN.
+
+           IF GAR-IND-EXG-GTP IN TAG = 'N' AND
+              GAR-IND-EXI-GTP IN GDG = 'S'
+      *FLB CST  17-NOV-1993 SE LIMPIA EL INDICADOR
+               MOVE SPACES TO GAR-IND-EXI-GTP IN GDG
+               PERFORM ELI-GTP
+           ELSE
+           IF GAR-IND-EXI-GTP IN GDG = 'S'
+               PERFORM ESC-GMO-GTP
+               IF MSG-COD-MENS > SPACES
+                   GO TO EXT-MAIN.
+
+           IF GAR-IND-EXG-GUB IN TAG = 'N' AND
+              GAR-IND-EXI-GUB IN GDG = 'S'
+      *FLB CST  17-NOV-1993 SE LIMPIA EL INDICADOR
+               MOVE SPACES TO GAR-IND-EXI-GUB IN GDG
+               PERFORM ELI-GUB
+           ELSE
+           IF GAR-IND-EXI-GUB IN GDG = 'S'
+               PERFORM ESC-GMO-GUB
+               IF MSG-COD-MENS > SPACES
+                   GO TO EXT-MAIN.
+
+           IF GAR-IND-EXG-GAP IN TAG = 'N' AND
+              GAR-IND-EXI-GAP IN GDG = 'S'
+      *FLB CST  17-NOV-1993 SE LIMPIA EL INDICADOR
+               MOVE SPACES TO GAR-IND-EXI-GAP IN GDG
+               PERFORM ELI-GAP
+           ELSE
+           IF GAR-IND-EXI-GAP IN GDG = 'S'
+               PERFORM ESC-GMO-GAP
+               IF MSG-COD-MENS > SPACES
+                   GO TO EXT-MAIN.
+
+           IF GAR-IND-EXG-GIN IN TAG = 'N' AND
+              GAR-IND-EXI-GIN IN GDG = 'S'
+      *FLB CST  17-NOV-1993 SE LIMPIA EL INDICADOR
+               MOVE SPACES TO GAR-IND-EXI-GIN IN GDG
+               PERFORM ELI-GIN
+           ELSE
+           IF GAR-IND-EXI-GIN IN GDG = 'S'
+               PERFORM ESC-GMO-GIN
+               IF MSG-COD-MENS > SPACES
+                   GO TO EXT-MAIN.
+
+           IF GAR-IND-EXG-GSI IN TAG = 'N' AND
+              GAR-IND-EXI-GSI IN GDG = 'S'
+      *FLB CST  17-NOV-1993 SE LIMPIA EL INDICADOR
+               MOVE SPACES TO GAR-IND-EXI-GSI IN GDG
+               PERFORM ELI-GSI
+           ELSE
+           IF GAR-IND-EXI-GSI IN GDG = 'S'
+               PERFORM ESC-GMO-GSI
+               IF MSG-COD-MENS > SPACES
+                   GO TO EXT-MAIN.
+
+           IF GAR-IND-EXG-GDP IN TAG = 'N' AND
+              GAR-IND-EXI-GDP IN GDG = 'S'
+      *FLB CST  17-NOV-1993 SE LIMPIA EL INDICADOR
+               MOVE SPACES TO GAR-IND-EXI-GDP IN GDG
+               PERFORM ELI-GDP
+           ELSE
+           IF GAR-IND-EXI-GDP IN GDG = 'S'
+               PERFORM ESC-GMO-GDP
+               IF MSG-COD-MENS > SPACES
+                   GO TO EXT-MAIN.
+      *FLB CST  17-NOV-1993 TRASLADADO AQUI PARA EVITAR QUE IND-EXI-XXX
+      *    QUEDE LLENO EN GDG CUANDO DEBE ESTAR VACIO
+      *    EL PROBLEMA SE PRODUJO EN LA ENTIDAD GES PERO PODRIA OCURRIR
+      *    PARA OTRAS
+
+      *FLB CST  17-NOV-1993 TRASLADADO AQUI 
+           MOVE HOY-FHOY TO GDG-FEC-ULT-ACT IN GDG.
+           MOVE HOY-HHOY TO GDG-HOR-ACT     IN GDG.
+      *FLB CST  17-NOV-1993 TRASLADADO AQUI 
+           MOVE HOY-FHOY TO GDG-FEC-ING-SIS IN GDG.
+           MOVE 'I'      TO GDG-MSC-TACC    IN GDG.
+
+           MOVE 'S'      TO GAR-IND-CPL     IN GDG.
+           MOVE 'A'      TO GDG-MSC-STAT    IN GDG.
+      *FLB CST  13-JUN-1994 
+           MOVE 'S'      TO GAR-IND-EXI-GDD IN GDG.
+           MOVE FIO-MOD TO FIO-CMND.
+           PERFORM GAR-FIO-GDG.
+           IF NOT FIO-STAT-OKS
+               MOVE 'GDG    MOD' TO MSG-COD-MENS
+               GO TO EXT-MAIN.
+      *FLB CST  17-NOV-1993 TRASLADADO AQUI 
+
+      * TERMINA NORMALMENTE EN EXT-MAIN.
+
+       EXT-MAIN.
+           PERFORM FIN.
+       FIN-MAIN.
+           EXIT.
+
+       INI SECTION.
+       INI-INI.
+       COPY GNSBGEDB.
+           MOVE DFHCOMMAREA TO VCG-CMMA.
+           MOVE VCG-PROG    TO FIO-PROG.
+           MOVE SPACES TO MSG-COD-MENS.
+      *Handler para manejar VSAM
+      *     PERFORM GNS-HDL-VSM.
+      *Buscar Independencia de Datos
+           MOVE VCG-QIDD TO SCR-QIDD.
+           MOVE VCG-LIDD TO SCR-LIDD.
+           PERFORM GNS-BUS-IDD.
+      *Carga
+      *FLB CST  1-DEC-1993 
+      *     MOVE VCG-RGDG TO GDG.
+           MOVE VCG-NUM-SIS TO GAR-NUM-SIS IN GDG.
+           MOVE VCG-COD-CRR TO GAR-COD-CRR IN GDG.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM GAR-FIO-GDG.
+           IF NOT FIO-STAT-OKS
+               MOVE 'GDG    NEX' TO MSG-COD-MENS.
+      *FLB CST  1-DEC-1993 
+       FIN-INI.
+           EXIT.
+
+       FIN SECTION.
+       INI-FIN.
+      *FLB CST  1-DEC-1993 
+      *     MOVE GDG TO VCG-RGDG.
+      *     MOVE MSG TO VCG-RMSG.
+           MOVE MSG-COD-MENS TO VCG-MENS.
+      *FLB CST  1-DEC-1993 
+           MOVE VCG-CMMA TO DFHCOMMAREA.
+           MOVE +0 TO EIBRESP.
+       COPY GNSBGGBK.
+       FIN-FIN.
+           EXIT.
+
+       COPY GNSBGSYS.
+       COPY GNSBBIDD.
+      * COPY GNSBHVSM.
+      * COPY GNSBGVSM.
+       COPY GNSBGDTC.
+       COPY GNSBIABT.
+
+       COPY GARBGVC2.
+
+      *FLB CST 22-SEP-1993
+       VAL-GAP SECTION.
+       INI-VAL-GAP.
+           MOVE GAR-COD-GRA IN GDG TO WSS-COD-GRA.
+           MOVE GAR-NUM-SIS IN GDG TO GAR-NUM-SIS IN GAP.
+           MOVE GAR-COD-CRR IN GDG TO GAR-COD-CRR IN GAP.
+           MOVE WSS-COD-GRA TO WSS-COD-PRD-ACR.
+           MOVE WSS-COD-PRD-ACR TO GAR-COD-PRD-ACR IN GAP.
+
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM GAR-FIO-GAP.
+           IF FIO-STAT-OKS
+               MOVE 'GRAINV' TO MSG-COD-MENS
+               GO TO FIN-VAL-GAP.
+
+           SUBTRACT 1 FROM WSS-COD-PRD-ACR.
+           MOVE WSS-COD-PRD-ACR TO GAR-COD-PRD-ACR IN GAP.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM GAR-FIO-GAP.
+           IF NOT FIO-STAT-OKS
+               MOVE 'GRAINV' TO MSG-COD-MENS
+               GO TO FIN-VAL-GAP.
+
+       FIN-VAL-GAP.
+           EXIT.   
+
+      *FLB CST 22-SEP-1993 FIN
+
+       ESC-GMO-GDD SECTION.
+       INI-ESC-GMO-GDD.
+           PERFORM INI-GMO.
+           MOVE 'GDD001' TO GAR-COD-CPO IN GMO.
+           MOVE 'N' TO GAR-IND-VAL IN GMO.
+           MOVE 'N' TO GAR-IND-CLV IN GMO.
+           MOVE GAR-NUM-SIS IN GDG TO GAR-NUM-SIS IN GDD.
+           MOVE GAR-COD-CRR IN GDG TO GAR-COD-CRR IN GDD.
+           MOVE 1 TO WSS-IMAL.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+       LUP-ESC-GMO-GDD.
+           MOVE 'GAR-CLV-GDD-2' TO FIO-AKEY.
+           PERFORM GAR-FIO-GDD.
+           IF FIO-STAT-OKS AND 
+              GAR-NUM-SIS IN GDG = GAR-NUM-SIS IN GDD AND
+              GAR-COD-CRR IN GDG = GAR-COD-CRR IN GDD
+               MOVE 0 TO WSS-IMAL
+               MOVE GAR-CLV-GDD-1 IN GDD TO GAR-GLS-CPO-NVO IN GMO
+               MOVE FIO-PUT TO FIO-CMND
+               PERFORM GAR-FIO-GMO
+               IF FIO-STAT-OKS
+                   MOVE FIO-GET-NXT TO FIO-CMND
+                   ADD 1 TO GAR-CRR-MOV IN GMO
+                   GO TO LUP-ESC-GMO-GDD
+               ELSE
+                   MOVE 'GMO    PUT' TO MSG-COD-MENS
+           ELSE
+               IF WSS-IMAL > 0
+                   MOVE 'GDD    NEX' TO MSG-COD-MENS.
+       FIN-ESC-GMO-GDD.
+           EXIT.   
+
+       ESC-GMO-GES SECTION.
+       INI-ESC-GMO-GES.
+           PERFORM INI-GMO.
+           MOVE 'GES000' TO GAR-COD-CPO IN GMO.
+           MOVE 'N' TO GAR-IND-VAL IN GMO.
+           MOVE 'N' TO GAR-IND-CLV IN GMO.
+           MOVE GAR-NUM-SIS IN GDG TO GAR-NUM-SIS IN GES.
+           MOVE GAR-COD-CRR IN GDG TO GAR-COD-CRR IN GES.
+           MOVE ZEROES TO GAR-COD-ESP IN GES.
+           MOVE 'GAR-CLV-GES-1' TO FIO-AKEY.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           MOVE 1 TO WSS-IMAL.
+       LUP-ESC-GMO-GES.
+           PERFORM GAR-FIO-GES.
+           IF FIO-STAT-OKS AND 
+              GAR-NUM-SIS IN GDG = GAR-NUM-SIS IN GES AND
+              GAR-COD-CRR IN GDG = GAR-COD-CRR IN GES
+               MOVE 0 TO WSS-IMAL
+               MOVE GAR-COD-ESP IN GES TO GAR-GLS-CPO-NVO IN GMO
+               MOVE FIO-PUT TO FIO-CMND
+               PERFORM GAR-FIO-GMO
+               IF FIO-STAT-OKS
+                   MOVE FIO-GET-NXT TO FIO-CMND
+                   ADD 1 TO GAR-CRR-MOV IN GMO
+                   GO TO LUP-ESC-GMO-GES
+               ELSE
+                   MOVE 'GMO    PUT' TO MSG-COD-MENS
+           ELSE
+               IF WSS-IMAL > 0
+                   MOVE 'GES    NEX' TO MSG-COD-MENS.
+       FIN-ESC-GMO-GES.
+           EXIT.   
+
+       ESC-GMO-GLE SECTION.
+       INI-ESC-GMO-GLE.
+           PERFORM INI-GMO.
+           MOVE 'GLE000' TO GAR-COD-CPO IN GMO.
+           MOVE 'N' TO GAR-IND-VAL IN GMO.
+           MOVE 'N' TO GAR-IND-CLV IN GMO.
+           MOVE GAR-NUM-SIS IN GDG TO GAR-NUM-SIS IN GLE.
+           MOVE GAR-COD-CRR IN GDG TO GAR-COD-CRR IN GLE.
+           MOVE 'GAR-CLV-GLE-1' TO FIO-AKEY.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM GAR-FIO-GLE.
+           IF FIO-STAT-OKS
+               MOVE 'DATOS LEGALES' TO GAR-GLS-CPO-NVO IN GMO
+               MOVE FIO-PUT TO FIO-CMND
+               PERFORM GAR-FIO-GMO
+               IF FIO-STAT-OKS
+                   NEXT SENTENCE
+               ELSE
+                   MOVE 'GMO    PUT' TO MSG-COD-MENS
+           ELSE
+                   MOVE 'GLE    NEX' TO MSG-COD-MENS.
+       FIN-ESC-GMO-GLE.
+           EXIT.   
+
+       ESC-GMO-GDO SECTION.
+       INI-ESC-GMO-GDO.
+       FIN-ESC-GMO-GDO.
+           EXIT.   
+
+       ESC-GMO-GSE SECTION.
+       INI-ESC-GMO-GSE.
+           PERFORM INI-GMO.
+           MOVE 'GSE000' TO GAR-COD-CPO IN GMO.
+           MOVE 'N' TO GAR-IND-VAL IN GMO.
+           MOVE 'N' TO GAR-IND-CLV IN GMO.
+           MOVE GAR-NUM-SIS IN GDG TO GAR-NUM-SIS IN GSE.
+           MOVE GAR-COD-CRR IN GDG TO GAR-COD-CRR IN GSE.
+           MOVE 'GAR-CLV-GSE-1' TO FIO-AKEY.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM GAR-FIO-GSE.
+           IF FIO-STAT-OKS
+               MOVE 'DATOS DE SEGUROS' TO GAR-GLS-CPO-NVO IN GMO
+               MOVE FIO-PUT TO FIO-CMND
+               PERFORM GAR-FIO-GMO
+               IF FIO-STAT-OKS
+                   NEXT SENTENCE
+               ELSE
+                   MOVE 'GMO    PUT' TO MSG-COD-MENS
+           ELSE
+                   MOVE 'GSE    NEX' TO MSG-COD-MENS.
+       FIN-ESC-GMO-GSE.
+           EXIT.   
+
+       ESC-GMO-GVT SECTION.
+       INI-ESC-GMO-GVT.
+           MOVE SPACES TO MSG-COD-MENS.
+      * SI LA GARANTIA ESTA COMPLETA, SE ESCRIBE GMO
+      * SI ESTA INCOMPLETA SE ESCRIBE EN RUTINA QUE MARCA GARANTIA COMPLETA
+           PERFORM INI-GMO.
+           MOVE GAR-COD-TSN IN GVT TO GAR-COD-TSN IN GMO.
+           MOVE 'GVT001' TO GAR-COD-CPO IN GMO.
+           MOVE GAR-VAL-LIQ-TSN IN GVT TO GAR-VAL-CPO-NVO IN GMO.
+           MOVE FIO-PUT TO FIO-CMND.
+           PERFORM GAR-FIO-GMO.
+           IF NOT FIO-STAT-OKS
+               GO TO ERR-ESC-GMO-GVT.
+
+           MOVE 'GVT002' TO GAR-COD-CPO IN GMO.
+           MOVE GAR-VAL-CML-TSN IN GVT TO GAR-VAL-CPO-NVO IN GMO.
+           ADD 1 TO GAR-CRR-MOV IN GMO.
+           MOVE FIO-PUT TO FIO-CMND.
+           PERFORM GAR-FIO-GMO.
+           IF NOT FIO-STAT-OKS
+               GO TO ERR-ESC-GMO-GVT.
+
+           MOVE 'GVT003' TO GAR-COD-CPO IN GMO.
+           MOVE GAR-VAL-PON IN GVT TO GAR-VAL-CPO-NVO IN GMO.
+           ADD 1 TO GAR-CRR-MOV IN GMO.
+           MOVE FIO-PUT TO FIO-CMND.
+           PERFORM GAR-FIO-GMO.
+           IF NOT FIO-STAT-OKS
+               GO TO ERR-ESC-GMO-GVT.
+
+           MOVE 'GVT005' TO GAR-COD-CPO IN GMO.
+           MOVE GAR-FEC-TSN IN GVT     TO GAR-GLS-CPO-NVO IN GMO.
+           MOVE GAR-VAL-AJT-SUP IN GVT TO GAR-VAL-CPO-NVO IN GMO.
+           ADD 1 TO GAR-CRR-MOV IN GMO.
+           MOVE FIO-PUT TO FIO-CMND.
+           PERFORM GAR-FIO-GMO.
+           IF NOT FIO-STAT-OKS
+               GO TO ERR-ESC-GMO-GVT.
+
+           MOVE 'GVT004' TO GAR-COD-CPO IN GMO.
+           MOVE 'N' TO GAR-IND-VAL IN GMO.
+           MOVE ZEROES TO GAR-VAL-CPO-ANT IN GMO.
+           MOVE ZEROES TO GAR-VAL-CPO-NVO IN GMO.
+           MOVE GAR-FEC-TSN IN GVT TO GAR-GLS-CPO-NVO IN GMO.
+           ADD 1 TO GAR-CRR-MOV IN GMO.
+           MOVE FIO-PUT TO FIO-CMND.
+           PERFORM GAR-FIO-GMO.
+           IF NOT FIO-STAT-OKS
+               GO TO ERR-ESC-GMO-GVT.
+           GO TO FIN-ESC-GMO-GVT.
+       ERR-ESC-GMO-GVT.
+           MOVE 'GMO    PUT' TO MSG-COD-MENS.
+       FIN-ESC-GMO-GVT.
+           EXIT.
+
+       ESC-GMO-GTP SECTION.
+       INI-ESC-GMO-GTP.
+           PERFORM INI-GMO.
+           MOVE 'N' TO GAR-IND-VAL IN GMO.
+           MOVE 'N' TO GAR-IND-CLV IN GMO.
+           MOVE 'GTP001' TO GAR-COD-CPO IN GMO.
+           MOVE GAR-NUM-SIS IN GDG TO GAR-NUM-SIS IN GTP.
+           MOVE GAR-COD-CRR IN GDG TO GAR-COD-CRR IN GTP.
+           MOVE GAR-COD-TSN IN GDG TO GAR-COD-TSN IN GTP.
+           MOVE SPACES TO GAR-IDN-ITM-TSN IN GTP.
+           MOVE 'GAR-CLV-GTP-1' TO FIO-AKEY.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           MOVE 1 TO WSS-IMAL.
+       LUP-ESC-GMO-GTP.
+           PERFORM GAR-FIO-GTP.
+           IF FIO-STAT-OKS AND 
+              GAR-NUM-SIS IN GDG = GAR-NUM-SIS IN GTP AND
+              GAR-COD-CRR IN GDG = GAR-COD-CRR IN GTP
+               MOVE 0 TO WSS-IMAL
+               MOVE GAR-IDN-ITM-TSN IN GTP TO GAR-GLS-CPO-NVO IN GMO
+               MOVE FIO-PUT TO FIO-CMND
+               PERFORM GAR-FIO-GMO
+               IF FIO-STAT-OKS
+                   MOVE FIO-GET-NXT TO FIO-CMND
+                   ADD 1 TO GAR-CRR-MOV IN GMO
+                   GO TO LUP-ESC-GMO-GTP
+               ELSE
+                   MOVE 'GMO    PUT' TO MSG-COD-MENS
+           ELSE
+               IF WSS-IMAL > 0
+                   MOVE 'GTP    NEX' TO MSG-COD-MENS.
+       FIN-ESC-GMO-GTP.
+           EXIT.   
+
+       ESC-GMO-GUB SECTION.
+       INI-ESC-GMO-GUB.
+           PERFORM INI-GMO.
+           MOVE 'GUB000' TO GAR-COD-CPO IN GMO.
+           MOVE 'N' TO GAR-IND-VAL IN GMO.
+           MOVE 'N' TO GAR-IND-CLV IN GMO.
+           MOVE GAR-NUM-SIS IN GDG TO GAR-NUM-SIS IN GUB.
+           MOVE GAR-COD-CRR IN GDG TO GAR-COD-CRR IN GUB.
+           MOVE 'GAR-CLV-GUB-1' TO FIO-AKEY.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM GAR-FIO-GUB.
+           IF FIO-STAT-OKS
+               MOVE 'DATOS DE UBICACION' TO GAR-GLS-CPO-NVO IN GMO
+               MOVE FIO-PUT TO FIO-CMND
+               PERFORM GAR-FIO-GMO
+               IF FIO-STAT-OKS
+                   NEXT SENTENCE
+               ELSE
+                   MOVE 'GMO    PUT' TO MSG-COD-MENS
+           ELSE
+                   MOVE 'GUB    NEX' TO MSG-COD-MENS.
+       FIN-ESC-GMO-GUB.
+           EXIT.   
+
+       ESC-GMO-GAP SECTION.
+       INI-ESC-GMO-GAP.
+           PERFORM INI-GMO.
+           MOVE 'N' TO GAR-IND-VAL IN GMO.
+           MOVE 'N' TO GAR-IND-CLV IN GMO.
+           MOVE 'GAP001' TO GAR-COD-CPO IN GMO.
+           MOVE GAR-NUM-SIS IN GDG TO GAR-NUM-SIS IN GAP.
+           MOVE GAR-COD-CRR IN GDG TO GAR-COD-CRR IN GAP.
+           MOVE SPACES TO GAP-CIC-ICLI IN GAP.
+           MOVE 'GAR-CLV-GAP-1' TO FIO-AKEY.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           MOVE 1 TO WSS-IMAL.
+       LUP-ESC-GMO-GAP.
+           PERFORM GAR-FIO-GAP.
+           IF FIO-STAT-OKS AND 
+              GAR-NUM-SIS IN GDG = GAR-NUM-SIS IN GAP AND
+              GAR-COD-CRR IN GDG = GAR-COD-CRR IN GAP
+               MOVE 0 TO WSS-IMAL
+               MOVE GAP-CIC-ICLI IN GAP TO GAR-GLS-CPO-NVO IN GMO
+               MOVE FIO-PUT TO FIO-CMND
+               PERFORM GAR-FIO-GMO
+               IF FIO-STAT-OKS
+                   MOVE FIO-GET-NXT TO FIO-CMND
+                   ADD 1 TO GAR-CRR-MOV IN GMO
+                   GO TO LUP-ESC-GMO-GAP
+               ELSE
+                   MOVE 'GMO    PUT' TO MSG-COD-MENS
+           ELSE
+               IF WSS-IMAL > 0
+                   MOVE 'GAP    NEX' TO MSG-COD-MENS.
+       FIN-ESC-GMO-GAP.
+           EXIT.   
+
+       ESC-GMO-GIN SECTION.
+       INI-ESC-GMO-GIN.
+           PERFORM INI-GMO.
+           MOVE 'GIN000' TO GAR-COD-CPO IN GMO.
+           MOVE 'N' TO GAR-IND-VAL IN GMO.
+           MOVE 'N' TO GAR-IND-CLV IN GMO.
+           MOVE GAR-NUM-SIS IN GDG TO GAR-NUM-SIS IN GIN.
+           MOVE GAR-COD-CRR IN GDG TO GAR-COD-CRR IN GIN.
+           MOVE 'GAR-CLV-GIN-1' TO FIO-AKEY.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM GAR-FIO-GIN.
+           IF FIO-STAT-OKS
+               MOVE 'DATOS DE INSPECCIONES' TO GAR-GLS-CPO-NVO IN GMO
+               MOVE FIO-PUT TO FIO-CMND
+               PERFORM GAR-FIO-GMO
+               IF FIO-STAT-OKS
+                   NEXT SENTENCE
+               ELSE
+                   MOVE 'GMO    PUT' TO MSG-COD-MENS
+           ELSE
+                   MOVE 'GIN    NEX' TO MSG-COD-MENS.
+       FIN-ESC-GMO-GIN.
+           EXIT.   
+
+       ESC-GMO-GDP SECTION.
+       INI-ESC-GMO-GDP.
+           PERFORM INI-GMO.
+           MOVE 'GDP000' TO GAR-COD-CPO IN GMO.
+           MOVE 'N' TO GAR-IND-VAL IN GMO.
+           MOVE 'N' TO GAR-IND-CLV IN GMO.
+           MOVE GAR-NUM-SIS IN GDG TO GAR-NUM-SIS IN GDP.
+           MOVE GAR-COD-CRR IN GDG TO GAR-COD-CRR IN GDP.
+           MOVE 'GAR-CLV-GDP-1' TO FIO-AKEY.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM GAR-FIO-GDP.
+           IF FIO-STAT-OKS
+               MOVE 'DATOS DE DEPRECIACION' TO GAR-GLS-CPO-NVO IN GMO
+               MOVE FIO-PUT TO FIO-CMND
+               PERFORM GAR-FIO-GMO
+               IF FIO-STAT-OKS
+                   NEXT SENTENCE
+               ELSE
+                   MOVE 'GMO    PUT' TO MSG-COD-MENS
+           ELSE
+                   MOVE 'GDP    NEX' TO MSG-COD-MENS.
+       FIN-ESC-GMO-GDP.
+           EXIT.   
+
+       ESC-GMO-GSI SECTION.
+       INI-ESC-GMO-GSI.
+       FIN-ESC-GMO-GSI.
+           EXIT.   
+
+       INI-GMO SECTION.
+       INI-INI-GMO.
+           MOVE SPACES TO GMO-GLS-FLAG IN GMO.
+           MOVE SPACES TO GAR-FEC-MOV  IN GMO.
+           MOVE SPACES TO GAR-HOR-MOV  IN GMO.
+           MOVE SPACES TO GAR-NUM-SIS  IN GMO.
+           MOVE SPACES TO GAR-COD-CRR  IN GMO.
+      *    MOVE ZEROES TO GAR-CRR-MOV  IN GMO.
+           MOVE ZEROES TO GAR-COD-TSN  IN GMO.
+           MOVE SPACES TO GAR-COD-CPO  IN GMO.
+           MOVE SPACES TO GAR-IND-VAL  IN GMO.
+           MOVE SPACES TO GAR-IND-CLV  IN GMO.
+           MOVE SPACES TO GAR-COD-CLV-ANT IN GMO.
+           MOVE SPACES TO GAR-GLS-CPO-ANT IN GMO.
+           MOVE ZEROES TO GAR-VAL-CPO-ANT IN GMO.
+           MOVE SPACES TO GAR-COD-CLV-NVO IN GMO.
+           MOVE SPACES TO GAR-GLS-CPO-NVO IN GMO.
+           MOVE ZEROES TO GAR-VAL-CPO-NVO IN GMO.
+           MOVE SPACES TO GMO-FEC-ING-SIS IN GMO.
+           MOVE SPACES TO GAR-TIP-MOV     IN GMO.
+           MOVE SPACES TO GMO-GLS-DISP    IN GMO.
+
+           PERFORM GET-FHOY.
+           MOVE HOY-FHOY TO GAR-FEC-MOV IN GMO.
+           MOVE HOY-HHOY TO GAR-HOR-MOV IN GMO.
+      *FLB CST  13-OCT-1993 
+           MOVE VCG-OTRN TO GAR-TML-MOV     IN GMO.
+           MOVE VCG-USER TO GMO-IDN-USU-ING IN GMO.
+      *FLB CST  13-OCT-1993 
+           MOVE HOY-FHOY TO GMO-FEC-ING-SIS IN GMO.
+           MOVE GAR-NUM-SIS IN GDG TO GAR-NUM-SIS IN GMO.
+           MOVE GAR-COD-CRR IN GDG TO GAR-COD-CRR IN GMO.
+           MOVE GAR-COD-OFI IN GDG TO GAR-COD-OFI-MOV IN GMO.
+           ADD 1 TO GAR-CRR-MOV IN GMO.
+           MOVE 'S' TO GAR-IND-VAL IN GMO.
+           MOVE 'N' TO GAR-IND-CLV IN GMO.
+           MOVE SPACES TO GAR-COD-CLV-ANT IN GMO.
+           MOVE SPACES TO GAR-COD-CLV-NVO IN GMO.
+           MOVE ZEROES TO GAR-VAL-CPO-ANT IN GMO.
+           MOVE ZEROES TO GAR-VAL-CPO-NVO IN GMO.
+           MOVE SPACES TO GAR-GLS-CPO-ANT IN GMO.
+           MOVE SPACES TO GAR-GLS-CPO-NVO IN GMO.
+           MOVE '1' TO GAR-COD-MOV IN GMO.
+       FIN-INI-GMO.
+           EXIT.
+
+       COPY GARBFGAP.
+       COPY GARBFGDD.
+       COPY GARBFGDG.
+       COPY GARBFGDO.
+       COPY GARBFGDP.
+       COPY GARBFGES.
+       COPY GARBFGIN.
+       COPY GARBFGLE.
+       COPY GARBFGMO.
+       COPY GARBFGSE.
+       COPY GARBFGSI.
+       COPY GARBFGTP.
+       COPY GARBFGUB.
+       COPY GARBFGVT.
+       COPY GARBFTAG.
+
+       COPY GNSBGHOY.
+
+       BCK-OUT SECTION.
+       INI-BCK-OUT.
+           MOVE FIO-BCK-OUT TO FIO-CMND.
+           PERFORM GAR-FIO-GDG.
+           IF FIO-STAT-OKS
+               MOVE '49' TO FIO-STAT.
+       FIN-BCK-OUT.
+           EXIT.
+
+      *FLB CST  13-JUN-1994 
+       VAL-GDD SECTION.
+       INI-VAL-GDD.
+           MOVE SPACES TO MSG-COD-MENS.
+           MOVE GAR-NUM-SIS IN GDG TO GAR-NUM-SIS IN GDD.
+           MOVE GAR-COD-CRR IN GDG TO GAR-COD-CRR IN GDD.
+           MOVE 'GAR-CLV-GDD-2' TO FIO-AKEY.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM GAR-FIO-GDD.
+           IF NOT ( FIO-STAT-OKS AND
+                    GAR-NUM-SIS IN GDG = GAR-NUM-SIS IN GDD AND
+                    GAR-COD-CRR IN GDG = GAR-COD-CRR IN GDD )
+               MOVE 'GDD    NEX' TO MSG-COD-MENS
+               GO TO BRW-VAL-GDD.
+       LUP-VAL-GDD.
+           IF GDD-IIC-ICLI IN GDD NOT > ZEROES OR
+              GDD-IIC-ICLI IN GDD > '99999999'
+               MOVE 'IICICLI=0' TO MSG-COD-MENS
+                GO TO BRW-VAL-GDD.
+
+           MOVE 'GAR-CLV-GDD-2' TO FIO-AKEY.
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM GAR-FIO-GDD.
+           IF NOT ( FIO-STAT-OKS AND
+                    GAR-NUM-SIS IN GDG = GAR-NUM-SIS IN GDD AND
+                    GAR-COD-CRR IN GDG = GAR-COD-CRR IN GDD )
+               GO TO BRW-VAL-GDD.
+           GO TO LUP-VAL-GDD.
+       BRW-VAL-GDD.
+           IF FIO-STAT-OKS
+               MOVE 'GAR-CLV-GDD-2' TO FIO-AKEY
+               MOVE FIO-END-BRW TO FIO-CMND
+               PERFORM GAR-FIO-GDD.
+       FIN-VAL-GDD.
+           EXIT.
+

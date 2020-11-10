@@ -1,0 +1,831 @@
+       IDENTIFICATION DIVISION.
+      *========================
+       PROGRAM-ID.    COLPB877.
+       AUTHOR.        C OLIVA C.
+      *
+      ******************************************************************
+      *  INTERSOFT                                                     *
+      *  MIGRACION A COBOL OS/390                                      *
+      *  FECHA: 30 DE MARZO DE 1998                                    *
+      ******************************************************************
+      *****************************************************************
+      *                                                               *
+      * OBJETIVO :    EMITE CARTA AVISO A DEUDORES MOROSOS            *
+      *                                                               *
+      * ARCHIVOS :                                                    *
+      *                                                               *
+      * NOMBRE    TIPO              USO  DESCRIPCION                  *
+      *                                                               *
+      * COLVAVI   SAM                I   SOLICITUD ESTADO DE SALDO    *
+      * MAEMCAL   VSAM/KSDS          I   ARCHIVO CALENDARIO           *
+      * COLLB877  U.R                O   SUPER CARTOLA PROD. PERSONAS *
+      *****************************************************************
+      *                                                               *
+      * MANTENCION  1                                                 *
+      * -------------                                                 *
+      * ANALISTA   : .................................                *
+      * PROGRAMADOR: .................................                *
+      * FECHA      : DD/MM/19AA                                       *
+      * MOTIVO     : ................................................ *
+      *              ................................................ *
+      *              ................................................ *
+      *                                                               *
+      *****************************************************************
+      *
+       ENVIRONMENT DIVISION.
+      *=====================
+       CONFIGURATION SECTION.
+       SPECIAL-NAMES.
+                     DECIMAL-POINT IS COMMA
+                     C01 IS CANAL-1.
+       INPUT-OUTPUT SECTION.
+       FILE-CONTROL.
+
+           SELECT COLVAVI  ASSIGN               TO COLVAVI
+                           FILE STATUS          IS FS-COLVAVI.
+
+           SELECT PARAMT   ASSIGN               TO PARAMT
+                           FILE STATUS          IS FS-PARAMT.
+
+           SELECT COLLB877 ASSIGN TO SYS017-UR-1403-COLLB877.
+
+      /
+       DATA DIVISION.
+      *==============
+       FILE SECTION.
+
+       FD  COLVAVI
+           BLOCK CONTAINS 0 RECORDS.
+
+       01  R-COLVAVI.
+           05 AVI-IND-TCAR               PIC 9(01).
+           05 AVI-COD-VCOC               PIC X(06).
+           05 AVI-CIC-IOPC               PIC X(12).
+           05 AVI-NUM-IVCT               PIC 9(03).
+           05 AVI-FEC-FVEN               PIC X(08).
+           05 AVI-FEC-FSEL               PIC X(08).
+           05 AVI-VAL-SFIN               PIC 9(11)V9999.
+           05 AVI-NOM-DDIR               PIC X(35).
+           05 AVI-DIR-DDIR               PIC X(60).
+           05 AVI-COM-DDIR               PIC X(20).
+           05 AVI-NOM-DIND               PIC X(35).
+           05 AVI-DIR-DIND               PIC X(60).
+           05 AVI-COM-DIND               PIC X(20).
+      /
+       FD  PARAMT        LABEL RECORD STANDARD.
+       01  WP-REG-PROCESO.
+           03 WP-REG1.
+              05 WP-GLOSA                PIC X(08).
+              05 WP-FECHA-PRO.
+                 10 WP-DD-PRO            PIC 9(02).
+                 10 WP-MM-PRO            PIC 9(02).
+                 10 WP-SS-PRO            PIC 9(02).
+                 10 WP-AA-PRO            PIC 9(02).
+           03 WP-FILLER                  PIC X(64).
+      *
+       FD  COLLB877      LABEL RECORD OMITTED.
+       01  REGLB877                      PIC X(100).
+      /
+       WORKING-STORAGE SECTION.
+
+      *RRM-INI 28-OCT-1998
+       COPY GNSWGBAR.
+       01  WSS-VARI.
+           03  WSS-GLS-BARRA.
+               05  WSS-IND-BARRA OCCURS 30 PIC X(01).
+           03  WSS-COD-BARRA.
+               05  WSS-BAR-ACEPT OCCURS 40 PIC X(01).
+      *RRM-FIN 28-OCT-1998
+
+
+       01  WR-ESTADOS.
+           02 FS-COLVAVI                 PIC X(02) VALUE ZEROS.
+           02 FS-PARAMT                  PIC X(02) VALUE ZEROS.
+
+       01  WR-MONTOS.
+           02 WR-MONTO-E                 PIC S9(11)       COMP-3.
+           02 WR-MONTO-D                 PIC S9(11)V9999  COMP-3.
+
+       01  WR-TERMINO                    PIC 9(01)  VALUE 0.
+           88 WR-TERMINO-OK              VALUE 0.
+           88 WR-HAY-MSG-WRN-OP          VALUE 1.
+           88 WR-HAY-MSG-ERR-OP          VALUE 2.
+           88 WR-TERMINO-ANORMAL         VALUE 3.
+           88 WR-TERMINO-ERROR           VALUE 2 3.
+
+       01  WR-VARIABLES-TERMINO.
+           02 WR-SECCION                 PIC X(25).
+           02 WR-PARRAFO                 PIC X(25).
+           02 WR-ARCHIVO                 PIC X(25).
+           02 WR-OPERACI                 PIC X(25).
+           02 WR-FILE-ST                 PIC X(02).
+           02 WR-MENSAJE.
+              05 WR-COD-PGM              PIC X(08).
+              05 WR-BLANCO               PIC X(01) VALUE ' '.
+              05 WR-COD-MSG              PIC X(03).
+
+       01  WR-FECHAS.
+           02 WR-FECHA-AUX.
+              05 WR-SSAA-AUX.
+                 10 WR-SS-AUX            PIC 9(02).
+                 10 WR-AA-AUX            PIC 9(02).
+              05 WR-MM-AUX               PIC 9(02).
+              05 WR-DD-AUX               PIC 9(02).
+           02 WR-FECHA-HOY.
+              05 WR-AA-HOY               PIC X(02).
+              05 WR-MM-HOY               PIC X(02).
+              05 WR-DD-HOY               PIC X(02).
+           02 WR-FECHA-HOY-D.
+              05 WR-DD-HOY-D             PIC X(02).
+              05 FILLER                  PIC X(01) VALUE '/'.
+              05 WR-MM-HOY-D             PIC X(02).
+              05 FILLER                  PIC X(01) VALUE '/'.
+              05 WR-AA-HOY-D             PIC X(02).
+      *
+      *---------------------------------------------------------------*
+      *    A C U M U L A D O R E S                                    *
+      *---------------------------------------------------------------*
+       01  WA-ESTADISTICAS.
+           02 WA-LEI-AVI                 PIC 9(06) COMP-3 VALUE 0.
+           02 WA-LEI-F01                 PIC 9(06) COMP-3 VALUE 0.
+           02 WA-TOT-IMP                 PIC 9(06) COMP-3 VALUE 0.
+           02 WA-TOT-DIR                 PIC 9(06) COMP-3 VALUE 0.
+           02 WA-TOT-IND                 PIC 9(06) COMP-3 VALUE 0.
+      /
+      ******************************************************************
+      *
+       01  RTNWCALE.
+      *
+      * AREA DE LLAMADA A SUBRUTINA "RTNUCALE"
+      *
+      * ***  FUNCIONES VALIDAS PARA SUBRUTINA  ***
+      *
+      * AVNDC  : AVANZA N DIAS CALENDARIO (N = 0 A 99999)
+      * AVNDH  : AVANZA N DIAS HABILES (N = 0 A 99999)
+      * BDCA   : BUSCA DIA CALENDARIO ANTERIOR
+      * BDCS   : BUSCA DIA CALENDARIO SIGUIENTE
+      * BDHA   : BUSCA DIA HABIL ANTERIOR
+      * BDHS   : BUSCA DIA HABIL SIGUIENTE
+      * BPDCM  : BUSCA PRIMER DIA CALENDARIO MES (ACTUAL)
+      * BPDCMA : BUSCA PRIMER DIA CALENDARIO MES ANTERIOR
+      * BPDCMS : BUSCA PRIMER DIA CALENDARIO MES SIGUIENTE
+      * BPDHM  : BUSCA PRIMER DIA HABIL MES (ACTUAL)
+      * BPDHMA : BUSCA PRIMER DIA HABIL MES ANTERIOR
+      * BPDHMS : BUSCA PRIMER DIA HABIL MES SIGUIENTE
+      * BUDCM  : BUSCA ULTIMO DIA CALENDARIO MES (ACTUAL)
+      * BUDCMA : BUSCA ULTIMO DIA CALENDARIO MES ANTERIOR
+      * BUDCMS : BUSCA ULTIMO DIA CALENDARIO MES SIGUIENTE
+      * BUDHM  : BUSCA ULTIMO DIA HABIL MES (ACTUAL)
+      * BUDHMA : BUSCA ULTIMO DIA HABIL MES ANTERIOR
+      * BUDHMS : BUSCA ULTIMO DIA HABIL MES SIGUIENTE
+      * CARGAR : CARGA ARCHIVO CALENDARIO EN MEMORIA DESDE UNA FECHA
+      * CDCEF  : CALCULA DIFERENCIA DE DIAS CALENDARIO ENTRE FECHAS
+      * INFO   : ENTREGA INFORMACION ACERCA DE UNA FECHA
+      * RENDC  : RETROCEDE N DIAS CALENDARIO (N = 0 A 99999)
+      * RENDH  : RETROCEDE N DIAS HABILES (N = 0 A 99999)
+      *
+           05 CALEAREA-FUNCION              PIC X(06).
+           05 CALEAREA-FECHA-1              PIC X(08).
+           05 R1-CALEAREA-FECHA-1         REDEFINES CALEAREA-FECHA-1.
+              10 CALEAREA-FECHA-1-D         PIC 9(02).
+              10 CALEAREA-FECHA-1-M         PIC 9(02).
+              10 CALEAREA-FECHA-1-A         PIC 9(04).
+              10 R1-CALEAREA-FECHA-1-A    REDEFINES CALEAREA-FECHA-1-A.
+                 15 CALEAREA-FECHA-1-AM     PIC 9(02).
+                 15 CALEAREA-FECHA-1-AA     PIC 9(02).
+           05 CALEAREA-FECHA-2              PIC X(08).
+           05 R1-CALEAREA-FECHA-2         REDEFINES CALEAREA-FECHA-2.
+              10 CALEAREA-FECHA-2-D         PIC 9(02).
+              10 CALEAREA-FECHA-2-M         PIC 9(02).
+              10 CALEAREA-FECHA-2-A         PIC 9(04).
+              10 R1-CALEAREA-FECHA-2-A    REDEFINES CALEAREA-FECHA-2-A.
+                 15 CALEAREA-FECHA-2-AM     PIC 9(02).
+                 15 CALEAREA-FECHA-2-AA     PIC 9(02).
+           05 CALEAREA-NUM-DIA              PIC S9(8).
+           05 CALEAREA-TIP-DIA              PIC X(01).
+           05 CALEAREA-INI-DIA              PIC X(02).
+           05 CALEAREA-COD-RET              PIC 9(02).
+      *
+      ******************************************************************
+      /
+      *---------------------------------------------------------------*
+      *    T A B L A    M E S E S                                     *
+      *---------------------------------------------------------------*
+       01  WT-GLOSA-MESES.
+           02 WT-MESES.
+              05 FILLER                  PIC X(10) VALUE '  ENERO   '.
+              05 FILLER                  PIC X(10) VALUE ' FEBRERO  '.
+              05 FILLER                  PIC X(10) VALUE '  MARZO   '.
+              05 FILLER                  PIC X(10) VALUE '  ABRIL   '.
+              05 FILLER                  PIC X(10) VALUE '  MAYO    '.
+              05 FILLER                  PIC X(10) VALUE '  JUNIO   '.
+              05 FILLER                  PIC X(10) VALUE '  JULIO   '.
+              05 FILLER                  PIC X(10) VALUE '  AGOSTO  '.
+              05 FILLER                  PIC X(10) VALUE 'SEPTIEMBRE'.
+              05 FILLER                  PIC X(10) VALUE ' OCTUBRE  '.
+              05 FILLER                  PIC X(10) VALUE ' NOVIEMBRE'.
+              05 FILLER                  PIC X(10) VALUE ' DICIEMBRE'.
+           02 WT-MES REDEFINES WT-MESES  PIC X(10) OCCURS 12 TIMES.
+      /
+      *---------------------------------------------------------------*
+      *    LINEAS DE IMPRESION AVISOS FORMATO 1                       *
+      *---------------------------------------------------------------*
+       01  WR-LINEA01.
+           05 WR-NRO-FONT                PIC 9(1)   VALUE 1.
+           05 FILLER                     PIC X(06)  VALUE SPACES.
+           05 WR-DETALLE.
+      * RRM-INI 20-NOV-1998
+      *       10 FILLER                  PIC X(44)  VALUE SPACES.
+              10 FILLER                  PIC X(43)  VALUE SPACES.
+      * RRM-FIN 20-NOV-1998
+              10 WR-DD-01                PIC X(02).
+      * RRM-INI 20-NOV-1998
+      *       10 FILLER                  PIC X(02)  VALUE SPACES.
+              10 FILLER                  PIC X(03)  VALUE SPACES.
+      * RRM-FIN 20-NOV-1998
+              10 WR-GLS-MES-01           PIC X(10).
+              10 FILLER                  PIC X(04)  VALUE SPACES.
+              10 WR-SSAA-01              PIC X(04).
+              10 FILLER                  PIC X(10)  VALUE SPACES.
+
+       01  WR-LINEA02.
+           05 WR-NRO-FONT                PIC 9(1)   VALUE 1.
+           05 FILLER                     PIC X(01)  VALUE SPACES.
+           05 WR-DETALLE.
+              10 WR-NOM-DIR-02           PIC X(35).
+              10 FILLER                  PIC X(07)  VALUE SPACES.
+              10 WR-NOM-IND-02           PIC X(35).
+
+       01  WR-LINEA03.
+           05 WR-NRO-FONT                PIC 9(1)   VALUE 1.
+           05 FILLER                     PIC X(01)  VALUE SPACES.
+           05 WR-DETALLE.
+              10 WR-DIR-DIR-03           PIC X(35).
+              10 FILLER                  PIC X(07)  VALUE SPACES.
+              10 WR-DIR-IND-03           PIC X(35).
+
+       01  WR-LINEA04.
+           05 WR-NRO-FONT                PIC 9(1)   VALUE 1.
+           05 FILLER                     PIC X(01)  VALUE SPACES.
+           05 WR-DETALLE.
+              10 WR-COM-DIR-04           PIC X(35).
+              10 FILLER                  PIC X(07)  VALUE SPACES.
+              10 WR-COM-IND-04           PIC X(35).
+
+       01  WR-LINEA05.
+           05 WR-NRO-FONT                PIC 9(1)   VALUE 1.
+           05 FILLER                     PIC X(06)  VALUE SPACES.
+           05 WR-DETALLE.
+              10 FILLER                  PIC X(26)  VALUE SPACES.
+              10 WR-NUM-CRED-05          PIC X(12).
+              10 FILLER                  PIC X(12)  VALUE SPACES.
+              10 WR-NUM-CUOT-05          PIC X(03).
+              10 FILLER                  PIC X(09)  VALUE SPACES.
+
+       01  WR-LINEA06.
+           05 WR-NRO-FONT                PIC 9(1)   VALUE 1.
+           05 FILLER                     PIC X(06)  VALUE SPACES.
+           05 WR-DETALLE.
+              10 FILLER                  PIC X(26)  VALUE SPACES.
+              10 WR-DD-VCT-06            PIC X(02).
+              10 FILLER                  PIC X(01)  VALUE '/'.
+              10 WR-MM-VCT-06            PIC X(02).
+              10 FILLER                  PIC X(01)  VALUE '/'.
+              10 WR-SSAA-VCT-06          PIC X(04).
+              10 FILLER                  PIC X(03)  VALUE SPACES.
+
+       01  WR-LINEA07.
+           05 WR-NRO-FONT                PIC 9(1)   VALUE 1.
+           05 FILLER                     PIC X(06)  VALUE SPACES.
+           05 WR-DETALLE.
+              10 FILLER                  PIC X(22)  VALUE SPACES.
+              10 WR-COD-MON-07           PIC X(04)  VALUE '    '.
+              10 WR-MONTO-07.
+                 15 WR-MONTO-07-UF       PIC ZZZ.ZZ9,9999.
+                 15 WR-MONTO-07-P REDEFINES WR-MONTO-07-UF
+                                         PIC ZZZZ.ZZZ.ZZ9.
+              10 FILLER                  PIC X(03)  VALUE SPACES.
+      /
+      *---------------------------------------------------------------*
+      * AREAS PARA FORMATO MAILING                                    *
+      *---------------------------------------------------------------*
+
+       01  TABLA-LINEAS-COLILLA.
+           05 PTR-COLILLA                PIC 9(03) VALUE 0.
+           05 TAB-LIN-1.
+              10 TB-LIN-1-CTRL           PIC X(01).
+              10 TB-LIN-1-DATA           PIC X(34).
+              10 TB-LIN-1-DATO           REDEFINES TB-LIN-1-DATA
+                                         OCCURS 34 TIMES PIC X(01).
+           05 TAB-LIN-2.
+              10 TB-LIN-2-CTRL           PIC X(01).
+              10 TB-LIN-2-DATA           PIC X(34).
+              10 TB-LIN-2-DATO           REDEFINES TB-LIN-2-DATA
+                                         OCCURS 34 TIMES PIC X(01).
+           05 TAB-LIN-3.
+              10 TB-LIN-3-CTRL           PIC X(01).
+              10 TB-LIN-3-DATA           PIC X(34).
+              10 TB-LIN-3-DATO           REDEFINES TB-LIN-3-DATA
+                                         OCCURS 34 TIMES PIC X(01).
+      *
+      * LINEAS DE IMPRESION DE AVISOS (MAILER)
+      *
+       01  LAVIS-00.
+           05 LA00-CTRL                  PIC X(01) VALUE '2'.
+           05 LA00-COL1                  PIC X(01).
+           05 LA00-COL2                  PIC X(01).
+           05 LA00-COL3                  PIC X(01).
+      * RRM-INI 28-OCT-1998
+           05 LA00-FILL                  PIC X(06).
+           05 LA00-DIG-BARRA             PIC X(01).
+           05 LA00-COD-BARRA             PIC X(01).
+      * RRM-FIN 28-OCT-1998
+           05 FILLER                     PIC X(80) VALUE SPACES.
+
+      * RRM-INI 28-OCT-1998
+       01  LAVIS-AA.
+           05 LAAA-FONT                  PIC X(01) VALUE '3'.
+           05 LAAA-CODIGO                PIC X(01).
+      * RRM-FIN 28-OCT-1998
+      * RRM-INI 24-NOV-1998
+       01 LINEA-3-COLILL.
+          03 COM-DEU                    PIC X(20).
+          03 FILLER                     PIC X(05) VALUE SPACES.
+          03 OFI-DEU                    PIC X(03).
+       01 CIC-OPER.
+             05 D-CAI   PIC X(01).
+             05 N-CAI   PIC X(03).
+             05 N-IIC   PIC X(08).
+      * RRM-FIN 24-NOV-1998
+
+
+       PROCEDURE DIVISION.
+      *===================
+       A-CONTROL SECTION.
+      *------------------
+       AA-INICIALIZACION.
+           PERFORM B-INICIALIZAR.
+       AB-PROCESAMIENTO.
+           IF (NOT WR-TERMINO-ERROR)
+               PERFORM C-PROCESAR
+           END-IF.
+       AC-TERMINACION.
+           PERFORM D-TERMINAR.
+       AZZ-FIN-DE-PROCESO.
+           GOBACK.
+
+      /
+       B-INICIALIZAR SECTION.
+      *----------------------
+       B0-INICIO-CENTRAL.
+           PERFORM BA-ABRIR-ARCHIVOS
+           IF (NOT WR-TERMINO-ERROR)
+              PERFORM BB-VALIDA-PARAMETRO
+              IF (NOT WR-TERMINO-ERROR)
+                 PERFORM BC-CARGA-CALENDARIO
+              END-IF
+           END-IF.
+
+           GO TO BZ-FIN-DE-SECCION.
+
+       BA-ABRIR-ARCHIVOS.
+           OPEN INPUT  PARAMT
+                I-O    COLVAVI
+                OUTPUT COLLB877.
+
+           IF (FS-PARAMT  NOT = ZEROS)
+               MOVE 'B-INICIALIZAR'             TO WR-SECCION
+               MOVE 'BA-ABRIR-ARCHIVOS'         TO WR-PARRAFO
+               MOVE 'PARAMT '                   TO WR-ARCHIVO
+               MOVE 'OPEN'                      TO WR-OPERACI
+               MOVE FS-PARAMT                   TO WR-FILE-ST
+               MOVE 'COLPB877 '                 TO WR-MENSAJE
+               MOVE 3                           TO WR-TERMINO
+           END-IF.
+
+           IF (FS-COLVAVI  = '35')
+               DISPLAY ' '
+               DISPLAY '*************************************'
+               DISPLAY '*************************************'
+               DISPLAY '***                               ***'
+               DISPLAY '*** ARCHIVO DE AVISOS ESTA VACIO  ***'
+               DISPLAY '***                               ***'
+               DISPLAY '*************************************'
+               DISPLAY '*************************************'
+               DISPLAY ' '
+               MOVE 'B-INICIALIZAR'             TO WR-SECCION
+               MOVE 'BA-ABRIR-ARCHIVOS'         TO WR-PARRAFO
+               MOVE 'COLVAVI '                  TO WR-ARCHIVO
+               MOVE 'OPEN'                      TO WR-OPERACI
+               MOVE FS-COLVAVI                  TO WR-FILE-ST
+               MOVE 'COLPB877 '                 TO WR-MENSAJE
+               MOVE 3                           TO WR-TERMINO
+           ELSE
+              IF (FS-COLVAVI  NOT = ZEROS     AND
+                  FS-COLVAVI  NOT = '97' )
+                  MOVE 'B-INICIALIZAR'          TO WR-SECCION
+                  MOVE 'BA-ABRIR-ARCHIVOS'      TO WR-PARRAFO
+                  MOVE 'COLVAVI '               TO WR-ARCHIVO
+                  MOVE 'OPEN'                   TO WR-OPERACI
+                  MOVE FS-COLVAVI               TO WR-FILE-ST
+                  MOVE 'COLPB877 '              TO WR-MENSAJE
+                  MOVE 3                        TO WR-TERMINO
+              END-IF
+           END-IF.
+
+       BB-VALIDA-PARAMETRO.
+           PERFORM BL-LEER-PARAMETRO.
+           IF WP-FECHA-PRO IS NOT NUMERIC
+                 DISPLAY '*****************************************'
+                 DISPLAY 'COLPB877. FECHA PARAMETRO NO NUMERICA    '
+                 DISPLAY 'COLPB877. PROGRAMA CANCELADO'
+                 DISPLAY '*****************************************'
+                 MOVE 'B-INICIALIZAR'           TO WR-SECCION
+                 MOVE 'BB-VALIDA-PARAMETRO'     TO WR-PARRAFO
+                 MOVE 3                         TO WR-TERMINO
+           END-IF.
+
+       BC-CARGA-CALENDARIO.
+           MOVE 'CARGAR'                        TO CALEAREA-FUNCION
+           MOVE ALL '0'                         TO CALEAREA-FECHA-1
+           PERFORM BO-RUTINA-CALE
+           IF CALEAREA-FUNCION = 'CANCEL'
+              DISPLAY '*****************************************'
+              DISPLAY 'COLPB877. ERROR EN CARGA RUTINA FECHA    '
+              DISPLAY 'COLPB877. PROGRAMA CANCELADO'
+              DISPLAY '*****************************************'
+              MOVE 'B-INICIALIZAR'              TO WR-SECCION
+              MOVE 'BC-CARGA-CALENDARIO'        TO WR-PARRAFO
+              MOVE 3                            TO WR-TERMINO
+           ELSE
+              MOVE 'INFO'                       TO CALEAREA-FUNCION
+              MOVE WP-FECHA-PRO                 TO CALEAREA-FECHA-1
+              PERFORM BO-RUTINA-CALE
+              IF CALEAREA-COD-RET = 0
+                 DISPLAY ' '
+                 DISPLAY '** OK. FECHA DE PROCESO **'
+                 DISPLAY ' '
+              ELSE
+                 DISPLAY '*****************************************'
+                 DISPLAY 'COLPB877. ERROR EN CHEQUEO FECHA'
+                 DISPLAY 'COLPB877. FECHA = ' WP-FECHA-PRO
+                 DISPLAY 'COLPB877. PROGRAMA CANCELADO'
+                 DISPLAY '*****************************************'
+                 MOVE 'B-INICIALIZAR'           TO WR-SECCION
+                 MOVE 'BC-CARGA-CALENDARIO'     TO WR-PARRAFO
+                 MOVE 3                         TO WR-TERMINO
+              END-IF
+           END-IF.
+
+       BL-LEER-PARAMETRO.
+           READ PARAMT.
+           IF FS-PARAMT = '00' OR '10'
+              NEXT SENTENCE
+           ELSE
+              MOVE 'B-INICIALIZAR'              TO WR-SECCION
+              MOVE 'BL-LEER-PARAMETRO'          TO WR-PARRAFO
+              MOVE 'PARAMT '                    TO WR-ARCHIVO
+              MOVE 'READ'                       TO WR-OPERACI
+              MOVE FS-PARAMT                    TO WR-FILE-ST
+              MOVE 'COLPB877 '                  TO WR-MENSAJE
+              MOVE 3                            TO WR-TERMINO
+           END-IF.
+
+       BO-RUTINA-CALE.
+           CALL 'RUTUCALE' USING RTNWCALE
+           IF CALEAREA-COD-RET NOT = 0
+              DISPLAY ' '
+              DISPLAY 'BO-RUTINA-CALE'
+              DISPLAY '*** ERROR EN RUTINA RUTUCALE ***'
+              DISPLAY 'RTNWCALE : ' RTNWCALE
+              DISPLAY ' '
+              DISPLAY '***   PROCESO CANCELADO !!!! ***'
+              DISPLAY '                                '
+              MOVE 'B-INICIALIZAR'              TO WR-SECCION
+              MOVE 'BO-RUTINA-CALE     '        TO WR-PARRAFO
+              MOVE 3                            TO WR-TERMINO
+           END-IF.
+
+       BZ-FIN-DE-SECCION.
+           EXIT.
+
+      /
+       C-PROCESAR SECTION.
+      *-------------------
+       CA-PROCESAR-CENTRAL.
+           PERFORM CB-LEER-COLVAVI
+           PERFORM CC-CICLO   UNTIL (FS-COLVAVI NOT = '00')
+                                 OR (WR-TERMINO-ERROR).
+           GO TO CZ-FIN-DE-SECCION.
+
+       CB-LEER-COLVAVI.
+           READ COLVAVI NEXT.
+           IF FS-COLVAVI  = '00'
+              ADD   1                           TO WA-LEI-AVI
+           ELSE
+              IF FS-COLVAVI  = '10'
+                 NEXT SENTENCE
+              ELSE
+                 MOVE 'C-PROCESAR   '           TO WR-SECCION
+                 MOVE 'CB-LEER-COLVAVI   '      TO WR-PARRAFO
+                 MOVE 'COLVAVI '                TO WR-ARCHIVO
+                 MOVE 'READ'                    TO WR-OPERACI
+                 MOVE FS-COLVAVI                TO WR-FILE-ST
+                 MOVE 'COLPB877 '               TO WR-MENSAJE
+                 MOVE 3                         TO WR-TERMINO
+              END-IF
+           END-IF.
+
+       CC-CICLO.
+           IF AVI-IND-TCAR = 1
+              ADD 1                             TO WA-LEI-F01
+              PERFORM CD-LLENA-AVISO
+              PERFORM CE-MAILING-DIR
+              PERFORM CU-IMPRIME-AVISO
+              IF AVI-NOM-DIND NOT = SPACES
+                 PERFORM CK-MAILING-AVAL
+                 PERFORM CU-IMPRIME-AVISO
+              END-IF
+           END-IF.
+           PERFORM CB-LEER-COLVAVI.
+
+       CD-LLENA-AVISO.
+      *>>fecha carta
+           MOVE AVI-FEC-FSEL                    TO WR-FECHA-AUX
+           MOVE WR-DD-AUX                       TO WR-DD-01
+           MOVE WT-MES (WR-MM-AUX)              TO WR-GLS-MES-01
+           MOVE WR-SSAA-AUX                     TO WR-SSAA-01
+
+      *>>nombre deudor directo
+           MOVE AVI-NOM-DDIR                    TO WR-NOM-DIR-02
+
+      *>>nombre deudor indirecto (aval)
+           MOVE AVI-NOM-DIND                    TO WR-NOM-IND-02
+
+      *>>direccion deudor directo
+           MOVE AVI-DIR-DDIR                    TO WR-DIR-DIR-03
+
+      *>>direccion deudor indirecto (aval)
+           MOVE AVI-DIR-DIND                    TO WR-DIR-IND-03
+
+      *>>comuna deudor directo
+           MOVE AVI-COM-DDIR                    TO WR-COM-DIR-04
+
+      *>>comuna deudor indirecto (aval)
+           MOVE AVI-COM-DIND                    TO WR-COM-IND-04
+
+      *>>numero del credito
+           MOVE AVI-CIC-IOPC                    TO WR-NUM-CRED-05
+
+      *>>NUMERO DE LA CUOTA MOROSA
+           MOVE AVI-NUM-IVCT                    TO WR-NUM-CUOT-05
+
+      *>>fecha de vencimiento
+           MOVE AVI-FEC-FVEN                    TO WR-FECHA-AUX
+           MOVE WR-DD-AUX                       TO WR-DD-VCT-06
+           MOVE WR-MM-AUX                       TO WR-MM-VCT-06
+           MOVE WR-SSAA-AUX                     TO WR-SSAA-VCT-06
+
+      *>>monto
+           IF AVI-COD-VCOC = '0999  '
+              MOVE '  $ '                       TO WR-COD-MON-07
+              MOVE AVI-VAL-SFIN                 TO WR-MONTO-E
+              MOVE WR-MONTO-E                   TO WR-MONTO-07-P
+           ELSE
+              MOVE 'U.F '                       TO WR-COD-MON-07
+              MOVE AVI-VAL-SFIN                 TO WR-MONTO-D
+              MOVE WR-MONTO-D                   TO WR-MONTO-07-UF
+           END-IF.
+
+      *>>si no viene nombre de aval, no hay direccion ni comuna
+           IF AVI-NOM-DIND = SPACES
+              MOVE SPACES                       TO WR-NOM-IND-02
+                                                   WR-DIR-IND-03
+                                                   WR-COM-IND-04
+           END-IF.
+
+       CE-MAILING-DIR.
+           ADD 1                                TO WA-TOT-DIR.
+      *>>formatea e imprime identificacion del deudor directo al costado
+           MOVE SPACES                          TO TABLA-LINEAS-COLILLA
+           MOVE AVI-NOM-DDIR                    TO TB-LIN-1-DATA
+           MOVE AVI-DIR-DDIR                    TO TB-LIN-2-DATA
+      * RRM-INI 24-NOV-1998
+      *    MOVE AVI-COM-DDIR                    TO TB-LIN-3-DATA
+           MOVE AVI-COM-DDIR           TO  COM-DEU  IN LINEA-3-COLILL
+           MOVE AVI-CIC-IOPC           TO  CIC-OPER
+           MOVE N-CAI IN CIC-OPER      TO  OFI-DEU  IN LINEA-3-COLILL
+           MOVE LINEA-3-COLILL                  TO TB-LIN-3-DATA
+      * RRM-FIN 24-NOV-1998
+      * RRM-INI 28-OCT-1998 datos del codigo de barra.
+           MOVE AVI-CIC-IOPC        TO BAR-CIC-OPER IN BAR-VARI
+           MOVE 'COL'               TO BAR-COD-SIST IN BAR-VARI
+           MOVE 15                  TO BAR-NUM-LRGO IN BAR-VARI
+           PERFORM CAL-BAR
+           MOVE BAR-GLS-BARRA IN BAR-VARI TO WSS-GLS-BARRA IN WSS-VARI
+           MOVE BAR-COD-BARRA IN BAR-VARI TO WSS-COD-BARRA IN WSS-VARI
+      * RRM-FIN 28-OCT-1998
+           PERFORM CM-IMPRIME-COLILLA.
+
+
+       CK-MAILING-AVAL.
+           ADD 1                                TO WA-TOT-IND.
+      *>>formatea e imprime identificacion del aval al costado
+           MOVE SPACES                          TO TABLA-LINEAS-COLILLA
+           MOVE AVI-NOM-DIND                    TO TB-LIN-1-DATA
+           MOVE AVI-DIR-DIND                    TO TB-LIN-2-DATA
+      * RRM-INI 24-NOV-1998
+      *    MOVE AVI-COM-DIND                    TO TB-LIN-3-DATA
+           MOVE AVI-COM-DIND           TO  COM-DEU  IN LINEA-3-COLILL
+           MOVE AVI-CIC-IOPC           TO  CIC-OPER
+           MOVE N-CAI IN CIC-OPER      TO  OFI-DEU  IN LINEA-3-COLILL
+           MOVE LINEA-3-COLILL                  TO TB-LIN-3-DATA
+      * RRM-FIN 24-NOV-1998
+           PERFORM CM-IMPRIME-COLILLA.
+
+
+       CM-IMPRIME-COLILLA.
+           MOVE '2'                             TO TB-LIN-1-CTRL
+                                                   TB-LIN-2-CTRL
+                                                   TB-LIN-3-CTRL
+           MOVE SPACES                          TO LAVIS-00
+           MOVE '2'                             TO LA00-CTRL
+           WRITE REGLB877    FROM LAVIS-00  AFTER CANAL-1
+           MOVE 30                             TO PTR-COLILLA
+           PERFORM
+              WITH TEST BEFORE UNTIL
+                 PTR-COLILLA < 1
+                    MOVE '2'                          TO LA00-CTRL
+                    MOVE TB-LIN-1-DATO (PTR-COLILLA)  TO LA00-COL1
+                    MOVE TB-LIN-2-DATO (PTR-COLILLA)  TO LA00-COL2
+                    MOVE TB-LIN-3-DATO (PTR-COLILLA)  TO LA00-COL3
+      * RRM-INI 18-NOV-1998
+                    MOVE WSS-IND-BARRA (PTR-COLILLA) TO LA00-DIG-BARRA
+      * RRM-FIN 18-NOV-1998
+                    WRITE REGLB877    FROM LAVIS-00  AFTER 1
+                    SUBTRACT 1 FROM PTR-COLILLA
+      * RRM-INI 28-OCT-1998
+      *    END-PERFORM.
+           END-PERFORM
+
+           MOVE SPACES     TO LAVIS-00
+           MOVE '3'        TO LA00-CTRL
+           WRITE REGLB877    FROM LAVIS-00  AFTER CANAL-1
+
+           MOVE 20         TO PTR-COLILLA
+      *    MOVE 35         TO PTR-COLILLA
+           PERFORM WITH TEST BEFORE UNTIL PTR-COLILLA < 1
+                   MOVE WSS-BAR-ACEPT (PTR-COLILLA) TO LAAA-CODIGO
+                   WRITE REGLB877    FROM LAVIS-AA
+                   SUBTRACT 1 FROM PTR-COLILLA
+           END-PERFORM.
+      * RRM-FIN 28-OCT-1998
+
+
+       CU-IMPRIME-AVISO.
+           ADD   1                              TO WA-TOT-IMP
+           WRITE REGLB877 FROM  WR-LINEA01 AFTER PAGE
+      * RRM-INI 20-NOV-1998
+      *    WRITE REGLB877 FROM  WR-LINEA02 AFTER 10
+           WRITE REGLB877 FROM  WR-LINEA02 AFTER 11
+      * RRM-FIN 20-NOV-1998
+           WRITE REGLB877 FROM  WR-LINEA03 AFTER 1
+           WRITE REGLB877 FROM  WR-LINEA04 AFTER 1
+      * RRM-INI 23-NOV-1998
+      *    WRITE REGLB877 FROM  WR-LINEA05 AFTER 8
+           WRITE REGLB877 FROM  WR-LINEA05 AFTER 9
+      * RRM-FIN 23-NOV-1998
+           WRITE REGLB877 FROM  WR-LINEA06 AFTER 1
+           WRITE REGLB877 FROM  WR-LINEA07 AFTER 1.
+
+       CZ-FIN-DE-SECCION.
+           EXIT.
+
+      /
+       D-TERMINAR SECTION.
+      *-------------------
+       DA-ESTADISTICAS.
+           ACCEPT WR-FECHA-HOY FROM DATE
+           MOVE WR-DD-HOY                       TO WR-DD-HOY-D
+           MOVE WR-MM-HOY                       TO WR-MM-HOY-D
+           MOVE WR-AA-HOY                       TO WR-AA-HOY-D
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY 'ESTADISTICA DE PROCESO PROGRAMA COLPB877 FECHA '
+                    WR-FECHA-HOY-D
+           DISPLAY
+               '-------------------------------------------------------'
+           DISPLAY '    FORMATEADOR AVISOS DEUDORES MOROSOS'
+           DISPLAY ' '
+           DISPLAY 'TOTAL AVISOS LEIDOS...................: ' WA-LEI-AVI
+           DISPLAY 'LEIDOS FORMATO 1......................: ' WA-LEI-F01
+           DISPLAY 'TOTAL AVISOS IMPRESOS.................: ' WA-TOT-IMP
+           DISPLAY '      AVISOS DEUDORES DIRECTOS........: ' WA-TOT-DIR
+           DISPLAY '      AVISOS DEUDORES INDIRECTOS......: ' WA-TOT-IND
+           DISPLAY ' '
+           DISPLAY 'TARJETAS DE PARAMETROS'
+           DISPLAY '----------------------'
+           DISPLAY ' '
+           DISPLAY WP-REG1
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY 'MENSAJES PARA EL EXPLOTADOR'
+           DISPLAY '---------------------------'
+           DISPLAY '  '
+           IF WR-HAY-MSG-WRN-OP OR WR-HAY-MSG-ERR-OP
+               DISPLAY 'HAY MENSAJES PARA EL EXPLOTADOR'
+           ELSE
+               DISPLAY 'NO HAY MENSAJES PARA EL EXPLOTADOR'
+           END-IF.
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY ' '.
+
+       DB-TERMINO.
+           CLOSE COLVAVI PARAMT COLLB877.
+           IF WR-TERMINO-ANORMAL
+              MOVE 100                          TO RETURN-CODE
+              DISPLAY ' '
+              DISPLAY ' '
+              DISPLAY '**********************************************'
+              DISPLAY '**********************************************'
+              DISPLAY '********                              ********'
+              DISPLAY '******** TERMINO ERRONEO DEL PROCESO  ********'
+              DISPLAY '********                              ********'
+              DISPLAY '**********************************************'
+              DISPLAY '**********************************************'
+              DISPLAY ' '
+              DISPLAY 'EL ERROR FUE EN LA SECCION          ' WR-SECCION
+              DISPLAY '                   PARRAFO          ' WR-PARRAFO
+              DISPLAY '                   ARCHIVO          ' WR-ARCHIVO
+              DISPLAY '                   OPERACION        ' WR-OPERACI
+              DISPLAY '                   FILE STATUS      ' WR-FILE-ST
+              DISPLAY '                   MENSAJE DE ERROR ' WR-MENSAJE
+           ELSE
+              DISPLAY ' '
+              DISPLAY ' '
+              DISPLAY '*****PROCESO TERMINO EN FORMA NORMAL*****'
+           END-IF.
+           GO TO DZ-FIN-DE-SECCION.
+
+       DZ-FIN-DE-SECCION.
+           EXIT.
+
+      *        RRM-INI 28-OCT-1998
+      * COPY GNSBGBAR EXPANDIDO, PORQUE SE CAMBIO:
+      * "  CALL 'RTNUBARR' USING BAR-LNK.  "    POR
+      * "  CALL 'RUTUBARR' USING BAR-LNK.  ".
+      ************************* I N I C I O *************************
+      * SE DEBEN INCORPORAR COPYS COLWGBAR Y COLBGBAR
+      * SE DEBEN LLENAR CAMPOS :
+      *      BAR-CAI-OPER (EJ: OPC-CAI-IOPC)
+      *      BAR-IIC-OPER (EJ: OPC-IIC-IOPC)
+      *      BAR-COD-SIST (EJ: CCT : CUENTAS CORRIENTES
+      *                        COL : COLOCACIONES
+      *                        DAP : DEPOSITOS A PLAZOS
+      *                        CBZ : COBRANZA
+      *                        AHP : AHORRO A PLAZO
+      *                        AHV : AHORRO PARA LA VIVIENDA
+      *
+      * LLENAR CAMPOS :
+      *               BAR-CAI-OPER IN BAR-VARI
+      *               BAR-IIC-OPER IN BAR-VARI
+      *               BAR-COD-SIST IN BAR-VARI
+      *               BAR-NUM-LRGO IN BAR-VARI
+      *
+      *
+      * LLAMADA A RUTINA, PARA CALCULAR DIGITOS DE CODIGO DE BARRAS
+       CAL-BAR SECTION.
+       INI-CAL-BAR.
+
+           MOVE BAR-NUM-LRGO IN BAR-VARI TO BAR-LNK-LRGO    IN BAR-LNK.
+           MOVE BAR-CODIGO   IN BAR-VARI TO BAR-GLS-LNK     IN BAR-LNK.
+
+           CALL 'RUTUBARR' USING BAR-LNK.
+
+           MOVE '*'                  TO BAR-COD-ASTER1  IN BAR-VARI.
+           MOVE '*'                  TO BAR-COD-ASTER2  IN BAR-VARI.
+           MOVE BAR-LNK-C IN BAR-LNK TO BAR-COD-DIG-C   IN BAR-VARI.
+           MOVE BAR-LNK-K IN BAR-LNK TO BAR-COD-DIG-K   IN BAR-VARI.
+           MOVE 127                  TO AREA-DECIMAL.
+           MOVE AREA-BINARIO         TO BAR-COD-COMILLA IN BAR-VARI.
+
+           MOVE BAR-CODIGO IN BAR-VARI TO BAR-CODIG-A.
+           MOVE 1                      TO BAR-IND-2 IN BAR-VARI.
+           PERFORM BLK-GLS-BAR VARYING BAR-IND-1 IN BAR-VARI
+               FROM 1 BY 1 UNTIL BAR-IND-1 IN BAR-VARI > 15.
+           MOVE BAR-CODIG-B IN BAR-VARI TO BAR-GLS-BARRA IN BAR-VARI.
+       FIN-CAL-BAR.
+           EXIT.
+
+       BLK-GLS-BAR SECTION.
+       INI-BLK-GLS-BAR.
+           MOVE BAR-CODIG-AA  IN BAR-VARI(BAR-IND-1 IN BAR-VARI) TO
+                BAR-CODIG-BB  IN BAR-VARI(BAR-IND-2 IN BAR-VARI).
+           ADD 2 TO BAR-IND-2 IN BAR-VARI.
+       FIN-BLK-GLS-BAR.
+           EXIT.
+      ***************************** F I N ***************************
+      *RRM-FIN 28-OCT-1998

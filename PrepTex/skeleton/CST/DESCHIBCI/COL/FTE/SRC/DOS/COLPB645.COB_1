@@ -1,0 +1,1996 @@
+       IDENTIFICATION DIVISION.
+      *=======================
+       PROGRAM-ID. COLPB645.
+       AUTHOR.     P.JELDRES.
+       DATE-WRITTEN. 30/08/1991.
+       DATE-COMPILED.
+      *REMARKS.
+      ******************************************************************
+      *  INTERSOFT                                                     *
+      *  MIGRACION A COBOL OS/390                                      *
+      *  FECHA: 30 DE MARZO DE 1998                                    *
+      ******************************************************************
+      ******************************************************************
+      *  SISTEMA  : COLOCACIONES                                       *
+      *  OBJETIVO : EMITIR UN LISTADO DE PLANILLA DE DESCUENTOS AL     *
+      *             PERSONAL,ORDENADO POR NOMBRE Y CON TOTALES AL      *
+      *             FINAL DEL LISTADO.                                 *
+      *  ARCHIVOS :                                                    *
+      *   ENTRADA :TABLAS DE BASE DE DATOS : OPC,CAN,RCV,DBC,RDC       *
+      *   SALIDA  :LISTADO DE PLANILLA DE DESCUENTO AL PERSONAL        *
+      *                                                                *
+      *                                                                *
+      *  MANTENCIONES                                                  *
+      *  ============                                                  *
+      *            PROGRAMADOR: E.CORNEJO C.                           *
+      *            FECHA      : 13/12/91                               *
+      *            CAMBIO     : MODIFICAR LA OBTENCION DEL CAMPO       *
+      *                         VCTOS. CANCELADOS, DEPENDIENDO SI EL   *
+      *                         CREDITO FUE CURSADO POR EL ANTIGUO O   *
+      *                         NUEVO SIST. DE COLOCACIONES.           *
+      *                                                                *
+      ******************************************************************
+           EJECT
+       ENVIRONMENT DIVISION.
+      *====================
+       CONFIGURATION SECTION.
+      *---------------------
+       SPECIAL-NAMES.
+                     C01 IS CANAL-1
+                     DECIMAL-POINT IS COMMA.
+      *
+       INPUT-OUTPUT SECTION.
+      *--------------------
+       FILE-CONTROL.
+           SELECT LISTADO     ASSIGN TO UR-S-LISTADO.
+           SELECT SORTWK      ASSIGN TO SYS001-DA-3340-S-SORTWK1.
+           SELECT TAR-TARJETA ASSIGN TO TARJE.
+           EJECT
+       DATA DIVISION.
+      *=============
+       FILE SECTION.
+      *
+      *
+       FD  TAR-TARJETA
+           LABEL RECORD IS STANDARD
+           RECORD CONTAINS 80 CHARACTERS.
+
+       01  REG-TARJETA.
+           05 TAR-OPERAC PIC X(6).
+           05 FILLER     PIC X.
+           05 FILLER     PIC X(73).
+       FD  LISTADO
+           LABEL RECORD OMITTED
+           RECORD CONTAINS 133 CHARACTERS.
+
+       01  LINEA PIC X(133).
+       SD  SORTWK
+           LABEL RECORD STANDARD
+           RECORD CONTAINS 157 CHARACTERS.
+       01  REG-SORT.
+           05 SOR-NOMBRE                    PIC  X(39).
+           05 SOR-CLAVE.
+              10 SOR-COD                    PIC  X.
+              10 SOR-SUCURSAL               PIC  9(03).
+              10 SOR-CODIGO-OPER.
+                 14 SOR-COD-OPER            PIC  9(03).
+                 14 SOR-SERIAL-OPER         PIC  9(05).
+           05 SOR-RUT-DD.
+              10 SOR-RUT-DD-DIG             PIC  9(09).
+              10 SOR-RUT-DD-VER             PIC  X(01).
+           05 SOR-SALDO-ANTER               PIC  S9(11)V9(4) COMP-3.
+           05 SOR-ABONO-CAPIT               PIC  S9(11)V9(4) COMP-3.
+           05 SOR-INTERESES                 PIC  S9(11)V9(4) COMP-3.
+           05 SOR-SALDO-ACTUAL              PIC  S9(11)V9(4) COMP-3.
+           05 SOR-CUOT-PAGADAS              PIC  999.
+           05 SOR-CUOT-ORIG                 PIC  999.
+           05 SOR-FECHA-CANCEL.
+              10 SOR-ANO-01                 PIC XX.
+              10 SOR-ANO-02                 PIC XX.
+              10 SOR-MES-01                 PIC XX.
+              10 SOR-DIA-01                 PIC XX.
+           05 SOR-GLOSA                     PIC X(40).
+           05 SOR-CLAVE-2.
+              10 SOR-MONEDA                 PIC X(4).
+              10 SOR-CLASE                  PIC X(6).
+           EJECT
+       WORKING-STORAGE SECTION.
+      *-----------------------
+       01  F-FILE-STATUS.
+           05 FS-CREDIT                    PIC 99.
+           05 FS-CREDIT-AUX                PIC 99.
+           05 FS-CUOTAS                    PIC 99.
+       01  W-REGISTROS-DE-TRABAJO.
+           05 WR-CP                        PIC 9(5).
+           05 WR-CL                        PIC 99.
+           05 WR-COD-ANT                   PIC X(10).
+           05 WR-MENSAJE                   PIC X(40).
+           05 WR-SECCION                   PIC X(40).
+           05 WR-PARRAFO                   PIC X(40).
+           05 WR-OPERACION                 PIC X(40).
+           05 WR-STATUS                    PIC 99.
+           05 WR-CLAVE                     PIC X(20).
+           05 WR-NRO-CUOTA                 PIC 999.
+           05 WR-TOTAL-CUOTAS              PIC 999.
+           05 WR-RUT-DD                    PIC 9(8).
+           05 WR-DV-DD                     PIC X.
+           05 WR-RDC-WS.
+              10 WR-RDC-A                  PIC X(12).
+              10 WR-RDC-B                  PIC 999.
+           05 WR-COLOCACION-WS.
+              10 WR-OPERAC-WS              PIC XXX.
+              10 WR-SERIAL-WS              PIC X(5).
+           05 WR-SERIAL-ANT                PIC 9(5).
+           05 WR-PRIMER-CRED.
+              10 WR-PRIMER-CRED1           PIC X(3).
+              10 WR-PRIMER-CRED2           PIC X(3).
+              10 WR-PRIMER-CRED3           PIC X(5).
+           05 WR-MONEDA.
+              10 WR-MONEDA-1               PIC X.
+              10 WR-MONEDA-2               PIC X(3).
+           05 WR-FECHA.
+              10 WR-ANO                    PIC X(02).
+              10 WR-MES                    PIC X(02).
+              10 WR-DIA                    PIC X(02).
+           05 WR-RUT-A                     PIC 9(8).
+           05 WR-DV-A                      PIC X.
+           05 WR-NOMBRE-A.
+              10 WR-APAT-A                 PIC X(13).
+              10 WR-AMAT-A                 PIC X(13).
+              10 WR-NOMBR-A                PIC X(13).
+           05 WR-RNOMBRE-A REDEFINES WR-NOMBRE-A.
+              10 WR-NOMBRE1-A              PIC X(25).
+              10 WR-NOMBRE2-A              PIC X(14).
+           05 WR-D02-NOMBRE.
+              10 WR-D02-NOM1               PIC X(25).
+              10 WR-D02-NOM2               PIC X(15).
+           05 WR-D02-NOMBRE25.
+              10 WR-D02-APAT25             PIC X(25).
+              10 WR-D02-AMAT25             PIC X(25).
+              10 WR-D02-NOMB25             PIC X(25).
+           05 WR-D02-N1                  REDEFINES WR-D02-NOMBRE25.
+              10 WR-D02-N1A                PIC X(01) OCCURS 75 TIMES.
+           05 WR-D02-N2.
+              10 WR-D02-N2A                PIC X(01) OCCURS 40 TIMES.
+           05 WR-W-NOM.
+              10 WR-INDN                   PIC X(01).
+              10 WR-IND1                   PIC 9(03).
+              10 WR-IND2                   PIC 9(03).
+           SKIP2
+       01  W-ACUMULADORES.
+           05 WA-OPC-LEIDOS                PIC 9(07).
+           05 WA-CAN-LEIDOS                PIC 9(07).
+           05 WA-RCV-LEIDOS                PIC 9(07).
+           05 WA-OPC-SELECCIONADOS         PIC 9(07).
+           05 WA-RDC-LEIDOS                PIC 9(07).
+           05 WA-DBC-LEIDOS                PIC 9(07).
+           05 WA-CRED-LEIDOS               PIC 9(07).
+           05 WA-CRED-CREADOS              PIC 9(07).
+           05 WA-CRED-BORRADOS             PIC 9(07).
+           05 WA-CUOT-LEIDAS               PIC 9(07).
+           05 WA-REG-SORT-GRA              PIC 9(07).
+           05 WA-REG-SORT-LEI              PIC 9(07).
+           03 WA-CUOT-CREADAS              PIC 9(07).
+           03 WA-CUOT-BORRADAS             PIC 9(07).
+           03 WA-ACUM-CINTA                PIC 9(07).
+           03 WA-ACUM-AUX                  PIC 9(07).
+           03 WA-ACUM-CAN                  PIC 9(07).
+           03 WA-TAR-LEIDAS                PIC 9(07).
+           03 WA-TOT-SALDO-ANT             PIC S9(11)V9999 COMP-3.
+           03 WA-TOT-SALDO-ACT             PIC S9(11)V9999 COMP-3.
+           03 WA-TOT-ABONO-CAP             PIC S9(11)V9999 COMP-3.
+           03 WA-TOT-INTERES               PIC S9(11)V9999 COMP-3.
+           03 WA-VALOR-WS                  PIC S9(11)V9999 COMP-3.
+           03 WA-TOT-CREDITOS              PIC 9(7).
+           SKIP2
+       01  W-PARAMETRO.
+           05 FILLER                       PIC X(01).
+           05 WP-FECHA-CANCEL.
+              10 WP-FECHA-CANCEL-SS        PIC 99.
+              10 WP-FECHA-CANCEL-AA        PIC 99.
+              10 WP-FECHA-CANCEL-MM        PIC 99.
+              10 WP-FECHA-CANCEL-DD        PIC 99.
+           05 FILLER                       PIC X(71).
+           SKIP2
+       01  W-SWITCHES.
+           03 WS-RETURN-CODE               PIC 9(03).
+           03 WS-SW-OPC                    PIC X(03).
+           03 WS-SW-CAN                    PIC X(03).
+           03 WS-SW-CAN-RCV                PIC 9.
+           03 WS-SW-PASO                   PIC 9.
+           03 WS-SW-DLC                    PIC 9.
+           03 WS-SW-RCV                    PIC 9.
+           03 WS-SW-RDC                    PIC 9.
+           03 WS-SW-TAB                    PIC 9.
+           03 WS-SW-CRED                   PIC 9.
+           03 WS-SW-MODIF                  PIC 9.
+           03 WS-SW-1                      PIC 9.
+           03 WS-ERROR                     PIC X(02).
+           03 WS-FIN-SORT                  PIC X(03).
+           SKIP2
+       01  W-TABLAS.
+           03 WT-FIN-DATOS                 PIC X(02) VALUE SPACES.
+           03 WT-PIL-CONT                  PIC 9(6) COMP-3 VALUE 0.
+           03 WT-PILOTO OCCURS 50 TIMES INDEXED BY TCX.
+              05 WT-OPERAC                 PIC X(06).
+           SKIP2
+      *01  W-CONSTANTES-REFERENCIALES.
+      *    03 CC-XXXXXXXXX                 PIC X(03) VALUE 'GGGGGG'.
+           SKIP2
+      * FECHA DE SISTEMA.
+       01  FECHA-PROCESO.
+           03 DD-CURRENT                   PIC 9(02).
+           03 FILLER                       PIC X(01) VALUE '/'.
+           03 MM-CURRENT                   PIC 9(02).
+           03 FILLER                       PIC X(01) VALUE '/'.
+           03 AA-CURRENT                   PIC 9(02).
+      * PARAMETROS RUTINA RUTUVALF
+       01  PARAM-RUTUVALF.
+           05 RTNWVALF-FECHA.
+              10 RTNWVALF-FECHA-DD PIC X(2).
+              10 RTNWVALF-FECHA-MM PIC X(2).
+              10 RTNWVALF-FECHA-AM PIC X(2).
+              10 RTNWVALF-FECHA-AA PIC X(2).
+           05 RTNWVALF-COD-RET     PIC 9.
+       01  TIT-1.
+           05 FILLER PIC X(46) VALUE 'BANCO DE CREDITO E INVERSIONES'.
+           05 FILLER PIC X(70) VALUE
+           'PLANILLA DE CREDITOS AL PERSONAL'.
+           05 FILLER PIC X(7) VALUE 'FECHA:'.
+           05 T1-FECHA PIC X(8).
+       01  TIT-2.
+           05 FILLER PIC X(45) VALUE 'COLOCACIONES'.
+           05 FILLER PIC X(71) VALUE
+              '-----------------------------------'.
+           05 FILLER PIC X(7) VALUE 'PAG  :'.
+           05 PAG-T1 PIC ZZZ9.
+       01  TIT-2A.
+           05 FILLER PIC X(50)  VALUE SPACES.
+           05 FILLER PIC X(5)   VALUE 'AL :'.
+           05 DD-2A  PIC 99.
+           05 FILLER PIC X      VALUE '/'.
+           05 MM-2A  PIC 99.
+           05 FILLER PIC X      VALUE '/'.
+           05 AA-2A1 PIC 99.
+           05 AA-2A2 PIC 99B(51).
+      *    05 FILLER PIC X(9)  VALUE 'SUCURSAL:'.
+      *    05 SUC-SALIDA PIC X(25)B(32).
+           05 FILLER PIC X(14)  VALUE 'PROGR:COLPB645'.
+       01  TIT-2B.
+           05 GLOSA-2B  PIC X(40)BBB.
+           05 FILLER    PIC X(6) VALUE 'CLASE:'.
+           05 MONEDA-2B PIC X(4)B.
+           05 CLASE-2B  PIC X(6)BBB.
+       01  RAYA PIC X(132) VALUE ALL '-'.
+       01  ESPA PIC X(132) VALUE ALL SPACES.
+      *
+       01  TIT-3.
+           05 FILLER          PIC X(44)  VALUE
+           '           N O M B R E'.
+           05 FILLER          PIC X(40)  VALUE
+           'R U T     OPERACION     SALDO ANTERIOR'.
+           05 FILLER          PIC X(48)  VALUE
+           '<===== V A L O R  C U O T A ======><==CUOTAS===>'.
+      *
+       01  TIT-4.
+           05 FILLER          PIC X(54)  VALUE SPACES.
+           05 FILLER          PIC X(12)  VALUE 'F.CANCEL'.
+           05 FILLER          PIC X(40)  VALUE
+           '  SALDO ACTUAL     ABONO CAPITAL'.
+           05 FILLER          PIC X(26)  VALUE
+           'INTERESES    PAGADAS ORIG.'.
+      *
+       01  DETA-01.
+           05 FILLER          PIC X       VALUE SPACES.
+           05 NOMBRE-01       PIC X(39)B.
+           05 RUT-01          PIC 9(9).
+           05 FILLER          PIC X       VALUE '-'.
+           05 DV-01           PIC XB.
+           05 OPERACION-01    PIC X(12).
+           05 SALDO-ANT-01    PIC ZZZZZ.ZZZ.ZZ9,9999.
+           05 ABONO-01        PIC ZZZZZ.ZZZ.ZZ9,9999.
+           05 INTERESES-01    PIC ZZZZZ.ZZZ.ZZ9,9999BB.
+           05 PAGADAS-01      PIC 999BBB.
+           05 ORIG-01         PIC 999.
+      *
+      *
+      *
+       01  DETA-02.
+           05 FILLER           PIC X(55) VALUE SPACES.
+           05 DIA-01           PIC XX.
+           05 FILLER           PIC X VALUE '/'.
+           05 MES-01           PIC XX.
+           05 FILLER           PIC X VALUE '/'.
+           05 ANO-01           PIC XXBB.
+           05 SALDO-ACTUAL-01  PIC ZZZZZ.ZZZ.ZZ9,9999B(48).
+       01  LTOTAL-01.
+           05 FILLER              PIC X(38) VALUE SPACES.
+           05 FILLER              PIC X(19) VALUE
+           'TOTAL DE CREDITOS :'.
+           05 TOT-CRED-01        PIC ZZZZ9BBB.
+           05 TOT-SALDO-ANT-01    PIC ZZZZZ.ZZZ.ZZ9,9999.
+           05 TOT-ABONO-01        PIC ZZZZZ.ZZZ.ZZ9,9999.
+           05 TOT-INTERES-01      PIC ZZZZZ.ZZZ.ZZ9,9999B(11).
+       01  LTOTAL-02.
+           05 FILLER              PIC X(65) VALUE SPACES.
+           05 TOT-SALDO-ACTUAL-01 PIC ZZZZZ.ZZZ.ZZ9,9999B(47).
+
+
+
+           EJECT
+      ******************************************************************
+      *      USER INFORMATION BLOCK                                    *
+      ******************************************************************
+      *
+       01  UIB.
+           03 FILLER               PIC X(32) VALUE 'COLPB645'.
+      *
+      ******************************************************************
+      *      REQUEST AREA                                              *
+      ******************************************************************
+      *
+       01  REQ-AREA-OPC.
+           03 OPC-COMMAND          PIC X(5).
+           03 OPC-TABLE            PIC X(3) VALUE 'OPC'.
+           03 OPC-KEY              PIC X(5).
+           03 OPC-RET-COD          PIC X(2) VALUE SPACES.
+           03 REQ-INT-RTN-CD       PIC X(1).
+           03 OPC-DB-ID            PIC S9(4) COMP VALUE +160.
+           03 OPC-REC-ID           PIC X(7).
+           03 FILLER               PIC X(25).
+           03 OPC-CONT-MAX         PIC S9(4) COMP.
+           03 OPC-IO-COUNT         PIC S9(4) COMP.
+           03 FILLER               PIC X(22).
+           03 OPC-VALUE            PIC X(50).
+       01  REQ-AREA-CAN.
+           03 CAN-COMMAND          PIC X(5).
+           03 CAN-TABLE            PIC X(3) VALUE 'CAN'.
+           03 CAN-KEY              PIC X(5).
+           03 CAN-RET-COD          PIC X(2) VALUE SPACES.
+           03 CAN-INT-RTN-CD       PIC X(1).
+           03 CAN-DB-ID            PIC S9(4) COMP VALUE +160.
+           03 CAN-REC-ID           PIC X(7).
+           03 FILLER               PIC X(25).
+           03 CAN-CONT-MAX         PIC S9(4) COMP.
+           03 CAN-IO-COUNT         PIC S9(4) COMP.
+           03 FILLER               PIC X(22).
+           03 CAN-VALUE            PIC X(50).
+       01  REQ-AREA-RCV.
+           03 RCV-COMMAND          PIC X(5).
+           03 RCV-TABLE            PIC X(3) VALUE 'RCV'.
+           03 RCV-KEY              PIC X(5).
+           03 RCV-RET-COD          PIC X(2) VALUE SPACES.
+           03 RCV-INT-RTN-CD       PIC X(1).
+           03 RCV-DB-ID            PIC S9(4) COMP VALUE +160.
+           03 RCV-REC-ID           PIC X(7).
+           03 FILLER               PIC X(25).
+           03 RCV-CONT-MAX         PIC S9(4) COMP.
+           03 RCV-IO-COUNT         PIC S9(4) COMP.
+           03 FILLER               PIC X(22).
+           03 RCV-VALUE            PIC X(50).
+       01  REQ-AREA-RDC.
+           03 RDC-COMMAND         PIC X(5).
+           03 RDC-TABLE           PIC X(3)     VALUE 'RDC'.
+           03 RDC-KEY             PIC X(5).
+           03 RDC-RET-COD         PIC X(2)     VALUE SPACES.
+           03 RDC-INT-RC          PIC X(1).
+           03 RDC-DB-ID           PIC S9(4)    COMP VALUE +160.
+           03 RDC-REC-ID          PIC X(7).
+           03 FILLER              PIC X(25).
+           03 RDC-CONT-MAX        PIC S9(4)    COMP.
+           03 RDC-CONT-ID         PIC S9(4)    COMP.
+           03 FILLER              PIC X(22).
+           03 RDC-VALUE           PIC X(40).
+
+       01  REQ-AREA-DBC.
+           03 DBC-COMMAND         PIC X(5).
+           03 DBC-TABLE           PIC X(3)     VALUE 'DBC'.
+           03 DBC-KEY             PIC X(5).
+           03 DBC-RET-COD         PIC X(2)     VALUE SPACES.
+           03 DBC-INT-RC          PIC X(1).
+           03 DBC-DB-ID           PIC S9(4)    COMP VALUE +100.
+           03 DBC-REC-ID          PIC X(7).
+           03 FILLER              PIC X(25).
+           03 DBC-CONT-MAX        PIC S9(4)    COMP.
+           03 DBC-CONT-ID         PIC S9(4)    COMP.
+           03 FILLER              PIC X(22).
+           03 DBC-VALUE           PIC X(40).
+       01  REQ-AREA-TAB.
+           03 TAB-COMMAND         PIC X(5).
+           03 TAB-TABLE           PIC X(3)     VALUE 'TAB'.
+           03 TAB-KEY             PIC X(5).
+           03 TAB-RET-COD         PIC X(2)     VALUE SPACES.
+           03 TAB-INT-RC          PIC X(1).
+           03 TAB-DB-ID           PIC S9(4)    COMP VALUE +210.
+           03 TAB-REC-ID          PIC X(7).
+           03 FILLER              PIC X(25).
+           03 TAB-CONT-MAX        PIC S9(4)    COMP.
+           03 TAB-CONT-ID         PIC S9(4)    COMP.
+           03 FILLER              PIC X(22).
+           03 TAB-VALUE           PIC X(40).
+           EJECT
+      *
+      ******************************************************************
+      *                   WORK AREA                                    *
+      ******************************************************************
+      *
+      *
+       01  R-OPC.
+      *    COPYDD COL-R-OPC.COL-E-OPC00(PROD),01,D
+      *                             EQUIVALENTE AL REGISTRO OPC
+           02  COL-E-OPC00.
+      *                             OPERACION CREDITO
+               03  OPC.
+      *                             FILLER COMPATIBILIDAD VSAM/MVS
+                   04  OPC-GLS-FLAG PICTURE X(1).
+      *                             CLAVE PRIMARIA REGISTRO
+                   04  OPC-KEY-IREG.
+      *                             KEY     IDENTIFICACION OPERACION CRE
+                       05  OPC-KEY-IOPC.
+      *                             COD. INT. COMP. OPERACION CREDITO
+                       06  OPC-CIC-IOPC.
+      *                             CENTRO ASIGNACION IDENTIFICACION
+                       07  OPC-CAI-IOPC.
+                       08  OPC-COD-TOPC
+                                    PICTURE X(1).
+                       08  OPC-COD-COPC
+                                    PICTURE X(3).
+      *                             IDENT. INTERNA COMPUTACIONAL
+                       07  OPC-IIC-IOPC.
+                       08  OPC-COD-OOPC.
+                       09  OPC-COD-SOPC
+                                    PICTURE X(2).
+                       09  OPC-IND-SOPC
+                                    PICTURE X(1).
+                       08  OPC-GLS-NOPC
+                                    PICTURE X(5).
+      *                             TIME STAMP TRANSACCION
+                       05  OPC-STP-ITRN.
+      *                             FECHA TRANSACCION
+                       06  OPC-FEC-FTRN.
+                       07  OPC-NUM-STRN
+                                    PICTURE 9(2).
+                       07  OPC-NUM-ATRN
+                                    PICTURE 9(2).
+                       07  OPC-NUM-MTRN
+                                    PICTURE 9(2).
+                       07  OPC-NUM-DTRN
+                                    PICTURE 9(2).
+      *                             HORA TRANSACCION
+                       06  OPC-HRA-HRTR.
+                       07  OPC-NUM-HHTR
+                                    PICTURE 9(2).
+                       07  OPC-NUM-MMTR
+                                    PICTURE 9(2).
+                       07  OPC-NUM-SSTR
+                                    PICTURE 9(2).
+      *                             REQ INDICADOR TIPO ACCION
+                   04  OPC-MSC-TACC PICTURE X(1).
+      *                             INDICADOR STATUS
+                   04  OPC-MSC-STAT PICTURE X(1).
+      *                             REQ CODIGO ORIGEN TRANSACCION
+                   04  OPC-COD-OTRN.
+      *                             INDICADOR TIPO ORIGEN
+                       05  OPC-MSC-TTRN
+                                    PICTURE X(1).
+      *                             CODIGO TIPO ORIGEN
+                       05  OPC-COD-TTRN
+                                    PICTURE X(3).
+      *                             REQ AUTOR TRANSACCION
+                   04  OPC-COD-ATRN PICTURE X(12).
+      *                             REQ VALOR DE CAMBIO OPERACION CREDIT
+                   04  OPC-COD-VCOC.
+      *                             MISCELANEO TIPO VALOR
+                       05  OPC-MSC-TVOC
+                                    PICTURE X(1).
+      *                             CODIGO VALOR
+                       05  OPC-COD-CVOC
+                                    PICTURE X(3).
+      *                             CODIGO TIPO CAMBIO
+                       05  OPC-COD-TCOC
+                                    PICTURE X(2).
+      *                             REQ CODIGO CLASE OPERACION CREDITO
+                   04  OPC-COD-COOC.
+      *                             CODIGO TIPO OPERACION
+                       05  OPC-COD-TOOC
+                                    PICTURE X(3).
+      *                             CODIGO AUXILIAR OPERACION
+                       05  OPC-COD-AOOC
+                                    PICTURE X(3).
+      *                             REQ CODIGO OFICINA OPERACION CREDITO
+                   04  OPC-COD-OFOC PICTURE X(3).
+      *                             RESPONSABLE MANTENCION OPERACION CRE
+                   04  OPC-COD-RMOC PICTURE X(12).
+      *                             CODIGO DESTINO OPERACION CREDITO
+                   04  OPC-COD-CDOC PICTURE X(3).
+      *                             COD. INT. COMP. LINEA DE CREDITO
+                   04  OPC-CIC-ILDC.
+      *                             CENTRO ASIGNACION IDENTIFICACION
+                       05  OPC-CAI-ILDC.
+                       06  OPC-COD-TLDC
+                                    PICTURE X(1).
+                       06  OPC-COD-CLDC
+                                    PICTURE X(3).
+      *                             IDENT. INTERNA COMPUTACIONAL
+                       05  OPC-IIC-ILDC.
+                       06  OPC-COD-OLDC.
+                       07  OPC-COD-SLDC
+                                    PICTURE X(2).
+                       07  OPC-IND-SLDC
+                                    PICTURE X(1).
+                       06  OPC-GLS-NLDC
+                                    PICTURE X(5).
+      *                             REQ FECHA CURSE O COLOCACION
+                   04  OPC-FEC-FCOL.
+                       05  OPC-NUM-SCOL
+                                    PICTURE 9(2).
+                       05  OPC-NUM-ACOL
+                                    PICTURE 9(2).
+                       05  OPC-NUM-MCOL
+                                    PICTURE 9(2).
+                       05  OPC-NUM-DCOL
+                                    PICTURE 9(2).
+      *                             REQ FECHA CURSE CONTABLE
+                   04  OPC-FEC-FING.
+                       05  OPC-NUM-SING
+                                    PICTURE 9(2).
+                       05  OPC-NUM-AING
+                                    PICTURE 9(2).
+                       05  OPC-NUM-MING
+                                    PICTURE 9(2).
+                       05  OPC-NUM-DING
+                                    PICTURE 9(2).
+      *                             REQ FECHA CURSE COMPUTACIONAL
+                   04  OPC-FEC-FINP.
+                       05  OPC-NUM-SINP
+                                    PICTURE 9(2).
+                       05  OPC-NUM-AINP
+                                    PICTURE 9(2).
+                       05  OPC-NUM-MINP
+                                    PICTURE 9(2).
+                       05  OPC-NUM-DINP
+                                    PICTURE 9(2).
+      *                             REQ MONTO CREDITO
+                   04  OPC-VAL-CRED PICTURE 9(11)V9(4)
+                                        COMPUTATIONAL-3.
+      *                             REQ SALDO VALOR CREDITO
+                   04  OPC-VAL-SCRE PICTURE 9(11)V9(4)
+                                        COMPUTATIONAL-3.
+      *                             REQ ANALISIS FERIADOS (S/N)
+                   04  OPC-IND-AFER PICTURE X(1).
+      *                             REQ MODALIDAD CALCULO VALORES FINALE
+                   04  OPC-MSC-MCVF PICTURE X(1).
+      *                             REQ TIPO CALCULO VENCIMIENTOS
+                   04  OPC-MSC-TCVE.
+      *                             BASE CALCULO CREDITO
+                       05  OPC-MSC-BCCR
+                                    PICTURE X(1).
+      *                             VALORES INFORMADOS CREDITO
+                       05  OPC-MSC-VICR
+                                    PICTURE X(1).
+      *                             TIPO RENOVACION
+                   04  OPC-IND-RENO PICTURE X(3).
+      *                             CONDICION GARANTIA
+                   04  OPC-IND-GARA PICTURE X(3).
+      *                             VALOR COMISION
+                   04  OPC-SGV-VCOM PICTURE S9(11)V9(4)
+                                        COMPUTATIONAL-3.
+      *                             VALOR GASTOS
+                   04  OPC-VAL-GAST PICTURE S9(11)V9(4)
+                                        COMPUTATIONAL-3.
+      *                             CODIGO DE SEGURO DESGRAVAMEN
+                   04  OPC-COD-SEGD.
+                       05  OPC-COD-ISEG
+                                    PICTURE X(3).
+                       05  OPC-COD-CSEG
+                                    PICTURE X(3).
+                       05  OPC-COD-SSEG
+                                    PICTURE X(3).
+      *                             VALOR SEGURO
+                   04  OPC-VAL-SEGD PICTURE 9(11)V9(4)
+                                        COMPUTATIONAL-3.
+      *                             VALOR LIQUIDO
+                   04  OPC-SGV-LIQU PICTURE S9(11)V9(4)
+                                        COMPUTATIONAL-3.
+      *                             REQ NUMERO PROXIMO VENCIMIENTO
+                   04  OPC-NUM-IVEN PICTURE 9(3).
+      *                             REQ NUMERO VENCIMIENTOS ORIGINALES
+                   04  OPC-NUM-VCOR PICTURE 9(3).
+      *                             REQ NUMERO VENCIMIENTOS VIGENTES
+                   04  OPC-NUM-VCVG PICTURE 9(3).
+      *                             NUMERO VENCTOS CANCELADOS EN FORMA O
+                   04  OPC-NUM-VCCO PICTURE 9(3).
+      *                             NUMERO VENCIMIENTOS CANCELADOS MOROS
+                   04  OPC-NUM-VCCM PICTURE 9(3).
+      *                             NUMERO DE VENCIMIENTOS CANCELADOS VE
+                   04  OPC-NUM-VCCV PICTURE 9(3).
+      *                             REQ NUMERO TOTAL VENCIMIENTOS CANCEL
+                   04  OPC-NUM-TVCC PICTURE 9(3).
+      *                             INDICADOR VENCIMIENTOS ESTRUCTURADOS
+                   04  OPC-IND-VSTR PICTURE X(1).
+      *                             COD. INT. COMP. CREDITO ENLACE
+                   04  OPC-CIC-ICEN.
+      *                             CENTRO ASIGNACION IDENTIFICACION
+                       05  OPC-CAI-ICEN.
+                       06  OPC-COD-TCEN
+                                    PICTURE X(1).
+                       06  OPC-COD-CCEN
+                                    PICTURE X(3).
+      *                             IDENT. INTERNA COMPUTACIONAL
+                       05  OPC-IIC-ICEN.
+                       06  OPC-COD-OCEN.
+                       07  OPC-COD-SCEN
+                                    PICTURE X(2).
+                       07  OPC-IND-SCEN
+                                    PICTURE X(1).
+                       06  OPC-GLS-NCEN
+                                    PICTURE X(5).
+      *                             CODIGO AREA GESTION
+                   04  OPC-COD-AGES PICTURE X(2).
+      *                             FLAG PARA ACTIVAR SIN CONTABILIZAR
+                   04  FILLER       PICTURE X(1).
+      *                             INDICADOR INSISTENCIA
+                   04  FILLER       PICTURE X(1).
+      *                             CANAL DE VENTA
+                   04  FILLER       PICTURE X(1).
+      *                             VALOR SEGURO
+                   04  FILLER       PICTURE 9(11)V9(4)
+                                        COMPUTATIONAL-3.
+      *                             GLOSA DISPONIBLE
+                   04  OPC-GLS-DISP PICTURE X(20).
+       01  R-CAN.
+      *    COPYDD COL-R-CAN.COL-E-CAN00(PROD),01,D
+      *                             EQUIVALENTE AL REGISTRO CAN
+           02  COL-E-CAN00.
+      *                             CANCELACIONES
+               03  CAN.
+      *                             FILLER COMPATIBILIDAD VSAM/MVS
+                   04  CAN-GLS-FLAG PICTURE X(1).
+      *                             CLAVE PRIMARIA REGISTRO
+                   04  CAN-KEY-IREG.
+      *                             KEY    IDENTIFICACION CANCELACION
+                       05  CAN-KEY-ICAN.
+      *                             COD. INT. COMP. OPERACION CREDITO
+                       06  CAN-CIC-IOPC.
+      *                             CENTRO ASIGNACION IDENTIFICACION
+                       07  CAN-CAI-IOPC.
+                       08  CAN-COD-TOPC
+                                    PICTURE X(1).
+                       08  CAN-COD-COPC
+                                    PICTURE X(3).
+      *                             IDENT. INTERNA COMPUTACIONAL
+                       07  CAN-IIC-IOPC.
+                       08  CAN-COD-OOPC.
+                       09  CAN-COD-SOPC
+                                    PICTURE X(2).
+                       09  CAN-IND-SOPC
+                                    PICTURE X(1).
+                       08  CAN-GLS-NOPC
+                                    PICTURE X(5).
+      *                             NUMERO IDENTIFICACION CANCELACION
+                       06  CAN-NUM-ICAN
+                                    PICTURE 9(3).
+      *                             TIME STAMP TRANSACCION
+                       05  CAN-STP-ITRN.
+      *                             FECHA TRANSACCION
+                       06  CAN-FEC-FTRN.
+                       07  CAN-NUM-STRN
+                                    PICTURE 9(2).
+                       07  CAN-NUM-ATRN
+                                    PICTURE 9(2).
+                       07  CAN-NUM-MTRN
+                                    PICTURE 9(2).
+                       07  CAN-NUM-DTRN
+                                    PICTURE 9(2).
+      *                             HORA TRANSACCION
+                       06  CAN-HRA-HRTR.
+                       07  CAN-NUM-HHTR
+                                    PICTURE 9(2).
+                       07  CAN-NUM-MMTR
+                                    PICTURE 9(2).
+                       07  CAN-NUM-SSTR
+                                    PICTURE 9(2).
+      *                             REQ INDICADOR TIPO ACCION
+                   04  CAN-MSC-TACC PICTURE X(1).
+      *                             INDICADOR STATUS
+                   04  CAN-MSC-STAT PICTURE X(1).
+      *                             REQ CODIGO ORIGEN TRANSACCION
+                   04  CAN-COD-OTRN.
+      *                             INDICADOR TIPO ORIGEN
+                       05  CAN-MSC-TTRN
+                                    PICTURE X(1).
+      *                             CODIGO TIPO ORIGEN
+                       05  CAN-COD-TTRN
+                                    PICTURE X(3).
+      *                             REQ AUTOR TRANSACCION
+                   04  CAN-COD-ATRN PICTURE X(12).
+      *                             REQ OFICINA CANCELACION
+                   04  CAN-COD-OFCA PICTURE X(3).
+      *                             CODIGO RESPONSABLE CANCELACION
+                   04  CAN-COD-RCAN PICTURE X(12).
+      *                             REQ CODIGO CANCELACION
+                   04  CAN-MSC-CANC.
+      *                             TIPO CANCELACION
+                       05  CAN-MSC-TCAN
+                                    PICTURE X(1).
+      *                             FORMA CANCELACION
+                       05  CAN-MSC-FCAN
+                                    PICTURE X(1).
+      *                             ENTIDAD CANCELACION
+                       05  CAN-MSC-ECAN
+                                    PICTURE X(1).
+      *                             REQ FECHA CANCELACION REAL
+                   04  CAN-FEC-FCAN.
+                       05  CAN-NUM-SCAN
+                                    PICTURE 9(2).
+                       05  CAN-NUM-ACAN
+                                    PICTURE 9(2).
+                       05  CAN-NUM-MCAN
+                                    PICTURE 9(2).
+                       05  CAN-NUM-DCAN
+                                    PICTURE 9(2).
+      *                             REQ FECHA CANCELACION CONTABLE
+                   04  CAN-FEC-FEGR.
+                       05  CAN-NUM-SEGR
+                                    PICTURE 9(2).
+                       05  CAN-NUM-AEGR
+                                    PICTURE 9(2).
+                       05  CAN-NUM-MEGR
+                                    PICTURE 9(2).
+                       05  CAN-NUM-DEGR
+                                    PICTURE 9(2).
+      *                             REQ FECHA CANCELACION COMPUTACIONAL
+                   04  CAN-FEC-FOUT.
+                       05  CAN-NUM-SOUT
+                                    PICTURE 9(2).
+                       05  CAN-NUM-AOUT
+                                    PICTURE 9(2).
+                       05  CAN-NUM-MOUT
+                                    PICTURE 9(2).
+                       05  CAN-NUM-DOUT
+                                    PICTURE 9(2).
+      *                             VALOR GASTOS
+                   04  CAN-SGV-GAST PICTURE S9(11)V9(4)
+                                        COMPUTATIONAL-3.
+      *                             VALOR TOTAL PAGADO
+                   04  CAN-SGV-TPAG PICTURE S9(11)V9(4)
+                                        COMPUTATIONAL-3.
+      *                             VALOR TOTAL RENOVADO
+                   04  CAN-SGV-TREN PICTURE S9(11)V9(4)
+                                        COMPUTATIONAL-3.
+      *                             TOTAL DE VENCIMIENTOS CANCELADOS
+                   04  CAN-NUM-TVCC PICTURE S9(3).
+      *                             DIFERENCIA, PAGO EFECT - DEBE PAGAR
+                   04  CAN-SGV-DIFE PICTURE S9(11)V9(4)
+                                        COMPUTATIONAL-3.
+      *                             FECHA DEVENGO ANTERIOR
+                   04  CAN-FEC-FDVA.
+                       05  CAN-NUM-SDVA
+                                    PICTURE 9(2).
+                       05  CAN-NUM-ADVA
+                                    PICTURE 9(2).
+                       05  CAN-NUM-MDVA
+                                    PICTURE 9(2).
+                       05  CAN-NUM-DDVA
+                                    PICTURE 9(2).
+      *                             GLOSA DISPONIBLE
+                   04  CAN-GLS-DISP PICTURE X(25).
+       01  R-RCV.
+      *    COPYDD COL-R-RCV.COL-E-RCV00(PROD),01,D
+      *                             EQUIVALENTE AL REGISTRO RCV
+           02  COL-E-RCV00.
+      *                             RELACION CANCELACION VENCIMIENTOS
+               03  RCV.
+      *                             FILLER COMPATIBILIDAD VSAM/MVS
+                   04  RCV-GLS-FLAG PICTURE X(1).
+      *                             CLAVE PRIMARIA REGISTRO
+                   04  RCV-KEY-IREG.
+      *                             KEY     IDENTIFICACION RELACION CANC
+                       05  RCV-KEY-IRCV.
+      *                             IDENTIFICACION CANCELACION
+                       06  RCV-KEY-ICAN.
+      *                             COD. INT. COMP. OPERACION CREDITO
+                       07  RCV-CIC-IOPC.
+      *                             CENTRO ASIGNACION IDENTIFICACION
+                       08  RCV-CAI-IOPC.
+                       09  RCV-COD-TOPC
+                                    PICTURE X(1).
+                       09  RCV-COD-COPC
+                                    PICTURE X(3).
+      *                             IDENT. INTERNA COMPUTACIONAL
+                       08  RCV-IIC-IOPC.
+                       09  RCV-COD-OOPC.
+                       10  RCV-COD-SOPC
+                                    PICTURE X(2).
+                       10  RCV-IND-SOPC
+                                    PICTURE X(1).
+                       09  RCV-GLS-NOPC
+                                    PICTURE X(5).
+      *                             NUMERO IDENTIFICACION CANCELACION
+                       07  RCV-NUM-ICAN
+                                    PICTURE 9(3).
+      *                             IDENTIFICACION VENCIMIENTO
+                       06  RCV-KEY-IVCT.
+      *                             COD. INT. COMP. OPERACION CREDITO
+                       07  RCV-CIC-IOPV.
+      *                             CENTRO ASIGNACION IDENTIFICACION
+                       08  RCV-CAI-IOPV.
+                       09  RCV-COD-TOPV
+                                    PICTURE X(1).
+                       09  RCV-COD-COPV
+                                    PICTURE X(3).
+      *                             IDENT. INTERNA COMPUTACIONAL
+                       08  RCV-IIC-IOPV.
+                       09  RCV-COD-OOPV.
+                       10  RCV-COD-SOPV
+                                    PICTURE X(2).
+                       10  RCV-IND-SOPV
+                                    PICTURE X(1).
+                       09  RCV-GLS-NOPV
+                                    PICTURE X(5).
+      *                             NUMERO IDENTIFICACION VENCIMIENTO
+                       07  RCV-NUM-IVCT
+                                    PICTURE 9(3).
+      *                             TIME STAMP TRANSACCION
+                       05  RCV-STP-ITRN.
+      *                             FECHA TRANSACCION
+                       06  RCV-FEC-FTRN.
+                       07  RCV-NUM-STRN
+                                    PICTURE 9(2).
+                       07  RCV-NUM-ATRN
+                                    PICTURE 9(2).
+                       07  RCV-NUM-MTRN
+                                    PICTURE 9(2).
+                       07  RCV-NUM-DTRN
+                                    PICTURE 9(2).
+      *                             HORA TRANSACCION
+                       06  RCV-HRA-HRTR.
+                       07  RCV-NUM-HHTR
+                                    PICTURE 9(2).
+                       07  RCV-NUM-MMTR
+                                    PICTURE 9(2).
+                       07  RCV-NUM-SSTR
+                                    PICTURE 9(2).
+      *                             REQ INDICADOR TIPO ACCION
+                   04  RCV-MSC-TACC PICTURE X(1).
+      *                             INDICADOR STATUS
+                   04  RCV-MSC-STAT PICTURE X(1).
+      *                             REQ CODIGO ORIGEN TRANSACCION
+                   04  RCV-COD-OTRN.
+      *                             INDICADOR TIPO ORIGEN
+                       05  RCV-MSC-TTRN
+                                    PICTURE X(1).
+      *                             CODIGO TIPO ORIGEN
+                       05  RCV-COD-TTRN
+                                    PICTURE X(3).
+      *                             REQ AUTOR TRANSACCION
+                   04  RCV-COD-ATRN PICTURE X(12).
+      *                             IDENTIFICACION DOCUMENTO ASOCIADO
+                   04  RCV-KEY-IDLC.
+      *                             COD. INT. COMP. OPERACION CREDITO
+                       05  RCV-CIC-IOPD.
+      *                             CENTRO ASIGNACION IDENTIFICACION
+                       06  RCV-CAI-IOPD.
+                       07  RCV-COD-TOPD
+                                    PICTURE X(1).
+                       07  RCV-COD-COPD
+                                    PICTURE X(3).
+      *                             IDENT. INTERNA COMPUTACIONAL
+                       06  RCV-IIC-IOPD.
+                       07  RCV-COD-OOPD.
+                       08  RCV-COD-SOPD
+                                    PICTURE X(2).
+                       08  RCV-IND-SOPD
+                                    PICTURE X(1).
+                       07  RCV-GLS-NOPD
+                                    PICTURE X(5).
+      *                             NUMERO IDENTIFICACION DOCUMENTO
+                       05  RCV-NUM-IDLC
+                                    PICTURE 9(3).
+      *                             CORRELATIVO ESTRUCTURA VENCIMIENTOS
+                   04  RCV-NUM-IEVC PICTURE 9(3).
+      *                             REQ MODO CANCELACION ( ANTICIPADA, V
+                   04  RCV-MSC-MCAN PICTURE X(1).
+      *                             REQ VALOR CAPITAL CANCELADO
+                   04  RCV-SGV-CAPI PICTURE S9(11)V9(4)
+                                        COMPUTATIONAL-3.
+      *                             MONTO INTERES NO INCLUIDO VALOR FINA
+                   04  RCV-SGV-INTE PICTURE S9(11)V9(4)
+                                        COMPUTATIONAL-3.
+      *                             REQ VALOR FINAL CANCELADO
+                   04  RCV-SGV-FINA PICTURE S9(11)V9(4)
+                                        COMPUTATIONAL-3.
+      *                             SITUACION CONTABLE
+                   04  RCV-IND-SCTB PICTURE X(3).
+      *                             SITUACION COBRANZA
+                   04  RCV-IND-SCBZ PICTURE X(5).
+      *                             REQ FECHA CANCELACION REAL
+                   04  RCV-FEC-FCAN.
+                       05  RCV-NUM-SCAN
+                                    PICTURE 9(2).
+                       05  RCV-NUM-ACAN
+                                    PICTURE 9(2).
+                       05  RCV-NUM-MCAN
+                                    PICTURE 9(2).
+                       05  RCV-NUM-DCAN
+                                    PICTURE 9(2).
+      *                             REQ FECHA CANCELACION COMPUTACIONAL
+                   04  RCV-FEC-FOUT.
+                       05  RCV-NUM-SOUT
+                                    PICTURE 9(2).
+                       05  RCV-NUM-AOUT
+                                    PICTURE 9(2).
+                       05  RCV-NUM-MOUT
+                                    PICTURE 9(2).
+                       05  RCV-NUM-DOUT
+                                    PICTURE 9(2).
+      *                             VALOR REAJUSTES CANCELADOS
+                   04  RCV-SGV-REAJ PICTURE S9(11)V9(4)
+                                        COMPUTATIONAL-3.
+      *                             INT. MOR. CANC. MONEDA CONTABLE
+                   04  RCV-SGV-INTM PICTURE S9(11)V9(4)
+                                        COMPUTATIONAL-3.
+      *                             REAJUSTES MORATORIOS CANCELADOS
+                   04  RCV-SGV-REAM PICTURE S9(11)V9(4)
+                                        COMPUTATIONAL-3.
+      *                             GLOSA DISPONIBLE
+                   04  RCV-GLS-DISP PICTURE X(4).
+       01  REG-RDC.
+      *    COPYDD COL-R-RDC.COL-E-RDC00(PROD),01,D
+      *                             EQUIVALENTE AL REGISTRO RDC
+           02  COL-E-RDC00.
+      *                             RELACION DEUDOR CREDITO
+               03  RDC.
+      *                             FILLER COMPATIBILIDAD VSAM/MVS
+                   04  RDC-GLS-FLAG PICTURE X(1).
+      *                             CLAVE PRIMARIA REGISTRO
+                   04  RDC-KEY-IREG.
+      *                             KEY     IDENTIFICACION RELACION DEUD
+                       05  RDC-KEY-IRDC.
+      *                             COD. INT. COMP. CLIENTE
+                       06  RDC-CIC-ICLI.
+      *                             CENTRO ASIGNACION IDENTIFICACION
+                       07  RDC-CAI-ICLI.
+                       08  RDC-COD-TCLI
+                                    PICTURE X(1).
+                       08  RDC-COD-CCLI
+                                    PICTURE X(3).
+      *                             IDENT. INTERNA COMPUTACIONAL
+                       07  RDC-IIC-ICLI
+                                    PICTURE X(8).
+      *                             IDENTIFICACION DOCUMENTO LEGAL
+                       06  RDC-KEY-IDLC.
+      *                             COD. INT. COMP. OPERACION CURSADA
+                       07  RDC-CIC-IOPC.
+      *                             CENTRO ASIGNACION IDENTIFICACION
+                       08  RDC-CAI-IOPC.
+                       09  RDC-COD-TOPC
+                                    PICTURE X(1).
+                       09  RDC-COD-COPC
+                                    PICTURE X(3).
+      *                             IDENT. INTERNA COMPUTACIONAL
+                       08  RDC-IIC-IOPC.
+                       09  RDC-COD-OOPC.
+                       10  RDC-COD-SOPC
+                                    PICTURE X(2).
+                       10  RDC-IND-SOPC
+                                    PICTURE X(1).
+                       09  RDC-GLS-NOPC
+                                    PICTURE X(5).
+      *                             NUM IDENTIFICACION DOCUMENTO LEGAL
+                       07  RDC-NUM-IDLC
+                                    PICTURE 9(3).
+      *                             CODIGO TIPO RELACION
+                       05  RDC-COD-TRDC
+                                    PICTURE X(3).
+      *                             TIME STAMP TRANSACCION
+                       05  RDC-STP-ITRN.
+      *                             FECHA TRANSACCION
+                       06  RDC-FEC-FTRN.
+                       07  RDC-NUM-STRN
+                                    PICTURE 9(2).
+                       07  RDC-NUM-ATRN
+                                    PICTURE 9(2).
+                       07  RDC-NUM-MTRN
+                                    PICTURE 9(2).
+                       07  RDC-NUM-DTRN
+                                    PICTURE 9(2).
+      *                             HORA TRANSACCION
+                       06  RDC-HRA-HRTR.
+                       07  RDC-NUM-HHTR
+                                    PICTURE 9(2).
+                       07  RDC-NUM-MMTR
+                                    PICTURE 9(2).
+                       07  RDC-NUM-SSTR
+                                    PICTURE 9(2).
+      *                             REQ INDICADOR TIPO ACCION
+                   04  RDC-MSC-TACC PICTURE X(1).
+      *                             INDICADOR STATUS
+                   04  RDC-MSC-STAT PICTURE X(1).
+      *                             REQ CODIGO ORIGEN TRANSACCION
+                   04  RDC-COD-OTRN.
+      *                             INDICADOR TIPO ORIGEN
+                       05  RDC-MSC-TTRN
+                                    PICTURE X(1).
+      *                             CODIGO TIPO ORIGEN
+                       05  RDC-COD-TTRN
+                                    PICTURE X(3).
+      *                             REQ AUTOR TRANSACCION
+                   04  RDC-COD-ATRN PICTURE X(12).
+      *                             PEN DIRECCION ASOCIADA
+                   04  RDC-NUM-DIRE PICTURE X(2).
+      *                             REQ MONTO LIMITE DEUDA ( PORCENTAJE
+                   04  RDC-VAL-LIMD PICTURE 9(3)V9(6)
+                                        COMPUTATIONAL.
+      *                             GLOSA DISPONIBLE
+                   04  RDC-GLS-DISP PICTURE X(6).
+       01  REG-DBC.
+      *    COPYDD DGC-R-DBC.DGC-E-DBC00(PROD),01,D
+      *                             EQUIVALENTE AL REGISTRO DBC
+           02  DGC-E-DBC00.
+      *                             DATOS BASICOS DEL CLIENTE
+               03  DBC.
+      *                             FILLER COMPATIBILIDAD VSAM/MVS
+                   04  DBC-GLS-FLAG PICTURE X(1).
+      *                             KEY CLAVE PRIMARIA REGISTRO
+                   04  DBC-KEY-IREG.
+      *                             IDENTIFICACION DATOS BASICOS CLIENTE
+                       05  DBC-KEY-IDBC.
+      *                             COD. INT. COMP. CLIENTE
+                       06  DBC-CIC-ICLI.
+      *                             CENTRO ASIGNACION IDENTIFICACION
+                       07  DBC-CAI-ICLI.
+                       08  DBC-COD-TCLI
+                                    PICTURE X(1).
+                       08  DBC-COD-CCLI
+                                    PICTURE X(3).
+      *                             IDENT. INTERNA COMPUTACIONAL
+                       07  DBC-IIC-ICLI
+                                    PICTURE X(8).
+      *                             TIME STAMP TRANSACCION
+                       05  DBC-STP-ITRN.
+      *                             FECHA TRANSACCION
+                       06  DBC-FEC-FTRN.
+                       07  DBC-NUM-STRN
+                                    PICTURE 9(2).
+                       07  DBC-NUM-ATRN
+                                    PICTURE 9(2).
+                       07  DBC-NUM-MTRN
+                                    PICTURE 9(2).
+                       07  DBC-NUM-DTRN
+                                    PICTURE 9(2).
+      *                             HORA TRANSACCION
+                       06  DBC-HRA-HRTR.
+                       07  DBC-NUM-HHTR
+                                    PICTURE 9(2).
+                       07  DBC-NUM-MMTR
+                                    PICTURE 9(2).
+                       07  DBC-NUM-SSTR
+                                    PICTURE 9(2).
+      *                             INDICADOR TIPO ACCION
+                   04  DBC-MSC-TACC PICTURE X(1).
+      *                             INDICADOR STATUS
+                   04  DBC-MSC-STAT PICTURE X(1).
+      *                             CODIGO ORIGEN TRANSACCION
+                   04  DBC-COD-OTRN.
+      *                             INDICADOR TIPO ORIGEN
+                       05  DBC-MSC-TTRN
+                                    PICTURE X(1).
+      *                             CODIGO TIPO ORIGEN
+                       05  DBC-COD-TTRN
+                                    PICTURE X(3).
+      *                             AUTOR TRANSACCION
+                   04  DBC-COD-ATRN PICTURE X(12).
+      *                             KEY RUT CLIENTE + INDICADOR O CALIFI
+                   04  DBC-IDC-ICLI.
+      *                             RUT CLIENTE
+                       05  DBC-NUM-ICLI
+                                    PICTURE X(8).
+      *                             INDICADOR TIPO RUT
+                       05  DBC-IND-ICLI
+                                    PICTURE X(1).
+      *                             EXTENSION DEL RUT
+                       05  DBC-GLS-ICLI
+                                    PICTURE X(3).
+      *                             KEY DIGITO VERIFICADOR DEL RUT
+                   04  DBC-VRF-ICLI PICTURE X(1).
+      *                             KEY NOMBRE CLIENTE GENERICO (PERSONA
+                   04  DBC-GLS-NOMC.
+                       05  DBC-GLS-APAT
+                                    PICTURE X(25).
+                       05  DBC-GLS-AMAT
+                                    PICTURE X(25).
+                       05  DBC-GLS-NOMB
+                                    PICTURE X(25).
+      *                             SOUNDEX DEL NOMBRE DE CLIENTE
+                   04  DBC-SNX-NOMC.
+                       05  DBC-SNX-APAT
+                                    PICTURE X(3).
+                       05  DBC-SNX-AMAT
+                                    PICTURE X(3).
+                       05  DBC-SNX-NOMB
+                                    PICTURE X(3).
+      *                             NUMERO DE DIRECCION DE ENVIO CORRESP
+                   04  DBC-NUM-DCOR PICTURE 9(2).
+      *                             OPR IND TIPO CLIENTE ( PERSONA O EMP
+                   04  DBC-IND-TICL PICTURE X(1).
+      *                             TIPO CLIENTE (POTENCIAL,NO CLIENTE,G
+                   04  DBC-COD-TICL PICTURE X(2).
+      *                             CODIGO CLASIFICACION COMERCIAL
+                   04  DBC-COD-CLCM PICTURE X(2).
+      *                             RCM CODIGO DEL EJECUTIVO ENCARGADO D
+                   04  DBC-COD-EJEC PICTURE X(12).
+      *                             OPR CODIGO DE OFICINA DONDE OPERA EL
+                   04  DBC-COD-OFIC PICTURE X(3).
+      *                             RCM INDICADOR SI OPERA EN OTRA OFICI
+                   04  DBC-IND-OOFI PICTURE X(1).
+      *                             EXT CODIGO ACTIVIDAD ECONOMICA
+                   04  DBC-COD-ACTI PICTURE X(9).
+      *                             EXT ORIGEN Y DESTINO SECT (COMP.INST
+                   04  DBC-COD-ODSE PICTURE X(3).
+      *                             INF FECHA INGRESO AL PLAN
+                   04  DBC-FEC-FPLN.
+                       05  DBC-NUM-SPLN
+                                    PICTURE 9(2).
+                       05  DBC-NUM-APLN
+                                    PICTURE 9(2).
+                       05  DBC-NUM-MPLN
+                                    PICTURE 9(2).
+                       05  DBC-NUM-DPLN
+                                    PICTURE 9(2).
+      *                             CODIGO DE SEGMENTO
+                   04  DBC-COD-SETO PICTURE X(5).
+      *                             PERIODO DE SEGMENTO (SSAAMM)
+                   04  DBC-PDO-SETO PICTURE X(6).
+      *                             INF INDICADOR DE MULTAS BANCO CENTRA
+                   04  DBC-IND-MUBC PICTURE X(1).
+      *                             INF INDICADOR DE JUICIOS BANCO CENTR
+                   04  DBC-IND-JUBC PICTURE X(1).
+      *                             EXT CODIGO ESTADO CLIENTE ( COMO DEU
+                   04  DBC-MSC-SCLI PICTURE X(1).
+      *                             FECHA ESTADO CLIENTE
+                   04  DBC-FEC-FSCL.
+                       05  DBC-NUM-SSCL
+                                    PICTURE 9(2).
+                       05  DBC-NUM-ASCL
+                                    PICTURE 9(2).
+                       05  DBC-NUM-MSCL
+                                    PICTURE 9(2).
+                       05  DBC-NUM-DSCL
+                                    PICTURE 9(2).
+      *                             CODIGO DE BLOQUEO DEL CLIENTE
+                   04  DBC-COD-BLOC PICTURE X(2).
+      *                             NUMERO TOTAL DE DIRECCIONES
+                   04  DBC-NUM-TDIR PICTURE 9(2).
+      *                             NUMERO TOTAL DE COMENTARIOS
+                   04  DBC-NUM-TCMT PICTURE 9(3).
+      *                             FECHA INICIO OPERACION
+                   04  DBC-FEC-FIOP.
+                       05  DBC-NUM-SIOP
+                                    PICTURE 9(2).
+                       05  DBC-NUM-AIOP
+                                    PICTURE 9(2).
+                       05  DBC-NUM-MIOP
+                                    PICTURE 9(2).
+                       05  DBC-NUM-DIOP
+                                    PICTURE 9(2).
+      *                             FECHA TERMINO OPERACION
+                   04  DBC-FEC-FTOP.
+                       05  DBC-NUM-STOP
+                                    PICTURE 9(2).
+                       05  DBC-NUM-ATOP
+                                    PICTURE 9(2).
+                       05  DBC-NUM-MTOP
+                                    PICTURE 9(2).
+                       05  DBC-NUM-DTOP
+                                    PICTURE 9(2).
+      *                             NUMERO OPERACIONES FECHA TERMINO NUL
+                   04  DBC-NUM-OFTN PICTURE 9(3).
+      *                             FECHA INGRESO DE DATOS A LA BASE DE
+                   04  DBC-FEC-FINP.
+                       05  DBC-NUM-SINP
+                                    PICTURE 9(2).
+                       05  DBC-NUM-AINP
+                                    PICTURE 9(2).
+                       05  DBC-NUM-MINP
+                                    PICTURE 9(2).
+                       05  DBC-NUM-DINP
+                                    PICTURE 9(2).
+       01  REG-TAB.
+      *    COPYDD TAB-R-TAB.TAB-E-TAB00(PROD),01,D
+      *                             EQUIVALENTE AL REGISTRO TAB
+           02  TAB-E-TAB00.
+      *                             REGISTRO GENERICO DE TABLAS
+               03  TAB.
+      *                             FILLER COMPATIBILIDAD VSAM/MVS
+                   04  TAB-GLS-FLAG PICTURE X(1).
+      *                             CLAVE PRIMARIA REGISTRO
+                   04  TAB-KEY-IREG.
+      *                             KEY     TIPO + CODIGO ( LLAVE PRIMAR
+                       05  TAB-COD-TABL.
+      *                             CODIGO TIPO TABLA
+                       06  TAB-COD-TTAB
+                                    PICTURE X(3).
+      *                             CODIGO TABLA
+                       06  TAB-COD-CTAB
+                                    PICTURE X(12).
+      *                             TIME STAMP TRANSACCION
+                       05  TAB-STP-ITRN.
+      *                             FECHA TRANSACCION
+                       06  TAB-FEC-FTRN.
+                       07  TAB-NUM-STRN
+                                    PICTURE 9(2).
+                       07  TAB-NUM-ATRN
+                                    PICTURE 9(2).
+                       07  TAB-NUM-MTRN
+                                    PICTURE 9(2).
+                       07  TAB-NUM-DTRN
+                                    PICTURE 9(2).
+      *                             HORA TRANSACCION
+                       06  TAB-HRA-HRTR.
+                       07  TAB-NUM-HHTR
+                                    PICTURE 9(2).
+                       07  TAB-NUM-MMTR
+                                    PICTURE 9(2).
+                       07  TAB-NUM-SSTR
+                                    PICTURE 9(2).
+      *                             INDICADOR TIPO ACCION
+                   04  TAB-MSC-TACC PICTURE X(1).
+      *                             INDICADOR STATUS
+                   04  TAB-MSC-STAT PICTURE X(1).
+      *                             INDICADOR VIGENCIA
+                   04  TAB-IND-VIGE
+                             REDEFINES TAB-MSC-STAT
+                                    PICTURE X(1).
+      *                             CODIGO ORIGEN TRANSACCION
+                   04  TAB-COD-OTRN.
+      *                             INDICADOR TIPO ORIGEN
+                       05  TAB-MSC-TTRN
+                                    PICTURE X(1).
+      *                             CODIGO TIPO ORIGEN
+                       05  TAB-COD-TTRN
+                                    PICTURE X(3).
+      *                             AUTOR TRANSACCION
+                   04  TAB-COD-ATRN PICTURE X(12).
+      *                             KEY TIPO + CODIGO ( INTERNO COMPUTAC
+                   04  TAB-CIC-TABL.
+      *                             CODIGO TIPO TABLA
+                       05  TAB-CIC-TTAB
+                                    PICTURE X(3).
+      *                             CODIGO TABLA
+                       05  TAB-CIC-CTAB
+                                    PICTURE X(12).
+      *                             CODIGO EXTERNO
+                   04  TAB-EXT-TABL.
+      *                             CODIGO TIPO TABLA
+                       05  TAB-EXT-TTAB
+                                    PICTURE X(3).
+      *                             CODIGO TABLA
+                       05  TAB-EXT-CTAB
+                                    PICTURE X(5).
+      *                             DESCRIPCION CORTA
+                   04  TAB-GLS-DCOR PICTURE X(12).
+      *                             ABREVIACION DESCRIPCION
+                   04  TAB-GLS-ABRV PICTURE X(5).
+      *                             DESCRIPCION DEL CODIGO
+                   04  TAB-GLS-DESC PICTURE X(40).
+      *                             DATOS ANEXOS
+                   04  TAB-GLS-DATA PICTURE X(60).
+      *                             CLAVE SOUNDEX
+                   04  TAB-SNX-TABL.
+                       05  TAB-SNX-TTAB
+                                    PICTURE X(3).
+                       05  TAB-SNX-CTAB
+                                    PICTURE X(3).
+               03  TAB-REDEF REDEFINES TAB
+                                    PICTURE X(194).
+      ******************************************************************
+      *                 ELEMENT LIST                                   *
+      ******************************************************************
+      *
+       01  ELEM-LIST-OPC.
+           03 ELEM-1         PIC X(05) VALUE 'OPC00'.
+           03 ELEM-SEC       PIC X(01).
+           03 FILLER         PIC X(05) VALUE SPACES.
+       01  ELEM-LIST-CAN.
+           03 ELEM-1         PIC X(05) VALUE 'CAN00'.
+           03 ELEM-SEC       PIC X(01).
+           03 FILLER         PIC X(05) VALUE SPACES.
+       01  ELEM-LIST-RCV.
+           03 ELEM-1         PIC X(05) VALUE 'RCV00'.
+           03 ELEM-SEC       PIC X(01).
+           03 FILLER         PIC X(05) VALUE SPACES.
+       01  ELEM-LIST-RDC.
+           05 ELEM-1          PIC X(5) VALUE 'RDC00'.
+           05 ELEM-SEC        PIC X(1).
+           05 FILLER          PIC X(5) VALUE SPACES.
+       01  ELEM-LIST-DBC.
+           05 ELEM-1          PIC X(5) VALUE 'DBC00'.
+           05 ELEM-SEC        PIC X(1).
+           05 FILLER          PIC X(5) VALUE SPACES.
+       01  ELEM-LIST-TAB.
+           05 ELEM-1          PIC X(5) VALUE 'TAB00'.
+           05 ELEM-SEC        PIC X(1).
+           05 FILLER          PIC X(5) VALUE SPACES.
+           EJECT
+       PROCEDURE DIVISION.
+      *==================
+       A-CONTROL SECTION.
+      *=================
+           ENTRY 'DBMSCBL'.
+       AA-INICIALIZACION.
+           PERFORM B-INICIALIZAR.
+       AB-PROCESAMIENTO.
+           SORT SORTWK ON ASCENDING KEY SOR-CLAVE-2 SOR-NOMBRE
+           INPUT PROCEDURE C-ENTRADA
+           OUTPUT PROCEDURE D-SALIDA.
+       AC-TERMINO.
+           PERFORM E-TERMINAR.
+       AZ-FIN-DE-PROCESO.
+           GOBACK.
+           EJECT
+       B-INICIALIZAR SECTION.
+      *=====================
+       BA-CONTROL.
+      *----------
+           PERFORM BB-INICIALIZAR-VARIABLES.
+           PERFORM BC-ACEPTAR-PARAMETROS.
+           PERFORM BD-VALIDAR-PARAMETROS.
+           IF WS-RETURN-CODE = 100
+              GO TO BZ-FIN-DE-SECCION
+           END-IF
+           PERFORM BE-ABRIR-ARCHIVOS.
+           PERFORM BF-ACEPTA-CLAVES.
+           PERFORM BG-LLENAR-TABLA UNTIL WT-FIN-DATOS = 'SI'.
+           GO TO BZ-FIN-DE-SECCION.
+           SKIP1
+       BB-INICIALIZAR-VARIABLES.
+      *------------------------
+           INITIALIZE F-FILE-STATUS W-REGISTROS-DE-TRABAJO
+                      W-PARAMETRO W-SWITCHES W-ACUMULADORES.
+           SKIP1
+       BC-ACEPTAR-PARAMETROS.
+      *---------------------
+
+           ACCEPT WR-FECHA FROM DATE.
+           MOVE WR-DIA       TO DD-CURRENT.
+           MOVE WR-MES       TO MM-CURRENT.
+           MOVE WR-ANO       TO AA-CURRENT.
+           ACCEPT W-PARAMETRO
+           DISPLAY 'PARAMETRO INGRESADO :' W-PARAMETRO.
+           SKIP1
+       BD-VALIDAR-PARAMETROS.
+      *----------------------
+           MOVE WP-FECHA-CANCEL-SS TO RTNWVALF-FECHA-AM
+           MOVE WP-FECHA-CANCEL-AA TO RTNWVALF-FECHA-AA
+           MOVE WP-FECHA-CANCEL-MM TO RTNWVALF-FECHA-MM
+           MOVE WP-FECHA-CANCEL-DD TO RTNWVALF-FECHA-DD
+           CALL 'RUTUVALF' USING RTNWVALF-FECHA RTNWVALF-COD-RET
+           IF RTNWVALF-COD-RET > 0
+              MOVE 100 TO WS-RETURN-CODE
+              MOVE 'B-INICIALIZAR'        TO WR-SECCION
+              MOVE 'BD-VALIDAR-PARAMETRO' TO WR-PARRAFO
+              MOVE 'VALIDA FECHA'         TO WR-OPERACION
+              MOVE RTNWVALF-COD-RET       TO WR-STATUS
+              MOVE WP-FECHA-CANCEL        TO WR-CLAVE.
+      ****    GO TO BZ-FIN-DE-SECCION.
+
+              MOVE 70 TO WR-CL
+              MOVE FECHA-PROCESO          TO T1-FECHA
+              MOVE WP-FECHA-CANCEL-SS     TO AA-2A1
+              MOVE WP-FECHA-CANCEL-AA     TO AA-2A2
+              MOVE WP-FECHA-CANCEL-MM     TO MM-2A
+              MOVE WP-FECHA-CANCEL-DD     TO DD-2A.
+       BE-ABRIR-ARCHIVOS.
+      *-----------------
+           OPEN INPUT TAR-TARJETA.
+           OPEN OUTPUT LISTADO.
+           SKIP1
+       BF-ACEPTA-CLAVES.
+      *-----------------
+           READ TAR-TARJETA AT END MOVE 'SI' TO WT-FIN-DATOS END-READ.
+           IF WT-FIN-DATOS NOT = 'SI'
+              ADD 1 TO WA-TAR-LEIDAS.
+       BG-LLENAR-TABLA.
+      *-----------------
+           ADD 1           TO WT-PIL-CONT
+           SET TCX         TO WT-PIL-CONT
+           MOVE TAR-OPERAC TO WT-OPERAC (TCX)
+           PERFORM BF-ACEPTA-CLAVES.
+           SKIP1
+       BZ-FIN-DE-SECCION.
+      *-----------------
+           EXIT.
+           EJECT
+       C-ENTRADA SECTION.
+      *==================
+       CA-PROCESO-ENTRADA.
+      *-----------------
+           PERFORM CB-LEER-OPC-INI
+           PERFORM CC-PROCESO-OPC UNTIL WS-SW-OPC = 'FIN' OR
+                                        WS-RETURN-CODE = 100.
+       D-SALIDA SECTION.
+      *=================
+       DA-PROC-SALIDA.
+      *-------------
+             IF WS-RETURN-CODE = 100
+                GO TO DY-FIN-SECCION
+             END-IF
+             RETURN SORTWK AT END MOVE 'FIN' TO WS-FIN-SORT.
+             PERFORM DB-IMPRIMIR UNTIL WS-FIN-SORT =  'FIN'.
+             MOVE WA-TOT-CREDITOS  TO TOT-CRED-01
+             MOVE WA-TOT-SALDO-ANT TO TOT-SALDO-ANT-01
+             MOVE WA-TOT-SALDO-ACT TO TOT-SALDO-ACTUAL-01
+             MOVE WA-TOT-ABONO-CAP TO TOT-ABONO-01
+             MOVE WA-TOT-INTERES   TO TOT-INTERES-01
+             WRITE LINEA FROM LTOTAL-01  AFTER 2
+             WRITE LINEA FROM LTOTAL-02  AFTER 1.
+       DY-FIN-SECCION.
+      *----------------
+       DZ-FIN-SALIDA SECTION.
+      *======================
+       CB-LEER-OPC-INI.
+      *-----------------
+           MOVE SPACES                       TO OPC-VALUE
+           MOVE 'D        '                  TO OPC-VALUE
+           MOVE 'LOCKY'                      TO OPC-COMMAND
+           MOVE 'OPC00'                      TO OPC-KEY
+           CALL 'DBNTRY' USING UIB REQ-AREA-OPC OPC ELEM-LIST-OPC
+           IF OPC-RET-COD = SPACES
+              MOVE 'REDLE'                   TO OPC-COMMAND
+              MOVE 'OPC00'                   TO OPC-KEY
+              CALL 'DBNTRY' USING UIB REQ-AREA-OPC OPC ELEM-LIST-OPC
+              IF OPC-RET-COD NOT = SPACES
+                 MOVE 'C-ENTRADA'       TO WR-SECCION
+                 MOVE 'CB-LEER-OPC-INI' TO WR-PARRAFO
+                 MOVE 'REDLE OPC00    ' TO WR-OPERACION
+                 MOVE OPC-RET-COD       TO WR-STATUS
+                 MOVE OPC-VALUE         TO WR-CLAVE
+                 MOVE 100               TO WS-RETURN-CODE
+              END-IF
+           ELSE
+             MOVE 'C-ENTRADA'       TO WR-SECCION
+             MOVE 'CB-LEER-OPC-INI' TO WR-PARRAFO
+             MOVE 'LOCKY OPC00    ' TO WR-OPERACION
+             MOVE OPC-RET-COD       TO WR-STATUS
+             MOVE OPC-VALUE         TO WR-CLAVE
+             MOVE 100               TO WS-RETURN-CODE
+           END-IF.
+       CC-PROCESO-OPC.
+      *----------------
+      *    DISPLAY '*******************************************'
+      *    DISPLAY 'CLAVE 1:' OPC-KEY-IOPC
+           MOVE ZEROS TO REG-SORT
+           IF OPC-MSC-STAT = 'A'
+               IF OPC-COD-TOPC = 'D'
+                   IF OPC-VAL-SCRE > 0
+                       MOVE 0 TO WS-SW-MODIF
+                       PERFORM CN-LEER-TABLA
+                       IF WS-SW-MODIF = 1
+                          ADD 1 TO WA-OPC-SELECCIONADOS
+                          PERFORM CE-LEER-RUT-DD
+                       END-IF
+                   END-IF
+               END-IF
+           END-IF
+
+                 PERFORM CD-LEER-OPC.
+       CD-LEER-OPC.
+      *-------------
+           MOVE 'REDNX'                  TO OPC-COMMAND
+           MOVE 'OPC00'                  TO OPC-KEY
+           CALL 'DBNTRY' USING UIB REQ-AREA-OPC OPC ELEM-LIST-OPC.
+           IF OPC-RET-COD NOT = SPACES AND NOT = '14'
+              MOVE 'C-ENTRADA'       TO WR-SECCION
+              MOVE 'CD-LEER-OPC'     TO WR-PARRAFO
+              MOVE 'REDNX OPC00    ' TO WR-OPERACION
+              MOVE OPC-RET-COD       TO WR-STATUS
+              MOVE OPC-VALUE         TO WR-CLAVE
+              MOVE 100               TO WS-RETURN-CODE
+           ELSE
+              IF OPC-RET-COD  = '14'
+                 MOVE 'FIN' TO WS-SW-OPC
+              ELSE
+                 IF OPC-RET-COD = SPACES
+                    ADD 1 TO WA-OPC-LEIDOS
+                 ELSE
+                    MOVE 'FIN' TO WS-SW-OPC
+                 END-IF
+              END-IF
+           END-IF.
+       CE-LEER-RUT-DD.
+      *------------
+           MOVE 0                              TO WS-SW-RDC
+           MOVE SPACES                         TO RDC-VALUE
+           MOVE OPC-KEY-IOPC                   TO WR-RDC-A
+           MOVE 000                            TO WR-RDC-B
+           MOVE WR-RDC-WS                      TO RDC-VALUE
+           MOVE 'LOCKY'                        TO RDC-COMMAND
+           MOVE 'RDC01'                        TO RDC-KEY
+           CALL 'DBNTRY' USING UIB REQ-AREA-RDC RDC ELEM-LIST-RDC.
+           IF RDC-RET-COD = SPACES
+               MOVE 'REDLE'                    TO RDC-COMMAND
+               MOVE 'RDC01'                    TO RDC-KEY
+               CALL 'DBNTRY' USING UIB REQ-AREA-RDC RDC ELEM-LIST-RDC
+               IF RDC-RET-COD NOT = SPACES
+                   MOVE 'C-PROCESAR'           TO WR-SECCION
+                   MOVE 'CE-LEER-RUT-DD'       TO WR-PARRAFO
+                   MOVE 'REDLE RDC01   '       TO WR-OPERACION
+                   MOVE RDC-RET-COD            TO WR-STATUS
+                   MOVE RDC-VALUE              TO WR-CLAVE
+                   PERFORM CX-DESPLEGAR-MENSAJES
+                  ELSE
+                   IF WR-RDC-WS = RDC-KEY-IDLC
+                      ADD 1 TO WA-RDC-LEIDOS
+                      MOVE SPACES              TO DBC-VALUE
+                      MOVE RDC-CIC-ICLI        TO DBC-VALUE
+                      MOVE 'REDKY'             TO DBC-COMMAND
+                      MOVE 'DBC00'             TO DBC-KEY
+                      CALL 'DBNTRY' USING UIB REQ-AREA-DBC DBC
+                                  ELEM-LIST-DBC
+                      IF DBC-RET-COD NOT = SPACES
+                         MOVE 'C-PROCESAR'     TO WR-SECCION
+                         MOVE 'CE-LEER-RUT-DD' TO WR-PARRAFO
+                         MOVE 'REDKY DBC     ' TO WR-OPERACION
+                         MOVE DBC-RET-COD      TO WR-STATUS
+                         MOVE DBC-VALUE        TO WR-CLAVE
+                         PERFORM CX-DESPLEGAR-MENSAJES
+                      ELSE
+                         MOVE 1                TO WS-SW-RDC
+                         ADD 1                 TO WA-DBC-LEIDOS
+                         MOVE DBC-NUM-ICLI     TO WR-RUT-DD
+                         MOVE DBC-VRF-ICLI     TO WR-DV-DD
+                         MOVE 999              TO WA-ACUM-CAN
+                         PERFORM CF-LEER-CAN
+      ****               DISPLAY 'RUT' DBC-NUM-ICLI ' ' DBC-VRF-ICLI
+                      END-IF
+                     ELSE
+                      MOVE 'C-PROCESAR'        TO WR-SECCION
+                      MOVE 'CE-LEER-RUT-DD'    TO WR-PARRAFO
+                      MOVE 'RDC NO ENCONTRADO' TO WR-OPERACION
+                      MOVE RDC-RET-COD         TO WR-STATUS
+                      MOVE DBC-VALUE           TO WR-RDC-WS
+                      PERFORM CX-DESPLEGAR-MENSAJES
+                     END-IF
+                   END-IF
+           ELSE
+             MOVE 'C-PROCESAR'                 TO WR-SECCION
+             MOVE 'CE-LEER-RUT-DD'             TO WR-PARRAFO
+             MOVE 'LOCKY RDC01   '             TO WR-OPERACION
+             MOVE RDC-RET-COD                  TO WR-STATUS
+             MOVE RDC-VALUE                    TO WR-CLAVE
+             PERFORM CX-DESPLEGAR-MENSAJES
+           END-IF.
+       CF-LEER-CAN.
+      *-------------
+           MOVE SPACES                        TO CAN-VALUE
+           MOVE OPC-KEY-IOPC                  TO CAN-CIC-IOPC
+           MOVE 999                           TO CAN-NUM-ICAN
+           MOVE CAN-KEY-ICAN                  TO CAN-VALUE
+           MOVE 'CAN00'                       TO CAN-KEY
+           MOVE SPACES                        TO WS-SW-CAN.
+
+           MOVE 'LOCKL'                       TO CAN-COMMAND
+           CALL 'DBNTRY' USING UIB REQ-AREA-CAN R-CAN ELEM-LIST-CAN
+           IF CAN-RET-COD = SPACES
+               MOVE 'CAN00'                   TO CAN-KEY
+               MOVE 'REDLE'                   TO CAN-COMMAND
+               CALL 'DBNTRY' USING UIB REQ-AREA-CAN R-CAN ELEM-LIST-CAN
+               IF CAN-RET-COD NOT = SPACES
+                   MOVE 'C-PROCESAR'     TO WR-SECCION
+                   MOVE 'CF-LEER-CAN'    TO WR-PARRAFO
+                   MOVE 'REDLE CAN00   ' TO WR-OPERACION
+                   MOVE CAN-RET-COD      TO WR-STATUS
+                   MOVE CAN-VALUE        TO WR-CLAVE
+                   MOVE 100 TO WS-RETURN-CODE
+               ELSE
+      ****         DISPLAY 'CAN 1:' CAN-KEY-ICAN
+      ****         DISPLAY 'OPC 1:' OPC-KEY-IOPC
+                   IF CAN-CIC-IOPC  = OPC-KEY-IOPC
+                      ADD 1 TO WA-CAN-LEIDOS
+                      MOVE 0 TO WS-SW-RCV
+                      PERFORM CG-LEER-RCV
+                   END-IF
+               END-IF
+           ELSE
+                MOVE 'C-PROCESAR'     TO WR-SECCION
+                MOVE 'CF-LEER-CAN'    TO WR-PARRAFO
+                MOVE 'LOCKL CAN00   ' TO WR-OPERACION
+                MOVE CAN-RET-COD      TO WR-STATUS
+                MOVE CAN-VALUE        TO WR-CLAVE
+                PERFORM CX-DESPLEGAR-MENSAJES
+           END-IF.
+           SKIP1
+       CG-LEER-RCV.
+      *-------------
+           MOVE SPACES                        TO RCV-VALUE
+           MOVE CAN-KEY-ICAN                  TO RCV-VALUE
+           MOVE 'RCV00'                       TO RCV-KEY
+
+           MOVE 'LOCKY'                       TO RCV-COMMAND
+           CALL 'DBNTRY' USING UIB REQ-AREA-RCV R-RCV ELEM-LIST-RCV
+           IF RCV-RET-COD = SPACES
+               MOVE 'RCV00'                   TO RCV-KEY
+               MOVE 'REDLE'                   TO RCV-COMMAND
+               CALL 'DBNTRY' USING UIB REQ-AREA-RCV R-RCV ELEM-LIST-RCV
+               IF RCV-RET-COD NOT = SPACES
+                   MOVE 'C-PROCESAR'     TO WR-SECCION
+                   MOVE 'CG-LEER-RCV'    TO WR-PARRAFO
+                   MOVE 'REDLE RCV00   ' TO WR-OPERACION
+                   MOVE RCV-RET-COD      TO WR-STATUS
+                   MOVE RCV-VALUE        TO WR-CLAVE
+                   MOVE 100 TO WS-RETURN-CODE
+               ELSE
+      ****         DISPLAY 'CAN 2:' CAN-KEY-ICAN
+      ****         DISPLAY 'RCV 2:' RCV-KEY-ICAN
+                   IF CAN-KEY-ICAN  = RCV-KEY-ICAN
+      ****            DISPLAY 'RCV-SGV-CAPI' RCV-SGV-CAPI
+      ****            DISPLAY 'RCV-SGV-FINA' RCV-SGV-FINA
+                      ADD 1 TO WA-RCV-LEIDOS
+                      MOVE 0 TO WS-SW-CAN-RCV
+                      PERFORM CH-RTN-RCV UNTIL WS-SW-CAN-RCV = 1
+                   END-IF
+               END-IF
+           ELSE
+                MOVE 'C-PROCESAR'     TO WR-SECCION
+                MOVE 'CG-LEER-RCV'    TO WR-PARRAFO
+                MOVE 'LOCKY RCV00   ' TO WR-OPERACION
+                MOVE RCV-RET-COD      TO WR-STATUS
+                MOVE RCV-VALUE        TO WR-CLAVE
+                MOVE 100 TO WS-RETURN-CODE
+           END-IF.
+           SKIP1
+       CH-RTN-RCV.
+      *------------
+           IF CAN-MSC-STAT = 'A' AND RCV-SGV-CAPI NOT < 0
+              AND RCV-SGV-FINA NOT < 0
+              MOVE 1 TO WS-SW-RCV
+              MOVE 1 TO WS-SW-CAN-RCV
+              ADD 1 TO WA-REG-SORT-GRA
+              PERFORM CJ-GRABAR-SORT
+           ELSE
+              PERFORM CI-LEER-CAN-ANT.
+       CI-LEER-CAN-ANT.
+      *----------------
+           MOVE CAN-KEY-ICAN    TO CAN-VALUE
+           MOVE 'CAN00'                       TO CAN-KEY
+           MOVE SPACES                        TO WS-SW-CAN.
+
+           MOVE 'LOCBR'                       TO CAN-COMMAND
+           CALL 'DBNTRY' USING UIB REQ-AREA-CAN R-CAN ELEM-LIST-CAN
+           IF CAN-RET-COD = SPACES
+               MOVE 'CAN00'                   TO CAN-KEY
+               MOVE 'REDLE'                   TO CAN-COMMAND
+               CALL 'DBNTRY' USING UIB REQ-AREA-CAN R-CAN ELEM-LIST-CAN
+               IF CAN-RET-COD NOT = SPACES
+                   MOVE 'C-PROCESAR'     TO WR-SECCION
+                   MOVE 'CF-LEER-CAN'    TO WR-PARRAFO
+                   MOVE 'REDLE CAN03   ' TO WR-OPERACION
+                   MOVE CAN-RET-COD      TO WR-STATUS
+                   MOVE CAN-VALUE        TO WR-CLAVE
+                   MOVE 100 TO WS-RETURN-CODE
+               ELSE
+      ****         DISPLAY 'CAN 3:' CAN-KEY-ICAN
+      ****         DISPLAY 'OPC 3:' OPC-KEY-IOPC
+                   IF CAN-CIC-IOPC  = OPC-KEY-IOPC
+                      ADD 1 TO WA-CAN-LEIDOS
+                      MOVE 0 TO WS-SW-RCV
+                      PERFORM CIA-LEER-RCV
+                   ELSE
+                    MOVE 1 TO WS-SW-CAN-RCV
+                   END-IF
+               END-IF
+           ELSE
+                MOVE 'C-PROCESAR'     TO WR-SECCION
+                MOVE 'CF-LEER-CAN'    TO WR-PARRAFO
+                MOVE 'LOCKY CAN00   ' TO WR-OPERACION
+                MOVE CAN-RET-COD      TO WR-STATUS
+                MOVE CAN-VALUE        TO WR-CLAVE
+                MOVE 100 TO WS-RETURN-CODE
+                MOVE 'FIN' TO WS-SW-CAN
+           END-IF.
+           SKIP1
+       CIA-LEER-RCV.
+      *-------------
+           MOVE SPACES                        TO RCV-VALUE
+           MOVE CAN-KEY-ICAN                  TO RCV-VALUE
+           MOVE 'RCV00'                       TO RCV-KEY
+
+           MOVE 'LOCKY'                       TO RCV-COMMAND
+           CALL 'DBNTRY' USING UIB REQ-AREA-RCV R-RCV ELEM-LIST-RCV
+           IF RCV-RET-COD = SPACES
+               MOVE 'RCV00'                   TO RCV-KEY
+               MOVE 'REDLE'                   TO RCV-COMMAND
+               CALL 'DBNTRY' USING UIB REQ-AREA-RCV R-RCV ELEM-LIST-RCV
+               IF RCV-RET-COD NOT = SPACES
+                   MOVE 'C-PROCESAR'     TO WR-SECCION
+                   MOVE 'CG-LEER-RCV'    TO WR-PARRAFO
+                   MOVE 'REDLE RCV00   ' TO WR-OPERACION
+                   MOVE RCV-RET-COD      TO WR-STATUS
+                   MOVE RCV-VALUE        TO WR-CLAVE
+                   MOVE 100 TO WS-RETURN-CODE
+               ELSE
+      ****         DISPLAY 'CAN 9:' CAN-KEY-ICAN
+      ****         DISPLAY 'RCV 9:' RCV-KEY-ICAN
+                   IF CAN-KEY-ICAN  = RCV-KEY-ICAN
+      ****            DISPLAY 'RCV-SGV-CAPI' RCV-SGV-CAPI
+      ****            DISPLAY 'RCV-SGV-FINA' RCV-SGV-FINA
+                      ADD 1 TO WA-RCV-LEIDOS
+                   ELSE
+                    MOVE 1 TO WS-SW-CAN-RCV
+                   END-IF
+               END-IF
+           ELSE
+                MOVE 'C-PROCESAR'     TO WR-SECCION
+                MOVE 'CG-LEER-RCV'    TO WR-PARRAFO
+                MOVE 'LOCKY RCV00   ' TO WR-OPERACION
+                MOVE RCV-RET-COD      TO WR-STATUS
+                MOVE RCV-VALUE        TO WR-CLAVE
+                MOVE 100 TO WS-RETURN-CODE
+           END-IF.
+           SKIP1
+       CJ-GRABAR-SORT.
+      *---------------
+      *     MOVE DBC-GLS-NOMC TO SOR-NOMBRE
+
+           IF DBC-IND-TICL = 'P'
+              MOVE DBC-GLS-APAT    TO WR-D02-APAT25
+              MOVE DBC-GLS-AMAT    TO WR-D02-AMAT25
+              MOVE DBC-GLS-NOMB    TO WR-D02-NOMB25
+              MOVE SPACES          TO WR-D02-N2
+              PERFORM CK-SACA-BLANCOS
+              MOVE WR-D02-N2       TO WR-D02-NOMBRE
+              MOVE WR-D02-NOMBRE   TO SOR-NOMBRE
+           ELSE
+              MOVE DBC-GLS-APAT    TO WR-D02-NOM1
+              MOVE DBC-GLS-AMAT    TO WR-D02-NOM2
+              MOVE WR-D02-NOMBRE   TO SOR-NOMBRE
+           END-IF.
+           MOVE WR-RUT-DD          TO SOR-RUT-DD-DIG
+           MOVE WR-DV-DD           TO SOR-RUT-DD-VER
+           MOVE OPC-KEY-IOPC       TO SOR-CLAVE
+           COMPUTE WA-VALOR-WS = OPC-VAL-SCRE + RCV-SGV-CAPI
+           MOVE WA-VALOR-WS        TO SOR-SALDO-ANTER
+           MOVE RCV-SGV-CAPI       TO SOR-ABONO-CAPIT
+           COMPUTE WA-VALOR-WS = RCV-SGV-FINA - RCV-SGV-CAPI
+           MOVE WA-VALOR-WS        TO SOR-INTERESES
+           MOVE OPC-VAL-SCRE       TO SOR-SALDO-ACTUAL
+           MOVE OPC-NUM-VCOR       TO SOR-CUOT-ORIG
+
+           IF OPC-NUM-TVCC > ZEROES
+              MOVE OPC-NUM-TVCC       TO SOR-CUOT-PAGADAS
+           ELSE
+           COMPUTE SOR-CUOT-PAGADAS = OPC-NUM-VCCO + OPC-NUM-VCCM +
+                                      OPC-NUM-VCCV
+           END-IF
+
+           MOVE CAN-FEC-FOUT       TO SOR-FECHA-CANCEL
+           MOVE 0 TO WS-SW-TAB
+           PERFORM CO-LEER-TAB-AUX
+           IF WS-SW-TAB = 0
+              MOVE TAB-GLS-DESC TO SOR-GLOSA
+              MOVE OPC-COD-COOC TO SOR-CLASE
+              MOVE OPC-MSC-TVOC TO WR-MONEDA-1
+              MOVE OPC-COD-CVOC TO WR-MONEDA-2
+              MOVE WR-MONEDA    TO SOR-MONEDA
+              RELEASE REG-SORT
+           END-IF.
+       CK-SACA-BLANCOS.
+      *----------------
+           MOVE    1 TO WR-IND2.
+           MOVE    'N' TO WR-INDN.
+           PERFORM CM-MUEVE-NOMBRE VARYING WR-IND1 FROM 1 BY 1 UNTIL
+                                WR-IND1 > 75 OR WR-IND2 > 40.
+       CL-FIN-SACA-BLANCOS.
+      *-----------------
+            EXIT.
+
+       CM-MUEVE-NOMBRE.
+      *-------------
+           IF WR-D02-N1A (WR-IND1) NOT = ' '
+              MOVE WR-D02-N1A (WR-IND1) TO WR-D02-N2A (WR-IND2)
+              MOVE 'S' TO WR-INDN
+              ADD  1 TO WR-IND2
+           ELSE
+              IF WR-INDN = 'S'
+                 MOVE WR-D02-N1A (WR-IND1) TO WR-D02-N2A (WR-IND2)
+                 MOVE 'N' TO WR-INDN
+                 ADD  1 TO WR-IND2
+              END-IF
+           END-IF.
+
+       CN-LEER-TABLA.
+      *---------------
+           SET TCX TO 1
+           SEARCH WT-PILOTO
+                  AT END MOVE 0 TO WS-SW-MODIF
+                  WHEN WT-OPERAC (TCX) = OPC-COD-COOC
+                  MOVE 1 TO WS-SW-MODIF
+                  END-SEARCH.
+       CO-LEER-TAB-AUX.
+      *----------------
+           MOVE SPACES       TO TAB-VALUE
+           MOVE 'AUX'        TO TAB-COD-TTAB
+           MOVE OPC-COD-COOC TO TAB-COD-CTAB
+           MOVE TAB-COD-TABL TO TAB-VALUE
+           MOVE 'REDKY'      TO TAB-COMMAND
+           MOVE 'TAB00'      TO TAB-KEY
+           CALL 'DBNTRY' USING UIB REQ-AREA-TAB TAB ELEM-LIST-TAB.
+           IF TAB-RET-COD = SPACES
+              MOVE 0 TO WS-SW-TAB
+           ELSE
+              DISPLAY 'NO ACCESO TABLA TAB   CLAVE:' TAB-VALUE
+              MOVE 1 TO WS-SW-TAB.
+       CX-DESPLEGAR-MENSAJES.
+      *----------------------
+              DISPLAY 'ERROR EN LA SECCION  :' WR-SECCION
+              DISPLAY '            PARRAFO  :' WR-PARRAFO
+              DISPLAY '            OPERACION:' WR-OPERACION
+              DISPLAY '            STATUS   :' WR-STATUS
+              DISPLAY '            CLAVE    :' WR-CLAVE.
+              DISPLAY 'PROCESO CONTINUA'.
+
+       CZ-FIN-DE-SECCION.
+      *-----------------
+           EXIT.
+       DB-IMPRIMIR.
+      *----------
+           PERFORM DC-RTN-IMPRESION.
+           RETURN SORTWK AT END MOVE 'FIN' TO WS-FIN-SORT.
+       DC-RTN-IMPRESION.
+      *---------------
+           PERFORM DF-IMPRIME-LINEA-BASE-DATOS
+           MOVE SPACES      TO LINEA
+           WRITE LINEA      AFTER 1
+           ADD 1 TO WR-CL.
+
+       DD-ENCABEZADO.
+      *--------------
+      **   PERFORM DE-LEER-SUCURSAL.
+           ADD 1   TO WR-CP.
+           MOVE WR-CP TO PAG-T1
+           MOVE SOR-MONEDA TO MONEDA-2B
+           MOVE SOR-CLASE  TO CLASE-2B
+           MOVE SOR-GLOSA  TO GLOSA-2B
+           WRITE LINEA FROM TIT-1 AFTER CANAL-1
+           WRITE LINEA FROM TIT-2 AFTER 1
+           WRITE LINEA FROM TIT-2A AFTER 1
+           WRITE LINEA FROM TIT-2B AFTER 1
+           WRITE LINEA FROM RAYA  AFTER 1
+           WRITE LINEA FROM TIT-3 AFTER 2
+           WRITE LINEA FROM TIT-4 AFTER 2
+           WRITE LINEA FROM RAYA  AFTER 1
+           MOVE 11 TO WR-CL.
+
+      *DE-LEER-SUCURSAL.
+      *---------------
+      *      MOVE SOR-SUCURSAL TO SUC-CLAVE
+      *      READ SUC-SUCURSAL
+      *      IF FS-SUCURSAL NOT = 0
+      *         THEN
+      *          DISPLAY 'ERROR AL LEER SUCURSAL:' FS-SUCURSAL
+      *          DISPLAY 'CLAVE:' SUC-CLAVE
+      *          MOVE SPACES TO SUC-SALIDA
+      *         ELSE
+      *          MOVE SUC-NOMBRE TO SUC-SALIDA.
+       DF-IMPRIME-LINEA-BASE-DATOS.
+      *-----------------------------
+           ADD 1 TO WA-REG-SORT-LEI
+           IF WR-CL > 60
+              PERFORM DD-ENCABEZADO.
+              MOVE SOR-NOMBRE        TO NOMBRE-01
+              MOVE SOR-RUT-DD-DIG    TO RUT-01
+              MOVE SOR-RUT-DD-VER    TO DV-01
+              MOVE SOR-CLAVE         TO OPERACION-01
+              MOVE SOR-SALDO-ANTER   TO SALDO-ANT-01
+              IF SOR-FECHA-CANCEL < WP-FECHA-CANCEL
+                 MOVE 0 TO SOR-ABONO-CAPIT
+                 MOVE 0 TO SOR-INTERESES.
+              MOVE SOR-ABONO-CAPIT   TO ABONO-01
+              MOVE SOR-INTERESES     TO INTERESES-01
+              MOVE SOR-SALDO-ACTUAL  TO SALDO-ACTUAL-01
+              MOVE SOR-CUOT-PAGADAS  TO PAGADAS-01
+              MOVE SOR-CUOT-ORIG     TO ORIG-01
+              MOVE SOR-ANO-02        TO ANO-01
+              MOVE SOR-MES-01        TO MES-01
+              MOVE SOR-DIA-01        TO DIA-01
+           IF WS-SW-1 = 0
+              MOVE 1 TO WS-SW-1
+              MOVE SOR-CLAVE-2  TO WR-COD-ANT.
+
+           IF SOR-CLAVE-2 NOT = WR-COD-ANT
+             MOVE WA-TOT-CREDITOS  TO TOT-CRED-01
+             MOVE WA-TOT-SALDO-ANT TO TOT-SALDO-ANT-01
+             MOVE WA-TOT-SALDO-ACT TO TOT-SALDO-ACTUAL-01
+             MOVE WA-TOT-ABONO-CAP TO TOT-ABONO-01
+             MOVE WA-TOT-INTERES   TO TOT-INTERES-01
+             WRITE LINEA FROM LTOTAL-01  AFTER 2
+             WRITE LINEA FROM LTOTAL-02  AFTER 1
+             PERFORM DD-ENCABEZADO
+             MOVE 0 TO WA-TOT-CREDITOS
+             MOVE 0 TO WA-TOT-SALDO-ANT
+             MOVE 0 TO WA-TOT-SALDO-ACT
+             MOVE 0 TO WA-TOT-ABONO-CAP
+             MOVE 0 TO WA-TOT-INTERES.
+
+               WRITE LINEA FROM DETA-01   AFTER 1
+               ADD 1 TO WR-CL
+               WRITE LINEA FROM DETA-02   AFTER 1
+               ADD 1 TO WR-CL
+              ADD SOR-SALDO-ANTER    TO WA-TOT-SALDO-ANT
+              ADD SOR-ABONO-CAPIT    TO WA-TOT-ABONO-CAP
+              ADD SOR-SALDO-ACTUAL   TO WA-TOT-SALDO-ACT
+              ADD SOR-INTERESES      TO WA-TOT-INTERES
+              ADD 1 TO WA-TOT-CREDITOS.
+              MOVE SOR-CLAVE-2 TO WR-COD-ANT.
+
+
+           EJECT
+       E-TERMINAR SECTION.
+      *==================
+       EA-CONTROL.
+      *----------
+           PERFORM EB-TOTALES.
+      *    IF WS-RETURN-CODE NOT = 100
+              PERFORM EC-CERRAR-ARCHIVOS
+      *    END-IF
+           PERFORM ED-FIN-PROGRAMA.
+           GO TO EZ-FIN-DE-SECCION.
+           SKIP1
+       EB-TOTALES.
+      *----------
+           DISPLAY ' '
+           DISPLAY '+---------------------------------------------+'
+           DISPLAY '+ ESTADISTICAS DE PROCESO.  PROGRAMA COLPB645 +'
+           DISPLAY '+---------------------------------------------+'
+           DISPLAY '          FECHA : ' FECHA-PROCESO.
+           DISPLAY '+---------------------------------------------+'
+           DISPLAY 'REG. OPC LEIDOS.........  : ' WA-OPC-LEIDOS
+           DISPLAY 'REG. OPC SELECCIONADOS..  : ' WA-OPC-SELECCIONADOS
+           DISPLAY 'REG. CAN LEIDOS.........  : ' WA-CAN-LEIDOS
+           DISPLAY 'REG. RCV LEIDOS.........  : ' WA-RCV-LEIDOS
+           DISPLAY 'REG. RDC LEIDOS.........  : ' WA-RDC-LEIDOS
+           DISPLAY 'REG. DBC LEIDOS.........  : ' WA-DBC-LEIDOS
+           DISPLAY 'REG. GRABADOS AL SORT...  : ' WA-REG-SORT-GRA.
+           DISPLAY 'REG. LEIDOS DEL SORT....  : ' WA-REG-SORT-LEI.
+           SKIP1
+       EC-CERRAR-ARCHIVOS.
+      *------------------
+           CLOSE LISTADO TAR-TARJETA.
+           SKIP1
+       ED-FIN-PROGRAMA.
+      *---------------
+           DISPLAY ' '
+           DISPLAY '+-------------------------------------------+'
+           DISPLAY '+ MENSAJES PARA EL EXPLOTADOR               +'
+           DISPLAY '+-------------------------------------------+'
+           IF WS-RETURN-CODE = 100
+              MOVE 100 TO RETURN-CODE
+              DISPLAY ' HAY MENSAJES PARA EL EXPLOTADOR'
+              DISPLAY ' '
+              DISPLAY ' '
+              DISPLAY ' '
+              DISPLAY '************************************************'
+              DISPLAY '************************************************'
+              DISPLAY '****                                        ****'
+              DISPLAY '****      TERMINO ERRONEO DEL PROCESO       ****'
+              DISPLAY '****                                        ****'
+              DISPLAY '************************************************'
+              DISPLAY '************************************************'
+              DISPLAY 'EL ERROR FUE EN LA SECCION   ' WR-SECCION
+              DISPLAY '                   PARRAFO   ' WR-PARRAFO
+              DISPLAY '                   OPERACION ' WR-OPERACION
+              DISPLAY '                   STATUS    ' WR-STATUS
+              DISPLAY '                   CLAVE     ' WR-CLAVE
+           ELSE
+              DISPLAY ' NO HAY MENSAJES PARA EL EXPLOTADOR'
+              DISPLAY ' '
+              DISPLAY ' '
+              DISPLAY ' '
+              DISPLAY '*** PROCESO TERMINO EN FORMA NORMAL ***'
+           END-IF.
+           SKIP1
+       EZ-FIN-DE-SECCION.
+      *-----------------
+           EXIT.
+           EJECT

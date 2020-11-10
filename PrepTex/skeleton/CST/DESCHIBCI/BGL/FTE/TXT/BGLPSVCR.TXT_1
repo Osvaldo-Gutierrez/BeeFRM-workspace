@@ -1,0 +1,579 @@
+       IDENTIFICATION DIVISION.
+      *=======================
+       PROGRAM-ID.     BGLPSVCR.
+       AUTHOR.          CONSIST.
+
+      * OBTIENE TOTAL VALORIZADO (CON INT DEVENGADOS) DE LOS CREDITOS DE
+      *    UN CLIENTE GARANTIZADOS EN FORMA ESPECIFICA
+      * RECIBE
+      *         05  DBC-KEY-IDBC.
+      *             07 DBC-CAI-ICLI
+      *             07 DBC-IIC-ICLI
+      *         05  VCR-CIC-GTIA.
+      *             07 VCR-CAI-GTIA
+      *             07 VCR-IIC-GTIA
+      *         05 VCR-QIDD
+      *         05 VCR-LIDD
+      * EN IBM RECIBE
+      *     03  VCR-PROG
+      *     03  VCR-TCMA
+      * EN VAX SUPONE ABIERTO ARCHIVO GES (GTIA ESPECIFICA)
+
+      * DEVUELVE
+      *         05  CLI-VAL-DEUD
+      *         05  VCR-COD-SIST
+      *         05  VCR-COD-MENS
+
+      * SI HAY UN ERROR DEVUELVE MSG-COD-MENS CON EL CODIGO DEL MENSAJE
+      * EL ERROR SE MANEJA EN PROGRAMA LLAMADOR
+
+       ENVIRONMENT DIVISION.
+      *====================
+       CONFIGURATION SECTION.
+      *----------------------
+       SPECIAL-NAMES.
+               DECIMAL-POINT IS COMMA.
+
+       DATA DIVISION.
+      *=============
+
+       WORKING-STORAGE SECTION.
+      *-----------------------
+       COPY GNSBRTAB.
+       COPY GNSBRMSC.
+       COPY GNSBRMSG.
+       COPY GNSWCFIO.
+       COPY GNSWVFIO.
+       COPY GNSWGHOY.
+       COPY GNSWGSYS.
+       COPY GNSWGFRM.
+
+       COPY GNSWVIDD.
+       01  SCR-VARI.
+           03 SCR-SIST             VALUE 'BGL' PIC X(03).
+           03 SCR-QIDD                         PIC X(08).
+           03 SCR-LIDD                    COMP PIC S9(04).
+
+       COPY BGLBRGES.
+
+       COPY COLBRRDC.
+       COPY COLBROPC.
+       COPY COLBRDLC.
+       COPY COLBRICG.
+
+       COPY COLWGINT.
+
+       COPY TABBRCAM.
+
+       COPY BGLWGVCR.
+       COPY GNSWGFEC.
+
+       COPY GNSWGRQA.
+       COPY GNSWGUIB.
+       COPY GNSWGELS.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-TAB-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-MSG-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-MSC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-CAM-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-GES-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-RDC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-OPC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-DLC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-ICC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-ICG-REQA==.
+       01  WSS-VARI.
+           03 WSS-DLC-RDC                         PIC X(01).
+           03 WSS-IND-RDC                         PIC 9(01).
+           03 WSS-VAL-DIFE    VALUE ZEROES        PIC S9(11).
+           03 PGM-STAT-ADIC.
+              05 PGM-STAT-GES.
+                 88 PGM-STAT-GES-NUL VALUE '  '.
+                 07 PGM-STT1-GES        VALUE '2' PIC X(01).
+                    88 PGM-STAT-GES-OKS VALUE '0'.
+                 07 PGM-STT2-GES        VALUE '3' PIC X(01).
+
+       LINKAGE SECTION.
+      *---------------
+       01  DFHCOMMAREA.
+           02 FILLER                               PIC X(206).
+       COPY GNSLGFIO.
+
+       PROCEDURE DIVISION.
+      *===================
+       MAIN SECTION.
+      *------------
+       INI-MAIN.
+           PERFORM INI.
+
+           MOVE VCR-CIC-GTIA IN VCR-VARI TO GES-CIC-GTIA IN GES.
+           MOVE ZEROES                   TO GES-NUM-IGES IN GES.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM BGL-FIO-GES.
+           MOVE FIO-STAT TO PGM-STAT-GES.
+           IF NOT (
+              FIO-STAT-OKS AND
+              VCR-CIC-GTIA IN VCR-VARI = GES-CIC-GTIA IN GES
+                  )
+               MOVE 'BGL'          TO MSG-COD-SIST
+               MOVE 'GES    NEX'   TO MSG-COD-MENS
+               GO TO FIN-MAIN.
+
+      * ESPECIFICA A OPC INDIVIDUALES, PUEDEN SER N GES
+           IF GES-IIC-IOPC IN GES > ZEROES
+               MOVE 'N' TO WSS-DLC-RDC.
+       LUP-MAIN.
+      * ASUME PORCENTAJE = 100%
+           IF GES-SGV-PLCR IN GES NOT > ZEROES
+               MOVE 100 TO GES-SGV-PLCR IN GES.
+
+      * TRANSFORMA MONTO LIMITE A PESOS DEL DIA
+           IF GES-SGV-VLCR IN GES > ZEROES AND
+              GES-COD-MVLC IN GES NOT = VCR-COD-PESO IN VCR-VARI
+               MOVE GES-COD-MVLC IN GES TO CAM-COD-VCAM IN CAM(1)
+               MOVE FIO-GET-KEY TO FIO-CMND
+               PERFORM TAB-FIO-CAM
+               IF NOT (
+                  FIO-STAT-OKS AND CAM-IND-VIGE IN CAM = 'S'
+                     )
+                   MOVE 'TAB'        TO MSG-COD-SIST
+                   MOVE 'CAM    NEX' TO MSG-COD-MENS
+                   GO TO FIN-MAIN
+               ELSE
+                   MULTIPLY CAM-SGV-VCAM IN CAM BY
+                            GES-SGV-VLCR IN GES GIVING
+                            GES-SGV-VLCR IN GES ROUNDED.
+
+      * ESPECIFICA A MUCHAS OPC, SOLO DEBE EXISTIR UN GES
+           IF GES-IIC-IOPC IN GES NOT > ZEROES
+               PERFORM LUP-RDC
+               IF MSG-COD-MENS = SPACES
+      *           CALCULA % LIMITE Y COMPARA MONTO LIMITE DE LA GARANTIA
+                   PERFORM CAL-LIM
+                   GO TO FIN-MAIN
+               ELSE
+                   GO TO FIN-MAIN.
+
+      * ESPECIFICA A UN DLC, PUEDEN EXISTIR VARIOS GES
+           MOVE GES-CAI-IOPC IN GES TO DLC-CAI-IOPC IN DLC.
+           MOVE GES-IIC-IOPC IN GES TO DLC-IIC-IOPC IN DLC.
+           MOVE GES-NUM-IDLC IN GES TO DLC-NUM-IDLC IN DLC.
+      * LEE DOCUMENTO LEGAL DE CREDITO EN COL
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM COL-FIO-DLC.
+           IF NOT FIO-STAT-OKS
+               MOVE 'BGL'          TO MSG-COD-SIST
+               MOVE 'DLC    NEX'   TO MSG-COD-MENS
+               GO TO FIN-MAIN.
+
+           IF DLC-VAL-SDLC IN DLC NOT > ZEROES
+               MOVE 'BGL'            TO MSG-COD-SIST
+               MOVE 'DLC    NOVIG'   TO MSG-COD-MENS
+               GO TO FIN-MAIN.
+
+           MOVE GES-CAI-IOPC IN GES TO OPC-CAI-IOPC IN OPC.
+           MOVE GES-IIC-IOPC IN GES TO OPC-IIC-IOPC IN OPC.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM COL-FIO-OPC.
+           IF NOT FIO-STAT-OKS
+               MOVE 'BGL'          TO MSG-COD-SIST
+               MOVE 'OPC    NEX'   TO MSG-COD-MENS
+               GO TO FIN-MAIN.
+
+           IF OPC-MSC-STAT IN OPC NOT = 'A'
+               MOVE 'BGL'            TO MSG-COD-SIST
+               MOVE 'OPC    NOVIG'   TO MSG-COD-MENS
+               GO TO FIN-MAIN.
+
+      *    BUSCA % PARTICPACION DE CLIENTE EN DOCUMENTO
+           PERFORM BUS-DLC-RDC.
+           IF MSG-COD-MENS > SPACES
+               GO TO FIN-MAIN.
+           IF WSS-IND-RDC = ZEROES
+               GO TO NXT-MAIN.
+
+      * CALCULA VALOR DEL DOCUMENTO Y LO ACUMULA A OTROS DOCUMENTOS
+           PERFORM CAL-VCR.
+
+       NXT-MAIN.
+           IF MSG-COD-MENS > SPACES
+               GO TO FIN-MAIN.
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM BGL-FIO-GES.
+           MOVE FIO-STAT TO PGM-STAT-GES.
+           IF FIO-STAT-OKS AND
+               VCR-CIC-GTIA IN VCR-VARI = GES-CIC-GTIA IN GES
+               GO TO LUP-MAIN.
+           IF WSS-DLC-RDC NOT = 'S'
+               MOVE 'BGL'         TO MSG-COD-SIST
+               MOVE 'GESDLCNORDC' TO MSG-COD-MENS.
+       FIN-MAIN.
+           IF PGM-STAT-GES-OKS
+               MOVE FIO-END-BRW TO FIO-CMND
+               PERFORM BGL-FIO-GES.
+           PERFORM FIN.
+       EXT-MAIN.
+           EXIT.
+
+       LUP-RDC SECTION.
+       INI-LUP-RDC.
+           MOVE DBC-KEY-IDBC IN VCR-VARI TO RDC-CIC-ICLI IN RDC.
+           MOVE SPACES                   TO RDC-CAI-IOPC IN RDC.
+           MOVE ZEROES                   TO RDC-IIC-IOPC IN RDC.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM COL-FIO-RDC.
+           IF NOT (
+              FIO-STAT-OKS AND
+              DBC-KEY-IDBC IN VCR-VARI = RDC-CIC-ICLI IN RDC
+                  )
+               MOVE 'BGL'          TO MSG-COD-SIST
+               MOVE 'RDC    NEX'   TO MSG-COD-MENS
+               GO TO BRW-LUP-RDC.
+       LUP-LUP-RDC.
+      * ESPECIFICA AL TIPO DE DEUDA DIRECTA
+           IF GES-IND-TDEU IN GES = 'D' OR SPACES
+              AND RDC-NUM-IDLC IN RDC > ZEROES
+               GO TO NXT-LUP-RDC.
+
+      * ESPECIFICA AL TIPO DE DEUDA INDIRECTA
+           IF GES-IND-TDEU IN GES = 'I'
+              AND RDC-NUM-IDLC IN RDC = ZEROES
+               GO TO NXT-LUP-RDC.
+
+           MOVE RDC-CIC-IOPC IN RDC TO OPC-CIC-IOPC IN OPC.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM COL-FIO-OPC.
+           IF NOT FIO-STAT-OKS
+               MOVE 'BGL'          TO MSG-COD-SIST
+               MOVE 'OPC    NEX'   TO MSG-COD-MENS
+               GO TO FIN-LUP-RDC.
+
+           IF OPC-MSC-STAT IN OPC NOT = 'A'
+               GO TO NXT-LUP-RDC.
+
+      * ESPECIFICA A UNA MONEDA
+           IF GES-COD-CVCC IN GES > SPACES AND
+              GES-COD-VCMC IN GES NOT = OPC-COD-VCOC IN OPC
+               GO TO NXT-LUP-RDC.
+
+      * ESPECIFICA A UN TIPO DE OPERACION (TIO)
+           IF GES-COD-TOPE IN GES > SPACES AND
+              GES-COD-TOPE IN GES NOT = OPC-COD-TOOC IN OPC
+               GO TO NXT-LUP-RDC.
+
+      * ESPECIFICA A UN COD AUXILIAR DE OPERACION (TIO+AUX)
+           IF GES-COD-SOPE IN GES > SPACES
+              AND (
+                  GES-COD-TOPE IN GES NOT = OPC-COD-TOOC IN OPC OR
+                  GES-COD-SOPE IN GES NOT = OPC-COD-AOOC IN OPC
+                  )
+               GO TO NXT-LUP-RDC.
+
+      * ESPECIFICA A UN DESTINO DEL CREDITO
+           IF GES-COD-DCRE IN GES > SPACES AND
+              GES-COD-DCRE IN GES NOT = OPC-COD-CDOC IN OPC
+               GO TO NXT-LUP-RDC.
+
+      * ESPECIFICA A UN TIPO DE MONEDA
+           IF GES-COD-TVCC IN GES > SPACES AND
+              GES-COD-CVCC IN GES NOT > SPACES AND
+              GES-COD-TVCC IN GES NOT = OPC-MSC-TVOC IN OPC
+               GO TO NXT-LUP-RDC.
+
+      * ESPECIFICA AL TIPO DE DEUDA DIRECTA
+           IF GES-IND-TDEU IN GES = 'D' OR SPACES
+               PERFORM LUP-DLC
+               IF MSG-COD-MENS = SPACES
+                   GO TO NXT-LUP-RDC
+               ELSE
+                   GO TO FIN-LUP-RDC.
+
+      * ESPECIFICA AL TIPO DE DEUDA INDIRECTA
+
+      * BUSCA EL DOCUMENTO LEGAL DE CREDITO
+           MOVE RDC-KEY-IDLC IN RDC TO DLC-KEY-IDLC IN DLC.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM COL-FIO-DLC.
+           IF NOT FIO-STAT-OKS
+               MOVE 'BGL'          TO MSG-COD-SIST
+               MOVE 'DLC    NEX'   TO MSG-COD-MENS
+               GO TO FIN-LUP-RDC.
+
+           PERFORM PRO-DLC.
+
+       NXT-LUP-RDC.
+           IF MSG-COD-MENS = SPACES
+               MOVE FIO-GET-NXT TO FIO-CMND
+               PERFORM COL-FIO-RDC
+               IF FIO-STAT-OKS AND
+                  DBC-KEY-IDBC IN VCR-VARI = RDC-CIC-ICLI IN RDC
+                  GO TO LUP-LUP-RDC.
+       BRW-LUP-RDC.
+           IF FIO-STAT-OKS
+               MOVE FIO-END-BRW TO FIO-CMND
+               PERFORM COL-FIO-RDC.
+       FIN-LUP-RDC.
+           EXIT.
+
+       LUP-DLC SECTION.
+       INI-LUP-DLC.
+      *    BUSCA EL PRIMER DOCUMENTO LEGAL DE CREDITO
+           MOVE RDC-KEY-IDLC IN RDC TO DLC-KEY-IDLC IN DLC.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM COL-FIO-DLC.
+           IF NOT (
+              FIO-STAT-OKS AND
+              DLC-CIC-IOPC IN DLC = OPC-CIC-IOPC IN OPC
+                  )
+               MOVE 'BGL'          TO MSG-COD-SIST
+               MOVE 'DLC    NEX'   TO MSG-COD-MENS
+               GO TO BRW-LUP-DLC.
+       LUP-LUP-DLC.
+           PERFORM PRO-DLC.
+       NXT-LUP-DLC.
+           IF MSG-COD-MENS = SPACES
+               MOVE FIO-GET-NXT TO FIO-CMND
+               PERFORM COL-FIO-DLC
+               IF FIO-STAT-OKS AND
+                  DLC-CIC-IOPC IN DLC = OPC-CIC-IOPC IN OPC
+                   GO TO LUP-LUP-DLC.
+       BRW-LUP-DLC.
+           IF FIO-STAT-OKS
+               MOVE FIO-END-BRW TO FIO-CMND
+               PERFORM COL-FIO-DLC.
+       FIN-LUP-DLC.
+           EXIT.
+
+       PRO-DLC SECTION.
+       INI-PRO-DLC.
+      * OMITE DOCUMENTOS PAGADOS
+           IF DLC-VAL-SDLC IN DLC NOT > ZEROES
+               GO TO FIN-PRO-DLC.
+
+      * CALCULA VALOR DEL DOCUMENTO Y LO ACUMULA A OTROS DOCUMENTOS
+           PERFORM CAL-VCR.
+       FIN-PRO-DLC.
+           EXIT.
+
+       BUS-DLC-RDC SECTION.
+       INI-BUS-DLC-RDC.
+      * BUSCA % DE PARTICIPACION DE CLIENTE EN DOCUMENTO
+      * PARTE SUPONIENDO QUE CLIENTE NO ES DEUDOR DE DOCUMENTO
+           MOVE ZEROES TO WSS-IND-RDC.
+
+           MOVE DLC-KEY-IDLC IN DLC TO RDC-KEY-IDLC IN RDC.
+           MOVE ZEROES              TO RDC-NUM-IDLC IN RDC.
+           MOVE 'RDC-KEY-IDLC' TO FIO-AKEY.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM COL-FIO-RDC.
+           IF NOT (
+              FIO-STAT-OKS AND
+              DLC-CIC-IOPC IN DLC = RDC-CIC-IOPC IN RDC AND
+              RDC-NUM-IDLC IN RDC = ZEROES
+                  )
+      * DLC NO TIENE RDC DIRECTO
+               GO TO BRW-BUS-DLC-RDC.
+       LUP-BUS-DLC-RDC.
+           IF RDC-CIC-ICLI IN RDC = DBC-KEY-IDBC IN VCR-VARI
+               MOVE 'S' TO WSS-DLC-RDC
+               MOVE 1 TO WSS-IND-RDC
+               GO TO BRW-BUS-DLC-RDC.
+
+       NXT-BUS-DLC-RDC.
+           MOVE 'RDC-KEY-IDLC' TO FIO-AKEY.
+           MOVE FIO-GET-NXT TO FIO-CMND
+           PERFORM COL-FIO-RDC.
+           IF FIO-STAT-OKS AND
+              DLC-CIC-IOPC IN DLC = RDC-CIC-IOPC IN RDC AND
+              RDC-NUM-IDLC IN RDC = ZEROES
+               GO TO LUP-BUS-DLC-RDC.
+       BRW-BUS-DLC-RDC.
+           IF FIO-STAT-OKS
+               MOVE 'RDC-KEY-IDLC' TO FIO-AKEY
+               MOVE FIO-END-BRW TO FIO-CMND
+               PERFORM COL-FIO-RDC.
+       FIN-BUS-DLC-RDC.
+           EXIT.
+
+       CAL-VCR SECTION.
+       INI-CAL-VCR.
+      *TASA INTERES             : INT-TIPT
+      *VALOR TASA INFORMADA     : INT-TINT
+      *VALOR DE CAMBIO          : INT-VCAM
+      *FECHA INICIAL PERIODO    : INT-FUNO
+      *FECHA FINAL   PERIODO    : INT-FDOS
+      *FLB CST  8-NOV-1993
+      *INT-FCOL DEBE LLENARSE PARA TASA VARIABLE
+      *FECHA BASA TASA VARIABLE : INT-FBTV ( OPCIONAL )
+      *FECHA DE PROCESO         : INT-FPRO ( LA RUTINA LA OBTIENE)
+           MOVE OPC-CIC-IOPC IN OPC TO INT-IOPC.
+           MOVE DLC-NUM-IDLC IN DLC TO INT-IDLC.
+           MOVE OPC-COD-VCOC IN OPC TO INT-VCAM.
+           MOVE DLC-NUM-DDEV IN DLC TO INT-DUNO.
+           MOVE DLC-NUM-MDEV IN DLC TO INT-MUNO.
+           MOVE DLC-NUM-SDEV IN DLC TO INT-SUNO.
+           MOVE DLC-NUM-ADEV IN DLC TO INT-AUNO.
+      *FLB CST  8-NOV-1993
+           MOVE OPC-NUM-DCOL IN OPC TO INT-DCOL.
+           MOVE OPC-NUM-MCOL IN OPC TO INT-MCOL.
+           MOVE OPC-NUM-SCOL IN OPC TO INT-SCOL.
+           MOVE OPC-NUM-ACOL IN OPC TO INT-ACOL.
+      *FLB CST  8-NOV-1993
+           MOVE HOY-DHOY            TO INT-DBTV.
+           MOVE HOY-MHOY            TO INT-MBTV.
+           MOVE HOY-SHOY            TO INT-SBTV.
+           MOVE HOY-AHOY            TO INT-ABTV.
+           IF HOY-FHOY NOT > DLC-FEC-FMAV IN DLC
+               MOVE HOY-DHOY            TO INT-DDOS
+               MOVE HOY-MHOY            TO INT-MDOS
+               MOVE HOY-SHOY            TO INT-SDOS
+               MOVE HOY-AHOY            TO INT-ADOS
+           ELSE
+               MOVE DLC-NUM-DMAV IN DLC TO INT-DDOS
+               MOVE DLC-NUM-MMAV IN DLC TO INT-MDOS
+               MOVE DLC-NUM-SMAV IN DLC TO INT-SDOS
+               MOVE DLC-NUM-AMAV IN DLC TO INT-ADOS.
+           PERFORM COL-CAL-INT.
+           IF INT-CMSG > SPACES
+               MOVE 'GNS'    TO MSG-COD-SIST
+               MOVE INT-CMSG TO MSG-COD-MENS
+               GO TO FIN-CAL-VCR.
+
+      * BUSCA CAMBIO A PESOS DE MONEDA DE LA OPERACION DE CREDITO
+           IF OPC-COD-VCOC IN OPC NOT = VCR-COD-PESO IN VCR-VARI
+               MOVE OPC-COD-VCOC IN OPC TO CAM-COD-VCAM IN CAM(1)
+               MOVE FIO-GET-KEY TO FIO-CMND
+               PERFORM TAB-FIO-CAM
+               IF NOT (
+                  FIO-STAT-OKS AND CAM-IND-VIGE IN CAM = 'S'
+                     )
+                   MOVE 'TAB'        TO MSG-COD-SIST
+                   MOVE 'CAM    NEX' TO MSG-COD-MENS
+                   GO TO FIN-CAL-VCR
+               ELSE
+                   NEXT SENTENCE
+           ELSE
+               MOVE +1 TO CAM-SGV-VCAM IN CAM.
+
+      * OBTIENE VALOR EN PESOS DEL DIA DE LA PARTE DEL CREDITO PARA
+      * ESE CLIENTE, DEBIDAMENTE VALORIZADA
+           COMPUTE DLC-VAL-SDLC IN DLC ROUNDED =
+                   ( DLC-VAL-IPEN  IN DLC +
+                     DLC-VAL-SDLC  IN DLC * (1 + INT-TIPE )) /
+                   100 * RDC-VAL-LIMD  IN RDC *
+                   CAM-SGV-VCAM IN CAM.
+
+      * GARANTIA ESPECIFICA A DLC, APLICA % LIMITE EN CADA DLC
+           IF GES-IIC-IOPC IN GES > ZEROES
+               IF GES-SGV-PLCR IN GES < 100
+                   COMPUTE DLC-VAL-SDLC IN DLC ROUNDED =
+                           DLC-VAL-SDLC IN DLC / 100 *
+                           GES-SGV-PLCR IN GES.
+
+      * GARANTIA ESPECIFICA A DLC, COMPARA MONTO LIMITE EN CADA DLC
+           IF GES-IIC-IOPC IN GES > ZEROES
+               IF GES-SGV-VLCR IN GES > ZEROES
+                   SUBTRACT GES-SGV-VLCR IN GES FROM
+                            DLC-VAL-SDLC IN DLC GIVING
+                            WSS-VAL-DIFE ROUNDED
+                   IF WSS-VAL-DIFE > ZEROES
+                       MOVE GES-SGV-VLCR IN GES TO
+                            DLC-VAL-SDLC IN DLC.
+
+      * ACUMULA EN PESOS EL VALOR DEL DLC GARANTIZADO
+           COMPUTE CLI-VAL-DEUD IN VCR-VARI ROUNDED =
+                   CLI-VAL-DEUD IN VCR-VARI +
+                   DLC-VAL-SDLC  IN DLC.
+       FIN-CAL-VCR.
+           EXIT.
+
+       CAL-LIM SECTION.
+       INI-CAL-LIM.
+      * GARANTIA ESPECIFICA A MUCHAS OPC, APLICA % LIMITE
+           IF GES-SGV-PLCR IN GES < 100
+               COMPUTE CLI-VAL-DEUD IN VCR-VARI ROUNDED =
+                       CLI-VAL-DEUD IN VCR-VARI / 100 *
+                       GES-SGV-PLCR IN GES.
+
+      * GARANTIA ESPECIFICA A MUCHAS OPC, COMPARA MONTO LIMITE
+           IF GES-SGV-VLCR IN GES > ZEROES
+               SUBTRACT GES-SGV-VLCR IN GES FROM
+                        CLI-VAL-DEUD IN VCR-VARI GIVING
+                        WSS-VAL-DIFE ROUNDED
+               IF WSS-VAL-DIFE > ZEROES
+                   MOVE GES-SGV-VLCR IN GES TO
+                        CLI-VAL-DEUD IN VCR-VARI.
+       FIN-CAL-LIM.
+           EXIT.
+
+       INI SECTION.
+       INI-INI.
+       COPY GNSBGEDB.
+           MOVE DFHCOMMAREA(1:EIBCALEN)  TO VCR-CMMA IN VCR-VARI.
+           MOVE VCR-PROG TO FIO-PROG.
+      *FLB 13-ABR-1994, para pasar en COMMAREA las variables que indican
+      *los start-browse para los distintos archivos
+      *( Version VSAM compatible)
+           MOVE VCR-MSFL TO FIO-MSFL.
+      *Buscar Independencia de Datos
+           MOVE VCR-QIDD TO SCR-QIDD.
+           MOVE VCR-LIDD TO SCR-LIDD.
+           PERFORM GNS-BUS-IDD.
+      * Inicializa Variables
+           MOVE ZEROES TO CLI-VAL-DEUD IN VCR-VARI.
+           PERFORM GET-FHOY.
+
+      * Limpia Variables de Retorno
+           MOVE SPACES  TO MSG-COD-SIST
+                           MSG-COD-MENS.
+
+           PERFORM GET-FHOY.
+           MOVE HOY-SHOY                 TO CAM-NUM-SCAM IN CAM(1).
+           MOVE HOY-AHOY                 TO CAM-NUM-ACAM IN CAM(1).
+           MOVE HOY-MHOY                 TO CAM-NUM-MCAM IN CAM(1).
+           MOVE HOY-DHOY                 TO CAM-NUM-DCAM IN CAM(1).
+           MOVE CAM-FEC-FCAM IN CAM(1)   TO CAM-FEC-FCAM IN CAM(2).
+           MOVE VCR-COD-PESO IN VCR-VARI TO CAM-COD-VCAM IN CAM(2).
+       FIN-INI.
+           EXIT.
+
+       FIN SECTION.
+       INI-FIN.
+           MOVE MSG-COD-SIST TO VCR-COD-SIST IN VCR-VARI.
+           MOVE MSG-COD-MENS TO VCR-COD-MENS IN VCR-VARI.
+      *FLB 13-ABR-1994, para pasar en COMMAREA las variables que indican
+      *los start-browse para los distintos archivos
+      *( Version VSAM compatible)
+           MOVE FIO-MSFL TO VCR-MSFL.
+           MOVE VCR-CMMA IN VCR-VARI TO DFHCOMMAREA.
+           MOVE +0 TO EIBRESP.
+       COPY GNSBGGBK.
+       FIN-FIN.
+           EXIT.
+
+       COPY GNSBGSYS.
+       COPY GNSBGHOY.
+       COPY GNSBBTAB.
+       COPY GNSBBIDD.
+       COPY GNSBGDTC.
+       COPY GNSBGVSM.
+       COPY GNSBGMSG.
+       COPY GNSBIABT.
+
+       COPY GNSBFTAB.
+       COPY GNSBFMSC.
+       COPY GNSBFMSG.
+
+       COPY BGLBFGES.
+
+       COPY COLBFRDC.
+       COPY COLBFOPC.
+       COPY COLBFDLC.
+       COPY COLBFICG.
+
+       COPY COLBGINT.
+
+       COPY TABBFCAM.
+
+       COPY GNSBGFEC.
+       COPY GNSBPFEC.
+

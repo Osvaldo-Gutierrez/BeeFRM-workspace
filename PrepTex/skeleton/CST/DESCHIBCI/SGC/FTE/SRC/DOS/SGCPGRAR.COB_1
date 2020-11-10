@@ -1,0 +1,175 @@
+       IDENTIFICATION DIVISION.
+      *=======================
+       PROGRAM-ID.      SGCPGRAR.
+       AUTHOR.          CONSIST.
+       DATE-WRITTEN.    18-Ago-93 04:46 PM.
+
+      * Programa que Reformatea campo REC-COD-AREC de la tabla REC
+
+       ENVIRONMENT DIVISION.
+      *====================
+       CONFIGURATION SECTION.
+      *---------------------
+       SPECIAL-NAMES.
+            DECIMAL-POINT IS COMMA.
+
+       DATA DIVISION.
+      *=============
+       WORKING-STORAGE SECTION.
+      *-----------------------
+      *<<<< WSS_DTC
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-TAB-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-MSG-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-REC-REQA==.
+      *>>>>
+      *<<<< WSS
+       COPY GNSBRTAB.
+       COPY GNSBRMSG.
+       COPY SGCBRREC.
+
+       COPY GNSWGRQA.
+       COPY GNSWGUIB.
+       COPY GNSWGELS.
+       COPY GNSWVIDD.
+       COPY GNSWCFIO.
+       COPY GNSWVFIO.
+       COPY GNSWGSYS.
+
+       01  WSS-VARI.
+           03 WSS-OLD-AREC.
+              05 WSS-OLD-CODI                     PIC X(03).
+              05 WSS-OLD-FIL2                     PIC X(02).
+           03 WSS-NEW-AREC.
+              05 WSS-NEW-FIL1       VALUE '00'    PIC X(02).
+              05 WSS-NEW-CODI                     PIC X(03).
+           03 WSS-IND-ERRO                        PIC 9(01).
+           03 WSS-CONT.
+              05 WSS-NUM-REGL                     PIC 9(06).
+              05 WSS-NUM-REGP                     PIC 9(06).
+              05 WSS-NUM-REGM                     PIC 9(06).
+              05 WSS-NUM-REGR                     PIC 9(06).
+              05 WSS-NUM-CHKP                     PIC 9(06).
+      *>>>>
+
+
+       PROCEDURE DIVISION.
+      *==================
+       MAIN SECTION.
+      *------------
+       INI-MAIN.
+       COPY GNSBGEDB.
+           MOVE 'SGCPGRAR' TO FIO-PROG.
+           PERFORM GNS-BUS-IDD.
+
+      * Inicializa Variables
+           MOVE ZEROES TO WSS-CONT IN WSS-VARI.
+
+      * Efectua la Apertura de Archivos
+           MOVE FIO-UPD TO FIO-CMND.
+           PERFORM SGC-FIO-REC.
+
+           DISPLAY 'INICIO PROCESO DE REFORMATEO'.
+
+      * Lectura Inicial de Clientes en REC
+           MOVE FIO-GET-FST TO FIO-CMND.
+           PERFORM SGC-FIO-REC.
+           IF NOT FIO-STAT-OKS
+               DISPLAY 'NO EXISTEN RELACIONES : '
+               PERFORM GNS-PRO-ABT.
+       LUP-MAIN.
+           ADD  1  TO WSS-NUM-REGL IN WSS-VARI.
+
+      * Proceso actualiza Codigo Asociado a la Relacion en REC (Reformateo)
+           MOVE  0  TO WSS-IND-ERRO IN WSS-VARI.
+           IF NOT ( REC-COD-TREC IN REC = 'PR' OR
+                    REC-COD-TREC IN REC = 'RB' )
+               GO TO NXT-MAIN.
+
+           MOVE FIO-GET-KEY-UPD TO FIO-CMND.
+           PERFORM SGC-FIO-REC.
+           IF NOT FIO-STAT-OKS
+               ADD  1  TO WSS-NUM-REGR IN WSS-VARI
+               DISPLAY 'ERROR: NO PUDO TOMAR DE UPD REGISTRO REC -'
+                       ' KEY :' REC-KEY-IREC IN REC
+               GO TO NXT-MAIN.
+
+           ADD  1  TO WSS-NUM-REGP IN WSS-VARI.
+           MOVE REC-COD-AREC IN REC TO WSS-OLD-AREC IN WSS-VARI.
+           IF WSS-OLD-AREC IN WSS-VARI NUMERIC OR
+              WSS-OLD-CODI IN WSS-VARI NOT NUMERIC
+               MOVE FIO-ULK-REC TO FIO-CMND
+               PERFORM SGC-FIO-REC
+               IF NOT FIO-STAT-OKS
+                   ADD  1  TO WSS-NUM-REGR IN WSS-VARI
+                   DISPLAY 'ERROR: NO PUDO LIBERAR UPD REGISTRO REC -'
+                           ' KEY :' REC-KEY-IREC IN REC
+                   GO TO NXT-MAIN
+               ELSE
+                   GO TO NXT-MAIN.
+
+           MOVE WSS-OLD-CODI IN WSS-VARI TO WSS-NEW-CODI IN WSS-VARI.
+           MOVE WSS-NEW-AREC IN WSS-VARI TO REC-COD-AREC IN REC.
+           MOVE FIO-MOD TO FIO-CMND.
+           PERFORM SGC-FIO-REC.
+           IF NOT FIO-STAT-OKS
+               MOVE  1  TO WSS-IND-ERRO IN WSS-VARI
+               DISPLAY 'ERROR AL MODIFICAR RELACION EN REC -'
+                       ' KEY :' REC-KEY-IREC IN REC
+               GO TO CHK-MAIN.
+           ADD  1  TO WSS-NUM-REGM IN WSS-VARI.
+       CHK-MAIN.
+           IF WSS-IND-ERRO IN WSS-VARI = 1
+               ADD  1  TO WSS-NUM-REGR IN WSS-VARI
+               MOVE FIO-BCK-OUT TO FIO-CMND
+               PERFORM SGC-FIO-REC
+               GO TO NXT-MAIN.
+
+      * Proceso de CHK-PNT para los registros Procesados
+           ADD  1  TO WSS-NUM-CHKP IN WSS-VARI.
+           IF WSS-NUM-CHKP IN WSS-VARI = 9
+               MOVE FIO-CHK-PNT TO FIO-CMND
+               PERFORM SGC-FIO-REC
+               GO TO NXT-MAIN.
+       NXT-MAIN.
+      * Siguiente lectura de Relacion de Clientes
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM SGC-FIO-REC.
+           IF NOT FIO-STAT-OKS
+               GO TO FIN-MAIN.
+           GO TO LUP-MAIN.
+       FIN-MAIN.
+           DISPLAY 'TERMINO  PROCESO DE REFORMATEO'.
+
+      * Efectua la Clausura de Archivos
+           MOVE FIO-CLO TO FIO-CMND.
+           PERFORM SGC-FIO-REC.
+
+      * Despliegue de los Totales de Control
+           DISPLAY 'LOS REGISTROS LEIDOS          SON : '
+                    WSS-NUM-REGL IN WSS-VARI.
+           DISPLAY 'LOS REGISTROS PROCESADOS  OK. SON : '
+                    WSS-NUM-REGP IN WSS-VARI.
+           DISPLAY 'LOS REGISTROS MODIFICADOS OK. SON : '
+                    WSS-NUM-REGM IN WSS-VARI.
+           DISPLAY 'LOS REGISTROS RECHAZADOS      SON : '
+                    WSS-NUM-REGR IN WSS-VARI.
+
+      * Termino del Proceso
+           PERFORM GNS-PRO-END.
+      **************************************************************************
+      *<<<< EOF
+       COPY GNSBFTAB.
+       COPY GNSBFMSG.
+       COPY SGCBFREC.
+
+       COPY GNSBBMSG.
+       COPY GNSBBTAB.
+       COPY GNSBVTAB.
+
+       COPY GNSBGDTC.
+       COPY GNSBGIDD.
+       COPY GNSBTABT.
+       COPY GNSBBSYS.
+       COPY GNSBGEND.
+       COPY GNSBGABT.
+      *>>>>

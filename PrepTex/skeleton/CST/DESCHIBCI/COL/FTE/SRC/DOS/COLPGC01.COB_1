@@ -1,0 +1,443 @@
+       IDENTIFICATION DIVISION.
+      *************************
+       PROGRAM-ID.     COLPGC01.
+      *AUTHOR.         DONOSO JARA OSVALDO.
+      *                DATE-WRITTEN,  17/07/92.
+      ******************************************************************
+      *  INTERSOFT                                                     *
+      *  MIGRACION A COBOL OS/390                                      *
+      *  FECHA: 30 DE MARZO DE 1998                                    *
+      ******************************************************************
+      ******************************************************************
+      *  Sistema  : Colocaciones                                       *
+      *  Subsist. : Lineas de Avances                                  *
+      *  Analista : Retamal Pablo.                                     *
+      *  Objetivo : Actualizar maestro cartolas con cargos, abonos e   *
+      *             impuestos                                          *
+      *  Archivos :                                                    *
+      *   Entrada : COLVPAR, Registro de parametros                    *
+      *             COLVIMO, Archivos impuestos y mvtos                *
+      *                                                                *
+      *   Salida  :                                                    *
+      *                                                                *
+      *   Ent/Sal : COLMCAR, Maestro cartolas LDA                      *
+      *                                                                *
+      *   Trabajo :                                                    *
+      *                                                                *
+      *  Mantenciones                                                  *
+      *  ============                                                  *
+      *            Programador: ...........................            *
+      *            Fecha      : dd/mm/aa                               *
+      *            Cambio     : .....................................  *
+      *                         .....................................  *
+      *                         .....................................  *
+      ******************************************************************
+           EJECT
+       ENVIRONMENT DIVISION.
+      **********************
+       CONFIGURATION SECTION.
+      *=====================
+       SPECIAL-NAMES.
+                      DECIMAL-POINT IS COMMA.
+       INPUT-OUTPUT SECTION.
+      *=====================
+       FILE-CONTROL.
+           SELECT COLVPAR ASSIGN       TO COLVPAR
+                  FILE STATUS          IS WR-FS-COLVPAR.
+           SELECT COLVIMO ASSIGN       TO DA-S-COLVIMO
+                  FILE STATUS          IS WR-FS-COLVIMO.
+           SELECT COLMCAR ASSIGN       TO COLMCAR
+                  ORGANIZATION         IS INDEXED
+                  ACCESS               IS RANDOM
+                  RECORD KEY           IS CAR-CLAVE-LDA
+                  FILE STATUS          IS WR-FS-COLMCAR.
+           EJECT
+       DATA DIVISION.
+      *==============
+           SKIP3
+       FILE SECTION.
+      *=============
+       FD  COLVPAR
+           RECORD CONTAINS 080 CHARACTERS
+           LABEL RECORD IS STANDARD.
+       01  COLRPAR.
+           02 FILLER                        PIC X(20).
+           02 PAR-FEC-PRO                   PIC X(08).
+           02 FILLER                        PIC X(20).
+           02 PAR-IND-BOR                   PIC X(02).
+           02 FILLER                        PIC X(30).
+           SKIP1
+       FD  COLMCAR.
+       COPY COLMCAR.
+           SKIP1
+       FD  COLVIMO
+           RECORD CONTAINS 128 CHARACTERS
+           BLOCK CONTAINS 0 RECORDS
+           LABEL RECORD IS STANDARD.
+       COPY COLVIMO.
+           SKIP1
+       WORKING-STORAGE SECTION.
+      *========================
+       01  W-SWITCHES.
+           05 WS-PROCESO                    PIC 9(01) VALUE 0.
+              88 WS-PROCESO-OK                        VALUE 0.
+              88 WS-PROCESO-NO-OK                     VALUE 1.
+              88 WS-PROCESO-WARNING                   VALUE 2.
+           SKIP1
+       01  W-CONTADORES-Y-ACUMULADORES.
+           05 WA-L-IMO                      PIC 9(06) VALUE 0.
+           05 WA-G-CAR                      PIC 9(06) VALUE 0.
+           05 WA-NUM-IMPTO                  PIC 9(02) VALUE 0.
+           SKIP1
+       01  W-REGISTROS-DE-TRABAJO.
+           05 WR-FECHA-HOY.
+              10 WR-HOY-AA                  PIC X(02).
+              10 WR-HOY-MM                  PIC X(02).
+              10 WR-HOY-DD                  PIC X(02).
+           05 WR-MENSAJES.
+              10 WR-SECCION                 PIC X(15).
+              10 WR-PARRAFO                 PIC X(15).
+              10 WR-ARCHIVO                 PIC X(10).
+              10 WR-OPERACI                 PIC X(20).
+              10 WR-FILE-ST                 PIC X(02).
+              10 WR-MENSAJE                 PIC X(35).
+           05 WR-FS-COLMCAR                 PIC 9(02) VALUE 0.
+           05 WR-FS-COLVPAR                 PIC 9(02) VALUE 0.
+           05 WR-FS-COLVIMO                 PIC 9(02) VALUE 0.
+           05 WR-VAL-REAJUS                 PIC S9(11)V9(04).
+           05 WR-PARAM-RUTUFECH.
+              10 WR-RUTU-FECH.
+                 15 WR-RUTU-ANO             PIC 9999.
+                 15 WR-RUTU-MES             PIC 99.
+                 15 WR-RUTU-DIA             PIC 99.
+              10 WR-RUTU-SN                 PIC X.
+              10 WR-RUTU-HABANT             PIC 9(08) VALUE 0.
+              10 WR-RUTU-HABPOS             PIC 9(08) VALUE 0.
+              10 WR-RUTU-CODRET             PIC 9     VALUE 0.
+           EJECT
+       PROCEDURE DIVISION.
+      *===================
+       A-CONTROL SECTION.
+      *=================
+       AA-INICIALIZACION.
+           PERFORM B-INICIALIZAR.
+           SKIP1
+       AB-PROCESAMIENTO.
+           IF WS-PROCESO-OK
+              PERFORM C-PROCESAR
+           END-IF.
+           SKIP1
+       AC-TERMINACION.
+           PERFORM D-TERMINAR.
+           SKIP1
+       AZ-FIN-DE-PROCESO.
+           STOP RUN.
+           EJECT
+       B-INICIALIZAR SECTION.
+      *======================
+       BA-PROC-PPAL.
+      *-------------
+           PERFORM BB-ABRIR-ARCHIVOS.
+           PERFORM BC-VALIDA-PARAMETRO.
+           GO BZ-FIN-DE-SECCION.
+       BB-ABRIR-ARCHIVOS.
+      *------------------
+           OPEN INPUT  COLVPAR
+                       COLVIMO
+                I-O    COLMCAR.
+
+           IF (WR-FS-COLMCAR NOT = 0 AND NOT = 97)
+               MOVE 'B-INICIALIZAR'         TO WR-SECCION
+               MOVE 'BB-ABRIR-ARCHIVOS'     TO WR-PARRAFO
+               MOVE 'COLMCAR    '           TO WR-ARCHIVO
+               MOVE 'OPEN       '           TO WR-OPERACI
+               MOVE WR-FS-COLMCAR           TO WR-FILE-ST
+               PERFORM BD-DISPLAY-ERROR
+           END-IF.
+           IF (WR-FS-COLVPAR NOT = 0 AND NOT = 97)
+               MOVE 'B-INICIALIZAR'         TO WR-SECCION
+               MOVE 'BB-ABRIR-ARCHIVOS'     TO WR-PARRAFO
+               MOVE 'COLVPAR    '           TO WR-ARCHIVO
+               MOVE 'OPEN       '           TO WR-OPERACI
+               MOVE WR-FS-COLVPAR           TO WR-FILE-ST
+               PERFORM BD-DISPLAY-ERROR
+           END-IF.
+           IF (WR-FS-COLVIMO NOT = 0 AND NOT = 97)
+               MOVE 'B-INICIALIZAR'         TO WR-SECCION
+               MOVE 'BB-ABRIR-ARCHIVOS'     TO WR-PARRAFO
+               MOVE 'COLVIMO    '           TO WR-ARCHIVO
+               MOVE 'OPEN       '           TO WR-OPERACI
+               MOVE WR-FS-COLVIMO           TO WR-FILE-ST
+               PERFORM BD-DISPLAY-ERROR
+           END-IF.
+           SKIP1
+       BC-VALIDA-PARAMETRO.
+      *--------------------
+           PERFORM BF-LEER-COLVPAR.
+           MOVE PAR-FEC-PRO                 TO WR-RUTU-FECH.
+           MOVE ZEROS                       TO WR-RUTU-HABANT
+           MOVE ZEROS                       TO WR-RUTU-HABPOS
+           MOVE ZEROS                       TO WR-RUTU-CODRET
+           MOVE ' '                         TO WR-RUTU-SN
+           CALL 'RUTUFECH' USING  WR-RUTU-FECH   WR-RUTU-SN
+                                  WR-RUTU-HABANT WR-RUTU-HABPOS
+                                  WR-RUTU-CODRET
+           IF (WR-RUTU-CODRET NOT = 0)
+               MOVE 'B-INICIALIZAR'         TO WR-SECCION
+               MOVE 'BC-VALIDA-PARAMET'     TO WR-PARRAFO
+               MOVE 'COLVPAR'               TO WR-ARCHIVO
+               MOVE '* FECHA INVALIDA *'    TO WR-MENSAJE
+               MOVE ' '                     TO WR-FILE-ST
+               PERFORM BD-DISPLAY-ERROR
+           END-IF.
+           ACCEPT WR-FECHA-HOY FROM DATE.
+           SKIP1
+       BD-DISPLAY-ERROR.
+      *-----------------
+           SET  WS-PROCESO-NO-OK            TO TRUE
+           DISPLAY ' '
+           DISPLAY 'ERROR EN SECCION  : ' WR-SECCION
+           DISPLAY ' PARRAFO          : ' WR-PARRAFO
+           DISPLAY ' ARCHIVO          : ' WR-ARCHIVO
+           DISPLAY ' OPERACION        : ' WR-OPERACI
+           DISPLAY ' FILE STATUS      : ' WR-FILE-ST
+           DISPLAY ' MENSAJE DE ERROR : ' WR-MENSAJE
+           DISPLAY ' '.
+           SKIP1
+       BF-LEER-COLVPAR.
+      *------------------
+           READ COLVPAR AT END MOVE 10      TO WR-FS-COLVPAR END-READ
+           IF WR-FS-COLVPAR NOT = 0
+              MOVE 'B-INICIALIZAR'          TO WR-SECCION
+              MOVE 'BF-LEER-COLVPAR'        TO WR-PARRAFO
+              MOVE 'COLVPAR    '            TO WR-ARCHIVO
+              MOVE 'READ       '            TO WR-OPERACI
+              MOVE WR-FS-COLVPAR            TO WR-FILE-ST
+              PERFORM BD-DISPLAY-ERROR
+           END-IF.
+           SKIP1
+       BZ-FIN-DE-SECCION.
+      *------------------
+           EXIT.
+           EJECT
+       C-PROCESAR SECTION.
+      *===================
+       CA-PROC-PPAL.
+      *-------------
+           PERFORM CB-LEER-COLVIMO
+           PERFORM CC-ACTUALIZA-CARTOLA
+            UNTIL (WR-FS-COLVIMO NOT = 0 OR WS-PROCESO-NO-OK)
+           GO CZ-FIN-DE-SECCION.
+           SKIP1
+       CB-LEER-COLVIMO.
+      *----------------
+           READ COLVIMO NEXT AT END MOVE 10 TO WR-FS-COLVIMO END-READ
+           IF WR-FS-COLVIMO = 0
+              ADD  1                        TO WA-L-IMO
+           ELSE
+           IF WR-FS-COLVIMO NOT = 10
+              MOVE 'C-PROCESAR'             TO WR-SECCION
+              MOVE 'CB-LEER-COLVIMO'        TO WR-PARRAFO
+              MOVE 'COLVIMO'                TO WR-ARCHIVO
+              MOVE 'READ       '            TO WR-OPERACI
+              MOVE WR-FS-COLVIMO            TO WR-FILE-ST
+              MOVE IMO-CLAVE-LDA            TO WR-MENSAJE
+              PERFORM BD-DISPLAY-ERROR
+           END-IF
+           END-IF.
+           SKIP1
+       CC-ACTUALIZA-CARTOLA.
+      *---------------------
+           MOVE IMO-CLAVE-LDA               TO CAR-CLAVE-LDA
+           PERFORM CE-LEER-COLMCAR
+           IF (WR-FS-COLMCAR = 0)
+
+               MOVE 0                       TO WA-NUM-IMPTO
+               MOVE CAR-SALD-ACT            TO CAR-SALD-ANT
+               MOVE 0                       TO CAR-INTERES
+               MOVE 0                       TO CAR-NRO-COLAS
+               MOVE 0                       TO WR-VAL-REAJUS
+               PERFORM CD-ACUMULA-LLENA-TRAILER
+                UNTIL (IMO-CLAVE-LDA NOT = CAR-CLAVE-LDA OR
+                       WR-FS-COLVIMO NOT = 0 OR WS-PROCESO-NO-OK)
+
+               IF (WS-PROCESO-OK)
+                   IF (WA-NUM-IMPTO = 1)
+                       IF (WR-VAL-REAJUS = CAR-SALD-ACT)
+                           PERFORM CF-GRABAR-COLMCAR
+                       ELSE
+                           PERFORM CH-MAL-VAL-FINAL
+                       END-IF
+                   ELSE
+                       PERFORM CG-MAL-IMPTO
+                   END-IF
+               END-IF
+           END-IF.
+           SKIP1
+       CD-ACUMULA-LLENA-TRAILER.
+      *-------------------------
+           IF (IMO-TIPO-MOV IN IMO-REGISTRO = 'I')
+               ADD 1                        TO  WA-NUM-IMPTO
+               MOVE IMO-MONTO IN IMO-REGISTRO      TO CAR-VAL-IMPTO
+               MOVE IMO-REAJUSTES IN IMO-REGISTRO  TO WR-VAL-REAJUS
+           ELSE
+               ADD  1                              TO CAR-NRO-COLAS
+               MOVE IMO-TIPO-MOV   IN IMO-REGISTRO TO
+                    IMO-TIPO-MOV   IN CAR-REGISTRO(CAR-NRO-COLAS)
+               MOVE IMO-CIC-IOPC   IN IMO-REGISTRO TO
+                    IMO-CIC-IOPC   IN CAR-REGISTRO(CAR-NRO-COLAS)
+               MOVE IMO-FEC-MOV    IN IMO-REGISTRO TO
+                    IMO-FEC-MOV    IN CAR-REGISTRO(CAR-NRO-COLAS)
+               MOVE IMO-MONTO      IN IMO-REGISTRO TO
+                    IMO-MONTO      IN CAR-REGISTRO(CAR-NRO-COLAS)
+               MOVE IMO-SDO-AVANCE IN IMO-REGISTRO TO
+                    IMO-SALDO-OPC  IN CAR-REGISTRO(CAR-NRO-COLAS)
+               MOVE IMO-TASA       IN IMO-REGISTRO TO
+                    IMO-TASA       IN CAR-REGISTRO(CAR-NRO-COLAS)
+               IF (IMO-TIPO-MOV IN IMO-REGISTRO = 'C')
+                   ADD IMO-MONTO      IN IMO-REGISTRO TO
+                   CAR-SALD-ACT       IN CAR-REGISTRO
+                   MOVE 0                             TO
+                   IMO-INTERES        IN CAR-REGISTRO(CAR-NRO-COLAS)
+               ELSE
+                   SUBTRACT IMO-MONTO IN IMO-REGISTRO FROM
+                   CAR-SALD-ACT       IN CAR-REGISTRO
+                   MOVE IMO-INTERES   IN IMO-REGISTRO TO
+                   IMO-INTERES        IN CAR-REGISTRO(CAR-NRO-COLAS)
+                   ADD  IMO-INTERES   IN IMO-REGISTRO TO
+                   CAR-INTERES        IN CAR-REGISTRO
+               END-IF
+           END-IF.
+           PERFORM CB-LEER-COLVIMO.
+           SKIP1
+       CE-LEER-COLMCAR.
+      *----------------
+           READ COLMCAR END-READ.
+           IF (WR-FS-COLMCAR NOT = 0)
+               MOVE 'C-PROCESAR'            TO WR-SECCION
+               MOVE 'CE-LEER-COLMCAR'       TO WR-PARRAFO
+               MOVE 'COLMCAR    '           TO WR-ARCHIVO
+               MOVE 'READ'                  TO WR-OPERACI
+               MOVE WR-FS-COLMCAR           TO WR-FILE-ST
+               MOVE IMO-CLAVE-LDA           TO WR-MENSAJE
+               PERFORM BD-DISPLAY-ERROR
+           END-IF.
+           SKIP1
+       CF-GRABAR-COLMCAR.
+      *------------------
+           ADD  1                           TO CAR-FOLIO
+           MOVE CAR-FEC-SACT                TO CAR-FEC-SANT
+           MOVE PAR-FEC-PRO                 TO CAR-FEC-SACT
+           MOVE PAR-FEC-PRO                 TO CAR-FEC-IMPTO
+           MOVE 'S'                         TO CAR-IND-LISTAR
+           REWRITE CAR-REGISTRO END-REWRITE.
+           IF (WR-FS-COLMCAR = 0)
+               ADD  1                       TO WA-G-CAR
+           ELSE
+               MOVE 'C-PROCESAR'            TO WR-SECCION
+               MOVE 'CF-GRABAR-COLMCAR'     TO WR-PARRAFO
+               MOVE 'COLMCAR    '           TO WR-ARCHIVO
+               MOVE 'REWRITE    '           TO WR-OPERACI
+               MOVE WR-FS-COLMCAR           TO WR-FILE-ST
+               MOVE IMO-CLAVE-LDA           TO WR-MENSAJE
+               PERFORM BD-DISPLAY-ERROR
+           END-IF.
+           SKIP1
+       CG-MAL-IMPTO.
+      *-------------
+           MOVE 'C-PROCESAR'                TO WR-SECCION
+           MOVE 'CG-MAL-IMPTO'              TO WR-PARRAFO
+           MOVE '           '               TO WR-ARCHIVO
+           MOVE CAR-CLAVE-LDA               TO WR-OPERACI
+           MOVE '  '                        TO WR-FILE-ST
+           IF (WA-NUM-IMPTO = 0)
+               MOVE '** MVTOS SIN IMPTO **' TO WR-MENSAJE
+           ELSE
+               MOVE '** MVTOS CON MAS DE UN IMPTO **' TO WR-MENSAJE
+           END-IF.
+           PERFORM BD-DISPLAY-ERROR.
+           SKIP1
+       CH-MAL-VAL-FINAL.
+      *-----------------
+           MOVE 'C-PROCESAR'                TO WR-SECCION
+           MOVE 'CH-MAL-VAL-FINAL'          TO WR-PARRAFO
+           MOVE '           '               TO WR-ARCHIVO
+           MOVE CAR-CLAVE-LDA               TO WR-OPERACI
+           MOVE '  '                        TO WR-FILE-ST
+           MOVE '* SALDO ACTUAL INCORRECTO' TO WR-MENSAJE
+           PERFORM BD-DISPLAY-ERROR.
+           DISPLAY ' '.
+           DISPLAY ' VALOR INFROMADO : ' WR-VAL-REAJUS
+           DISPLAY ' VALOR CALCULADO : ' CAR-SALD-ACT.
+           SKIP1
+       CZ-FIN-DE-SECCION.
+      *------------------
+           EXIT.
+           EJECT
+       D-TERMINAR SECTION.
+      *===================
+       DB-ESTADISTICAS.
+      *----------------
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY 'INFORMES'
+           DISPLAY '--------'
+           DISPLAY ' '
+           DISPLAY 'PROGRAMA NO EMITE INFORME'
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY 'ESTADISTICAS DE PROCESO PROGRAMA COLPGC01 FECHA '
+                    WR-FECHA-HOY
+           DISPLAY '-----------------------------------------------'
+           DISPLAY '  ACTUALIZADOR MAESTRO CARTOLAS LDA'
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY 'REG LEIDOS DE COLVIMO : ' WA-L-IMO
+           DISPLAY 'REG REGRAB EN COLMCAR : ' WA-G-CAR
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY 'TARJETAS DE PARAMETROS'
+           DISPLAY '----------------------'
+           DISPLAY ' '
+           DISPLAY COLRPAR.
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY 'MENSAJES PARA EL EXPLOTADOR'
+           DISPLAY '---------------------------'
+           DISPLAY ' '
+           IF WS-PROCESO-OK
+               DISPLAY 'NO HAY MENSAJES PARA EL EXPLOTADOR'
+           ELSE
+               DISPLAY 'HAY MENSAJES PARA EL EXPLOTADOR'
+           END-IF.
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY ' '.
+           SKIP1
+       DC-TERMINO.
+      *-----------
+           CLOSE COLVPAR COLMCAR COLVIMO
+           IF WS-PROCESO-NO-OK
+              MOVE 100                      TO RETURN-CODE
+              DISPLAY ' '
+              DISPLAY ' '
+              DISPLAY '**********************************************'
+              DISPLAY '**********************************************'
+              DISPLAY '********                              ********'
+              DISPLAY '******** TERMINO ERRONEO DEL PROCESO  ********'
+              DISPLAY '********                              ********'
+              DISPLAY '**********************************************'
+              DISPLAY '**********************************************'
+           ELSE
+              DISPLAY ' '
+              DISPLAY ' '
+              DISPLAY '*****PROCESO TERMINO EN FORMA NORMAL*****'
+           END-IF.
+           SKIP1
+       DZ-FIN-DE-SECCION.
+      *------------------
+           EXIT.
+           EJECT

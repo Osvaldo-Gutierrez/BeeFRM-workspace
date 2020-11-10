@@ -1,0 +1,228 @@
+       IDENTIFICATION DIVISION.
+      *
+       PROGRAM-ID.     GARPBAD3.
+       AUTHOR.         F. Lizana B.
+      * 26-NOV-1991 18:24:54
+       DATE-COMPILED.
+      *         PROGRAMA COBOL + DATACOM/DB
+      *         QUE TIENE POR OBJETIVO CALCULAR
+      *         LOS MONTOS REALES Y NO REALES
+      *         DE LAS GARANTIAS.
+      *
+      *         SE recorre el archivo D01 de INPUT
+      *               - D01 (VSAM)
+      *
+      *     Para cada registro del D01 (Mayores Deudores)
+      *          se recorre una vez todas las garantias de ese deudor
+      *             en D03 (DATACOM), sumando las garantias reales y
+      *              no reales
+      *          se recorre una segunda vez todas las garantias de ese
+      *             deudor en D03, grabando totales sumados  e indicador
+      *
+       DATA DIVISION.
+      *
+       WORKING-STORAGE SECTION.
+
+       77  SUMA-TOTAL-REA                  PIC S9(11)V9(2) VALUE +0.
+       77  SUMA-TOTAL-NRE                  PIC S9(11)V9(2) VALUE +0.
+       77  CONT-D01-LEIDOS                 PIC 9(05) VALUE 0.
+       77  CONT-D01-ACTUALIZADOS           PIC 9(05) VALUE 0.
+       77  CONT-D03-GRABADOS               PIC 9(05) VALUE 0.
+
+       COPY GNSWVFIO.
+       COPY GNSWCFIO.
+       COPY GNSWVIDD.
+       COPY GNSWGRQA.
+       COPY GNSWGUIB.
+       COPY GNSWGELS.
+       COPY GNSBRTAB.
+       COPY GNSBRMSG.
+       COPY GNSBRERR.
+       COPY GNSWGHOY.
+       COPY GNSWGSYS.
+
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-D03-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-TAB-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-MSG-REQA==.
+
+       COPY GARBRD03.
+       COPY SUPBRD01.
+
+      *------------------------------------------------------------*
+      *                                                            *
+      *                   PROGRAMA PRINCIPAL                       *
+      *                                                            *
+      *------------------------------------------------------------*
+
+       PROCEDURE DIVISION.
+       MAIN SECTION.
+       INI-MAIN.
+       COPY GNSBGEDB.
+           PERFORM INI.
+           IF NOT FIO-STAT-OKS
+               GO TO FIN-MAIN.
+       LUP-MAIN.
+           ADD 1 TO CONT-D01-LEIDOS.
+           MOVE D01-RUT-D IN D01 TO GAR-ID-SUP-DDR IN D03.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM GAR-FIO-D03.
+           IF NOT FIO-STAT-OKS OR
+              GAR-ID-SUP-DDR IN D03 NOT = D01-RUT-D IN D01
+               GO TO NXT-MAIN.
+
+           PERFORM SUMA-POR-TIPO UNTIL
+                   GAR-ID-SUP-DDR IN D03 NOT = D01-RUT-D IN D01 OR
+                   NOT FIO-STAT-OKS.
+
+           MOVE D01-RUT-D IN D01 TO GAR-ID-SUP-DDR IN D03.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM GAR-FIO-D03.
+           IF NOT FIO-STAT-OKS
+               GO TO NXT-MAIN.
+           MOVE FIO-GET-KEY-UPD TO FIO-CMND.
+           PERFORM GAR-FIO-D03.
+           IF NOT FIO-STAT-OKS
+               GO TO NXT-MAIN.
+
+           MOVE 0 TO SUMA-TOTAL-REA SUMA-TOTAL-NRE.
+           PERFORM MOVER-SUMA-TOTAL UNTIL
+                   GAR-ID-SUP-DDR IN D03 NOT = D01-RUT-D IN D01 OR
+                   NOT FIO-STAT-OKS.
+           ADD 1 TO CONT-D01-ACTUALIZADOS.
+
+       NXT-MAIN.
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM SUP-FIO-D01.
+           IF FIO-STAT-OKS
+               GO TO LUP-MAIN.
+       FIN-MAIN.
+           DISPLAY ' '.
+           DISPLAY 'GARPBAD3 : '.
+           DISPLAY ' '.
+           DISPLAY 'FIN NORMAL .... '.
+           DISPLAY ' '.
+           DISPLAY ' '.
+           DISPLAY 'DEUDORES  LEIDOS       : ' CONT-D01-LEIDOS.
+           DISPLAY ' '.
+           DISPLAY 'DEUDORES  ACTUALIZADOS : ' CONT-D01-ACTUALIZADOS.
+           DISPLAY ' '.
+           DISPLAY 'REGISTROS ACTUALIZADOS: ' CONT-D03-GRABADOS.
+           DISPLAY ' '.
+           MOVE FIO-CLO TO FIO-CMND.
+           PERFORM GAR-FIO-D03.
+           MOVE FIO-CLO TO FIO-CMND.
+           PERFORM SUP-FIO-D01.
+       COPY GNSBGGBK.
+
+       SUMA-POR-TIPO SECTION.
+      *----------------------
+       INI-SUMAR-POR-TIPO.
+
+           IF GAR-TIP-REA-NRE = 'R'
+              COMPUTE SUMA-TOTAL-REA = SUMA-TOTAL-REA + GAR-VAL
+           ELSE
+              COMPUTE SUMA-TOTAL-NRE = SUMA-TOTAL-NRE + GAR-VAL.
+
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM GAR-FIO-D03.
+       FIN-SUMAR-POR-TIPO.
+           EXIT.
+
+
+       MOVER-SUMA-TOTAL SECTION.
+      *-------------------------
+       INI-MOVER-SUMA-TOTAL.
+
+           MOVE SUMA-TOTAL-REA TO GAR-VAL-GAR-REA.
+           MOVE SUMA-TOTAL-NRE TO GAR-VAL-GAR-NRE.
+           MOVE D01-IND-MAYD TO GAR-IND-MAY-DDR.
+           MOVE FIO-GET-KEY-UPD TO FIO-CMND.
+           PERFORM GAR-FIO-D03.
+           MOVE FIO-MOD TO FIO-CMND.
+           PERFORM GAR-FIO-D03.
+           IF NOT FIO-STAT-OKS
+               MOVE 'D03    MOD'    TO ERR-COD-MENS IN ERR
+               MOVE 'GAR-CLV-D03-1' TO ERR-COD-CMPO IN ERR
+               MOVE ADR-D03-REQA    TO ADR-REQA
+               MOVE ERR-SVRT-FAT IN ERR-VARI TO ERR-IND-SVRT IN ERR
+               PERFORM PRO-ERR
+               PERFORM PRG-ABT.
+           ADD 1 TO CONT-D03-GRABADOS.
+
+           MOVE 'RDUNE' TO ADR-CMND IN ADR-REQA.
+           CALL 'DBNTRY' USING ADR-UIFB ADR-REQA FIO-DFLD ADR-ELLS.
+           PERFORM SET-STAT.
+       FIN-MOVER-SUMA-TOTAL.
+           EXIT.
+
+       INI SECTION.
+       INI-INI.
+           MOVE 'GARPBAD3' TO FIO-PROG.
+           PERFORM GNS-BUS-IDD.
+           MOVE ERR-TERR-LGC IN ERR-VARI TO ERR-COD-TERR IN ERR.
+           MOVE 'GARPBAD3'               TO ERR-COD-ATRN IN ERR.
+           MOVE ERR-TTRN-BAT IN ERR-VARI TO ERR-MSC-TTRN IN ERR.
+           MOVE ERR-SVRT-FAT IN ERR-VARI TO ERR-IND-SVRT IN ERR.
+           MOVE 'M' TO ERR-MSC-TACC IN ERR.
+
+           MOVE FIO-ACCS-UPD TO FIO-ACCS.
+           MOVE FIO-ACC      TO FIO-CMND.
+           MOVE 'GNS'        TO FIO-SIST.
+           PERFORM GNS-FIO-TAB.
+
+           MOVE FIO-INP      TO FIO-CMND.
+           MOVE 'GNS'        TO FIO-SIST.
+           PERFORM GNS-FIO-TAB.
+           IF NOT FIO-STAT-OKS
+               PERFORM PRO-ERR
+               PERFORM PRG-ABT.
+
+           MOVE FIO-ACCS-UPD TO FIO-ACCS.
+           MOVE FIO-ACC      TO FIO-CMND.
+           MOVE 'GAR'        TO FIO-SIST.
+           PERFORM SUP-FIO-D01.
+           MOVE FIO-INP TO FIO-CMND.
+           PERFORM SUP-FIO-D01.
+           IF NOT FIO-STAT-OKS
+               PERFORM PRO-ERR
+               PERFORM PRG-ABT.
+
+           MOVE FIO-ACCS-UPD TO FIO-ACCS.
+           MOVE FIO-ACC      TO FIO-CMND.
+           MOVE 'GAR'        TO FIO-SIST.
+           PERFORM GAR-FIO-D03.
+           MOVE FIO-UPD TO FIO-CMND.
+           PERFORM GAR-FIO-D03.
+           IF NOT FIO-STAT-OKS
+               PERFORM PRO-ERR
+               PERFORM PRG-ABT.
+
+           MOVE '2'    TO D01-IND-TREG.
+           MOVE SPACES TO D01-RUT-D.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM SUP-FIO-D01.
+           IF NOT FIO-STAT-OKS
+               MOVE ERR-SVRT-ADV IN ERR-VARI TO ERR-IND-SVRT IN ERR
+               MOVE ERR-SVRT-ADV IN ERR-VARI TO ERR-IND-SVRT IN ERR
+               MOVE 'REG TIPO 2 NEX' TO ERR-COD-MENS IN ERR
+               MOVE SPACES           TO ERR-COD-CMPO IN ERR
+               MOVE SPACES           TO ADR-REQA
+           ELSE
+               MOVE ERR-SVRT-REC IN ERR-VARI TO ERR-IND-SVRT IN ERR.
+       FIN-INI.
+           EXIT.
+
+       COPY GARBFD03.
+       COPY SUPBFD01.
+
+       COPY GNSBFTAB.
+       COPY GNSBBMSG.
+       COPY GNSBFMSG.
+      *COPY GNSBFERR.
+       COPY GNSBGERR REPLACING ==FIO-STAT IN FIO-VARI== BY ==FIO-STAT==.
+       COPY GNSBGDTC.
+       COPY GNSBGIDD.
+       COPY GNSBTABT.
+       COPY GNSBGHOY.
+       COPY GNSBBSYS.
+

@@ -1,0 +1,886 @@
+       IDENTIFICATION DIVISION.
+      *
+       PROGRAM-ID.  GARPBGAR.
+       AUTHOR.      G. URETA Q.
+       REMARKS.
+                SUBRUTINA COBOL + DATACOM/DB
+
+                SON UTILIZADAS COMO INPUT LAS TABLAS :
+                    - GDG
+                    - GDD
+                    - GVT
+                    - GES
+                    - GSE
+
+                SON UTILIZADAS COMO OUTPUT LAS TABLAS :
+                    - GAR
+                    - RGD
+                    - AMG
+
+
+      *============================================================
+      *MODIFICACIONES:
+      *
+      * - CAMBIOS EN FECHA VENC. SEGURO (SE ELIMINA EL SIGNO)
+      * - CAMBIO EN CAMPO GAR. REAL/NO REAL
+      *   ===  SENC  03/11/88  ===
+      *
+      * - SE ENTREGAN CONVERTIDOS A PESOS LOS MONTOS :
+      *   VALOR COMERCIAL, VALOR LIQUIDACION Y VALOR AJUSTADO SUPER.
+      *   ===  SENC  05/05/89  ===
+      *
+      *
+      * CONVERTIDO POR CONSIST A BASE DE DATOS NUEVO SIST GARANTIAS
+      *
+       ENVIRONMENT DIVISION.
+      *
+       DATA DIVISION.
+      *
+       WORKING-STORAGE SECTION.
+
+       77    CONT-GAR-WS               PIC 9(5)  VALUE 0.
+       77    CONT-AMG-WS               PIC 9(5)  VALUE 0.
+       77    CONT-RGD-WS               PIC 9(5)  VALUE 0.
+       77    CRR-AMG-WS                PIC 9(2)  VALUE 0.
+       77    CRITER-FEC                PIC X(1)  VALUE 'N'.
+       77    COD-TSN-AUX               PIC X(3).
+       77    IDENT-WS                  PIC X(12).
+       77    EXIST                     PIC X(1).
+
+       77    W-COD-MON-CHILE           PIC X(6)   VALUE '0999  '.
+       77    W-CB-1                    PIC S9(11)V9(4) VALUE +0.
+       77    W-CB-2                    PIC S9(11)V9(4) VALUE +0.
+
+       01  VAR-CALCULOS.
+           05  MONTO-ENT            PIC S9(14)      COMP-3  VALUE +0.
+           05  VAL-CML-PESOS        PIC S9(14)      COMP-3  VALUE +0.
+           05  VAL-LIQ-PESOS        PIC S9(14)      COMP-3  VALUE +0.
+           05  VAL-AJT-PESOS        PIC S9(14)      COMP-3  VALUE +0.
+
+       01    WSS-VARI.
+             03 WSS-COD-PESO                    PIC X(06).
+
+       01    GLOSAS.
+             03  GLOSA-1                        PIC X(25).
+             03  GLOSA-2                        PIC X(15).
+
+       01    UNE-GLOSAS.
+             03  UNE-GLOSA-1                    PIC X(40).
+             03  UNE-GLOSA-2                    PIC X(25).
+
+       01    SEP-IDENT.
+             03  NUM-SEP                        PIC X(4).
+             03  CRR-SEP                        PIC X(8).
+
+       COPY GNSWVFIO.
+       COPY GNSWCFIO.
+       COPY GNSWGHOY.
+       COPY GNSWGFEC.
+       COPY GNSWGSYS.
+
+       COPY GNSWVIDD.
+       COPY GNSWGRQA.
+       COPY GNSWGUIB.
+       COPY GNSWGELS.
+
+       COPY GNSBRMSG.
+       COPY GNSBRTAB.
+       COPY GNSBRERR.
+
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-TAB-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-MSG-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-CAM-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-TAG-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-GDD-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-GDG-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-GVT-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-GES-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-GSE-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-DBC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-GAR-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-RGD-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-AMG-REQA==.
+
+       COPY TABBRCAM.
+       COPY GARBRTAG.
+       COPY GARBRGDD.
+       COPY GARBRGDG.
+       COPY GARBRGVT.
+       COPY GARBRGSE.
+       COPY GARBRGES.
+       COPY SGCBRDBC.
+       COPY DEUBRGAR.
+       COPY DEUBRRGD.
+       COPY DEUBRAMG.
+
+      *------------------------------------------------------------*
+      *                                                            *
+      *               REGISTROS VARIABLES AUXILIARES               *
+      *                                                            *
+      *------------------------------------------------------------*
+
+       01   WS-VARIOS.
+            03    CONT-GAR                 PIC S9(5) COMP.
+            03    CONT-AMG                 PIC S9(5) COMP.
+            03    CONT-RGD                 PIC S9(5) COMP.
+
+       01   UNE-CLAVE.
+            03    UNE-CL1                  PIC X(3).
+            03    UNE-CL2                  PIC X(3).
+            03    FILLER                   PIC X(6) VALUE SPACES.
+
+       01   SEP-CODIG-C.
+            03    FILLER                   PIC X(2).
+            03    TIP-STP                  PIC X(1).
+            03    FILLER                   PIC X(20).
+
+       01   F-VEN-SEG-1.
+            05  F-VEN-SEG-AA-1             PIC S9(4).
+            05  F-VEN-SEG-MM-1             PIC S9(2).
+            05  F-VEN-SEG-DD-1             PIC S9(2).
+
+
+       01   F-VEN-SEG-2.
+            05  F-VEN-SEG-AA-2             PIC 9(4).
+            05  F-VEN-SEG-MM-2             PIC 9(2).
+            05  F-VEN-SEG-DD-2             PIC 9(2).
+
+
+      *------------------------------------------------------------*
+      *                                                            *
+      *                   LINKAGE SECTION                          *
+      *                                                            *
+      *------------------------------------------------------------*
+
+       LINKAGE SECTION.
+
+
+       01   REG-PARAMETROS.
+            03    IDEN-LLAMADA             PIC X(19).
+            03    TIPO-IDENT               PIC X(1).
+            03    IDENT                    PIC X(12).
+            03    FILLER                   PIC X(19).
+            03    TIPO-FECHA               PIC X(1).
+            03    FECHA                    PIC X(8).
+            03    COD-RET-GARPBGAR.
+                  05 RET-ARCHIVO           PIC X(7).
+                  05 RET-ERROR             PIC X(5).
+
+
+      *------------------------------------------------------------*
+      *                                                            *
+      *                   PROGRAMA PRINCIPAL                       *
+      *                                                            *
+      *------------------------------------------------------------*
+
+       PROCEDURE DIVISION USING REG-PARAMETROS.
+
+       COPY GNSBGEDB.
+           MOVE 'GARPBGAR' TO FIO-PROG.
+           PERFORM GNS-BUS-IDD.
+
+           PERFORM OBT-COD-MNAC.
+           MOVE SPACES TO COD-RET-GARPBGAR.
+
+      *     IF TIPO-IDENT = 'C'
+      *        PERFORM 100-CREDITO
+      *     ELSE
+              IF TIPO-IDENT = 'D'
+                 PERFORM 200-DEUDOR
+              ELSE
+                IF TIPO-IDENT = 'G'
+                   PERFORM 300-GARANTIA
+                ELSE
+                   IF TIPO-IDENT = 'T'
+                      PERFORM 400-TOTGAR
+                   ELSE
+                      MOVE 'PRT' TO RET-ARCHIVO
+                      MOVE '01'  TO RET-ERROR.
+           MOVE CONT-GAR-WS TO CONT-GAR.
+           MOVE CONT-RGD-WS TO CONT-RGD.
+           MOVE CONT-AMG-WS TO CONT-AMG.
+      *    IF CONT-GAR-WS = 0 AND CONT-RGD-WS = 0 AND CONT-AMG-WS = 0
+      *       MOVE 'NO GRAB' TO RET-ARCHIVO
+      *       MOVE 'O IDG'  TO RET-ERROR.
+           GOBACK.
+
+
+
+
+      *------------------------------------------------------------*
+      *                                                            *
+      *                      PROCEDIMIENTOS                        *
+      *                                                            *
+      *------------------------------------------------------------*
+
+
+      *------------------------------------------------------------*
+      *               TIPO IDENTIFICADOR = 'C'                     *
+      *------------------------------------------------------------*
+
+
+       100-CREDITO SECTION.
+      *********************
+
+           MOVE SPACES  TO GAR-CLV-GES-1.
+      * BASE DATOS NO TIENE DEFINIDO INDICE POR NUMERO DE DLC
+      *     MOVE IDENT   TO GAR-CIC-IOPC IN GES.
+           MOVE 'GAR-CLV-GES-2' TO FIO-AKEY.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM GAR-FIO-GES.
+           IF NOT FIO-STAT-OKS
+              MOVE 'GRT-GES' TO RET-ARCHIVO
+              MOVE '14'  TO RET-ERROR
+              GO TO 100-FIN-CREDITO.
+           PERFORM 110-POR-COD-CREDITO UNTIL
+                   (NOT FIO-STAT-OKS ) OR
+                   ( GAR-CIC-IOPC NOT = IDENT).
+
+       100-FIN-CREDITO.
+           EXIT.
+
+
+       110-POR-COD-CREDITO SECTION.
+      *****************************
+
+           MOVE GAR-NUM-SIS IN GES TO GAR-NUM-SIS IN GDG.
+           MOVE GAR-COD-CRR IN GES TO GAR-COD-CRR IN GDG.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM GAR-FIO-GDG.
+           IF NOT FIO-STAT-OKS
+              GO TO 110-LEER-SEC-GES.
+           PERFORM 111-VALIDA-EXIST.
+           IF EXIST = 'N'
+              GO TO 110-LEER-SEC-GES.
+
+           PERFORM 115-VALIDA-POR-FECHA.
+           IF CRITER-FEC = 'N'
+              GO TO 110-LEER-SEC-GES.
+
+           MOVE GAR-NUM-SIS IN GES TO GAR-NUM-SIS IN GSE.
+           MOVE GAR-COD-CRR IN GES TO GAR-COD-CRR IN GSE.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM GAR-FIO-GSE.
+           IF NOT FIO-STAT-OKS
+              MOVE SPACES TO GAR-IIV-CIA-SEG GAR-VCB-SEG
+              MOVE ZEROES TO GAR-VAL-SEG.
+
+           MOVE GAR-NUM-SIS IN GES TO GAR-NUM-SIS IN GVT.
+           MOVE GAR-COD-CRR IN GES TO GAR-COD-CRR IN GVT.
+           MOVE ZEROES             TO GAR-COD-TSN IN GVT.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM GAR-FIO-GVT.
+           IF NOT FIO-STAT-OKS OR
+              (GAR-NUM-SIS IN GVT NOT = GAR-NUM-SIS IN GES) OR
+              (GAR-COD-CRR IN GVT NOT = GAR-COD-CRR IN GES)
+              GO TO 110-LEER-SEC-GES.
+
+           MOVE 'N' TO CRITER-FEC.
+           MOVE GAR-COD-TSN IN GVT TO COD-TSN-AUX.
+           PERFORM 118-VALIDA-VAL-TSN UNTIL CRITER-FEC = 'S'.
+
+           MOVE GAR-NUM-SIS IN GES TO GAR-NUM-SIS IN GVT.
+           MOVE GAR-COD-CRR IN GES TO GAR-COD-CRR IN GVT.
+           MOVE COD-TSN-AUX        TO GAR-COD-TSN IN GVT.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM GAR-FIO-GVT.
+           IF NOT FIO-STAT-OKS
+              GO TO 110-LEER-SEC-GES.
+
+           PERFORM 120-GRABAR-ARCH-GAR.
+           PERFORM 130-GRABAR-ARCH-AMG.
+
+           MOVE SPACES             TO GAR-CLV-GDD-1 IN GDD.
+           MOVE GAR-NUM-SIS IN GES TO GAR-NUM-SIS IN GDD.
+           MOVE GAR-COD-CRR IN GES TO GAR-COD-CRR IN GDD.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM GAR-FIO-GDD.
+           IF NOT FIO-STAT-OKS OR
+              (GAR-NUM-SIS IN GDD NOT = GAR-NUM-SIS IN GES) OR
+              (GAR-COD-CRR IN GDD NOT = GAR-COD-CRR IN GES)
+              GO TO 110-LEER-SEC-GES.
+
+           PERFORM 140-GRABAR-ARCH-RGD UNTIL
+                 (GAR-NUM-SIS IN GDD NOT = GAR-NUM-SIS IN GES) OR
+                 (GAR-COD-CRR IN GDD NOT = GAR-COD-CRR IN GES) OR
+                 (NOT FIO-STAT-OKS).
+
+       110-LEER-SEC-GES.
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM GAR-FIO-GES.
+
+       110-FIN-CREDITO.
+           EXIT.
+
+
+       111-VALIDA-EXIST SECTION.
+      **************************
+
+           MOVE 'N' TO EXIST.
+           IF (GAR-IND-EXI-GDD = 'S') AND (GAR-IND-EXI-GVT = 'S')
+              MOVE 'S' TO EXIST.
+
+
+       112-LEER-DIRECTORIO SECTION.
+      *****************************
+
+           MOVE GDD-CIC-ICLI   TO DBC-CIC-ICLI.
+           MOVE FIO-GET-KEY    TO FIO-CMND.
+           PERFORM SGC-FIO-DBC.
+           IF FIO-STAT-OKS
+               MOVE DBC-CIC-ICLI           TO IDENT-WS
+           ELSE
+               MOVE SPACES                 TO IDENT-WS.
+
+       112-FIN-LEER-DIRECTORIO.
+           EXIT.
+
+
+       113-LEER-DIRECTORIO SECTION.
+      *****************************
+
+           MOVE IDENT          TO DBC-IDC-ICLI.
+           MOVE 'DBC-IDC-ICLI' TO FIO-AKEY.
+           MOVE FIO-GET-KEY    TO FIO-CMND.
+           PERFORM SGC-FIO-DBC.
+           IF FIO-STAT-OKS
+               MOVE DBC-CIC-ICLI           TO IDENT-WS
+           ELSE
+               MOVE SPACES                 TO IDENT-WS.
+
+       113-FIN-LEER-DIRECTORIO.
+           EXIT.
+
+       115-VALIDA-POR-FECHA SECTION.
+      ******************************
+
+           MOVE 'N' TO CRITER-FEC.
+
+           IF TIPO-FECHA = 'R'
+              IF ((GAR-ES1 IN GDG > '09' AND < '20') AND
+                  (GAR-FEC-ESC-CNS IN GDG NOT > FECHA)) OR
+                 ((GAR-ES1 IN GDG = '20') AND
+                  (GAR-FEC-ESC-CNS IN GDG NOT > FECHA) AND
+                  (GAR-FEC-ALZ     IN GDG > FECHA))
+                 MOVE 'S' TO CRITER-FEC.
+
+           IF TIPO-FECHA = 'C'
+              IF ((GAR-ES1 IN GDG > '09' AND < '20') AND
+                  (GDG-FEC-ING-SIS IN GDG NOT > FECHA)) OR
+                 ((GAR-ES1 IN GDG = '20') AND
+                  (GDG-FEC-ING-SIS IN GDG NOT > FECHA) AND
+                  (GDG-FEC-ULT-ACT IN GDG > FECHA))
+                 MOVE 'S' TO CRITER-FEC.
+
+           IF CRITER-FEC = 'S'
+              MOVE GAR-IND-CPL IN GDG TO CRITER-FEC.
+
+       115-FIN-VALIDA-POR-FECHA.
+           EXIT.
+
+
+       118-VALIDA-VAL-TSN SECTION.
+      ****************************
+
+           IF TIPO-FECHA = 'R'
+              IF (GAR-FEC-TSN NOT > FECHA)
+                 MOVE GAR-COD-TSN IN GVT TO COD-TSN-AUX
+              ELSE
+                 MOVE 'S' TO CRITER-FEC.
+
+           IF TIPO-FECHA = 'C'
+              IF (GVT-FEC-ING-SIS NOT > FECHA)
+                 MOVE GAR-COD-TSN IN GVT TO COD-TSN-AUX
+              ELSE
+                 MOVE 'S' TO CRITER-FEC.
+
+           IF CRITER-FEC = 'N'
+              MOVE FIO-GET-NXT TO FIO-CMND
+              PERFORM GAR-FIO-GVT
+              IF (NOT FIO-STAT-OKS) OR
+                 (GAR-NUM-SIS IN GVT NOT = GAR-NUM-SIS IN GDG) OR
+                 (GAR-COD-CRR IN GVT NOT = GAR-COD-CRR IN GDG)
+                 MOVE 'S' TO CRITER-FEC.
+
+       118-FIN-VALIDA-VAL-TSN.
+           EXIT.
+
+
+       120-GRABAR-ARCH-GAR SECTION.
+      *****************************
+
+           MOVE GAR-TIP-OPE IN GDG     TO GAR-TIP-OPE IN TAG.
+           MOVE GAR-STP-OPE IN GDG     TO GAR-STP-OPE IN TAG.
+           PERFORM GAR-FIO-TAG.
+
+           MOVE ' '                       TO GAR-GLS-FLAG IN GAR.
+           MOVE IDEN-LLAMADA              TO GAR-KEY-IINV IN GAR.
+           MOVE GAR-CLV-GDG-1             TO GAR-CIC-IGAR IN GAR.
+           MOVE GAR-TIP-OPE IN GDG        TO GAR-COD-TOGA IN GAR.
+           MOVE GAR-STP-OPE IN GDG        TO GAR-COD-AOGA IN GAR.
+           MOVE GAR-COD-OFI IN GDG        TO GAR-COD-OFGA IN GAR.
+           MOVE GAR-DES-2                 TO GLOSAS.
+           MOVE GAR-DES-1                 TO UNE-GLOSA-1.
+           MOVE GLOSA-1                   TO UNE-GLOSA-2.
+           MOVE UNE-GLOSAS                TO GAR-GLS-DESC IN GAR.
+           MOVE GAR-COD-LIM IN GDG        TO GAR-IND-CGAR IN GAR.
+           MOVE GAR-VCB IN GDG            TO GAR-COD-VCGA IN GAR.
+
+      *     IF GAR-IND-MUL-DDR = 'SI'
+      *        MOVE 'S'                    TO GAR-IND-ODEU IN GAR
+      *     ELSE
+              MOVE 'N'                    TO GAR-IND-ODEU IN GAR.
+
+           MOVE GAR-FEC-ESC-CNS IN GDG TO GAR-FEC-FCTT IN GAR.
+           MOVE GDG-FEC-ING-SIS IN GDG TO GAR-FEC-FINP IN GAR.
+           MOVE GAR-FEC-VTO     IN GDG TO GAR-FEC-FVEN IN GAR.
+
+           IF GAR-VCB  IN GDG = WSS-COD-PESO
+
+                MOVE GAR-VAL-CML-TSN IN GVT TO GAR-VAL-COME IN GAR
+                MOVE GAR-VAL-LIQ-TSN IN GVT TO GAR-VAL-LIQU IN GAR
+                MOVE GAR-VAL-AJT-SUP IN GVT TO GAR-VAL-POND IN GAR
+
+           ELSE PERFORM  CONVERTIR-A-PESOS
+
+                MOVE   VAL-CML-PESOS         TO GAR-VAL-COME IN GAR
+                MOVE   VAL-LIQ-PESOS         TO GAR-VAL-LIQU IN GAR
+                MOVE   VAL-AJT-PESOS         TO GAR-VAL-POND IN GAR.
+
+           MOVE GAR-FEC-TSN        IN GVT TO GAR-FEC-FEVP IN GAR.
+           MOVE GAR-IIV-CIA-SEG    IN GSE TO GAR-COD-SEGG IN GAR.
+           MOVE GAR-VAL-SEG        IN GSE TO GAR-VAL-SEGG IN GAR.
+           MOVE GAR-VCB-SEG        IN GSE TO GAR-COD-VCSG IN GAR.
+
+           MOVE GAR-FA-VTO-SEG     IN GSE TO F-VEN-SEG-AA-1.
+           MOVE GAR-FM-VTO-SEG     IN GSE TO F-VEN-SEG-MM-1.
+           MOVE GAR-FD-VTO-SEG     IN GSE TO F-VEN-SEG-DD-1.
+
+           MOVE F-VEN-SEG-AA-1     TO F-VEN-SEG-AA-2.
+           MOVE F-VEN-SEG-MM-1     TO F-VEN-SEG-MM-2.
+           MOVE F-VEN-SEG-DD-1     TO F-VEN-SEG-DD-2.
+
+           MOVE F-VEN-SEG-2        TO GAR-FEC-FVSG IN GAR.
+
+           IF GAR-TIP-REA-NRE = 'R'
+                MOVE 'R'                  TO GAR-IND-REAL IN GAR
+           ELSE MOVE 'NR'                 TO GAR-IND-REAL IN GAR.
+
+           MOVE FIO-PUT TO FIO-CMND.
+           PERFORM DEU-FIO-GAR.
+           IF NOT FIO-STAT-OKS
+              MOVE 'GAR'                  TO RET-ARCHIVO
+              MOVE FIO-STAT               TO RET-ERROR
+              GOBACK
+           ELSE
+              ADD 1                       TO CONT-GAR-WS.
+
+           MOVE 0                         TO CRR-AMG-WS.
+           MOVE SPACES                    TO GAR.
+
+       120-FIN-GRABAR-GAR.
+           EXIT.
+
+       CONVERTIR-A-PESOS  SECTION.
+      *...........................
+
+           IF GAR-VCB IN GDG  = WSS-COD-PESO
+                 MOVE GAR-VAL-CML-TSN IN  GVT  TO   VAL-CML-PESOS
+                 MOVE GAR-VAL-LIQ-TSN IN  GVT  TO   VAL-LIQ-PESOS
+                 MOVE GAR-VAL-AJT-SUP IN  GVT  TO   VAL-AJT-PESOS
+                 GO TO FIN-CONVERTIR-A-PESOS.
+
+           MOVE GAR-FA-RVL   IN GVT      TO FEC-FANO.
+           MOVE FEC-SVLD                 TO CAM-NUM-SCAM IN CAM(1).
+           MOVE FEC-AVLD                 TO CAM-NUM-ACAM IN CAM(1).
+           MOVE GAR-FM-RVL   IN GVT      TO CAM-NUM-MCAM IN CAM(1).
+           MOVE GAR-FD-RVL   IN GVT      TO CAM-NUM-DCAM IN CAM(1).
+           MOVE CAM-FEC-FCAM IN CAM(1)   TO CAM-FEC-FCAM IN CAM(2).
+           MOVE GAR-VCB      IN GDG      TO CAM-COD-VCAM IN CAM(1).
+           MOVE WSS-COD-PESO IN WSS-VARI TO CAM-COD-VCAM IN CAM(2).
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM TAB-FIO-CAM.
+           IF NOT (
+              FIO-STAT-OKS AND CAM-IND-VIGE IN CAM = 'S'
+              )
+               MOVE 'CAM'                  TO RET-ARCHIVO
+               MOVE FIO-STAT               TO RET-ERROR
+               GOBACK.
+
+
+           COMPUTE   VAL-CML-PESOS ROUNDED =
+                         GAR-VAL-CML-TSN IN GVT * CAM-SGV-VCAM IN CAM
+
+           COMPUTE   VAL-LIQ-PESOS ROUNDED =
+                         GAR-VAL-LIQ-TSN IN GVT * CAM-SGV-VCAM IN CAM
+
+           COMPUTE   VAL-AJT-PESOS ROUNDED =
+                         GAR-VAL-AJT-SUP IN GVT * CAM-SGV-VCAM IN CAM.
+
+       FIN-CONVERTIR-A-PESOS.
+           EXIT.
+
+
+
+       130-GRABAR-ARCH-AMG SECTION.
+      *****************************
+
+           MOVE ' '                       TO AMG-GLS-FLAG.
+           MOVE IDEN-LLAMADA              TO AMG-KEY-IINV.
+           MOVE GAR-CLV-GDG-1             TO AMG-CIC-IGAR.
+           ADD 1                          TO CRR-AMG-WS.
+           MOVE CRR-AMG-WS                TO AMG-NUM-IAMG.
+           MOVE SPACES                    TO AMG-COD-OFCG.
+
+           IF GAR-COD-CRR-CDT > ZEROES
+              MOVE GAR-COD-CRR-CDT  IN GES TO AMG-CIC-ICRG
+      *        MOVE GAR-COD-DST-CDT IN GES TO AMG-COD-CDCG
+              MOVE SPACES                TO AMG-COD-CDCG
+              MOVE SPACES TO AMG-IND-TDEU AMG-COD-COCG
+           ELSE
+           IF GAR-STP-OPE-CDT > SPACES
+               MOVE GAR-TIP-OPE-CDT TO AMG-COD-TOCG
+               MOVE GAR-STP-OPE-CDT TO AMG-COD-AOCG
+               MOVE SPACES     TO AMG-COD-CDCG
+               MOVE SPACES     TO AMG-CIC-ICRG
+               MOVE SPACES     TO AMG-IND-TDEU
+           ELSE
+           IF GAR-TIP-OPE-CDT > SPACES
+               MOVE GAR-TIP-OPE-CDT TO AMG-COD-TOCG
+               MOVE SPACES        TO AMG-CIC-ICRG
+               MOVE SPACES        TO AMG-IND-TDEU AMG-COD-AOCG
+               MOVE SPACES        TO AMG-COD-CDCG
+           ELSE
+           IF GAR-COD-DST-CDT > SPACES
+               MOVE GAR-COD-DST-CDT IN GES TO AMG-COD-CDCG
+               MOVE SPACES           TO AMG-CIC-ICRG
+               MOVE SPACES           TO AMG-IND-TDEU AMG-COD-COCG
+           ELSE
+           IF GAR-TIP-DEU > SPACES
+               MOVE GAR-TIP-DEU IN GES TO AMG-IND-TDEU
+               MOVE SPACES           TO AMG-CIC-ICRG
+               MOVE SPACES           TO AMG-COD-CDCG AMG-COD-COCG.
+
+           MOVE GAR-VCB-CDT     IN GES    TO AMG-COD-VCCG.
+           MOVE GAR-VAL-LIM-CDT IN GES    TO AMG-VAL-LIMC.
+           MOVE AMG-COD-VCCG              TO AMG-COD-VCLC.
+           MOVE FIO-PUT TO FIO-CMND.
+           PERFORM DEU-FIO-AMG.
+           IF NOT FIO-STAT-OKS
+              MOVE 'AMG'                  TO RET-ARCHIVO
+              MOVE FIO-STAT               TO RET-ERROR
+              GOBACK
+           ELSE
+              ADD 1                       TO CONT-AMG-WS.
+
+           MOVE SPACES                    TO AMG.
+
+       130-FIN-GRABAR-ARCH-AMG.
+           EXIT.
+
+       140-GRABAR-ARCH-RGD SECTION.
+      *****************************
+
+           IF TIPO-IDENT NOT = 'D'
+              PERFORM 112-LEER-DIRECTORIO.
+           PERFORM 150-GRABO-RGD.
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM GAR-FIO-GDD.
+
+       140-FIN-GRABAR-ARCH-RGD.
+           EXIT.
+
+
+       150-GRABO-RGD SECTION.
+      ***********************
+
+           MOVE ' ' TO RGD-GLS-FLAG.
+           MOVE IDEN-LLAMADA              TO RGD-KEY-IINV.
+           MOVE GAR-CLV-GDG-1 IN GDG      TO RGD-CIC-IGAR.
+           IF TIPO-IDENT = 'D'
+              MOVE IDENT-WS               TO RGD-CIC-ICLI
+           ELSE
+              MOVE IDENT-WS               TO RGD-CIC-ICLI.
+           MOVE FIO-PUT TO FIO-CMND.
+           PERFORM DEU-FIO-RGD.
+           IF NOT FIO-STAT-OKS
+              MOVE 'RGD'                  TO RET-ARCHIVO
+              MOVE FIO-STAT               TO RET-ERROR
+              GOBACK
+           ELSE
+              ADD 1                       TO CONT-RGD-WS.
+
+           MOVE SPACES                    TO RGD.
+
+       150-FIN-GRABO-RGD.
+           EXIT.
+
+      *------------------------------------------------------------*
+      *               TIPO IDENTIFICADOR = 'D'                     *
+      *------------------------------------------------------------*
+
+       200-DEUDOR SECTION.
+      ********************
+
+           PERFORM 113-LEER-DIRECTORIO.
+           MOVE SPACES TO GAR-CLV-GDD-1 IN GDD.
+           MOVE DBC-CIC-ICLI TO GDD-CIC-ICLI.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           IF NOT FIO-STAT-OKS
+              MOVE 'GRT-GDD' TO RET-ARCHIVO
+              MOVE '14'  TO RET-ERROR
+              GO TO 200-FIN-DEUDOR.
+           PERFORM 210-POR-COD-DEUDOR UNTIL
+              (NOT FIO-STAT-OKS) OR
+              (GDD-CIC-ICLI IN GDD NOT = DBC-CIC-ICLI IN DBC).
+
+       200-FIN-DEUDOR.
+           EXIT.
+
+
+       210-POR-COD-DEUDOR SECTION.
+      ****************************
+
+           MOVE GAR-NUM-SIS IN GDD TO GAR-NUM-SIS IN GDG.
+           MOVE GAR-COD-CRR IN GDD TO GAR-COD-CRR IN GDG.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM GAR-FIO-GDG.
+           IF NOT FIO-STAT-OKS
+              GO TO 210-LEER-SEC-GDD.
+           PERFORM 111-VALIDA-EXIST.
+           IF EXIST = 'N'
+              GO TO 210-LEER-SEC-GDD.
+
+           PERFORM 115-VALIDA-POR-FECHA.
+           IF CRITER-FEC = 'N'
+              GO TO 210-LEER-SEC-GDD.
+
+           MOVE GAR-NUM-SIS IN GDD TO GAR-NUM-SIS IN GSE.
+           MOVE GAR-COD-CRR IN GDD TO GAR-COD-CRR IN GSE.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM GAR-FIO-GSE.
+           IF NOT FIO-STAT-OKS
+              MOVE SPACES TO GAR-IIV-CIA-SEG GAR-VCB-SEG
+              MOVE ZEROES TO GAR-VAL-SEG.
+
+           MOVE GAR-NUM-SIS IN GDG TO GAR-NUM-SIS IN GVT.
+           MOVE GAR-COD-CRR IN GDG TO GAR-COD-CRR IN GVT.
+           MOVE ZEROES             TO GAR-COD-TSN IN GVT.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM GAR-FIO-GVT.
+           IF NOT FIO-STAT-OKS OR
+              (GAR-NUM-SIS IN GVT NOT = GAR-NUM-SIS IN GDG) OR
+              (GAR-COD-CRR IN GVT NOT = GAR-COD-CRR IN GDG)
+              GO TO 210-LEER-SEC-GDD.
+
+           MOVE 'N' TO CRITER-FEC.
+           MOVE GAR-COD-TSN IN GVT TO COD-TSN-AUX.
+           PERFORM 118-VALIDA-VAL-TSN UNTIL CRITER-FEC = 'S'.
+
+           MOVE GAR-NUM-SIS IN GDG TO GAR-NUM-SIS IN GVT.
+           MOVE GAR-COD-CRR IN GDG TO GAR-COD-CRR IN GVT.
+           MOVE COD-TSN-AUX        TO GAR-COD-TSN IN GVT.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM GAR-FIO-GVT.
+           IF NOT FIO-STAT-OKS
+              GO TO 210-LEER-SEC-GDD.
+
+           PERFORM 120-GRABAR-ARCH-GAR.
+           PERFORM 150-GRABO-RGD.
+           IF GAR-COD-LIM IN GDG NOT = 'E'
+              GO TO 210-LEER-SEC-GDD.
+
+           MOVE SPACES             TO GAR-CLV-GES-1 IN GES.
+           MOVE GAR-NUM-SIS IN GDG TO GAR-NUM-SIS IN GES.
+           MOVE GAR-COD-CRR IN GDG TO GAR-COD-CRR IN GES.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM GAR-FIO-GES.
+           IF NOT FIO-STAT-OKS
+              GO TO 210-LEER-SEC-GDD.
+
+           PERFORM 215-GRABAR-ARCH-AMG UNTIL
+                   (NOT FIO-STAT-OKS) OR
+              (GAR-NUM-SIS IN GES NOT = GAR-NUM-SIS IN GDG) OR
+              (GAR-COD-CRR IN GES NOT = GAR-COD-CRR IN GDG).
+
+       210-LEER-SEC-GDD.
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM GAR-FIO-GDD.
+
+       210-FIN-POR-COD-DEUDOR.
+           EXIT.
+
+
+       215-GRABAR-ARCH-AMG SECTION.
+      *****************************
+
+           PERFORM 130-GRABAR-ARCH-AMG.
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM GAR-FIO-GES.
+
+       215-FIN-GRABAR-ARCH-AMG.
+           EXIT.
+
+      *------------------------------------------------------------*
+      *               TIPO IDENTIFICADOR = 'G'                     *
+      *------------------------------------------------------------*
+
+       300-GARANTIA SECTION.
+      **********************
+
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           MOVE IDENT   TO GAR-CLV-GDG-1.
+           PERFORM GAR-FIO-GDG.
+           IF NOT FIO-STAT-OKS
+              MOVE 'GRT-GDG' TO RET-ARCHIVO
+              MOVE '14'  TO RET-ERROR
+              GO TO 300-FIN-GARANTIA.
+           PERFORM 600-REVISO-GDG.
+
+       300-FIN-GARANTIA.
+           EXIT.
+
+
+      *------------------------------------------------------------*
+      *               TIPO IDENTIFICADOR = 'T'                     *
+      *------------------------------------------------------------*
+
+       400-TOTGAR SECTION.
+      ********************
+
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           MOVE ZEROES  TO GAR-CLV-GDG-1.
+           PERFORM GAR-FIO-GDG.
+           IF NOT FIO-STAT-OKS
+              MOVE 'GRT-GDG' TO RET-ARCHIVO
+              MOVE '14'  TO RET-ERROR
+              GO TO 400-FIN-TOTGAR.
+           PERFORM 500-POR-CADA-GDG UNTIL NOT FIO-STAT-OKS.
+
+       400-FIN-TOTGAR.
+           EXIT.
+
+
+      *------------------------------------------------------------*
+      *               INSPECCION DE TABLA 'GDG'                    *
+      *------------------------------------------------------------*
+
+       500-POR-CADA-GDG SECTION.
+      **************************
+
+           PERFORM 600-REVISO-GDG.
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM GAR-FIO-GDG.
+
+       500-FIN-POR-CADA-GDG.
+           EXIT.
+
+
+       600-REVISO-GDG SECTION.
+      ************************
+
+           PERFORM 111-VALIDA-EXIST.
+           IF EXIST = 'N'
+              GO TO 600-FIN-REVISO-GDG.
+           PERFORM 115-VALIDA-POR-FECHA.
+           IF CRITER-FEC = 'N'
+              GO TO 600-FIN-REVISO-GDG.
+
+           MOVE GAR-NUM-SIS IN GDG TO GAR-NUM-SIS IN GVT.
+           MOVE GAR-COD-CRR IN GDG TO GAR-COD-CRR IN GVT.
+           MOVE GAR-COD-TSN IN GDG TO GAR-COD-TSN IN GVT.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM GAR-FIO-GVT.
+           IF NOT FIO-STAT-OKS
+              MOVE 'GRT-GVT' TO RET-ARCHIVO
+              MOVE '14'  TO RET-ERROR
+              GO TO 600-LEER-GDD.
+
+
+           MOVE GAR-NUM-SIS IN GDG TO GAR-NUM-SIS IN GSE.
+           MOVE GAR-COD-CRR IN GDG TO GAR-COD-CRR IN GSE.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM GAR-FIO-GSE.
+           IF NOT FIO-STAT-OKS
+              MOVE SPACES TO GAR-IIV-CIA-SEG GAR-VCB-SEG
+              MOVE ZEROES TO GAR-VAL-SEG.
+
+           PERFORM 120-GRABAR-ARCH-GAR.
+
+           MOVE SPACES             TO GAR-CLV-GES-1 IN GES.
+           MOVE GAR-NUM-SIS IN GDG TO GAR-NUM-SIS IN GES.
+           MOVE GAR-COD-CRR IN GDG TO GAR-COD-CRR IN GES.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM GAR-FIO-GES.
+           IF NOT FIO-STAT-OKS
+              GO TO 600-LEER-GDD.
+
+           PERFORM 215-GRABAR-ARCH-AMG UNTIL
+                   (NOT FIO-STAT-OKS) OR
+              (GAR-NUM-SIS IN GES NOT = GAR-NUM-SIS IN GDG) OR
+              (GAR-COD-CRR IN GES NOT = GAR-COD-CRR IN GDG).
+
+       600-LEER-GDD.
+           MOVE SPACES             TO GAR-CLV-GDD-1 IN GDD.
+           MOVE GAR-NUM-SIS IN GDG TO GAR-NUM-SIS IN GDD.
+           MOVE GAR-COD-CRR IN GDG TO GAR-COD-CRR IN GDD.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM GAR-FIO-GDD.
+           IF NOT FIO-STAT-OKS OR
+              (GAR-NUM-SIS IN GDD NOT = GAR-NUM-SIS IN GDG) OR
+              (GAR-COD-CRR IN GDD NOT = GAR-COD-CRR IN GDG)
+              GO TO 600-FIN-REVISO-GDG.
+
+           PERFORM 140-GRABAR-ARCH-RGD UNTIL
+                 (GAR-NUM-SIS IN GDD NOT = GAR-NUM-SIS IN GDG) OR
+                 (GAR-COD-CRR IN GDD NOT = GAR-COD-CRR IN GDG) OR
+                 (NOT FIO-STAT-OKS).
+
+       600-FIN-REVISO-GDG.
+           EXIT.
+
+       COPY TABBFCAM.
+
+       COPY GARBFTAG.
+       COPY GARBFGDD.
+       COPY GARBFGDG.
+       COPY GARBFGVT.
+       COPY GARBFGES.
+       COPY GARBFGSE.
+
+       COPY SGCBFDBC.
+
+       COPY DEUBFGAR.
+       COPY DEUBFRGD.
+       COPY DEUBFAMG.
+
+       COPY GNSBBMSG.
+       COPY GNSBFMSG.
+       COPY GNSBFTAB.
+      *COPY GNSBFERR.
+       COPY GNSBGERR REPLACING ==FIO-STAT IN FIO-VARI== BY ==FIO-STAT==.
+
+       COPY GNSBTABT.
+       COPY GNSBBSYS.
+
+       COPY GNSBGDTC.
+       COPY GNSBGIDD.
+
+       OBT-COD-MNAC SECTION.
+       INI-OBT-COD-MNAC.
+      * Obtiene Codigo Valor de Cambio de Pesos Mediante CIC de la Moned
+           MOVE 'TAB'          TO FIO-SIST.
+           MOVE 'VLR'          TO TAB-CIC-TTAB IN TAB.
+           MOVE '0999  '       TO TAB-CIC-CTAB IN TAB.
+           MOVE 'TAB-CIC-TABL' TO FIO-AKEY.
+           MOVE FIO-GET-KEY    TO FIO-CMND.
+           PERFORM GNS-FIO-TAB.
+           IF NOT FIO-STAT-OKS
+              MOVE 'VLR'                  TO RET-ARCHIVO
+              MOVE FIO-STAT               TO RET-ERROR
+              GOBACK.
+           MOVE TAB-COD-CTAB IN TAB TO WSS-COD-PESO IN WSS-VARI.
+       FIN-OBT-COD-MNAC.
+           EXIT.
+
+

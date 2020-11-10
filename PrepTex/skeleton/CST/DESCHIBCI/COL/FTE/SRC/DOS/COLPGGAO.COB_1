@@ -1,0 +1,285 @@
+       IDENTIFICATION DIVISION.
+      *=======================
+       PROGRAM-ID.      COLPGGAO.
+       AUTHOR.          CONSIST.
+       DATE-WRITTEN.    07-JUN-1995 11:26:24.
+      * Programa que Genera archivo con OPC vigentes y con saldo > 0
+
+       ENVIRONMENT DIVISION.
+      *====================
+       CONFIGURATION SECTION.
+      *---------------------
+       SPECIAL-NAMES.
+            DECIMAL-POINT IS COMMA.
+
+       DATA DIVISION.
+      *=============
+       WORKING-STORAGE SECTION.
+      *-----------------------
+       COPY GNSWVIDD.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-TAB-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-CAM-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-MSG-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-OPC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-DLC-REQA==.
+       COPY TABBRCAM.
+       COPY GNSBRTAB.
+       COPY GNSBRMSG.
+       COPY COLBROPC.
+
+       COPY COLBRDLC.
+       COPY COLBRGAO.
+
+       COPY GNSWCNUM.
+       COPY GNSWVNUM.
+       COPY GNSWGFEC.
+       COPY GNSWGHOY.
+
+       COPY GNSWGRQA.
+       COPY GNSWGUIB.
+       COPY GNSWGELS.
+       COPY GNSWCFIO.
+       COPY GNSWVFIO.
+       COPY GNSWGSYS.
+       COPY GNSWGPES.
+
+       01  WSS-VARI.
+           03  WSS-NUM-RLEI    VALUE 0    PIC 9(03).
+           03  WSS-NUM-RING    VALUE 0    PIC 9(03).
+           03  WSS-FEC-FINP.
+               05  WSS-NUM-SINP           PIC 9(02).
+               05  WSS-NUM-AINP           PIC 9(02).
+               05  WSS-NUM-MINP           PIC 9(02).
+               05  WSS-NUM-DINP           PIC 9(02).
+           03  WSS-GLS-MONE.
+               05  WSS-COD-VVOC.
+                   07  WSS-MSC-TVOC       PIC X(01).
+                   07  WSS-COD-CVOC       PIC X(03).
+               05  WSS-COD-TCOC       PIC X(02).
+           03  WSS-COD-MNAC               PIC X(06).
+           03  WSS-VAL-SCRE               PIC S9(13)V9(04).
+
+       PROCEDURE DIVISION.
+      *==================
+       MAIN SECTION.
+      *------------
+       INI-MAIN.
+       COPY GNSBGEDB.
+           MOVE 'COLPGGAO' TO FIO-PROG.
+           PERFORM GNS-BUS-IDD.
+
+      * Apertura de Archivos
+           MOVE FIO-INP TO FIO-CMND.
+           PERFORM COL-FIO-OPC.
+           IF NOT FIO-STAT-OKS
+             DISPLAY 'ARCHIVO OPC MAL ABIERTO'
+             GO TO FIN-LUP-MAIN.
+
+           MOVE FIO-INP TO FIO-CMND.
+           PERFORM COL-FIO-DLC.
+           IF NOT FIO-STAT-OKS
+             DISPLAY 'ARCHIVO DLC MAL ABIERTO'
+             GO TO FIN-LUP-MAIN.
+
+           MOVE FIO-OUT TO FIO-CMND.
+           PERFORM COL-FIO-GAO.
+           IF NOT FIO-STAT-OKS
+             DISPLAY 'ARCHIVO GAO MAL ABIERTO'
+             GO TO FIN-LUP-MAIN.
+
+           MOVE FIO-INP TO FIO-CMND.
+           MOVE 'COL' TO FIO-SIST.
+           PERFORM GNS-FIO-TAB.
+           IF NOT FIO-STAT-OKS
+             DISPLAY 'ARCHIVO TAB MAL ABIERTO'
+             GO TO FIN-LUP-MAIN.
+
+           MOVE FIO-INP TO FIO-CMND.
+           MOVE 'TAB' TO FIO-SIST.
+           PERFORM GNS-FIO-TAB.
+           IF NOT FIO-STAT-OKS
+             DISPLAY 'ARCHIVO TAB MAL ABIERTO'
+             GO TO FIN-LUP-MAIN.
+
+      * Captura fecha de proceso del sistema
+           PERFORM GET-FHOY.
+           MOVE HOY-DHOY TO WSS-NUM-DINP IN WSS-VARI.
+           MOVE HOY-MHOY TO WSS-NUM-MINP IN WSS-VARI.
+           MOVE HOY-SHOY TO WSS-NUM-SINP IN WSS-VARI.
+           MOVE HOY-AHOY TO WSS-NUM-AINP IN WSS-VARI.
+
+
+      * Se obtiene por unica vez COD_PESO, para chequear si la
+      * Operacion es en peso u otra, de la siguiente forma :
+           MOVE 'TAB'                     TO FIO-SIST.
+           MOVE 'VLR'                     TO TAB-CIC-TTAB IN TAB.
+           MOVE '0999  '                  TO TAB-CIC-CTAB IN TAB.
+           MOVE 'TAB-CIC-TABL'            TO FIO-AKEY.
+           MOVE  FIO-GET-KEY              TO FIO-CMND.
+           PERFORM GNS-FIO-TAB.
+           IF FIO-STAT-OKS
+             MOVE TAB-COD-CTAB IN TAB TO WSS-COD-MNAC
+           ELSE
+             DISPLAY 'ERROR EN LECTURA DE CODIGO DE MONEDA NACIONAL'
+             GO TO FIN-LUP-MAIN.
+
+           DISPLAY ' '.
+           DISPLAY 'LEE TABLA OPC'.
+           DISPLAY '-------------'.
+           DISPLAY ' '.
+
+      * Proceso de Lectura
+           MOVE FIO-GET-FST TO FIO-CMND.
+           PERFORM COL-FIO-OPC.
+           IF NOT FIO-STAT-OKS
+             DISPLAY 'NO SE PUEDE LEER OPC'
+             GO TO FIN-LUP-MAIN.
+       LUP-MAIN.
+           ADD 1 TO WSS-NUM-RLEI IN WSS-VARI.
+
+      * Seleccionar OPC vigentes y activadas para obtener 
+      * Moneda, Clase, Saldo y Oficina
+           IF OPC-VAL-SCRE IN OPC NOT > 0 OR
+              OPC-MSC-STAT IN OPC NOT = 'A'
+             GO TO LEE-NXT-MAIN.
+
+      * Accesar DLC para obtener Plazo Contable, Situacion Cobranza
+      * Situacion Contable, Situacion Cartera
+           MOVE OPC-CIC-IOPC IN OPC TO DLC-CIC-IOPC IN DLC.
+           MOVE ZEROES TO DLC-NUM-IDLC IN DLC.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM COL-FIO-DLC.
+           IF (FIO-STAT-OKS AND
+               OPC-CIC-IOPC IN OPC = DLC-CIC-IOPC IN DLC)
+             PERFORM GRABAR-DLC-GAO
+           ELSE
+             DISPLAY 'OPERACION '
+                      OPC-CIC-IOPC IN OPC
+                      ' NO TIENE REGISTRO EN DLC'
+             DISPLAY 'PROCESO SIGUE ADELANTE'
+             GO TO LEE-NXT-MAIN.
+
+           IF DLC-COD-PLZO IN DLC NOT > SPACES
+               MOVE SPACES TO DLC-COD-PLZO IN DLC
+               GO TO LEE-NXT-MAIN.
+
+           MOVE OPC-COD-VCOC IN OPC TO GAO-COD-VCOC IN GAO.
+           MOVE OPC-COD-COOC IN OPC TO GAO-COD-COOC IN GAO.
+           MOVE OPC-COD-OFOC IN OPC TO GAO-COD-OFOC IN GAO.
+           MOVE OPC-COD-VCOC IN OPC TO WSS-GLS-MONE IN WSS-VARI.
+           MOVE OPC-VAL-SCRE IN OPC TO WSS-VAL-SCRE IN WSS-VARI.
+           IF WSS-COD-VVOC IN WSS-VARI NOT = '0999'
+             PERFORM CONVERTIR-A-MONNAC
+             MOVE WSS-VAL-SCRE IN WSS-VARI TO GAO-VAL-SCRE IN GAO
+           ELSE
+             MOVE WSS-VAL-SCRE IN WSS-VARI TO GAO-VAL-SCRE IN GAO.
+
+           ADD 1 TO WSS-NUM-RING IN WSS-VARI.
+           MOVE FIO-PUT TO FIO-CMND.
+           PERFORM COL-FIO-GAO.
+           IF NOT FIO-STAT-OKS
+             DISPLAY 'ERROR AL INGRESAR REGISTRO '
+                     ' EN TABLA GAO'
+             GO TO FIN-LUP-MAIN.
+
+       LEE-NXT-MAIN.
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM COL-FIO-OPC.
+           IF NOT FIO-STAT-OKS
+             GO TO FIN-LUP-MAIN.
+           GO TO LUP-MAIN.
+
+       FIN-LUP-MAIN.
+           DISPLAY 'FIN PROCESO LECTURA OPC'.
+
+           DISPLAY 'ESTADISTICAS DEL PROGRAMA '.
+           DISPLAY '------------------------- '.
+           DISPLAY ' '.
+           DISPLAY 'REGISTROS LEIDOS DE ARCHIVO OPC: '
+                    WSS-NUM-RLEI IN WSS-VARI.
+           DISPLAY 'REGISTROS INGRESADOS EN GAO: '
+                    WSS-NUM-RING IN WSS-VARI.
+
+      * Cerrar archivos
+           MOVE FIO-CLO TO FIO-CMND.
+           PERFORM COL-FIO-GAO.
+           PERFORM COL-FIO-OPC.
+           PERFORM COL-FIO-DLC.
+           PERFORM GNS-FIO-TAB.
+
+           PERFORM GNS-PRO-END.
+       FIN-MAIN.
+           EXIT.
+
+
+       GRABAR-DLC-GAO SECTION.
+       INI-GRABAR-DLC-GAO.
+           IF DLC-COD-PLZO IN DLC NOT > SPACES
+               DISPLAY 'OPERACION '
+                        OPC-CIC-IOPC IN OPC 
+                       ' NO TIENE PLAZO CONTABLE'
+               GO TO FIN-GRABAR-DLC-GAO.
+
+           MOVE DLC-COD-PLZO IN DLC TO GAO-COD-PLZO IN GAO.
+           MOVE DLC-IND-SCRT IN DLC TO GAO-IND-SCRT IN GAO.
+
+           IF DLC-IND-SCTB IN DLC = 'MUL'
+             MOVE SPACES              TO GAO-IND-SCTB IN GAO
+           ELSE
+             MOVE DLC-IND-SCTB IN DLC TO GAO-IND-SCTB IN GAO.
+           MOVE DLC-IND-SCBZ IN DLC TO GAO-IND-SCBZ IN GAO.
+       FIN-GRABAR-DLC-GAO.
+           EXIT.
+
+
+       CONVERTIR-A-MONNAC SECTION.
+      *===============================
+      * Convierte a pesos los valores almacenados en moneda
+      * reajustable.
+       INI-CNV-MON-NAC.
+      *---------------
+            MOVE OPC-COD-VCOC IN OPC TO CAM-COD-VCAM IN CAM(1).
+            MOVE WSS-COD-MNAC        TO CAM-COD-VCAM IN CAM(2).
+            MOVE OPC-FEC-FCOL IN OPC TO CAM-FEC-FCAM IN CAM(1).
+            MOVE OPC-FEC-FCOL IN OPC TO CAM-FEC-FCAM IN CAM(2).
+            MOVE FIO-GET-KEY TO FIO-CMND.
+            PERFORM TAB-FIO-CAM.
+            IF (NOT FIO-STAT-OKS OR
+               CAM-IND-VIGE IN CAM NOT = 'S')
+               DISPLAY ' '
+               DISPLAY 'NO EXI VCAM : '
+                        CAM-KEY-CAMB IN CAM  ' PARA : '
+                        OPC-CIC-IOPC IN OPC
+               GO TO FIN-CNV-MON-NAC
+            ELSE
+               MULTIPLY CAM-SGV-VCAM IN CAM
+                        BY WSS-VAL-SCRE IN WSS-VARI
+                           GIVING PES-SGV-DECI IN PES-VARI ROUNDED
+               PERFORM PES-SCTV
+               MOVE PES-SGV-ENTE IN PES-VARI
+                                    TO WSS-VAL-SCRE.
+       FIN-CNV-MON-NAC.
+      *---------------
+           EXIT.
+
+
+       COPY TABBFCAM.
+       COPY GNSBFTAB.
+       COPY GNSBFMSG.
+       COPY COLBFOPC.
+       COPY COLBFDLC.
+
+       COPY COLBFGAO.
+
+       COPY GNSBBMSG.
+       COPY GNSBGDTC.
+       COPY GNSBGFEC.
+       COPY GNSBGHOY.
+       COPY GNSBGIDD.
+       COPY GNSBTABT.
+       COPY GNSBBSYS.
+       COPY GNSBGPES.
+       COPY GNSBGEND.
+       COPY GNSBGABT.
+
+

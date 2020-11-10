@@ -1,0 +1,318 @@
+       IDENTIFICATION DIVISION.
+      *========================
+       PROGRAM-ID.   LDCPPXFM.
+       AUTHOR.       CONSIST.
+       DATE-WRITTEN.  3-JAN-1996 12:29:43.
+
+      * Expande familia de lineas en detalles de linea correspondientes
+
+       ENVIRONMENT DIVISION.
+      *=====================
+       CONFIGURATION SECTION.
+      *----------------------
+       SPECIAL-NAMES.
+               DECIMAL-POINT IS COMMA.
+
+       DATA DIVISION.
+      *==============
+
+       WORKING-STORAGE SECTION.
+      *------------------------
+       COPY GNSWVSCR.
+       COPY GNSWGFRM.
+       COPY GNSWVIDD.
+       COPY GNSWGRQA.
+       COPY GNSWGUIB.
+       COPY GNSWGELS.
+       COPY GNSBRTAB.
+       COPY GNSBRMSG.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-TAB-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-MSG-REQA==.
+       COPY GNSWCFIO.
+       COPY GNSWVFIO.
+       COPY GNSWGSYS.
+       COPY GNSWGQUE.
+       COPY GNSWGTSK.
+       COPY LDCWGMTX.
+       COPY LDCWGTRI.
+
+       01  TSPT-VARI.
+           03 WSS-CMMA                                PIC X(12).
+           03 WSS-PTR-GLS-COLA.
+              05  WSS-PTR-COD-TERM                    PIC X(02).
+              05  WSS-PTR-COD-TYPE                    PIC X(06).
+           03 WSS-LEN-TSPT VALUE    +1025  COMP       PIC S9(04).
+           03 WSS-ITEM-TSPT.
+              05 WSS-INDICA-TSPT                      PIC X(0001).
+              05 WSS-DATA-TSPT                        PIC X(1024).
+           03 WSS-NITM-TSPT    VALUE ZEROES           PIC 9(05).
+       01  WSS-VARI.
+           03 WSS-P                                   PIC 9(02).
+           03 WSS-Q                                   PIC 9(02).
+           03 WSS-IULT                                PIC 9(02).
+           03 WSS-FAMILIA                             PIC X(01).
+              88 ES-FAMILIA          VALUE 'S'.
+              88 NO-ES-FAMILIA       VALUE 'N'.
+           03 WSS-EXP-FAMILIA                         PIC X(01).
+              88 SI-EXP-FAMILIA      VALUE 'S'.
+              88 NO-EXP-FAMILIA      VALUE 'N'.
+           03 WSS-I                                   PIC 9(02).
+           03 WSS-J                                   PIC 9(02).
+           03 WSS-K                                   PIC 9(02).
+           03 WSS-L                                   PIC 9(02).
+           03 WSS-GLS-DATA.
+              05 WSS-TIPO OCCURS 10                   PIC X(03).
+           03 WSS-COD-MENS                            PIC X(12).
+
+       LINKAGE SECTION.
+      *----------------
+       01  DFHCOMMAREA.
+           03 FILLER                            PIC X(12).
+       COPY GNSLGFIO.
+
+       PROCEDURE DIVISION.
+      *===================
+
+       MAIN SECTION.
+       INI-MAIN.
+           PERFORM INI.
+           IF NOT ( WSS-TRAN = 'LDCCLFINGINP' OR 'LDCQCFMODINP' OR
+                               'LDCCLFMCAINP' )
+               GO TO CON-MAIN.
+           PERFORM EXPANDE-FAMILIA.
+           IF WSS-COD-MENS > SPACES
+               GO TO CON-MAIN.
+           IF SI-EXP-FAMILIA
+               PERFORM MOD-COLA.
+       CON-MAIN.
+           MOVE WSS-COD-MENS TO DFHCOMMAREA.
+       FIN-MAIN.
+           EXEC CICS RETURN END-EXEC.
+
+       INI SECTION.
+       INI-INI.
+       COPY GNSBGEIB.
+       COPY GNSBGEDB.
+
+           PERFORM GET-TSK-TERM.
+
+           MOVE DFHCOMMAREA TO WSS-CMMA.
+
+           MOVE WSS-CMMA TO WSS-PTR-GLS-COLA.
+
+           MOVE 'LDCPPXFM'  TO IDD-PROG FIO-PROG.
+           MOVE IDD-VARI    TO SYS-CMMA.
+           MOVE +507        TO SYS-TCMA.
+           MOVE 'GNSPPIDD'  TO SYS-PROG.
+           MOVE SYS-LINK    TO SYS-CMND.
+           PERFORM GNS-PRO-SYS.
+           MOVE SYS-CMMA TO IDD-VARI.
+
+           MOVE SPACES TO WSS-COD-MENS.
+
+           PERFORM GNS-ERR-QUE.
+           PERFORM GNS-HDL-VSM.
+           PERFORM PROCESO-LEE-TS.
+       FIN-INI.
+           EXIT.
+
+       PROCESO-LEE-TS SECTION.
+       INI-PROCESO-LEE-TS.
+           MOVE SPACES   TO WSS-PCAPT.
+           MOVE ZEROES   TO WSS-NITM-TSPT.
+           MOVE +1025    TO WSS-LEN-TSPT.
+           PERFORM GET-TSPT.
+           MOVE WSS-PCAPT TO WSS-FORM-RCV.
+       FIN-PROCESO-LEE-TS.
+           EXIT.
+
+       GET-TSPT SECTION.
+       INI-GET-TSPT.
+           ADD 1 TO WSS-NITM-TSPT.
+           MOVE WSS-PTR-GLS-COLA  TO QUE-COLA.
+           MOVE WSS-NITM-TSPT     TO QUE-NITM.
+           MOVE WSS-LEN-TSPT      TO QUE-LITM.
+           MOVE QUE-GET           TO QUE-CMND.
+           PERFORM GNS-PRO-QUE.
+           IF QUE-STAT = QUE-STAT-OKS
+               MOVE QUE-ITEM      TO WSS-ITEM-TSPT
+               MOVE WSS-DATA-TSPT TO WSS-PCAPT-ELE(WSS-NITM-TSPT)
+               GO TO INI-GET-TSPT.
+       FIN-GET-TSPT.
+           EXIT.
+
+       BUS-ULT-LLENA SECTION.
+       INI-BUS-ULT-LLENA.
+           MOVE 0 TO WSS-IULT.
+       LUP-BUS-ULT-LLENA.
+           ADD 1 TO WSS-IULT.
+           IF WSS-IULT > 15
+               GO TO FIN-BUS-ULT-LLENA.
+           IF PCAPT-A-LDC-NUM-ILDC-3(WSS-IULT) > SPACES
+               GO TO LUP-BUS-ULT-LLENA.
+       FIN-BUS-ULT-LLENA.
+           SUBTRACT 1 FROM WSS-IULT.
+       EXT-BUS-ULT-LLENA.
+           EXIT.
+
+       EXPANDE-FAMILIA SECTION.
+       INI-EXPANDE-FAMILIA.
+           MOVE 'N' TO WSS-EXP-FAMILIA.
+           PERFORM BUS-ULT-LLENA.
+           MOVE 1 TO WSS-I.
+           MOVE ZEROES TO WSS-Q.
+       LUP-EXPANDE-FAMILIA.
+           IF WSS-I > 15 OR WSS-I > WSS-IULT
+               GO TO FIN-EXPANDE-FAMILIA.
+           PERFORM VER-ES-FAMILIA.
+           IF NO-ES-FAMILIA
+               ADD 1 TO WSS-I
+               GO TO LUP-EXPANDE-FAMILIA.
+      *JSS-INI 22-MAR-1999
+           MOVE PCAPT-A-LDC-COD-TIPO-3(WSS-I) TO
+                PCAPT-A-LDC-COD-FAMI-3(WSS-I).
+      *JSS-FIN 22-MAR-1999
+           MOVE WSS-TIPO(1) TO PCAPT-A-LDC-COD-TIPO-3(WSS-I)
+                               PCAPT-A-LDC-COD-TIPO-7(WSS-I).
+           ADD 1 TO WSS-Q.
+           MOVE WSS-I TO WSS-P.
+           PERFORM PUT-APFA.
+      *Marca un indicador de que por lo menos expandio una familia
+           MOVE 'S' TO WSS-EXP-FAMILIA.
+      *Abrir ( WSS-J - 1 ) posiciones desde ( WSS-I + 1 )
+           PERFORM REPLICA-FAMILIA.
+           IF WSS-COD-MENS > SPACES
+               GO TO FIN-EXPANDE-FAMILIA.
+           ADD WSS-J TO WSS-I.
+           ADD WSS-J TO WSS-IULT.
+           SUBTRACT 1 FROM WSS-IULT.
+           GO TO LUP-EXPANDE-FAMILIA.
+       FIN-EXPANDE-FAMILIA.
+           EXIT.
+
+       VER-ES-FAMILIA SECTION.
+       INI-VER-ES-FAMILIA.
+           MOVE 'N' TO WSS-FAMILIA.
+           IF PCAPT-A-LDC-COD-TIPO-3(WSS-I) NOT > SPACES
+               GO TO FIN-VER-ES-FAMILIA.
+           MOVE 'FTL'                         TO TAB-COD-TTAB IN TAB.
+           MOVE PCAPT-A-LDC-COD-TIPO-3(WSS-I) TO TAB-COD-CTAB IN TAB.
+           MOVE 'LDC'       TO FIO-SIST.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM GNS-FIO-TAB.
+           IF ( NOT FIO-STAT-OKS ) OR
+              ( TAB-GLS-DATA IN TAB NOT > SPACES )
+               GO TO FIN-VER-ES-FAMILIA.
+           MOVE 'S' TO WSS-FAMILIA.
+           MOVE TAB-GLS-DATA TO WSS-GLS-DATA.
+           MOVE 0 TO WSS-J.
+       LUP-VER-ES-FAMILIA.
+           ADD 1 TO WSS-J.
+           IF WSS-J > 10
+               GO TO CON-VER-ES-FAMILIA.
+           IF WSS-TIPO(WSS-J) > SPACES
+               GO TO LUP-VER-ES-FAMILIA.
+       CON-VER-ES-FAMILIA.
+           SUBTRACT 1 FROM WSS-J.
+       FIN-VER-ES-FAMILIA.
+           EXIT.
+
+       REPLICA-FAMILIA SECTION.
+       INI-REPLICA-FAMILIA.
+           MOVE WSS-IULT       TO     WSS-K.
+           ADD  WSS-IULT WSS-J GIVING WSS-L.
+           SUBTRACT 1          FROM   WSS-L.
+           IF WSS-K = WSS-L
+               GO TO FIN-REPLICA-FAMILIA.
+           IF WSS-L > 15
+               MOVE 'XFMOVFLW' TO WSS-COD-MENS
+               GO TO FIN-REPLICA-FAMILIA.
+       LU1-REPLICA-FAMILIA.
+           IF WSS-K NOT > WSS-I
+               GO TO CON-REPLICA-FAMILIA.
+           MOVE PCAPT-A-LDC-ARR(WSS-K) TO PCAPT-A-LDC-ARR(WSS-L).
+           MOVE WSS-L TO PCAPT-A-LDC-NUM-ILDC-3(WSS-L)
+                         PCAPT-A-LDC-NUM-ILDC-6(WSS-L)
+                         PCAPT-A-LDC-NUM-ILDC-7(WSS-L).
+           SUBTRACT 1 FROM WSS-K.
+           SUBTRACT 1 FROM WSS-L.
+           GO TO LU1-REPLICA-FAMILIA.
+       CON-REPLICA-FAMILIA.
+      *Llenar WSS-J - 1 espacios comenzando desde posicion WSS-I + 1
+      *WSS-L parte de posicion 2
+           MOVE WSS-I TO WSS-K.
+           MOVE 1     TO WSS-L.
+       LU2-REPLICA-FAMILIA.
+           ADD 1 TO WSS-K.
+           ADD 1 TO WSS-L.
+           IF WSS-L > WSS-J
+               GO TO FIN-REPLICA-FAMILIA.
+           MOVE PCAPT-A-LDC-ARR(WSS-I) TO PCAPT-A-LDC-ARR(WSS-K).
+      *JSS-INI 22-MAR-1999
+           MOVE PCAPT-A-LDC-COD-FAMI-3(WSS-I) TO
+                PCAPT-A-LDC-COD-FAMI-3(WSS-K).
+      *JSS-FIN 22-MAR-1999
+           MOVE WSS-TIPO(WSS-L) TO PCAPT-A-LDC-COD-TIPO-3(WSS-K)
+                                   PCAPT-A-LDC-COD-TIPO-7(WSS-K).
+           MOVE WSS-K           TO PCAPT-A-LDC-NUM-ILDC-3(WSS-K)
+                                   PCAPT-A-LDC-NUM-ILDC-6(WSS-K)
+                                   PCAPT-A-LDC-NUM-ILDC-7(WSS-K).
+           MOVE WSS-K TO WSS-P.
+           PERFORM PUT-APFA.
+           GO TO LU2-REPLICA-FAMILIA.
+       FIN-REPLICA-FAMILIA.
+           EXIT.
+
+       MOD-COLA SECTION.
+       INI-MOD-COLA.
+      *Eliminar COLA
+           MOVE WSS-PTR-GLS-COLA TO QUE-COLA.
+           MOVE QUE-DEL          TO QUE-CMND.
+           PERFORM GNS-PRO-QUE.
+      *Regrabar WSS-PCAPAT en cola
+           MOVE ZEROES   TO WSS-NITM-TSPT.
+           MOVE +1025    TO WSS-LEN-TSPT.
+           PERFORM PUT-TSPT.
+       FIN-MOD-COLA.
+           EXIT.
+
+       PUT-TSPT SECTION.
+       INI-PUT-TSPT.
+           ADD 1 TO WSS-NITM-TSPT.
+           IF WSS-PCAPT-ELE(WSS-NITM-TSPT) NOT > SPACES OR
+              WSS-NITM-TSPT > 18
+               GO TO FIN-PUT-TSPT.
+           MOVE WSS-PTR-GLS-COLA  TO QUE-COLA.
+           MOVE WSS-NITM-TSPT     TO QUE-NITM.
+           MOVE WSS-LEN-TSPT      TO QUE-LITM.
+           MOVE WSS-PCAPT-ELE(WSS-NITM-TSPT) TO WSS-DATA-TSPT.
+           MOVE  WSS-ITEM-TSPT    TO QUE-ITEM.
+           MOVE QUE-PUT           TO QUE-CMND.
+           PERFORM GNS-PRO-QUE.
+           IF QUE-STAT = QUE-STAT-OKS
+               GO TO INI-PUT-TSPT
+           ELSE
+               MOVE 'QUEPUTERR' TO WSS-COD-MENS.
+       FIN-PUT-TSPT.
+           EXIT.
+
+       COPY GNSBGSYS.
+       COPY GNSBHVSM.
+       COPY GNSBGDTC.
+       COPY GNSBGMSG.
+       COPY GNSBGQUE.
+       COPY GNSBIABT.
+       COPY GNSBFTAB.
+       COPY GNSBFMSG.
+       COPY GNSBGTSK.
+       PUT-APFA SECTION.
+       INI-PUT-APFA.
+           MOVE 'APFA'              TO QUE-TYPE.
+           MOVE TSK-TERM-ALF        TO QUE-TERM.
+           MOVE +02                 TO QUE-LITM.
+           MOVE QUE-PUT             TO QUE-CMND.
+           MOVE WSS-P               TO QUE-NITM.
+           MOVE WSS-Q               TO QUE-ITEM.
+           PERFORM GNS-PRO-QUE.
+       FIN-PUT-APFA.
+           EXIT.

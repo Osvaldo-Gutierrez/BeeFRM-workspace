@@ -1,0 +1,315 @@
+       IDENTIFICATION DIVISION.
+      *=======================
+       PROGRAM-ID.    GNSPPPAN.
+       AUTHOR.        CONSIST ( JSS ).
+
+      * Procesador generico de paneles
+
+       ENVIRONMENT DIVISION.
+      *====================
+       CONFIGURATION SECTION.
+      *----------------------
+       SPECIAL-NAMES.
+               DECIMAL-POINT IS COMMA.
+
+       DATA DIVISION.
+      *=============
+       WORKING-STORAGE SECTION.
+
+       COPY GNSBRPAN.
+       COPY GNSWCFIO.
+       COPY GNSWVFIO.
+       01  WSS-VARI.
+           03 WSS-IPAN                    PIC X(12).
+           03 WSS-RPAN    OCCURS 100.
+              05 FILLER                   PIC X(01).
+              05 WSS-KPAN                 PIC X(28).
+              05 WSS-DPAN                 PIC X(460).
+           03 WSS-TLIN.
+              05 WSS-PLIN OCCURS 100      PIC 9(05).
+           03 WSS-NREG VALUE 0            PIC 9(03).
+           03 WSS-LMXR VALUE 100          PIC 9(03).
+           03 WSS-TBL-TFUN.
+              05 WSS-IFUN OCCURS 50.
+                 07 WSS-RETO.
+                    09 WSS-TCLA           PIC X(03).
+                    09 WSS-CHAR           PIC X(01).
+                    09 WSS-FUNC           PIC X(12).
+                 07 WSS-TFUN              PIC X(03).
+                 07 WSS-CMND              PIC X(80).
+           03 WSS-NFUN VALUE 0            PIC 9(03).
+           03 WSS-LMXF VALUE 50           PIC 9(03).
+           03 WSS-INDI VALUE 0            PIC 9(03).
+           03 WSS-INDJ VALUE 0            PIC 9(03).
+           03 WSS-INDK VALUE 0            PIC 9(03).
+           03 WSS-CMSG VALUE SPACES       PIC X(12).
+           03 WSS-MENS VALUE SPACES       PIC X(40).
+           03 WSS-GLS-KEYS.
+              05 WSS-TBL-KEYS   OCCURS 10.
+                  07 WSS-CHR-KEYS         PIC X(03).
+                  07 WSS-CMA-KEYS         PIC X(01).
+           03 WSS-NUM-NKEY                PIC 9(02).
+           03 WSS-GLS-CHRS.
+              05 WSS-TBL-CHRS   OCCURS 10.
+                 07 WSS-CHR-CHRS          PIC X(01).
+                 07 WSS-CMA-CHRS          PIC X(01).
+           03 WSS-NUM-NCHR                PIC 9(02).
+           03 WSS-NUM-FILO                PIC 9(02).
+           03 WSS-NUM-COLO                PIC 9(02).
+           03 WSS-NUM-LINE                PIC 9(02).
+           03 WSS-GLS-RREG                PIC X(132).
+           03 WSS-GLS-RCOD                PIC X(132).
+           03 WSS-COD-RETO-KEY            PIC X(16).
+           03 WSS-COD-RETO.
+              05 WSS-GLS-RKEY             PIC X(03).
+              05 WSS-GLS-RCHR             PIC X(01).
+              05 WSS-GLS-RPAN             PIC X(12).
+           03 WSS-RSET VALUE "(B[0m"
+                                          PIC X(07).
+
+       PROCEDURE DIVISION.
+      *===================
+
+       MAIN SECTION.
+       INI-MAIN.
+           INITIALIZE WSS-TLIN.
+           MOVE FIO-ACCS-UPD TO FIO-ACCS.
+           MOVE FIO-ACC      TO FIO-CMND.
+           PERFORM GNS-FIO-PAN.
+           MOVE FIO-INP TO FIO-CMND.
+           PERFORM GNS-FIO-PAN.
+           MOVE 'SIS' TO PAN-KEY-IPAN IN PAN.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM GNS-FIO-PAN.
+           IF NOT FIO-STAT-OKS
+               MOVE 'ABORTO: NO EXISTE PANEL SIS' TO WSS-MENS
+               GO TO ERR-MAIN.
+           MOVE 1 TO WSS-NREG.
+       LUP-MAIN.
+           IF WSS-NREG > WSS-LMXR
+               MOVE WSS-LMXR TO WSS-NREG.
+           MOVE PAN-COD-IPAN IN PAN TO WSS-IPAN.
+           MOVE PAN                 TO WSS-RPAN(WSS-NREG).
+           PERFORM LEE-FUNC.
+           IF WSS-CMSG > SPACES OR WSS-MENS > SPACES
+               GO TO ERR-MAIN.
+           PERFORM DET-PARA.
+           PERFORM CAL-PDPA.
+           PERFORM ANL-PDPA.
+           GO TO LUP-MAIN.
+       ERR-MAIN.
+           PERFORM CLO-FILE.
+           DISPLAY WSS-MENS.
+           CALL 'SYS$EXIT' USING BY VALUE 0.
+       FIN-MAIN.
+           PERFORM CLO-FILE.
+           STOP RUN.
+
+       LEE-FUNC SECTION.
+       INI-LEE-FUNC.
+           MOVE SPACES TO WSS-CMSG WSS-MENS WSS-TBL-TFUN.
+           MOVE 0 TO WSS-NFUN.
+       LUP-LEE-FUNC.
+           ADD 1 TO WSS-NFUN.
+           IF WSS-NFUN > WSS-LMXF
+               GO TO FIN-LEE-FUNC.
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM GNS-FIO-PAN.
+           IF NOT ( FIO-STAT-OKS AND
+                    PAN-COD-IPAN IN PAN = WSS-IPAN )
+               GO TO FIN-LEE-FUNC.
+           MOVE PAN-COD-TCLA IN PAN TO WSS-TCLA(WSS-NFUN).
+           MOVE PAN-COD-CHAR IN PAN TO WSS-CHAR(WSS-NFUN).
+           MOVE PAN-COD-FUNC IN PAN TO WSS-FUNC(WSS-NFUN).
+           MOVE PAN-COD-TFUN IN PAN TO WSS-TFUN(WSS-NFUN).
+           MOVE PAN-GLS-CMND IN PAN TO WSS-CMND(WSS-NFUN).
+           GO TO LUP-LEE-FUNC.
+       FIN-LEE-FUNC.
+           SUBTRACT 1 FROM WSS-NFUN.
+           MOVE WSS-RPAN(WSS-NREG) TO PAN.
+       EXT-LEE-FUNC.
+           EXIT.
+
+       DET-PARA SECTION.
+       INI-DET-PARA.
+      *Determina parametros para llamada a GNSPPDPA
+      *WSS-NUM-NKEY, WSS-GLS-KEYS, WSS-NUM-NCHR, WSS-GLS-CHRS
+           PERFORM DET-PARA-KEYS.
+           PERFORM DET-PARA-CHRS.
+           MOVE PAN-NUM-FILO IN PAN TO WSS-NUM-FILO.
+           MOVE PAN-NUM-COLO IN PAN TO WSS-NUM-COLO.
+           MOVE PAN-NUM-LINE IN PAN TO WSS-NUM-LINE.
+      *
+      *    CALL 'LIB$SET_SYMBOL' USING BY DESCRIPTOR ... WSS-NUM-NKEY
+      *    CALL 'LIB$SET_SYMBOL' USING BY DESCRIPTOR ... WSS-NUM-NCHR
+      *
+           CALL 'LIB$SET_SYMBOL' USING BY DESCRIPTOR 'FIL'
+                                          PAN-GLS-ARCH IN PAN.
+           CALL 'LIB$SET_SYMBOL' USING BY DESCRIPTOR 'KEY'
+                                          WSS-GLS-KEYS.
+           CALL 'LIB$SET_SYMBOL' USING BY DESCRIPTOR 'CHR'
+                                          WSS-GLS-CHRS.
+           CALL 'LIB$SET_SYMBOL' USING BY DESCRIPTOR 'PRM'
+                                          PAN-GLS-PRMT IN PAN.
+           CALL 'LIB$SET_SYMBOL' USING BY DESCRIPTOR 'FLA'
+                                          WSS-NUM-FILO.
+           CALL 'LIB$SET_SYMBOL' USING BY DESCRIPTOR 'COL'
+                                          WSS-NUM-COLO.
+           CALL 'LIB$SET_SYMBOL' USING BY DESCRIPTOR 'LNS'
+                                          WSS-NUM-LINE.
+           CALL 'LIB$SET_SYMBOL' USING BY DESCRIPTOR 'PLN'
+                                          WSS-PLIN(WSS-NREG).
+           CALL 'LIB$SET_SYMBOL' USING BY DESCRIPTOR 'CLS'
+                                          PAN-COD-CLRP IN PAN.
+           CALL 'LIB$SET_SYMBOL' USING BY DESCRIPTOR 'CLW'
+                                          PAN-COD-CLRV IN PAN.
+       FIN-DET-PARA.
+           EXIT.
+
+       DET-PARA-KEYS SECTION.
+       INI-DET-PARA-KEYS.
+           MOVE SPACES TO WSS-GLS-KEYS.
+           MOVE 0 TO WSS-INDI WSS-INDK WSS-NUM-NKEY.
+       LUP-DET-PARA-KEYS.
+           ADD 1 TO WSS-INDI.
+           IF WSS-INDI > WSS-NFUN
+               GO TO FIN-DET-PARA-KEYS.
+           MOVE 0 TO WSS-INDJ.
+       LU2-DET-PARA-KEYS.
+           ADD 1 TO WSS-INDJ.
+           IF WSS-INDJ > WSS-INDK
+               ADD 1 TO WSS-INDK
+               ADD 1 TO WSS-NUM-NKEY
+               MOVE WSS-TCLA(WSS-INDI) TO WSS-CHR-KEYS(WSS-INDK)
+               MOVE ','                TO WSS-CMA-KEYS(WSS-INDK)
+               GO TO LUP-DET-PARA-KEYS.
+           IF WSS-TCLA(WSS-INDI) = WSS-CHR-KEYS(WSS-INDK)
+               GO TO LUP-DET-PARA-KEYS.
+           GO TO LU2-DET-PARA-KEYS.
+       FIN-DET-PARA-KEYS.
+           EXIT.
+
+       DET-PARA-CHRS SECTION.
+       INI-DET-PARA-CHRS.
+           MOVE SPACES TO WSS-GLS-CHRS.
+           MOVE 0 TO WSS-INDI WSS-INDK WSS-NUM-NCHR.
+       LUP-DET-PARA-CHRS.
+           ADD 1 TO WSS-INDI.
+           IF WSS-INDI > WSS-NFUN
+               GO TO FIN-DET-PARA-CHRS.
+           MOVE 0 TO WSS-INDJ.
+       LU2-DET-PARA-CHRS.
+           ADD 1 TO WSS-INDJ.
+           IF WSS-INDJ > WSS-INDK
+               ADD 1 TO WSS-INDK
+               ADD 1 TO WSS-NUM-NCHR
+               MOVE WSS-CHAR(WSS-INDI) TO WSS-CHR-CHRS(WSS-INDK)
+               MOVE ','                TO WSS-CMA-CHRS(WSS-INDK)
+               GO TO LUP-DET-PARA-CHRS.
+           IF WSS-CHAR(WSS-INDI) = WSS-CHR-CHRS(WSS-INDK)
+               GO TO LUP-DET-PARA-CHRS.
+           GO TO LU2-DET-PARA-CHRS.
+       FIN-DET-PARA-CHRS.
+           EXIT.
+
+       CAL-PDPA SECTION.
+       INI-CAL-PDPA.
+           CALL 'PRODPA'.
+           CALL 'LIB$GET_SYMBOL' USING BY DESCRIPTOR 'GNS$DFLREG'
+                                          WSS-GLS-RREG.
+           CALL 'LIB$GET_SYMBOL' USING BY DESCRIPTOR 'GNS$DFLCOD'
+                                          WSS-GLS-RCOD.
+           CALL 'LIB$GET_SYMBOL' USING BY DESCRIPTOR 'GNS$DFLKEY'
+                                          WSS-GLS-RKEY.
+           CALL 'LIB$GET_SYMBOL' USING BY DESCRIPTOR 'GNS$DFLCHR'
+                                          WSS-GLS-RCHR.
+           CALL 'LIB$GET_SYMBOL' USING BY DESCRIPTOR 'GNS$DFLPAN'
+                                          WSS-GLS-RPAN.
+           CALL 'LIB$GET_SYMBOL' USING BY DESCRIPTOR 'GNS$DFLPLN'
+                                          WSS-PLIN(WSS-NREG).
+       FIN-CAL-PDPA.
+           EXIT.
+
+       ANL-PDPA SECTION.
+       INI-ANL-PDPA.
+           MOVE WSS-GLS-RKEY TO WSS-COD-RETO-KEY.
+           MOVE 0 TO WSS-INDI.
+       LU1-ANL-PDPA.
+           ADD 1 TO WSS-INDI.
+           IF WSS-INDI > WSS-NFUN
+               GO TO CON-ANL-PDPA.
+           IF WSS-COD-RETO-KEY NOT = WSS-RETO(WSS-INDI)
+               GO TO LU1-ANL-PDPA
+           ELSE
+               GO TO PRO-ANL-PDPA.
+       CON-ANL-PDPA.
+           MOVE 0 TO WSS-INDI.
+       LUP-ANL-PDPA.
+           ADD 1 TO WSS-INDI.
+           IF WSS-INDI > WSS-NFUN
+               GO TO CUR-ANL-PDPA.
+           IF WSS-COD-RETO NOT = WSS-RETO(WSS-INDI)
+               GO TO LUP-ANL-PDPA.
+       PRO-ANL-PDPA.
+      *PAN
+           IF WSS-TFUN(WSS-INDI) = 'PAN'
+               MOVE WSS-CMND(WSS-INDI) TO PAN-KEY-IPAN
+               MOVE FIO-GET-KEY TO FIO-CMND
+               PERFORM GNS-FIO-PAN
+               IF FIO-STAT-OKS
+                   ADD 1 TO WSS-NREG
+                   IF PAN-KEY-IPAN IN PAN = WSS-KPAN(WSS-NREG)
+                       GO TO FIN-ANL-PDPA
+                   ELSE
+                       MOVE 0 TO WSS-PLIN(WSS-NREG)
+                       GO TO FIN-ANL-PDPA
+               ELSE
+                   GO TO CUR-ANL-PDPA.
+      *BCK
+           IF WSS-TFUN(WSS-INDI) = 'BCK'
+               IF WSS-NREG > 1
+                   SUBTRACT 1 FROM WSS-NREG
+                   GO TO CUR-ANL-PDPA
+               ELSE
+                   MOVE 1 TO WSS-NREG
+                   GO TO CUR-ANL-PDPA.
+      *SIS
+           IF WSS-TFUN(WSS-INDI) = 'SIS'
+               MOVE 1 TO WSS-NREG
+               GO TO CUR-ANL-PDPA.
+      *RFH
+           IF WSS-TFUN(WSS-INDI) = 'RFH'
+               GO TO CUR-ANL-PDPA.
+      *DCL
+           IF WSS-TFUN(WSS-INDI) = 'DCL'
+               PERFORM CLO-FILE
+               DISPLAY WSS-RSET WITH NO ADVANCING
+               CALL 'LIB$DO_COMMAND' USING
+                                     BY DESCRIPTOR WSS-CMND(WSS-INDI).
+      *SPW
+           IF WSS-TFUN(WSS-INDI) = 'SPW'
+               DISPLAY WSS-RSET WITH NO ADVANCING
+               CALL 'LIB$SPAWN' USING
+                                     BY DESCRIPTOR WSS-CMND(WSS-INDI)
+               GO TO CUR-ANL-PDPA.
+      *EXT
+           IF WSS-TFUN(WSS-INDI) = 'EXT'
+               PERFORM CLO-FILE
+               DISPLAY WSS-RSET LINE 24 COLUMN 1 WITH NO ADVANCING
+               CALL 'LIB$DO_COMMAND' USING
+                                   BY DESCRIPTOR 'EXIT'.
+       CUR-ANL-PDPA.
+           MOVE WSS-RPAN(WSS-NREG) TO PAN.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM GNS-FIO-PAN.
+       FIN-ANL-PDPA.
+           EXIT.
+
+       CLO-FILE SECTION.
+       INI-CLO-FILE.
+           MOVE FIO-CLO TO FIO-CMND.
+           PERFORM GNS-FIO-PAN.
+       FIN-CLO-FILE.
+           EXIT.
+
+       COPY GNSBFPAN.

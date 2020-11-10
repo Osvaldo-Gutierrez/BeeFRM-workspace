@@ -1,0 +1,3211 @@
+       IDENTIFICATION DIVISION.
+      *=======================
+       PROGRAM-ID.      COLPLCOL.
+       AUTHOR.          BEE TEAM (EX-CONSIST).
+       DATE-WRITTEN.    19-OCT-1996.
+      *
+      *              CONVERTIDO A VSAM 19-OCT-1993 RVM-BFA.
+      * PROGRAMA MODIFICADO POR RBG PARA CHI Y ARG (PROPTX) 10-JUL-1996
+      ******************************************************************
+      * LISTADOR DE LAS ENTIDADES OPC, DLC, RCV, VEN, EVC, ICG, CYA,   *
+      * CAN, RDT Y RDC A PARTIR DEL CODIGO DE OPERACION                *
+      * MODIFICACION:                                                  *
+      *               PREPARADO PARA MAS DE UNA OPERACION.             *
+      ******************************************************************
+       ENVIRONMENT DIVISION.
+      *====================
+       CONFIGURATION SECTION.
+      *---------------------
+       SPECIAL-NAMES.
+            DECIMAL-POINT IS COMMA.
+       INPUT-OUTPUT SECTION.
+      *--------------------
+       FILE-CONTROL.
+      *@@@-AGREGADO 02-05-1994 FSL BRB
+      *    SELECT RPTCOL         ASSIGN TO        RPTCOL.
+           SELECT RPTCOL         ASSIGN TO        UT-S-RPTCOL.
+      *@@@-*
+       DATA DIVISION.
+      *=============
+       FILE SECTION.
+      *------------
+       FD  RPTCOL     RECORDING MODE IS F
+                      BLOCK CONTAINS 0 RECORDS
+                      RECORD CONTAINS 133 CHARACTERS
+                      LABEL RECORD ARE STANDARD
+                      DATA RECORDS IS RPT-DET.
+       01  RPT-DET                              PIC X(133).
+       WORKING-STORAGE SECTION.
+      *-----------------------
+      * MODULOS PARA CUALQUIER ACCESO A TABLAS
+       COPY GNSWCFIO.
+       COPY GNSWVFIO.
+       COPY GNSWVIDD.
+       COPY GNSBRTAB.
+       COPY GNSBRMSG.
+       COPY GNSBRMSC.
+      * REGISTRO PARA BUSCAR OFICINA
+       COPY TABBROFI.
+      *
+       COPY TABBRTIO.
+      *
+       COPY GNSWGRQA.
+       COPY GNSWGUIB.
+       COPY GNSWGELS.
+      * VARIABLES RUTINAS SISTEMA
+       COPY GNSWGSYS.
+       01  PGM-STAT.
+           03 PGM-STAT-SRT            VALUE ' ' PIC X(01).
+              88 PGM-STAT-SRT-OKS     VALUE ' '.
+              88 PGM-STAT-SRT-MAL     VALUE 'M'.
+           03 PGM-SOKS                VALUE ' ' PIC X(01).
+           03 PGM-SMAL                VALUE 'M' PIC X(01).
+      * VARIABLES MANEJO DE FECHAS
+       COPY GNSWGFEC.
+      * VARIABLES CURRENT-DAY
+       COPY GNSWGHOY.
+      *
+      * RVM-BFA-INI 10/19/93
+       COPY COLBROPC.
+       COPY COLBRDLC.
+       COPY COLBRRCV.
+       COPY COLBRVEN.
+       COPY COLBREVC.
+       COPY COLBRICG.
+       COPY COLBRCYA.
+       COPY COLBRCAN.
+       COPY COLBRRDT.
+       COPY COLBRRDC.
+       COPY COLBRRCE.
+      * RVM-BFA-FIN 10/19/93
+      *
+       01  WSS-VARI.
+      *
+      *--- CONTADORES DE CONTROL
+      *
+           03 WSS-NUM-OPCL    PIC 9(06) VALUE 0.
+           03 WSS-NUM-DLCL    PIC 9(06) VALUE 0.
+           03 WSS-NUM-RCVL    PIC 9(06) VALUE 0.
+           03 WSS-NUM-VENL    PIC 9(06) VALUE 0.
+           03 WSS-NUM-EVCL    PIC 9(06) VALUE 0.
+           03 WSS-NUM-ICGL    PIC 9(06) VALUE 0.
+           03 WSS-NUM-CYAL    PIC 9(06) VALUE 0.
+           03 WSS-NUM-CANL    PIC 9(06) VALUE 0.
+           03 WSS-NUM-RDTL    PIC 9(06) VALUE 0.
+           03 WSS-NUM-RDCL    PIC 9(06) VALUE 0.
+           03 WSS-NUM-RCEL    PIC 9(06) VALUE 0.
+           03 WSS-NUM-DYCL    PIC 9(06) VALUE 0.
+      *
+      *--- PARAMETROS
+      *
+           03 WSS-COD-PAR.
+              05 WSS-MSC-STAT  PIC X.
+              05 WSS-OPC-DESDE.
+                 07 WSS-CAI-DESDE PIC X(4).
+                 07 WSS-IIC-DESDE PIC X(8).
+      *       05 WSS-OPC-HASTA.
+      *          07 WSS-CAI-HASTA PIC X(4).
+      *          07 WSS-IIC-HASTA PIC X(8).
+
+      *--- CAMPOS DE FECHAS
+           03 WSS-FEC-FMAV    PIC 9(08).
+           03 WSS-FEC-DISP.
+              07 WSS-DIS-DDD  PIC 9(2).
+              07 FILLER       PIC X(1) VALUE '/'.
+              07 WSS-DIS-MMD  PIC 9(2).
+              07 FILLER       PIC X(1) VALUE '/'.
+              07 WSS-DIS-SSD  PIC 9(2).
+              07 WSS-DIS-AAD  PIC 9(2).
+           03 WSS-FEC-DMSA.
+              07 WSS-NUM-DDD  PIC 9(2).
+              07 WSS-NUM-MMD  PIC 9(2).
+              07 WSS-NUM-SSD  PIC 9(2).
+              07 WSS-NUM-AAD  PIC 9(2).
+      *
+      *--- CONTROLES DE PAGINA Y LINEA PARA LISTADO 1
+           03 WSS-NUM-CPAG        VALUE 0         PIC 9(04).
+           03 WSS-NUM-CLIN        VALUE 0         PIC 9(02).
+      *--- CAMPOS NUMERICOS A LOS QUE SE MUEVEN LOS COMP-3
+      *
+      *--- PARA LUEGO MOVERLOS A LOS CAMPOS DISPLAY
+           03 WSS-VAL-CRED                        PIC S9(13)V99.
+      *--- LINEAS DE IMPRESION
+           03 RPT-LIN-RAY.
+              05 FILLER       PIC X(132) VALUE ALL '-'.
+
+           03 RPT-LIN-001.
+              05 FILLER       PIC X(01) VALUE SPACES.
+      * @@@-AGREGADO 09-05-1994 FSL BRB
+      *       05 FILLER    PIC X(26) VALUE 'BANCO FRANCES DEL RIO DE L'.
+      *       05 FILLER    PIC X(07) VALUE 'A PLATA'.
+              05 FILLER    PIC X(26) VALUE 'BANCO ROBERTS             '.
+              05 FILLER    PIC X(07) VALUE '       '.
+      * @@@-*
+              05 FILLER       PIC X(88) VALUE SPACES.
+      *       05 FILLER       PIC X(95) VALUE SPACES.
+              05 RPT-GLS-FEC  PIC X(10) VALUE SPACES.
+              05 FILLER       PIC X(01) VALUE SPACES.
+      * RBG/INI/CHI/ 12-JUL-1996
+           03 RPT-LIN-099.
+              05 FILLER       PIC X(01) VALUE SPACES.
+              05 FILLER PIC X(27) VALUE 'BANCO CREDITO E INVERSIONES'.
+              05 FILLER    PIC X(07) VALUE '       '.
+              05 FILLER       PIC X(88) VALUE SPACES.
+              05 RPT-GLS-FEC1 PIC X(10) VALUE SPACES.
+              05 FILLER       PIC X(01) VALUE SPACES.
+      * RBG/FIN/CHI/ 12-JUL-1996
+           03 RPT-LIN-002.
+              05 FILLER       PIC X(122) VALUE SPACES.
+              05 RPT-GLS-PAG  PIC X(06)  VALUE 'PAG : '.
+              05 RPT-NUM-PAG  PIC 9(04)  VALUE ZEROS.
+              05 FILLER       PIC X(01)  VALUE SPACES.
+           03 RPT-LIN-003.
+              05 FILLER       PIC X(01)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'COLPLCOL'.
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 FILLER       PIC X(05)  VALUE 'CAI: '.
+              05 RPT-CAI-IOPC PIC X(04).
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 FILLER       PIC X(05)  VALUE 'IIC: '.
+              05 RPT-IIC-IOPC PIC X(08).
+              05 FILLER       PIC X(85)  VALUE SPACES.
+              05 FILLER       PIC X(10) VALUE '- RPTCOL -'.
+              05 FILLER       PIC X(01) VALUE SPACES.
+           03 RPT-LIN-004.
+              05 FILLER       PIC X(01)  VALUE SPACES.
+              05 FILLER       PIC X(09)  VALUE 'ENTIDAD: '.
+              05 RPT-ENT      PIC X(03).
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 RPT-GLS-004  PIC X(11).
+           03 RPT-OPC-001.
+              05 FILLER       PIC X(01)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'FLAG'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(03)  VALUE 'CAI'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(03)  VALUE 'IIC'.
+              05 FILLER       PIC X(08)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'FTRN'.
+              05 FILLER       PIC X(05)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'HTRN'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'TAAC'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'STAT'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'OTRN'.
+              05 FILLER       PIC X(06)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'ATRN'.
+              05 FILLER       PIC X(06)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'TVOC'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'CVOC'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'TCOC'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'TOOC'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'AOOC'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'OFOC'.
+              05 FILLER       PIC X(05)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'RMOC'.
+              05 FILLER       PIC X(07)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'CDOC'.
+           03 RPT-OPC-002.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-OPC-FLAG PIC X(01).
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 RPT-OPC-CAI  PIC X(04).
+              05 FILLER       PIC X(01)  VALUE SPACES.
+              05 RPT-OPC-IIC  PIC X(08).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-OPC-FTRN PIC X(08).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-OPC-HTRN PIC X(06).
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 RPT-OPC-TAAC PIC X(01).
+              05 FILLER       PIC X(05)  VALUE SPACES.
+              05 RPT-OPC-STAT PIC X(01).
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 RPT-OPC-OTRN PIC X(04).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-OPC-ATRN PIC X(12).
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 RPT-OPC-TVOC PIC X(01).
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 RPT-OPC-CVOC PIC X(03).
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 RPT-OPC-TCOC PIC X(02).
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 RPT-OPC-TOOC PIC X(03).
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 RPT-OPC-AOOC PIC X(03).
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 RPT-OPC-OFOC PIC X(03).
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 RPT-OPC-RMOC PIC X(12).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-OPC-CDOC PIC X(03).
+           03 RPT-OPC-003.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'CIC-IDLC'.
+              05 FILLER       PIC X(07)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'FCOL'.
+              05 FILLER       PIC X(06)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'FING'.
+              05 FILLER       PIC X(06)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'FINP'.
+              05 FILLER       PIC X(20)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'CRED'.
+              05 FILLER       PIC X(18)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'SCRE'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'IND-AFER'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'MCVF'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'BCCR'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'VICR'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'RENO'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'GARA'.
+           03 RPT-OPC-004.
+              05 FILLER       PIC X(01)  VALUE SPACES.
+              05 RPT-OPC-IDLC PIC X(12).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-OPC-FCOL PIC X(08).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-OPC-FING PIC X(08).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-OPC-FINP PIC X(08).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-OPC-CRED PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-OPC-SCRE PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(05)  VALUE SPACES.
+              05 RPT-OPC-AFER PIC X(01).
+              05 FILLER       PIC X(07)  VALUE SPACES.
+              05 RPT-OPC-MCVF PIC X(01).
+              05 FILLER       PIC X(05)  VALUE SPACES.
+              05 RPT-OPC-BCCR PIC X(01).
+              05 FILLER       PIC X(05)  VALUE SPACES.
+              05 RPT-OPC-VICR PIC X(01).
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 RPT-OPC-RENO PIC X(03).
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 RPT-OPC-GARA PIC X(04)  VALUE 'GARA'.
+           03 RPT-OPC-005.
+              05 FILLER       PIC X(17)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'GAST'.
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'COD-SEGD'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'VAL-SEGD'.
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'COD-SEGP'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'VAL-SEGP'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'SGV-LIQU'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'NUM-IVEN'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'VCOR'.
+           03 RPT-OPC-006.
+              05 FILLER       PIC X(01)  VALUE SPACES.
+              05 RPT-OPC-GAST PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-OPC-CSED PIC X(09).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-OPC-VSED PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-OPC-CSEP PIC X(09)  VALUE 'COD-SEGP'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-OPC-VSEP PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-OPC-LIQU PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(06)  VALUE SPACES.
+              05 RPT-OPC-IVEN PIC 9(04).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-OPC-VCOR PIC 9(04).
+           03 RPT-OPC-007.
+              05 FILLER       PIC X(01)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'VCVG'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'VCCO'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'VCCM'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'VCCV'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'TVCC'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'VSTR'.
+              05 FILLER       PIC X(05)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'CIC-ICEN'.
+              05 FILLER       PIC X(15)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'SGV-VCOM'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'SGV-TCOM'.
+              05 FILLER       PIC X(05)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'COD-TCOM'.
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'AGES'.
+           03 RPT-OPC-008.
+              05 FILLER       PIC X(01)  VALUE SPACES.
+              05 RPT-OPC-VCVG PIC 9(04).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-OPC-VCCO PIC 9(04).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-OPC-VCCM PIC 9(04).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-OPC-VCCV PIC 9(04).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-OPC-TVCC PIC 9(04).
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 RPT-OPC-VSTR PIC X(01).
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 RPT-OPC-ICEN PIC X(12).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-OPC-VCOM PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-OPC-TCOM PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-OPC-CCOM PIC X(12).
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 RPT-OPC-AGES PIC X(02).
+           03 RPT-OPC-009.
+              05 FILLER       PIC X(01)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'CATE'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'DCOM'.
+              05 FILLER       PIC X(06)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'ICYA'.
+              05 FILLER       PIC X(22)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'LEGA'.
+              05 FILLER       PIC X(07)  VALUE SPACES.
+      * RBG/INI/CHI/ 8-JUL-1996
+              05 FILLER       PIC X(04)  VALUE 'CTBL'.
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'INSI'.
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'CVTA'.
+              05 FILLER       PIC X(01)  VALUE SPACES.
+      * RBG/FIN/CHI/ 8-JUL-1996
+           03 RPT-OPC-010.
+              05 FILLER       PIC X(01)  VALUE SPACES.
+              05 RPT-OPC-CATE PIC X(04).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-OPC-DCOM PIC X(04).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-OPC-ICYA PIC X(12).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-OPC-LEGA PIC Z.ZZZ.ZZZ.ZZZ.ZZ9,99.
+      * RBG/CHI/INI/ 8-JUL-1996
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 RPT-OPC-CTBL PIC X(01).
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 RPT-OPC-INSI PIC X(01).
+              05 FILLER       PIC X(01)  VALUE SPACES.
+              05 RPT-OPC-CVTA PIC X(01).
+      * RBG/CHI/FIN/ 8-JUL-1996
+           03 RPT-DLC-001.
+              05 FILLER       PIC X(01)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'FLAG'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(03)  VALUE 'CAI'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(03)  VALUE 'IIC'.
+              05 FILLER       PIC X(06)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'IDLC'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'VAL-NDLC'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'VAL-SDLC'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'TDOC'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'PLZO'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'TIMP'.
+              05 FILLER       PIC X(13)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'VAL-IMPU'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'COD-NOTC'.
+           03 RPT-DLC-002.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-DLC-FLAG PIC X(01).
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 RPT-DLC-CAI  PIC X(04).
+              05 FILLER       PIC X(01)  VALUE SPACES.
+              05 RPT-DLC-IIC  PIC X(08).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-DLC-IDLC PIC 9(04).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-DLC-NDLC PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-DLC-SDLC PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-DLC-TDOC PIC X(03).
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 RPT-DLC-PLZO PIC X(02).
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 RPT-DLC-TIMP PIC X(01).
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 RPT-DLC-IMPU PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-DLC-MOTC PIC X(09).
+           03 RPT-DLC-003.
+              05 FILLER       PIC X(12)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'VAL-GNOT'.
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'SCBZ'.
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'SCRT'.
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'COD-UBFD'.
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'PLZA'.
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'MIPL'.
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'RIES'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'VAL-READ'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'VAL-INTD'.
+              05 FILLER       PIC X(06)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'FDEV'.
+           03 RPT-DLC-004.
+              05 RPT-DLC-GNOT PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 RPT-DLC-SCBZ PIC X(04).
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 RPT-DLC-SCRT PIC X(03).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-DLC-UBFD PIC X(09).
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 RPT-DLC-PLZA PIC X(04).
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 RPT-DLC-MIPL PIC X(01).
+              05 FILLER       PIC X(05)  VALUE SPACES.
+              05 RPT-DLC-RIES PIC X(02).
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 RPT-DLC-READ PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-DLC-INTD PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 RPT-DLC-FDEV PIC 9(08).
+           03 RPT-DLC-005.
+              05 FILLER       PIC X(12)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'VAL-SINT'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'VAL-SCPA'.
+              05 FILLER       PIC X(05)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'FMAT'.
+              05 FILLER       PIC X(05)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'CIC-IOCO'.
+              05 FILLER       PIC X(07)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'IDLO'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'VAL-IPEN'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'VAL-DPES'.
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'SCTB'.
+           03 RPT-DLC-006.
+              05 RPT-DLC-SINT PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-DLC-SCPA PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 RPT-DLC-FMAT PIC 9(08).
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 RPT-DLC-IOCO PIC X(12).
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 RPT-DLC-IDLO PIC 9(04).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-DLC-IPEN PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-DLC-DPES PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 RPT-DLC-SCTB PIC X(03).
+           03 RPT-DLC-007.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'FMAV'.
+              05 FILLER       PIC X(05)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'VSCE'.
+              05 FILLER       PIC X(16)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'VAL-COMD'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'GLS-DISP'.
+           03 RPT-DLC-008.
+              05 RPT-DLC-FMAV PIC 9(08).
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 RPT-DLC-VSCE PIC 9(04).
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 RPT-DLC-COMD PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 RPT-DLC-DISP PIC X(09).
+           03 RPT-DLC-009.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'ICYA'.
+              05 FILLER       PIC X(13)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'FULD'.
+              05 FILLER       PIC X(15)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'VAL-SDLD'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'GLIQ'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(14)  VALUE 'SGV-ICOD'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+           03 RPT-DLC-010.
+              05 FILLER       PIC X(01)  VALUE SPACES.
+              05 RPT-DLC-ICYA PIC X(12).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-DLC-FULD PIC 9(08).
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 RPT-DLC-SDLD PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-DLC-GLIQ PIC X(4).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-DLC-ICOD PIC -----.---.---.--9,99.
+           03 RPT-DLC-011.
+              05 FILLER       PIC X(12)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'SGV-IPUD'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'SGV-ICID'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'SGV-INMD'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'SGV-AJCD'.
+           03 RPT-DLC-012.
+              05 RPT-DLC-IPUD PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-DLC-ICID PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-DLC-INMD PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-DLC-AJCD PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+           03 RPT-DLC-013.
+              05 FILLER       PIC X(12)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'SGV-ACAV'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'SGV-AJKD'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'SGV-AJID'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'SGV-AIMD'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'SGV-ACAM'.
+           03 RPT-DLC-014.
+              05 RPT-DLC-ACAV PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-DLC-AJKD PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-DLC-AJID PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-DLC-AIMD PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-DLC-ACAM PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+      * RBG/CHI/INI/ 8-JUL-1996
+           03 RPT-DLC-015.
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'FTRN'.
+              05 FILLER       PIC X(08)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'HTRN'.
+              05 FILLER       PIC X(06)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'TACC'.
+              05 FILLER       PIC X(06)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'STAT'.
+              05 FILLER       PIC X(06)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'OTRN'.
+              05 FILLER       PIC X(06)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'FSDE'.
+              05 FILLER       PIC X(06)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'SUSP'.
+              05 FILLER       PIC X(06)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'FSDM'.
+           03 RPT-DLC-016.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-DLC-FTRN PIC X(08).
+              05 FILLER       PIC X(05)  VALUE SPACES.
+              05 RPT-DLC-HTRN PIC X(06).
+              05 FILLER       PIC X(06)  VALUE SPACES.
+              05 RPT-DLC-TACC PIC X(01).
+              05 FILLER       PIC X(09)  VALUE SPACES.
+              05 RPT-DLC-STAT PIC X(01).
+              05 FILLER       PIC X(09)  VALUE SPACES.
+              05 RPT-DLC-OTRN PIC X(04).
+              05 FILLER       PIC X(05)  VALUE SPACES.
+              05 RPT-DLC-FSDE PIC X(08).
+              05 FILLER       PIC X(05)  VALUE SPACES.
+              05 RPT-DLC-SUSP PIC X(01).
+              05 FILLER       PIC X(06)  VALUE SPACES.
+              05 RPT-DLC-FSDM PIC X(08).
+           03 RPT-DLC-017.
+              05 FILLER       PIC X(16)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'REAO'.
+              05 FILLER       PIC X(18)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'INTO'.
+              05 FILLER       PIC X(18)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'REAM'.
+              05 FILLER       PIC X(18)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'INTM'.
+           03 RPT-DLC-018.
+              05 RPT-DLC-REAO PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-DLC-INTO PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-DLC-REAM PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-DLC-INTM PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+      * RBG/CHI/FIN/ 8-JUL-1996
+           03 RPT-RCV-001.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'FLAG'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(03)  VALUE 'CAI'.
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 FILLER       PIC X(03)  VALUE 'IIC'.
+              05 FILLER       PIC X(07)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'ICAN'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'CIC-IOPV'.
+              05 FILLER       PIC X(06)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'IVCT'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'CIC-IOPD'.
+              05 FILLER       PIC X(06)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'IDLC'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'IEVC'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'MCAN'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'SGV-CAPI'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'SGV-INTE'.
+           03 RPT-RCV-002.
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 RPT-RCV-FLAG PIC X(01).
+              05 FILLER       PIC X(05)  VALUE SPACES.
+              05 RPT-RCV-CAI  PIC X(04).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-RCV-IIC  PIC X(08).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-RCV-ICAN PIC 9(04).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-RCV-IOPV PIC X(12).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-RCV-IVCT PIC 9(04).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-RCV-IOPD PIC X(12).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-RCV-IDLC PIC 9(04).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-RCV-IEVC PIC 9(04).
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 RPT-RCV-MCAN PIC X(01).
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 RPT-RCV-CAPI PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-RCV-INTE PIC -----.---.---.--9,99.
+           03 RPT-RCV-003.
+              05 FILLER       PIC X(13)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'SGV-FINA'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'SCTB'.
+              05 FILLER       PIC X(01)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'SCBZ'.
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'FCAN'.
+              05 FILLER       PIC X(06)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'FOUT'.
+              05 FILLER       PIC X(17)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'SGV-REAJ'.
+              05 FILLER       PIC X(15)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'SGV-IMPO'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'SGV-SEGD'.
+           03 RPT-RCV-004.
+              05 FILLER       PIC X(01)  VALUE SPACES.
+              05 RPT-RCV-FINA PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-RCV-SCTB PIC X(03).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-RCV-SCBZ PIC X(05).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-RCV-FCAN PIC 9(08).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-RCV-FOUT PIC 9(08).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-RCV-REAJ PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-RCV-IMPO PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-RCV-SEGD PIC -----.---.---.--9,99.
+           03 RPT-RCV-005.
+              05 FILLER       PIC X(12)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'SGV-SEGP'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'SGV-MCOM'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'SGV-ICOM'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'SGV-IPUN'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'STAT'.
+           03 RPT-RCV-006.
+              05 RPT-RCV-SEGP PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-RCV-MCOM PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-RCV-ICOM PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-RCV-IPUN PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 RPT-RCV-STAT PIC X(01).
+           03 RPT-RCV-007.
+              05 FILLER       PIC X(12)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'SGV-PAGO'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'SGV-RENO'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'SGV-ICOI'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'SGV-IPUI'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'SGV-ICDN'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'SGV-IPDN'.
+           03 RPT-RCV-008.
+              05 RPT-RCV-PAGO PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-RCV-RENO PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-RCV-ICOI PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-RCV-IPUI PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-RCV-ICDN PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-RCV-IPDN PIC -----.---.---.--9,99.
+           03 RPT-RCV-009.
+              05 FILLER       PIC X(12)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'SGV-ICDI'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'SGV-IPDI'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'SGV-ICNP'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'SGV-ICIP'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'SGV-IPNP'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'SGV-IPIP'.
+           03 RPT-RCV-010.
+              05 RPT-RCV-ICDI PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-RCV-IPDI PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-RCV-ICNP PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-RCV-ICIP PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-RCV-IPNP PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-RCV-IPIP PIC -----.---.---.--9,99.
+           03 RPT-RCV-011.
+              05 FILLER       PIC X(12)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'SGV-VIVA'.
+           03 RPT-RCV-012.
+              05 RPT-RCV-VIVA PIC -----.---.---.--9,99.
+      * RBG/CHI/INI/ 8-JUL-1996
+           03 RPT-RCV-013.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'FTRN'.
+              05 FILLER       PIC X(05)  VALUE SPACES.
+              05 FILLER       PIC X(06)  VALUE 'HTRN'.
+              05 FILLER       PIC X(06)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'TACC'.
+              05 FILLER       PIC X(09)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'OTRN'.
+              05 FILLER       PIC X(09)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'ATRN'.
+           03 RPT-RCV-014.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-RCV-FTRN PIC X(08).
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 RPT-RCV-HTRN PIC X(06).
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 RPT-RCV-TACC PIC X(01).
+              05 FILLER       PIC X(06)  VALUE SPACES.
+              05 RPT-RCV-OTRN PIC X(04).
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 RPT-RCV-ATRN PIC X(04).
+           03 RPT-RCV-015.
+              05 FILLER       PIC X(16)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'INTN'.
+              05 FILLER       PIC X(18)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'INTM'.
+              05 FILLER       PIC X(18)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'REAM'.
+              05 FILLER       PIC X(18)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'REAO'.
+              05 FILLER       PIC X(18)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'INTO'.
+              05 FILLER       PIC X(18)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'CAPP'.
+           03 RPT-RCV-016.
+              05 RPT-RCV-INTN PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-RCV-INTM PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-RCV-REAM PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-RCV-REAO PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-RCV-INTO PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-RCV-CAPP PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+      * RBG/CHI/FIN/ 8-JUL-1996
+           03 RPT-VEN-001.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'FLAG'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'CIC-IOPC'.
+              05 FILLER       PIC X(07)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'NUM-IVEN'.
+              05 FILLER       PIC X(06)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'TACC'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'FVEN'.
+              05 FILLER       PIC X(06)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'FIMV'.
+              05 FILLER       PIC X(18)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'VAL-CAPI'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'VAL-SCAP'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'VAL-IDNI'.
+           03 RPT-VEN-002.
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 RPT-VEN-FLAG PIC X(01).
+              05 FILLER       PIC X(05)  VALUE SPACES.
+              05 RPT-VEN-IOPC PIC X(12).
+              05 FILLER       PIC X(06)  VALUE SPACES.
+              05 RPT-VEN-IVEN PIC 9(04).
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 RPT-VEN-TACC PIC X(01).
+              05 FILLER       PIC X(08)  VALUE SPACES.
+              05 RPT-VEN-FVEN PIC 9(08).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-VEN-FIMV PIC 9(08).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-VEN-CAPI PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-VEN-SCAP PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-VEN-IDNI PIC -----.---.---.--9,99.
+           03 RPT-VEN-003.
+              05 FILLER       PIC X(13)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'VAL-FINA'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'VAL-SFIN'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'IVCT'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'IEVC'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'IDLC'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'CAUT'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'SCTB'.
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'SCBZ'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'VAL-MTSC'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'MTSC'.
+              05 FILLER       PIC X(16)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'IMPO'.
+           03 RPT-VEN-004.
+              05 FILLER       PIC X(01)  VALUE SPACES.
+              05 RPT-VEN-FINA PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-VEN-SFIN PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 RPT-VEN-IVCT PIC 9(04).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-VEN-IEVC PIC 9(04).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-VEN-IDLC PIC 9(04).
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 RPT-VEN-CAUT PIC X(01).
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 RPT-VEN-SCTB PIC X(03).
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 RPT-VEN-SCBZ PIC X(05).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-VEN-MTSC PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 RPT-VEN-MTSS PIC X(01).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-VEN-IMPO PIC -----.---.---.--9,99.
+           03 RPT-VEN-005.
+              05 FILLER       PIC X(13)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'VAL-SEGD'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'VAL-SEGP'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'VAL-MCOM'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'VAL-AJTD'.
+              05 FILLER       PIC X(13)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'VAL-INTD'.
+              05 FILLER       PIC X(13)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'VAL-COMD'.
+           03 RPT-VEN-006.
+              05 FILLER       PIC X(01)  VALUE SPACES.
+              05 RPT-VEN-SEGD PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-VEN-SEGP PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-VEN-MCOM PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-VEN-AJTD PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(01)  VALUE SPACES.
+              05 RPT-VEN-INTD PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(01)  VALUE SPACES.
+              05 RPT-VEN-COMD PIC -----.---.---.--9,99.
+           03 RPT-VEN-007.
+              05 FILLER       PIC X(01)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'IND-CALC'.
+           03 RPT-VEN-008.
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 RPT-VEN-CALC PIC X(01).
+           03 RPT-VEN-009.
+              05 FILLER       PIC X(12)  VALUE SPACES.
+              05 FILLER       PIC X(10)  VALUE 'VAL-ICDN'.
+              05 FILLER       PIC X(12)  VALUE SPACES.
+              05 FILLER       PIC X(10)  VALUE 'VAL-IPDN'.
+              05 FILLER       PIC X(12)  VALUE SPACES.
+              05 FILLER       PIC X(10)  VALUE 'VAL-ICDI'.
+              05 FILLER       PIC X(12)  VALUE SPACES.
+              05 FILLER       PIC X(10)  VALUE 'VAL-IPDI'.
+              05 FILLER       PIC X(12)  VALUE SPACES.
+              05 FILLER       PIC X(10)  VALUE 'VAL-SIMP'.
+              05 FILLER       PIC X(12)  VALUE SPACES.
+              05 FILLER       PIC X(10)  VALUE 'VAL-SSGD'.
+           03 RPT-VEN-010.
+              05 RPT-VEN-ICDN PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-VEN-IPDN PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-VEN-ICDI PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-VEN-IPDI PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(01)  VALUE SPACES.
+              05 RPT-VEN-SIMP PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-VEN-SSGD PIC -----.---.---.--9,99.
+           03 RPT-VEN-011.
+              05 FILLER       PIC X(12)  VALUE SPACES.
+              05 FILLER       PIC X(10)  VALUE 'VAL-SSGP'.
+              05 FILLER       PIC X(12)  VALUE SPACES.
+              05 FILLER       PIC X(10)  VALUE 'VAL-SCOM'.
+              05 FILLER       PIC X(12)  VALUE SPACES.
+              05 FILLER       PIC X(10)  VALUE 'VAL-VIVA'.
+              05 FILLER       PIC X(12)  VALUE SPACES.
+              05 FILLER       PIC X(10)  VALUE 'VAL-ICNP'.
+              05 FILLER       PIC X(12)  VALUE SPACES.
+              05 FILLER       PIC X(10)  VALUE 'VAL-ICIP'.
+              05 FILLER       PIC X(12)  VALUE SPACES.
+              05 FILLER       PIC X(10)  VALUE 'VAL-IPNP'.
+           03 RPT-VEN-012.
+              05 RPT-VEN-SSGP PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-VEN-SCOM PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-VEN-VIVA PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-VEN-ICNP PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(01)  VALUE SPACES.
+              05 RPT-VEN-ICIP PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-VEN-IPNP PIC -----.---.---.--9,99.
+           03 RPT-VEN-013.
+              05 FILLER       PIC X(12)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'VAL-IPIP'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'AVMR'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'VAL-AJCD'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'VAL-AJKD'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'VAL-AJID'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'VAL-AIMD'.
+           03 RPT-VEN-014.
+              05 RPT-VEN-IPIP PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-VEN-AVMR PIC X(04)  VALUE SPACES.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-VEN-AJCD PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-VEN-AJKD PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-VEN-AJID PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-VEN-AIMD PIC -----.---.---.--9,99.
+      * RBG/CHI/INI/ 8-JUL-1996
+           03 RPT-VEN-015.
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'FTRN'.
+              05 FILLER       PIC X(10)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'HTRN'.
+              05 FILLER       PIC X(10)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'STAT'.
+              05 FILLER       PIC X(10)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'OTRN'.
+              05 FILLER       PIC X(10)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'ATRN'.
+              05 FILLER       PIC X(10)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'CTBA'.
+              05 FILLER       PIC X(01)  VALUE SPACES.
+           03 RPT-VEN-016.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-VEN-FTRN PIC X(08).
+              05 FILLER       PIC X(01)  VALUE SPACES.
+              05 RPT-VEN-HTRN PIC X(06).
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 RPT-VEN-STAT PIC X(01).
+              05 FILLER       PIC X(06)  VALUE SPACES.
+              05 RPT-VEN-OTRN PIC X(04).
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 RPT-VEN-ATRN PIC X(12).
+              05 FILLER       PIC X(06)  VALUE SPACES.
+              05 RPT-VEN-CTBA PIC X(03).
+      * RBG/CHI/FIN/ 8-JUL-1996
+           03 RPT-EVC-001.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'FLAG'.
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'CIC-IOPC'.
+              05 FILLER       PIC X(06)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'IEVC'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'VIGU'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'VCAN'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'SEVE'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'UTSV'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'FPVC'.
+              05 FILLER       PIC X(05)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'DESD'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'SGV-FVAR'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'FVAR'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'VAL-VENC'.
+           03 RPT-EVC-002.
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 RPT-EVC-FLAG PIC X(01).
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 RPT-EVC-IOPC PIC X(12).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-EVC-IEVC PIC 9(04).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-EVC-VIGU PIC 9(04).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-EVC-VCAN PIC 9(04).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-EVC-SEVE PIC 9(04).
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 RPT-EVC-UTSV PIC X(01).
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 RPT-EVC-FPVC PIC 9(08).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-EVC-DESD PIC 9(04).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-EVC-FVAR PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 RPT-EVC-FVAA PIC X(01).
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 RPT-EVC-VENC PIC -----.---.---.--9,99.
+           03 RPT-EVC-003.
+              05 FILLER       PIC X(01)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'TCVE'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'IDLC'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'DPVE'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'CAUT'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'DURV'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'UTDV'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'IVCT'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'VAL-VCVF'.
+           03 RPT-EVC-004.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-EVC-TCVE PIC X(02).
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 RPT-EVC-IDLC PIC 9(04).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-EVC-DPVE PIC 9(04).
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 RPT-EVC-CAUT PIC X(01).
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 RPT-EVC-DURV PIC 9(04).
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 RPT-EVC-UTDV PIC X(01).
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 RPT-EVC-IVCT PIC 9(04).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-EVC-VCVF PIC -----.---.---.--9,99.
+      * RBG/CHI/INI 8-JUL-1996
+           03 RPT-EVC-005.
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'FTRN'.
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'HTRN'.
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'TACC'.
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'STAT'.
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'OTRN'.
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'ATRN'.
+           03 RPT-EVC-006.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-EVC-FTRN PIC X(08).
+              05 FILLER       PIC X(01)  VALUE SPACES.
+              05 RPT-EVC-HTRN PIC X(06).
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 RPT-EVC-TACC PIC X(01).
+              05 FILLER       PIC X(07)  VALUE SPACES.
+              05 RPT-EVC-STAT PIC X(01).
+              05 FILLER       PIC X(06)  VALUE SPACES.
+              05 RPT-EVC-OTRN PIC X(04).
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 RPT-EVC-ATRN PIC X(12).
+      * RBG/CHI/FIN 8-JUL-1996
+           03 RPT-ICG-001.
+              05 FILLER       PIC X(01)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'FLAG'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'CIC-IOPC'.
+              05 FILLER       PIC X(06)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'ICAN'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'CIC-IOPV'.
+              05 FILLER       PIC X(06)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'IVCT'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'TTAS'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'FINI'.
+              05 FILLER       PIC X(06)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'BCTI'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'PBTI'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'BPBT'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'SPBT'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'CVTI'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'TFPR'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'PREP'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'UTPR'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'FTER'.
+           03 RPT-ICG-002.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-ICG-FLAG PIC X(01).
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 RPT-ICG-IOPC PIC X(12).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-ICG-ICAN PIC 9(04).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-ICG-IOPV PIC X(12).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-ICG-IVCT PIC 9(04).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-ICG-TTAS PIC X(03).
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 RPT-ICG-FINI PIC 9(08).
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 RPT-ICG-BCTI PIC X(02).
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 RPT-ICG-PBTI PIC X(01).
+              05 FILLER       PIC X(05)  VALUE SPACES.
+              05 RPT-ICG-BPBT PIC X(01).
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 RPT-ICG-SPBT PIC X(04)  VALUE 'SPBT'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 PRT-ICG-CVTI PIC X(03).
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 RPT-ICG-TFPR PIC X(01).
+              05 FILLER       PIC X(05)  VALUE SPACES.
+              05 RPT-ICG-PREP PIC 9(03).
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 RPT-ICG-UTPR PIC X(01).
+              05 FILLER       PIC X(05)  VALUE SPACES.
+              05 RPT-ICG-FTER PIC 9(08).
+           03 RPT-ICG-003.
+              05 FILLER       PIC X(01)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'SGV-SPRD'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'SGV-TINT'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'SGV-MNTO'.
+           03 RPT-ICG-004.
+              05 RPT-ICG-SPRD PIC Z.ZZ9,999.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 RPT-ICG-TINT PIC Z.ZZ9,99.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 RPT-ICG-MNTO PIC -----.---.---.--9,99.
+      * RBG/CHI/INI/ 8-JUL-1996
+           03 RPT-ICG-005.
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'FTRN'.
+              05 FILLER       PIC X(08)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'HTRN'.
+              05 FILLER       PIC X(06)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'TAAC'.
+              05 FILLER       PIC X(06)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'STAT'.
+              05 FILLER       PIC X(06)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'OTRN'.
+              05 FILLER       PIC X(06)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'ATRN'.
+           03 RPT-ICG-006.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-ICG-FTRN PIC X(08).
+              05 FILLER       PIC X(01)  VALUE SPACES.
+              05 RPT-ICG-HTRN PIC X(06).
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 RPT-ICG-TACC PIC X(01).
+              05 FILLER       PIC X(07)  VALUE SPACES.
+              05 RPT-ICG-STAT PIC X(01).
+              05 FILLER       PIC X(06)  VALUE SPACES.
+              05 RPT-ICG-OTRN PIC X(04).
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 RPT-ICG-ATRN PIC X(12).
+      * RBG/CHI/FIN/ 8-JUL-1996
+           03 RPT-CYA-001.
+              05 FILLER       PIC X(01)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'FLAG'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'CIC-IOPC'.
+              05 FILLER       PIC X(05)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'ICAN'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'ICYA'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'TCYA'.
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'CIC-ICYA'.
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'VRF-ICYA'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'SGV-LIQU'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'MAUT'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'FREE'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'OFIC'.
+           03 RPT-CYA-002.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-CYA-FLAG PIC X(01).
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 RPT-CYA-IOPC PIC X(12).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-CYA-ICAN PIC X(03).
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 RPT-CYA-ICYA PIC 9(04).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-CYA-TCYA PIC X(05).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-CYA-CIC  PIC X(12).
+              05 FILLER       PIC X(05)  VALUE SPACES.
+              05 RPT-CYA-VRF  PIC X(01).
+              05 FILLER       PIC X(05)  VALUE SPACES.
+              05 RPT-CYA-LIQU PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 RPT-CYA-MAUT PIC X(01).
+              05 FILLER       PIC X(05)  VALUE SPACES.
+              05 RPT-CYA-FREE PIC X(01).
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 RPT-CYA-OFIC PIC X(03).
+      * RBG/CHI/INI/ 8-JUL-1996
+           03 RPT-CYA-003.
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'FTRN'.
+              05 FILLER       PIC X(06)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'HTRN'.
+              05 FILLER       PIC X(06)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'TACC'.
+              05 FILLER       PIC X(06)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'STAT'.
+              05 FILLER       PIC X(06)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'OTRN'.
+              05 FILLER       PIC X(06)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'ATRN'.
+           03 RPT-CYA-004.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-CYA-FTRN PIC X(08).
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 RPT-CYA-HTRN PIC X(06).
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 RPT-CYA-TACC PIC X(01).
+              05 FILLER       PIC X(07)  VALUE SPACES.
+              05 RPT-CYA-STAT PIC X(01).
+              05 FILLER       PIC X(06)  VALUE SPACES.
+              05 RPT-CYA-OTRN PIC X(04).
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 RPT-CYA-ATRN PIC X(12).
+      * RBG/CHI/FIN/ 8-JUL-1996
+           03 RPT-CAN-001.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'FLAG'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'CIC-IOPC'.
+              05 FILLER       PIC X(07)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'ICAN'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'FTRN'.
+              05 FILLER       PIC X(06)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'HTRN'.
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'TACC'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'STAT'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'OTRN'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'ATRN'.
+              05 FILLER       PIC X(10)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'OFCA'.
+              05 FILLER       PIC X(10)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'RCAN'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'CANC'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'FCAN'.
+              05 FILLER       PIC X(06)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'FEGR'.
+              05 FILLER       PIC X(06)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'FOUT'.
+           03 RPT-CAN-002.
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 RPT-CAN-FLAG PIC X(01).
+              05 FILLER       PIC X(05)  VALUE SPACES.
+              05 RPT-CAN-IOPC PIC X(12).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-CAN-ICAN PIC 9(04).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-CAN-FTRN PIC 9(08).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-CAN-HTRN PIC 9(06).
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 RPT-CAN-TACC PIC X(01).
+              05 FILLER       PIC X(05)  VALUE SPACES.
+              05 RPT-CAN-STAT PIC X(01).
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 RPT-CAN-OTRN PIC X(04).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-CAN-ATRN PIC X(12).
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 RPT-CAN-OFCA PIC X(03).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-CAN-RCAN PIC X(12).
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 RPT-CAN-CANC PIC X(03).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-CAN-FCAN PIC 9(08).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-CAN-FEGR PIC 9(08).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-CAN-FOUT PIC 9(08).
+           03 RPT-CAN-003.
+              05 FILLER       PIC X(12)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'SGV-GAST'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'SGV-TPAG'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'SGV-TREN'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'TVCC'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'SGV-DIFE'.
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'FDVA'.
+              05 FILLER       PIC X(16)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'SGV-INTE'.
+           03 RPT-CAN-004.
+              05 RPT-CAN-GAST PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-CAN-TPAG PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-CAN-TREN PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-CAN-TVCC PIC 9(04).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-CAN-DIFE PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-CAN-FDVA PIC 9(08).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-CAN-INTE PIC -----.---.---.--9,99.
+           03 RPT-CAN-005.
+              05 FILLER       PIC X(12)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'SGV-REAJ'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'SGV-INTD'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'SGV-DPES'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'SGV-COMD'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'SGV-ICOD'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'SGV-IPUD'.
+           03 RPT-CAN-006.
+              05 RPT-CAN-REAJ PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-CAN-INTD PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-CAN-DPES PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-CAN-COMD PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-CAN-ICOD PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-CAN-IPUD PIC -----.---.---.--9,99.
+           03 RPT-CAN-007.
+              05 FILLER       PIC X(12)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'SGV-ACAV'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'SGV-ICID'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'SGV-INMD'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'SGV-ACAM'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'SGV-ICDN'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'SGV-ICDI'.
+           03 RPT-CAN-008.
+              05 RPT-CAN-ACAV PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-CAN-ICID PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-CAN-INMD PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-CAN-ACAM PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-CAN-ICDN PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-CAN-ICDI PIC -----.---.---.--9,99.
+           03 RPT-CAN-009.
+              05 FILLER       PIC X(12)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'SGV-IPDN'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'SGV-IPDI'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'SGV-AJCD'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'SGV-AJKD'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'SGV-AJID'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'SGV-AIMD'.
+           03 RPT-CAN-010.
+              05 RPT-CAN-IPDN PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-CAN-IPDI PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-CAN-AJCD PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-CAN-AJKD PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-CAN-AJID PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-CAN-AIMD PIC -----.---.---.--9,99.
+      * RBG/CHI/INI/ 8-JUL-1996
+           03 RPT-CAN-011.
+              05 FILLER       PIC X(16)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'CTBL'.
+           03 RPT-CAN-012.
+              05 FILLER       PIC X(17)  VALUE SPACES.
+              05 RPT-CAN-CTBL PIC X(01).
+      * RBG/CHI/FIN/ 8-JUL-1996
+           03 RPT-RDT-001.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'FLAG'.
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'CIC-IOPC'.
+              05 FILLER       PIC X(06)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'IDLC'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'SCTB'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'FTRN'.
+              05 FILLER       PIC X(06)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'HTRN'.
+              05 FILLER       PIC X(06)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'TACC'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'STAT'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'OTRN'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'ATRN'.
+              05 FILLER       PIC X(22)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'VAL-SRDT'.
+           03 RPT-RDT-002.
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 RPT-RDT-FLAG PIC X(01).
+              05 FILLER       PIC X(05)  VALUE SPACES.
+              05 RPT-RDT-IOPC PIC X(12).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-RDT-IDLC PIC 9(04).
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 RPT-RDT-SCTB PIC X(03).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-RDT-FTRN PIC 9(08).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-RDT-HTRN PIC 9(06).
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 RPT-RDT-TACC PIC X(01).
+              05 FILLER       PIC X(05)  VALUE SPACES.
+              05 RPT-RDT-STAT PIC X(01).
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 RPT-RDT-OTRN PIC X(04).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-RDT-ATRN PIC X(12).
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 RPT-RDT-SRDT PIC -----.---.---.--9,99.
+           03 RPT-RDC-001.
+              05 FILLER       PIC X(01)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'FLAG'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'CIC-ICLI'.
+              05 FILLER       PIC X(06)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'CIC-IOPC'.
+              05 FILLER       PIC X(06)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'NUM-IDLC'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'TRDC'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'DIRE'.
+              05 FILLER       PIC X(14)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'VAL-LIMD'.
+           03 RPT-RDC-002.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-RDC-FLAG PIC X(01).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-RDC-ICLI PIC X(12).
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 RPT-RDC-IOPC PIC X(12).
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 RPT-RDC-IDLC PIC 9(04).
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 RPT-RDC-TRDC PIC X(03).
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 RPT-RDC-DIRE PIC X(02).
+              05 FILLER       PIC X(03)  VALUE SPACES.
+              05 RPT-RDC-LIMD PIC -----.---.---.--9,99.
+      * RBG/CHI/INI/ 8-JUL-1996
+           03 RPT-RDC-003.
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'FTRN'.
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'HTRN'.
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'TACC'.
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'STAT'.
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'OTRN'.
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'ATRN'.
+           03 RPT-RDC-004.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-RDC-FTRN PIC X(08).
+              05 FILLER       PIC X(01)  VALUE SPACES.
+              05 RPT-RDC-HTRN PIC X(06).
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 RPT-RDC-TACC PIC X(01).
+              05 FILLER       PIC X(06)  VALUE SPACES.
+              05 RPT-RDC-STAT PIC X(01).
+              05 FILLER       PIC X(06)  VALUE SPACES.
+              05 RPT-RDC-OTRN PIC X(04).
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 RPT-RDC-ATRN PIC X(12).
+      * RBG/CHI/FIN/ 8-JUL-1996
+           03 RPT-RCE-001.
+              05 FILLER       PIC X(01)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'FLAG'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'TOPC'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'COPC'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'OOPC'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(05)  VALUE 'NOPC'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'IDLC'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(12)  VALUE 'SAFE'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'CNJE'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(21)  VALUE 'DISP'.
+           03 RPT-RCE-002.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-RCE-FLAG PIC X(04).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-RCE-TOPC PIC X(04).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-RCE-COPC PIC X(04).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-RCE-OOPC PIC X(04).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-RCE-NOPC PIC X(05).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-RCE-IDLC PIC ZZZ9.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-RCE-SAFE PIC X(12).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-RCE-CNJE PIC X(04).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-RCE-DISP PIC X(21).
+      * RBG/CHI/INI/ 8-JUL-1996
+           03 RPT-RCE-003.
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'FTRN'.
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'HTRN'.
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'TACC'.
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'STAT'.
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'OTRN'.
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'ATRN'.
+           03 RPT-RCE-004.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-RCE-FTRN PIC X(08).
+              05 FILLER       PIC X(01)  VALUE SPACES.
+              05 RPT-RCE-HTRN PIC X(06).
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 RPT-RCE-TACC PIC X(01).
+              05 FILLER       PIC X(07)  VALUE SPACES.
+              05 RPT-RCE-STAT PIC X(01).
+              05 FILLER       PIC X(06)  VALUE SPACES.
+              05 RPT-RCE-OTRN PIC X(04).
+              05 FILLER       PIC X(04)  VALUE SPACES.
+              05 RPT-RCE-ATRN PIC X(12).
+      * RBG/CHI/FIN/ 8-JUL-1996
+           03 RPT-DYC-001.
+              05 FILLER       PIC X(01)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'FLAG'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'TOPC'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'COPC'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'OOPC'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(05)  VALUE 'NOPC'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'IDLC'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'IVEN'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'ICAN'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'IDYC'.
+              05 FILLER       PIC X(12)  VALUE SPACES.
+              05 FILLER       PIC X(10)  VALUE 'LIQU'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(10)  VALUE 'TIMP'.
+              05 FILLER       PIC X(12)  VALUE SPACES.
+              05 FILLER       PIC X(10)  VALUE 'MCAL'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'CNDC'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'TCDC'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'TVOC'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+           03 RPT-DYC-002.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-DYC-FLAG PIC X(04).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-DYC-TOPC PIC X(04).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-DYC-COPC PIC X(04).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-DYC-OOPC PIC X(04).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-DYC-NOPC PIC X(05).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-DYC-IDLC PIC ZZZ9.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-DYC-IVEN PIC ZZZ9.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-DYC-ICAN PIC ZZZ9.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-DYC-IDYC PIC ZZZ9.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-DYC-LIQU PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-DYC-TIMP PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-DYC-MCAL PIC -----.---.---.--9,99.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-DYC-CNDC PIC X(04).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-DYC-TCDC PIC X(04).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-DYC-TVOC PIC X(04).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+           03 RPT-DYC-003.
+              05 FILLER       PIC X(01)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'CVOC'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(04)  VALUE 'TCOC'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(08)  VALUE 'FEC-FACT'.
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 FILLER       PIC X(10)  VALUE 'AIVA'.
+           03 RPT-DYC-004.
+              05 FILLER       PIC X(01)  VALUE SPACES.
+              05 RPT-DYC-CVOC PIC X(04).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-DYC-TCOC PIC X(04).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-DYC-FACT PIC 9(08).
+              05 FILLER       PIC X(02)  VALUE SPACES.
+              05 RPT-DYC-AIVA PIC -----.---.---.--9,99.
+      *
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-OPC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-DLC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-RCV-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-VEN-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-EVC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-ICG-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-CYA-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-CAN-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-RDT-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-RDC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-RCE-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-TAB-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-OFI-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-MSG-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-MSC-REQA==.
+      *
+      *-----------------------------------------------------------------
+       PROCEDURE DIVISION.
+      *==================
+       MAIN SECTION.
+      *------------
+       INI-MAIN.
+
+      *    ACCEPT WSS-COD-PAR IN WSS-VARI  FROM SYSIN
+           ACCEPT WSS-COD-PAR IN WSS-VARI.
+
+           IF WSS-MSC-STAT NOT EQUAL
+              '*' AND 'A' AND 'L' AND 'M' AND 'C' AND 'I'
+              DISPLAY '***********************************'
+              DISPLAY 'ERROR EN PARAMETRO DE STATUS DE OPC'
+              DISPLAY 'PARAMETRO: ' WSS-COD-PAR
+              DISPLAY '***********************************'
+              MOVE PGM-SMAL TO PGM-STAT-SRT
+              GO TO FIN-MAIN.
+      *
+           IF WSS-IIC-DESDE NOT NUMERIC
+              DISPLAY '***************************************'
+              DISPLAY 'ERROR EN PARAMETRO NRO.OPC NO NUMERICO'
+              DISPLAY 'PARAMETRO: ' WSS-COD-PAR
+              DISPLAY '***************************************'
+              MOVE PGM-SMAL TO PGM-STAT-SRT
+              GO TO FIN-MAIN.
+      *
+      *    IF WSS-IIC-HASTA NOT NUMERIC
+      *       DISPLAY '***************************************'
+      *       DISPLAY 'ERROR EN PARAMETRO NRO. OPERACION HASTA'
+      *       DISPLAY '***************************************'
+      *       MOVE PGM-SMAL TO PGM-STAT-SRT
+      *       GO TO FIN-MAIN.
+
+      *    IF WSS-OPC-DESDE GREATER  WSS-OPC-HASTA
+      *       DISPLAY '*********************************************'
+      *       DISPLAY 'ERROR EN PARAMETRO: OPC-DESDE MAYOR OPE-HASTA'
+      *       DISPLAY '*********************************************'
+      *       MOVE PGM-SMAL TO PGM-STAT-SRT GO TO FIN-MAIN.
+
+       COPY GNSBGEDB.
+           MOVE 'COLPLCOL' TO FIO-PROG.
+           PERFORM GNS-BUS-IDD.
+
+           PERFORM GET-FHOY.
+      *
+           MOVE FIO-INP TO FIO-CMND.
+           PERFORM COL-FIO-OPC.
+      *RVM-BFA-INI 10/19/93
+           PERFORM COL-FIO-DLC.
+           PERFORM COL-FIO-RCV.
+           PERFORM COL-FIO-VEN.
+           PERFORM COL-FIO-EVC.
+           PERFORM COL-FIO-ICG.
+           PERFORM COL-FIO-CYA.
+           PERFORM COL-FIO-CAN.
+           PERFORM COL-FIO-RDT.
+           PERFORM COL-FIO-RDC.
+           PERFORM COL-FIO-RCE.
+      *RVM-BFA-FIN 10/19/93
+           OPEN OUTPUT RPTCOL
+      *
+           MOVE 60           TO WSS-NUM-CLIN IN WSS-VARI
+           MOVE 0            TO WSS-NUM-CPAG IN WSS-VARI
+           MOVE HOY-DHOY     TO WSS-DIS-DDD.
+           MOVE HOY-MHOY     TO WSS-DIS-MMD.
+           MOVE HOY-SHOY     TO WSS-DIS-SSD.
+           MOVE HOY-AHOY     TO WSS-DIS-AAD.
+           MOVE WSS-FEC-DISP TO RPT-GLS-FEC1.
+           MOVE WSS-CAI-DESDE TO RPT-CAI-IOPC.
+           MOVE WSS-IIC-DESDE TO RPT-IIC-IOPC.
+      *
+           DISPLAY ' '.
+           DISPLAY 'VOY A ACC-OPC'
+           PERFORM ACC-OPC.
+      *
+           MOVE FIO-CLO TO FIO-CMND.
+           PERFORM COL-FIO-OPC.
+      *RVM-BFA-INI 10/19/93
+           PERFORM COL-FIO-DLC.
+           PERFORM COL-FIO-RCV.
+           PERFORM COL-FIO-VEN.
+           PERFORM COL-FIO-EVC.
+           PERFORM COL-FIO-ICG.
+           PERFORM COL-FIO-CYA.
+           PERFORM COL-FIO-CAN.
+           PERFORM COL-FIO-RDT.
+           PERFORM COL-FIO-RDC.
+           PERFORM COL-FIO-RCE.
+      *RVM-BFA-FIN 10/19/93
+           CLOSE RPTCOL.
+      *
+       FIN-MAIN.
+      *
+      * DISPLAY DE CONTADORES
+      *
+           DISPLAY ' '.
+           DISPLAY 'OPC LEIDOS      : ' WSS-NUM-OPCL IN WSS-VARI.
+           DISPLAY 'DLC LEIDOS      : ' WSS-NUM-DLCL IN WSS-VARI.
+           DISPLAY 'RCV LEIDOS      : ' WSS-NUM-RCVL IN WSS-VARI.
+           DISPLAY 'VEN LEIDOS      : ' WSS-NUM-VENL IN WSS-VARI.
+           DISPLAY 'EVC LEIDOS      : ' WSS-NUM-EVCL IN WSS-VARI.
+           DISPLAY 'ICG LEIDOS      : ' WSS-NUM-ICGL IN WSS-VARI.
+           DISPLAY 'CYA LEIDOS      : ' WSS-NUM-CYAL IN WSS-VARI.
+           DISPLAY 'CAN LEIDOS      : ' WSS-NUM-CANL IN WSS-VARI.
+           DISPLAY 'RDT LEIDOS      : ' WSS-NUM-RDTL IN WSS-VARI.
+           DISPLAY 'RDC LEIDOS      : ' WSS-NUM-RDCL IN WSS-VARI.
+           DISPLAY 'RCE LEIDOS      : ' WSS-NUM-RCEL IN WSS-VARI.
+           IF PGM-STAT-SRT-MAL
+               PERFORM GNS-PRO-ABT
+           ELSE
+               PERFORM GNS-PRO-END.
+      *-----------------------------------------------------------------
+       ACC-OPC SECTION.
+       INI-ACC-OPC.
+      *
+      *   --- ACCESO OPC ---
+      *
+           MOVE 'OPC'  TO RPT-ENT.
+           MOVE SPACES TO RPT-GLS-004.
+
+       PROXIMA-OPC.
+           DISPLAY ' '.
+           DISPLAY '-----------------------------------------------'.
+           DISPLAY 'CODIGO DE OPERACION :   ' WSS-COD-PAR IN WSS-VARI.
+
+           MOVE WSS-CAI-DESDE IN WSS-VARI TO OPC-CAI-IOPC IN OPC.
+           MOVE WSS-IIC-DESDE IN WSS-VARI TO OPC-IIC-IOPC IN OPC.
+           MOVE 'OPC-KEY-IOPC' TO FIO-AKEY.
+           MOVE FIO-GET-KEY    TO FIO-CMND.
+           PERFORM COL-FIO-OPC.
+           IF NOT FIO-STAT-OKS
+      *      DISPLAY 'STATUS OPC ==> ' FIO-STT1
+             DISPLAY 'STATUS OPC ==> ' FIO-STAT
+      *JFK   MOVE 'FINAL'       TO RPT-GLS-004
+      *      MOVE PGM-SOKS      TO PGM-STAT-SRT
+      *      PERFORM IMP-004
+      *      PERFORM IMP-RAY
+      *      GO TO FIN-ACC-OPC.
+             GO TO NEXT-OPC.
+
+           IF WSS-MSC-STAT EQUAL '*'
+             NEXT SENTENCE
+           ELSE
+             IF OPC-MSC-STAT IN OPC EQUAL WSS-MSC-STAT
+               NEXT SENTENCE
+             ELSE
+               GO TO NEXT-OPC.
+
+           ADD 1 TO WSS-NUM-OPCL.
+
+           MOVE OPC-CAI-IOPC IN OPC TO RPT-CAI-IOPC.
+           MOVE OPC-IIC-IOPC IN OPC TO RPT-IIC-IOPC.
+           MOVE 'OPC'  TO RPT-ENT.
+           MOVE SPACES TO RPT-GLS-004.
+           DISPLAY 'VOY A IMP-OPC'
+           PERFORM IMP-OPC.
+           PERFORM IMP-RAY.
+           DISPLAY 'VOY A ACC-DLC'
+           PERFORM ACC-DLC.
+           DISPLAY 'VOY A ACC-RCV'
+           PERFORM ACC-RCV.
+           DISPLAY 'VOY A ACC-VEN'
+           PERFORM ACC-VEN.
+           DISPLAY 'VOY A ACC-EVC'
+           PERFORM ACC-EVC.
+           DISPLAY 'VOY A ACC-ICG'
+           PERFORM ACC-ICG.
+           DISPLAY 'VOY A ACC-CYA'
+           PERFORM ACC-CYA.
+           DISPLAY 'VOY A ACC-CAN'
+           PERFORM ACC-CAN.
+           DISPLAY 'VOY A ACC-RDT'
+           PERFORM ACC-RDT.
+           DISPLAY 'VOY A ACC-RDC'
+           PERFORM ACC-RDC.
+           DISPLAY 'VOY A ACC-RCE'
+           PERFORM ACC-RCE.
+      *
+       NEXT-OPC.
+           ACCEPT WSS-COD-PAR IN WSS-VARI.
+           IF WSS-MSC-STAT NOT EQUAL
+              '*' AND 'A' AND 'L' AND 'M' AND 'C' AND 'I'
+             GO TO FIN-ACC-OPC.
+           IF WSS-IIC-DESDE NOT NUMERIC
+             DISPLAY '***************************************'
+             DISPLAY 'ERROR EN PARAMETRO NRO.OPC NO NUMERICO'
+             DISPLAY 'PARAMETRO: ' WSS-COD-PAR
+             DISPLAY '***************************************'
+             MOVE PGM-SMAL TO PGM-STAT-SRT
+             GO TO FIN-ACC-OPC.
+
+           GO PROXIMA-OPC.
+
+       FIN-ACC-OPC.
+           EXIT.
+
+      *-----------------------------------------------------------------
+       ACC-DLC SECTION.
+       INI-ACC-DLC.
+      *
+      *   --- DECLARA, ABRE EL CURSOR Y EFECTUA PRIMER FETCH DE DLC
+      *
+           MOVE 'DLC'  TO RPT-ENT.
+           MOVE SPACES TO RPT-GLS-004.
+      *
+           MOVE 'DLC-KEY-IDLC'      TO FIO-AKEY.
+           MOVE FIO-GET-NLS         TO FIO-CMND.
+           MOVE 0                   TO DLC-NUM-IDLC IN DLC.
+           MOVE OPC-CAI-IOPC IN OPC TO DLC-CAI-IOPC IN DLC.
+           MOVE OPC-IIC-IOPC IN OPC TO DLC-IIC-IOPC IN DLC.
+           PERFORM COL-FIO-DLC.
+           IF NOT ( FIO-STAT-OKS AND
+                    OPC-CAI-IOPC IN OPC = DLC-CAI-IOPC IN DLC AND
+                    OPC-IIC-IOPC IN OPC = DLC-IIC-IOPC IN DLC )
+              MOVE 'INEXISTENTE' TO RPT-GLS-004
+              MOVE PGM-SOKS      TO PGM-STAT-SRT
+              PERFORM IMP-004
+              PERFORM IMP-RAY
+              GO TO FIN-ACC-DLC.
+      *
+       LUP-ACC-DLC.
+      *
+           ADD 1 TO WSS-NUM-DLCL.
+      *
+           PERFORM IMP-DLC.
+      *
+           MOVE 'DLC-KEY-IDLC'      TO FIO-AKEY.
+           MOVE FIO-GET-NXT         TO FIO-CMND.
+           PERFORM COL-FIO-DLC.
+           IF NOT ( FIO-STAT-OKS AND
+                    OPC-CAI-IOPC IN OPC = DLC-CAI-IOPC IN DLC AND
+                    OPC-IIC-IOPC IN OPC = DLC-IIC-IOPC IN DLC )
+              PERFORM IMP-RAY
+              GO TO FIN-ACC-DLC.
+      *
+           GO TO LUP-ACC-DLC.
+      *
+       FIN-ACC-DLC.
+           EXIT.
+      *-----------------------------------------------------------------
+       ACC-RCV SECTION.
+       INI-ACC-RCV.
+      *
+           MOVE 'RCV'  TO RPT-ENT.
+           MOVE SPACES TO RPT-GLS-004.
+      *
+      *   --- DECLARA, ABRE EL CURSOR Y EFECTUA PRIMER FETCH DE DLC
+      *
+           MOVE LOW-VALUE           TO RCV-KEY-IRCV IN RCV.
+           MOVE 'RCV-KEY-IRCV'      TO FIO-AKEY
+           MOVE FIO-GET-NLS         TO FIO-CMND
+           MOVE OPC-CAI-IOPC IN OPC TO RCV-CAI-IOPC IN RCV
+           MOVE OPC-IIC-IOPC IN OPC TO RCV-IIC-IOPC IN RCV
+           MOVE 0                   TO RCV-NUM-IVCT IN RCV
+           PERFORM COL-FIO-RCV.
+           IF NOT ( FIO-STAT-OKS AND
+                    OPC-CAI-IOPC IN OPC = RCV-CAI-IOPC IN RCV AND
+                    OPC-IIC-IOPC IN OPC = RCV-IIC-IOPC IN RCV )
+              MOVE 'INEXISTENTE' TO RPT-GLS-004
+              MOVE PGM-SOKS      TO PGM-STAT-SRT
+              PERFORM IMP-004
+              PERFORM IMP-RAY
+              GO TO FIN-ACC-RCV.
+       LUP-ACC-RCV.
+           ADD 1 TO WSS-NUM-RCVL.
+           PERFORM IMP-RCV.
+           MOVE 'RCV-KEY-IRCV'      TO FIO-AKEY.
+           MOVE FIO-GET-NXT         TO FIO-CMND.
+           PERFORM COL-FIO-RCV.
+      *@@@-AGREGADO 09-05-1994 FSL BRB
+           IF NOT ( FIO-STAT-OKS AND
+                    OPC-CAI-IOPC IN OPC = RCV-CAI-IOPC IN RCV AND
+                    OPC-IIC-IOPC IN OPC = RCV-IIC-IOPC IN RCV )
+      *@@@-*
+              PERFORM IMP-RAY
+              GO TO FIN-ACC-RCV.
+           GO TO LUP-ACC-RCV.
+       FIN-ACC-RCV.
+           EXIT.
+      *-----------------------------------------------------------------
+       ACC-VEN SECTION.
+       INI-ACC-VEN.
+      *
+           MOVE 'VEN'  TO RPT-ENT.
+           MOVE SPACES TO RPT-GLS-004.
+      *
+      *   --- DECLARA, ABRE EL CURSOR Y EFECTUA PRIMER FETCH DE VEN
+      *
+           MOVE 'VEN-KEY-IVEN'      TO FIO-AKEY
+           MOVE FIO-GET-NLS         TO FIO-CMND
+           MOVE OPC-CAI-IOPC IN OPC TO VEN-CAI-IOPC IN VEN
+           MOVE OPC-IIC-IOPC IN OPC TO VEN-IIC-IOPC IN VEN
+           PERFORM COL-FIO-VEN.
+           IF NOT ( FIO-STAT-OKS AND
+                    OPC-CAI-IOPC IN OPC = VEN-CAI-IOPC IN VEN AND
+                    OPC-IIC-IOPC IN OPC = VEN-IIC-IOPC IN VEN )
+              MOVE 'INEXISTENTE' TO RPT-GLS-004
+              MOVE PGM-SOKS      TO PGM-STAT-SRT
+              PERFORM IMP-004
+              PERFORM IMP-RAY
+              GO TO FIN-ACC-VEN.
+       LUP-ACC-VEN.
+           ADD 1 TO WSS-NUM-VENL.
+           PERFORM IMP-VEN.
+           MOVE 'VEN-KEY-IVEN'      TO FIO-AKEY.
+           MOVE FIO-GET-NXT         TO FIO-CMND.
+           PERFORM COL-FIO-VEN.
+           IF NOT ( FIO-STAT-OKS AND
+                    OPC-CAI-IOPC IN OPC = VEN-CAI-IOPC IN VEN AND
+                    OPC-IIC-IOPC IN OPC = VEN-IIC-IOPC IN VEN )
+              PERFORM IMP-RAY
+              GO TO FIN-ACC-VEN.
+           GO TO LUP-ACC-VEN.
+       FIN-ACC-VEN.
+           EXIT.
+      *-----------------------------------------------------------------
+       ACC-EVC SECTION.
+       INI-ACC-EVC.
+      *
+           MOVE 'EVC'  TO RPT-ENT.
+           MOVE SPACES TO RPT-GLS-004.
+      *
+      *   --- DECLARA, ABRE EL CURSOR Y EFECTUA PRIMER FETCH DE EVC
+      *
+           MOVE 'EVC-KEY-IEVC'      TO FIO-AKEY
+           MOVE FIO-GET-NLS         TO FIO-CMND
+           MOVE ZEROES              TO EVC-NUM-IEVC IN EVC.
+           MOVE OPC-CAI-IOPC IN OPC TO EVC-CAI-IOPC IN EVC
+           MOVE OPC-IIC-IOPC IN OPC TO EVC-IIC-IOPC IN EVC
+           PERFORM COL-FIO-EVC.
+           IF NOT ( FIO-STAT-OKS AND
+                    OPC-CAI-IOPC IN OPC = EVC-CAI-IOPC IN EVC AND
+                    OPC-IIC-IOPC IN OPC = EVC-IIC-IOPC IN EVC )
+              MOVE 'INEXISTENTE' TO RPT-GLS-004
+              MOVE PGM-SOKS      TO PGM-STAT-SRT
+              PERFORM IMP-004
+              PERFORM IMP-RAY
+              GO TO FIN-ACC-EVC.
+       LUP-ACC-EVC.
+           ADD 1 TO WSS-NUM-EVCL.
+           PERFORM IMP-EVC.
+           MOVE 'EVC-KEY-IEVC'      TO FIO-AKEY.
+           MOVE FIO-GET-NXT         TO FIO-CMND.
+           PERFORM COL-FIO-EVC.
+           IF NOT ( FIO-STAT-OKS AND
+                    OPC-CAI-IOPC IN OPC = EVC-CAI-IOPC IN EVC AND
+                    OPC-IIC-IOPC IN OPC = EVC-IIC-IOPC IN EVC )
+              PERFORM IMP-RAY
+              GO TO FIN-ACC-EVC.
+           GO TO LUP-ACC-EVC.
+       FIN-ACC-EVC.
+           EXIT.
+      *-----------------------------------------------------------------
+       ACC-ICG SECTION.
+       INI-ACC-ICG.
+      *
+           MOVE 'ICG'  TO RPT-ENT.
+           MOVE SPACES TO RPT-GLS-004.
+      *
+      *   --- DECLARA, ABRE EL CURSOR Y EFECTUA PRIMER FETCH DE ICG
+      *
+           MOVE 'ICG-KEY-IICG'      TO FIO-AKEY
+           MOVE FIO-GET-NLS         TO FIO-CMND
+           MOVE OPC-CAI-IOPC IN OPC TO ICG-CAI-IOPC IN ICG
+           MOVE OPC-IIC-IOPC IN OPC TO ICG-IIC-IOPC IN ICG
+           MOVE ZEROES              TO ICG-NUM-ICAN IN ICG.
+           MOVE SPACES              TO ICG-CIC-IOPV IN ICG.
+           MOVE ZEROES              TO ICG-NUM-IVCT IN ICG.
+           PERFORM COL-FIO-ICG.
+           IF NOT ( FIO-STAT-OKS AND
+                    OPC-CAI-IOPC IN OPC = ICG-CAI-IOPC IN ICG AND
+                    OPC-IIC-IOPC IN OPC = ICG-IIC-IOPC IN ICG )
+              MOVE 'INEXISTENTE' TO RPT-GLS-004
+              MOVE PGM-SOKS      TO PGM-STAT-SRT
+              PERFORM IMP-004
+              PERFORM IMP-RAY
+              GO TO FIN-ACC-ICG.
+       LUP-ACC-ICG.
+           ADD 1 TO WSS-NUM-ICGL.
+           PERFORM IMP-ICG.
+           MOVE 'ICG-KEY-IICG'      TO FIO-AKEY.
+           MOVE FIO-GET-NXT         TO FIO-CMND.
+           PERFORM COL-FIO-ICG.
+           IF NOT ( FIO-STAT-OKS AND
+                    OPC-CAI-IOPC IN OPC = ICG-CAI-IOPC IN ICG AND
+                    OPC-IIC-IOPC IN OPC = ICG-IIC-IOPC IN ICG )
+              PERFORM IMP-RAY
+              GO TO FIN-ACC-ICG.
+           GO TO LUP-ACC-ICG.
+       FIN-ACC-ICG.
+           EXIT.
+      *-----------------------------------------------------------------
+       ACC-CYA SECTION.
+       INI-ACC-CYA.
+      *
+           MOVE 'CYA'  TO RPT-ENT.
+           MOVE SPACES TO RPT-GLS-004.
+      *
+      *   --- DECLARA, ABRE EL CURSOR Y EFECTUA PRIMER FETCH DE CYA
+      *
+           MOVE 'CYA-KEY-ICYA'      TO FIO-AKEY
+           MOVE FIO-GET-NLS         TO FIO-CMND
+           MOVE OPC-CAI-IOPC IN OPC TO CYA-CAI-IOPC IN CYA
+           MOVE OPC-IIC-IOPC IN OPC TO CYA-IIC-IOPC IN CYA
+           MOVE ZEROES              TO CYA-NUM-ICAN IN CYA.
+           MOVE 1                   TO CYA-NUM-ICYA IN CYA.
+           PERFORM COL-FIO-CYA.
+           IF NOT ( FIO-STAT-OKS AND
+                    OPC-CIC-IOPC IN OPC = CYA-CIC-IOPC IN CYA AND
+                    CYA-NUM-ICAN IN CYA = ZEROES AND
+                    CYA-NUM-ICYA IN CYA = 1 )
+              MOVE 'INEXISTENTE' TO RPT-GLS-004
+              MOVE PGM-SOKS      TO PGM-STAT-SRT
+              PERFORM IMP-004
+              PERFORM IMP-RAY
+              GO TO FIN-ACC-CYA.
+       LUP-ACC-CYA.
+           ADD 1 TO WSS-NUM-CYAL.
+           PERFORM IMP-CYA.
+           MOVE 'CYA-KEY-ICYA'      TO FIO-AKEY.
+           MOVE FIO-GET-NXT         TO FIO-CMND.
+           PERFORM COL-FIO-CYA.
+           IF NOT ( FIO-STAT-OKS AND
+                    OPC-CIC-IOPC IN OPC = CYA-CIC-IOPC IN CYA )
+              PERFORM IMP-RAY
+              GO TO FIN-ACC-CYA.
+           GO TO LUP-ACC-CYA.
+       FIN-ACC-CYA.
+           EXIT.
+      *-----------------------------------------------------------------
+       ACC-CAN SECTION.
+      *---------------
+       INI-ACC-CAN.
+      *
+           MOVE 'CAN'  TO RPT-ENT.
+           MOVE SPACES TO RPT-GLS-004.
+      *---
+      *    DECLARA,ABRE Y PRIMER FETCH PARA CURSOR DE CAN
+      *---
+           MOVE ZEROES              TO CAN-NUM-ICAN IN CAN
+           MOVE OPC-CAI-IOPC IN OPC TO CAN-CAI-IOPC IN CAN
+           MOVE OPC-IIC-IOPC IN OPC TO CAN-IIC-IOPC IN CAN
+           MOVE 'CAN-KEY-ICAN' TO FIO-AKEY.
+           MOVE FIO-GET-NLS    TO FIO-CMND.
+           PERFORM COL-FIO-CAN.
+           IF NOT ( FIO-STAT-OKS AND
+                    OPC-CAI-IOPC IN OPC = CAN-CAI-IOPC IN CAN AND
+                    OPC-IIC-IOPC IN OPC = CAN-IIC-IOPC IN CAN )
+              MOVE 'INEXISTENTE' TO RPT-GLS-004
+              MOVE PGM-SOKS      TO PGM-STAT-SRT
+              PERFORM IMP-004
+              PERFORM IMP-RAY
+              GO TO FIN-ACC-CAN.
+       LUP-ACC-CAN.
+           ADD 1 TO WSS-NUM-CANL.
+           PERFORM IMP-CAN.
+           MOVE 'CAN-KEY-ICAN' TO FIO-AKEY
+           MOVE FIO-GET-NXT    TO FIO-CMND
+           PERFORM COL-FIO-CAN.
+           IF NOT ( FIO-STAT-OKS AND
+                    OPC-CAI-IOPC IN OPC = CAN-CAI-IOPC IN CAN AND
+                    OPC-IIC-IOPC IN OPC = CAN-IIC-IOPC IN CAN )
+              PERFORM IMP-RAY
+              GO TO FIN-ACC-CAN.
+           GO TO LUP-ACC-CAN.
+       FIN-ACC-CAN.
+           EXIT.
+      *-----------------------------------------------------------------
+       ACC-RDT SECTION.
+       INI-ACC-RDT.
+      *
+           MOVE 'RDT'  TO RPT-ENT.
+           MOVE SPACES TO RPT-GLS-004.
+      *
+      *   --- DECLARA, ABRE EL CURSOR Y EFECTUA PRIMER FETCH DE RDT
+      *
+           MOVE 'RDT-KEY-IRDT'      TO FIO-AKEY.
+           MOVE FIO-GET-NLS         TO FIO-CMND.
+      *JUS-INI 13-OCT-1997 16:21:15
+            MOVE ZEROES              TO RDT-NUM-IDLC IN RDT.
+      *    MOVE ZEROES              TO RDT-NUM-IVEN IN RDT.
+      *JUS-FIN 13-OCT-1997 16:21:15
+           MOVE SPACES              TO RDT-IND-SCTB IN RDT.
+           MOVE OPC-CAI-IOPC IN OPC TO RDT-CAI-IOPC IN RDT.
+           MOVE OPC-IIC-IOPC IN OPC TO RDT-IIC-IOPC IN RDT.
+
+           PERFORM COL-FIO-RDT.
+           IF NOT ( FIO-STAT-OKS AND
+                    OPC-CAI-IOPC IN OPC = RDT-CAI-IOPC IN RDT AND
+                    OPC-IIC-IOPC IN OPC = RDT-IIC-IOPC IN RDT )
+              MOVE 'INEXISTENTE' TO RPT-GLS-004
+              MOVE PGM-SOKS      TO PGM-STAT-SRT
+              PERFORM IMP-004
+              PERFORM IMP-RAY
+              GO TO FIN-ACC-RDT.
+       LUP-ACC-RDT.
+           ADD 1 TO WSS-NUM-RDTL.
+           PERFORM IMP-RDT.
+           MOVE 'RDT-KEY-IRDT'      TO FIO-AKEY.
+           MOVE FIO-GET-NXT         TO FIO-CMND.
+           PERFORM COL-FIO-RDT.
+           IF NOT ( FIO-STAT-OKS AND
+                    OPC-CAI-IOPC IN OPC = RDT-CAI-IOPC IN RDT AND
+                    OPC-IIC-IOPC IN OPC = RDT-IIC-IOPC IN RDT )
+              PERFORM IMP-RAY
+              GO TO FIN-ACC-RDT.
+           GO TO LUP-ACC-RDT.
+       FIN-ACC-RDT.
+           EXIT.
+      *-----------------------------------------------------------------
+       ACC-RDC SECTION.
+       INI-ACC-RDC.
+      *
+           MOVE 'RDC'  TO RPT-ENT.
+           MOVE SPACES TO RPT-GLS-004.
+      *
+      *   --- DECLARA, ABRE EL CURSOR Y EFECTUA PRIMER FETCH DE RDC
+      *
+           MOVE 'RDC-KEY-IDLC'      TO FIO-AKEY
+           MOVE FIO-GET-NLS         TO FIO-CMND
+           MOVE OPC-CAI-IOPC IN OPC TO RDC-CAI-IOPC IN RDC
+           MOVE OPC-IIC-IOPC IN OPC TO RDC-IIC-IOPC IN RDC
+           MOVE 0                   TO RDC-NUM-IDLC IN RDC
+           PERFORM COL-FIO-RDC.
+           IF NOT ( FIO-STAT-OKS AND
+                    OPC-CAI-IOPC IN OPC = RDC-CAI-IOPC IN RDC AND
+                    OPC-IIC-IOPC IN OPC = RDC-IIC-IOPC IN RDC )
+              MOVE 'INEXISTENTE' TO RPT-GLS-004
+              MOVE PGM-SOKS      TO PGM-STAT-SRT
+              PERFORM IMP-004
+              PERFORM IMP-RAY
+              GO TO FIN-ACC-RDC.
+       LUP-ACC-RDC.
+           ADD 1 TO WSS-NUM-RDCL.
+           PERFORM IMP-RDC.
+           MOVE 'RDC-KEY-IDLC'      TO FIO-AKEY
+           MOVE FIO-GET-NXT         TO FIO-CMND
+           PERFORM COL-FIO-RDC.
+           IF NOT ( FIO-STAT-OKS AND
+                    OPC-CAI-IOPC IN OPC = RDC-CAI-IOPC IN RDC AND
+                    OPC-IIC-IOPC IN OPC = RDC-IIC-IOPC IN RDC )
+              PERFORM IMP-RAY
+              GO TO FIN-ACC-RDC.
+           GO TO LUP-ACC-RDC.
+       FIN-ACC-RDC.
+           EXIT.
+      *-----------------------------------------------------------------
+       ACC-RCE SECTION.
+       INI-ACC-RCE.
+      *
+           MOVE 'RCE'  TO RPT-ENT.
+           MOVE SPACES TO RPT-GLS-004.
+      *
+      *   --- DECLARA, ABRE EL CURSOR Y EFECTUA PRIMER FETCH DE RCE
+      *
+           MOVE 'RCE-KEY-IRCE'      TO FIO-AKEY
+           MOVE FIO-GET-NLS         TO FIO-CMND
+           MOVE OPC-CAI-IOPC IN OPC TO RCE-CAI-IOPC IN RCE
+           MOVE OPC-IIC-IOPC IN OPC TO RCE-IIC-IOPC IN RCE
+           MOVE 0                   TO RCE-NUM-IDLC IN RCE
+           PERFORM COL-FIO-RCE.
+           IF NOT ( FIO-STAT-OKS AND
+                    OPC-CAI-IOPC IN OPC = RCE-CAI-IOPC IN RCE AND
+                    OPC-IIC-IOPC IN OPC = RCE-IIC-IOPC IN RCE )
+              MOVE 'INEXISTENTE' TO RPT-GLS-004
+              MOVE PGM-SOKS      TO PGM-STAT-SRT
+              PERFORM IMP-004
+              PERFORM IMP-RAY
+              GO TO FIN-ACC-RCE.
+       LUP-ACC-RCE.
+           ADD 1 TO WSS-NUM-RCEL.
+           PERFORM IMP-RCE.
+           MOVE 'RCE-KEY-IRCE'      TO FIO-AKEY
+           MOVE FIO-GET-NXT         TO FIO-CMND
+           PERFORM COL-FIO-RCE.
+           IF NOT ( FIO-STAT-OKS AND
+                    OPC-CAI-IOPC IN OPC = RCE-CAI-IOPC IN RCE AND
+                    OPC-IIC-IOPC IN OPC = RCE-IIC-IOPC IN RCE )
+              PERFORM IMP-RAY
+              GO TO FIN-ACC-RCE.
+           GO TO LUP-ACC-RCE.
+       FIN-ACC-RCE.
+           EXIT.
+      *-----------------------------------------------------------------
+      *-----------------------------------------------------------------
+       IMP-004 SECTION.
+       INI-IMP-004.
+      *
+           IF WSS-NUM-CLIN IN WSS-VARI > 55
+              PERFORM IMP-ENC.
+      *
+           WRITE RPT-DET FROM RPT-LIN-004  IN WSS-VARI AFTER 2.
+           ADD   2       TO   WSS-NUM-CLIN IN WSS-VARI.
+      *
+       FIN-IMP-004.
+           EXIT.
+      *-----------------------------------------------------------------
+       IMP-RAY SECTION.
+       INI-IMP-RAY.
+      *
+           IF WSS-NUM-CLIN IN WSS-VARI > 60
+              PERFORM IMP-ENC
+           ELSE
+              WRITE RPT-DET FROM RPT-LIN-RAY  IN WSS-VARI AFTER 2
+              ADD   2       TO   WSS-NUM-CLIN IN WSS-VARI.
+      *
+       FIN-IMP-RAY.
+           EXIT.
+      *-----------------------------------------------------------------
+       IMP-ENC SECTION.
+       INI-IMP-ENC.
+      *
+           ADD   1                        TO WSS-NUM-CPAG IN WSS-VARI.
+           MOVE  WSS-NUM-CPAG IN WSS-VARI TO RPT-NUM-PAG  IN WSS-VARI.
+           WRITE RPT-DET FROM RPT-LIN-099 IN WSS-VARI AFTER PAGE.
+           WRITE RPT-DET FROM RPT-LIN-002 IN WSS-VARI AFTER 1.
+           WRITE RPT-DET FROM RPT-LIN-003 IN WSS-VARI AFTER 1.
+           MOVE SPACES TO RPT-DET
+           WRITE RPT-DET                              AFTER 2.
+      *
+           MOVE 05 TO WSS-NUM-CLIN IN WSS-VARI.
+      *
+       FIN-IMP-ENC.
+           EXIT.
+      *-----------------------------------------------------------------
+       IMP-OPC SECTION.
+       INI-IMP-OPC.
+      *
+           MOVE 60       TO WSS-NUM-CLIN IN WSS-VARI.
+           MOVE OPC-GLS-FLAG IN OPC  TO RPT-OPC-FLAG.
+           MOVE OPC-CAI-IOPC IN OPC  TO RPT-OPC-CAI.
+           MOVE OPC-IIC-IOPC IN OPC  TO RPT-OPC-IIC.
+           MOVE OPC-FEC-FTRN IN OPC  TO RPT-OPC-FTRN.
+           MOVE OPC-HRA-HRTR IN OPC  TO RPT-OPC-HTRN.
+           MOVE OPC-MSC-TACC IN OPC  TO RPT-OPC-TAAC.
+           MOVE OPC-MSC-STAT IN OPC  TO RPT-OPC-STAT.
+           MOVE OPC-COD-OTRN IN OPC  TO RPT-OPC-OTRN.
+           MOVE OPC-COD-ATRN IN OPC  TO RPT-OPC-ATRN.
+           MOVE OPC-MSC-TVOC IN OPC  TO RPT-OPC-TVOC.
+           MOVE OPC-COD-CVOC IN OPC  TO RPT-OPC-CVOC.
+           MOVE OPC-COD-TCOC IN OPC  TO RPT-OPC-TCOC.
+           MOVE OPC-COD-TOOC IN OPC  TO RPT-OPC-TOOC.
+           MOVE OPC-COD-AOOC IN OPC  TO RPT-OPC-AOOC.
+           MOVE OPC-COD-OFOC IN OPC  TO RPT-OPC-OFOC.
+           MOVE OPC-COD-RMOC IN OPC  TO RPT-OPC-RMOC.
+           MOVE OPC-COD-CDOC IN OPC  TO RPT-OPC-CDOC.
+           MOVE OPC-CIC-ILDC IN OPC  TO RPT-OPC-IDLC.
+           MOVE OPC-FEC-FCOL IN OPC  TO RPT-OPC-FCOL.
+           MOVE OPC-FEC-FING IN OPC  TO RPT-OPC-FING.
+           MOVE OPC-FEC-FINP IN OPC  TO RPT-OPC-FINP.
+           MOVE OPC-VAL-CRED IN OPC  TO RPT-OPC-CRED.
+           MOVE OPC-VAL-SCRE IN OPC  TO RPT-OPC-SCRE.
+           MOVE OPC-IND-AFER IN OPC  TO RPT-OPC-AFER.
+           MOVE OPC-MSC-MCVF IN OPC  TO RPT-OPC-MCVF.
+           MOVE OPC-MSC-BCCR IN OPC  TO RPT-OPC-BCCR.
+           MOVE OPC-MSC-VICR IN OPC  TO RPT-OPC-VICR.
+           MOVE OPC-IND-RENO IN OPC  TO RPT-OPC-RENO.
+           MOVE OPC-IND-GARA IN OPC  TO RPT-OPC-GARA.
+           MOVE OPC-VAL-GAST IN OPC  TO RPT-OPC-GAST.
+           MOVE OPC-COD-SEGD IN OPC  TO RPT-OPC-CSED.
+           MOVE OPC-VAL-SEGD IN OPC  TO RPT-OPC-VSED.
+           MOVE OPC-VAL-SEGP IN OPC  TO RPT-OPC-VSEP.
+           MOVE OPC-SGV-LIQU IN OPC  TO RPT-OPC-LIQU.
+           MOVE OPC-NUM-IVEN IN OPC  TO RPT-OPC-IVEN.
+           MOVE OPC-NUM-VCOR IN OPC  TO RPT-OPC-VCOR.
+           MOVE OPC-NUM-VCVG IN OPC  TO RPT-OPC-VCVG.
+           MOVE OPC-NUM-VCCO IN OPC  TO RPT-OPC-VCCO.
+           MOVE OPC-NUM-VCCM IN OPC  TO RPT-OPC-VCCM.
+           MOVE OPC-NUM-VCCV IN OPC  TO RPT-OPC-VCCV.
+           MOVE OPC-NUM-TVCC IN OPC  TO RPT-OPC-TVCC.
+           MOVE OPC-IND-VSTR IN OPC  TO RPT-OPC-VSTR.
+           MOVE OPC-CIC-ICEN IN OPC  TO RPT-OPC-ICEN.
+           MOVE OPC-SGV-VCOM IN OPC  TO RPT-OPC-VCOM.
+           MOVE OPC-COD-AGES IN OPC  TO RPT-OPC-AGES.
+      * RBG/CHI/INI/5-JUL-1996
+           MOVE OPC-IND-CTBL IN OPC  TO RPT-OPC-CTBL.
+           MOVE OPC-COD-INSI IN OPC  TO RPT-OPC-INSI.
+           MOVE OPC-COD-CVTA IN OPC  TO RPT-OPC-CVTA.
+      * Para efectos del Reporte muevo ceros y spaces
+           MOVE SPACES               TO RPT-OPC-CSEP.
+           MOVE ZEROES               TO RPT-OPC-TCOM.
+           MOVE SPACES               TO RPT-OPC-CCOM.
+           MOVE SPACES               TO RPT-OPC-CATE.
+           MOVE SPACES               TO RPT-OPC-DCOM.
+           MOVE SPACES               TO RPT-OPC-ICYA.
+           MOVE ZEROES               TO RPT-OPC-LEGA.
+      * RBG/CHI/FIN/5-JUL-1996
+      *
+           IF WSS-NUM-CLIN IN WSS-VARI > 45
+              PERFORM IMP-ENC.
+           PERFORM IMP-004.
+      *
+           WRITE RPT-DET FROM RPT-OPC-001  IN WSS-VARI AFTER 2.
+           WRITE RPT-DET FROM RPT-OPC-002  IN WSS-VARI AFTER 1.
+           WRITE RPT-DET FROM RPT-OPC-003  IN WSS-VARI AFTER 2.
+           WRITE RPT-DET FROM RPT-OPC-004  IN WSS-VARI AFTER 1.
+           WRITE RPT-DET FROM RPT-OPC-005  IN WSS-VARI AFTER 2.
+           WRITE RPT-DET FROM RPT-OPC-006  IN WSS-VARI AFTER 1.
+           WRITE RPT-DET FROM RPT-OPC-007  IN WSS-VARI AFTER 2.
+           WRITE RPT-DET FROM RPT-OPC-008  IN WSS-VARI AFTER 1.
+           WRITE RPT-DET FROM RPT-OPC-009  IN WSS-VARI AFTER 2.
+           WRITE RPT-DET FROM RPT-OPC-010  IN WSS-VARI AFTER 1.
+           ADD   15      TO   WSS-NUM-CLIN IN WSS-VARI.
+      *
+       FIN-IMP-OPC.
+           EXIT.
+      *-----------------------------------------------------------------
+       IMP-DLC SECTION.
+       INI-IMP-DLC.
+      *
+           MOVE DLC-GLS-FLAG IN DLC TO RPT-DLC-FLAG
+           MOVE DLC-CAI-IOPC IN DLC TO RPT-DLC-CAI
+           MOVE DLC-IIC-IOPC IN DLC TO RPT-DLC-IIC
+           MOVE DLC-NUM-IDLC IN DLC TO RPT-DLC-IDLC
+           MOVE DLC-VAL-NDLC IN DLC TO RPT-DLC-NDLC
+           MOVE DLC-VAL-SDLC IN DLC TO RPT-DLC-SDLC
+           MOVE DLC-COD-TDOC IN DLC TO RPT-DLC-TDOC
+           MOVE DLC-COD-PLZO IN DLC TO RPT-DLC-PLZO
+           MOVE DLC-MSC-TIMP IN DLC TO RPT-DLC-TIMP
+           MOVE DLC-VAL-IMPU IN DLC TO RPT-DLC-IMPU
+           MOVE DLC-COD-NOTC IN DLC TO RPT-DLC-MOTC
+           MOVE DLC-VAL-GNOT IN DLC TO RPT-DLC-GNOT
+           MOVE DLC-IND-SCBZ IN DLC TO RPT-DLC-SCBZ
+           MOVE DLC-IND-SCRT IN DLC TO RPT-DLC-SCRT
+           MOVE DLC-COD-UBFD IN DLC TO RPT-DLC-UBFD
+           MOVE DLC-COD-PLZA IN DLC TO RPT-DLC-PLZA
+           MOVE DLC-MSC-MIPL IN DLC TO RPT-DLC-MIPL
+           MOVE DLC-IND-RIES IN DLC TO RPT-DLC-RIES
+           MOVE DLC-VAL-READ IN DLC TO RPT-DLC-READ
+           MOVE DLC-VAL-INTD IN DLC TO RPT-DLC-INTD
+           MOVE DLC-FEC-FDEV IN DLC TO RPT-DLC-FDEV
+           MOVE DLC-VAL-SINT IN DLC TO RPT-DLC-SINT
+           MOVE DLC-VAL-SCPA IN DLC TO RPT-DLC-SCPA
+           MOVE DLC-FEC-FAMT IN DLC TO RPT-DLC-FMAT
+           MOVE DLC-CIC-IOCO IN DLC TO RPT-DLC-IOCO
+           MOVE DLC-NUM-IDLO IN DLC TO RPT-DLC-IDLO
+           MOVE DLC-VAL-IPEN IN DLC TO RPT-DLC-IPEN
+           MOVE DLC-VAL-DPES IN DLC TO RPT-DLC-DPES
+           MOVE DLC-IND-SCTB IN DLC TO RPT-DLC-SCTB
+           MOVE DLC-FEC-FMAV IN DLC TO RPT-DLC-FMAV
+           MOVE DLC-NUM-VSCE IN DLC TO RPT-DLC-VSCE
+           MOVE DLC-GLS-DISP IN DLC TO RPT-DLC-DISP
+      * RBG/CHI/INI/5-JUL-1996
+           MOVE DLC-FEC-FTRN IN DLC TO RPT-DLC-FTRN.
+           MOVE DLC-HRA-HRTR IN DLC TO RPT-DLC-HTRN.
+           MOVE DLC-MSC-TACC IN DLC TO RPT-DLC-TACC.
+           MOVE DLC-MSC-STAT IN DLC TO RPT-DLC-STAT.
+           MOVE DLC-COD-OTRN IN DLC TO RPT-DLC-OTRN.
+           MOVE DLC-FEC-FSDE IN DLC TO RPT-DLC-FSDE.
+      * RBG/INI/27-SEP-1996/Estos Campos no estan en el Banco.
+      *     MOVE DLC-COD-SUSP IN DLC TO RPT-DLC-SUSP.
+      *     MOVE DLC-FEC-FSDM IN DLC TO RPT-DLC-FSDM.
+      *    IF DLC-VAL-REAO IN DLC IS NOT NUMERIC
+      *       MOVE 5555555555555,55 TO RPT-DLC-REAO
+      *    ELSE
+      *       MOVE DLC-VAL-REAO IN DLC TO RPT-DLC-REAO.
+      *    IF DLC-VAL-INTO IN DLC IS NOT NUMERIC
+      *       MOVE 5555555555555,55 TO RPT-DLC-INTO
+      *    ELSE
+      *       MOVE DLC-VAL-INTO IN DLC TO RPT-DLC-INTO.
+      *    IF DLC-VAL-REAM IN DLC IS NOT NUMERIC
+      *       MOVE 5555555555555,55 TO RPT-DLC-REAM
+      *    ELSE
+      *       MOVE DLC-VAL-REAM IN DLC TO RPT-DLC-REAM.
+      *    IF DLC-VAL-INTM IN DLC IS NOT NUMERIC
+      *       MOVE 5555555555555,55 TO RPT-DLC-INTM
+      *    ELSE
+      *       MOVE DLC-VAL-INTM IN DLC TO RPT-DLC-INTM.
+      * RBG/FIN/27-SEP-1996/Estos Campos no estan en el Banco.
+      * Para efectos del Reporte muevo ceros y spaces
+           MOVE SPACES             TO RPT-DLC-SUSP.
+           MOVE ZEROES             TO RPT-DLC-FSDM.
+            MOVE ZEROES             TO RPT-DLC-REAO.
+            MOVE ZEROES             TO RPT-DLC-INTO.
+            MOVE ZEROES             TO RPT-DLC-REAM.
+            MOVE ZEROES             TO RPT-DLC-INTM.
+           MOVE ZEROES             TO RPT-DLC-COMD.
+           MOVE SPACES             TO RPT-DLC-ICYA.
+           MOVE ZEROES             TO RPT-DLC-FULD.
+           MOVE ZEROES             TO RPT-DLC-SDLD.
+           MOVE SPACES             TO RPT-DLC-GLIQ.
+           MOVE ZEROES             TO RPT-DLC-ICOD.
+           MOVE ZEROES             TO RPT-DLC-IPUD.
+           MOVE ZEROES             TO RPT-DLC-ICID.
+           MOVE ZEROES             TO RPT-DLC-INMD.
+           MOVE ZEROES             TO RPT-DLC-AJCD.
+           MOVE ZEROES             TO RPT-DLC-ACAV.
+           MOVE ZEROES             TO RPT-DLC-AJKD.
+           MOVE ZEROES             TO RPT-DLC-AJID.
+           MOVE ZEROES             TO RPT-DLC-AIMD.
+           MOVE ZEROES             TO RPT-DLC-ACAM.
+
+      * RBG/CHI/FIN/5-JUL-1996
+           IF WSS-NUM-CLIN IN WSS-VARI > 39
+              PERFORM IMP-ENC.
+           PERFORM IMP-004
+      *
+           WRITE RPT-DET FROM RPT-DLC-001  IN WSS-VARI AFTER 2.
+           WRITE RPT-DET FROM RPT-DLC-002  IN WSS-VARI AFTER 1.
+           WRITE RPT-DET FROM RPT-DLC-003  IN WSS-VARI AFTER 2.
+           WRITE RPT-DET FROM RPT-DLC-004  IN WSS-VARI AFTER 1.
+           WRITE RPT-DET FROM RPT-DLC-005  IN WSS-VARI AFTER 2.
+           WRITE RPT-DET FROM RPT-DLC-006  IN WSS-VARI AFTER 1.
+           WRITE RPT-DET FROM RPT-DLC-007  IN WSS-VARI AFTER 2.
+           WRITE RPT-DET FROM RPT-DLC-008  IN WSS-VARI AFTER 1.
+           WRITE RPT-DET FROM RPT-DLC-009  IN WSS-VARI AFTER 2.
+           WRITE RPT-DET FROM RPT-DLC-010  IN WSS-VARI AFTER 1.
+           WRITE RPT-DET FROM RPT-DLC-011  IN WSS-VARI AFTER 2.
+           WRITE RPT-DET FROM RPT-DLC-012  IN WSS-VARI AFTER 1.
+           WRITE RPT-DET FROM RPT-DLC-013  IN WSS-VARI AFTER 2.
+           WRITE RPT-DET FROM RPT-DLC-014  IN WSS-VARI AFTER 1.
+      * RBG/CHI/INI/ 10-JUL-1996
+           WRITE RPT-DET FROM RPT-DLC-015  IN WSS-VARI AFTER 2.
+           WRITE RPT-DET FROM RPT-DLC-016  IN WSS-VARI AFTER 1.
+           WRITE RPT-DET FROM RPT-DLC-017  IN WSS-VARI AFTER 2.
+           WRITE RPT-DET FROM RPT-DLC-018  IN WSS-VARI AFTER 1.
+           ADD   24      TO   WSS-NUM-CLIN IN WSS-VARI.
+      * RBG/CHI/FIN/ 10-JUL-1996
+       FIN-IMP-DLC.
+           EXIT.
+      *-----------------------------------------------------------------
+       IMP-RCV SECTION.
+       INI-IMP-RCV.
+      *
+           MOVE RCV-GLS-FLAG IN RCV TO RPT-RCV-FLAG.
+           MOVE RCV-CAI-IOPC IN RCV TO RPT-RCV-CAI.
+           MOVE RCV-IIC-IOPC IN RCV TO RPT-RCV-IIC.
+           MOVE RCV-NUM-ICAN IN RCV TO RPT-RCV-ICAN.
+           MOVE RCV-CIC-IOPV IN RCV TO RPT-RCV-IOPV.
+           MOVE RCV-NUM-IVCT IN RCV TO RPT-RCV-IVCT.
+           MOVE RCV-CIC-IOPD IN RCV TO RPT-RCV-IOPD.
+           MOVE RCV-NUM-IDLC IN RCV TO RPT-RCV-IDLC.
+           MOVE RCV-NUM-IEVC IN RCV TO RPT-RCV-IEVC.
+           MOVE RCV-MSC-MCAN IN RCV TO RPT-RCV-MCAN.
+           MOVE RCV-SGV-CAPI IN RCV TO RPT-RCV-CAPI.
+           MOVE RCV-SGV-INTE IN RCV TO RPT-RCV-INTE.
+           MOVE RCV-SGV-FINA IN RCV TO RPT-RCV-FINA.
+           MOVE RCV-IND-SCTB IN RCV TO RPT-RCV-SCTB.
+           MOVE RCV-IND-SCBZ IN RCV TO RPT-RCV-SCBZ.
+           MOVE RCV-FEC-FCAN IN RCV TO RPT-RCV-FCAN.
+           MOVE RCV-FEC-FOUT IN RCV TO RPT-RCV-FOUT.
+           MOVE RCV-MSC-STAT IN RCV TO RPT-RCV-STAT.
+      * RBG/CHI/INI/5-JUL-1996
+           MOVE RCV-FEC-FTRN IN RCV TO RPT-RCV-FTRN.
+           MOVE RCV-HRA-HRTR IN RCV TO RPT-RCV-HTRN.
+           MOVE RCV-MSC-TACC IN RCV TO RPT-RCV-TACC.
+           MOVE RCV-COD-OTRN IN RCV TO RPT-RCV-OTRN.
+           MOVE RCV-COD-ATRN IN RCV TO RPT-RCV-ATRN.
+           MOVE ZEROES              TO RPT-RCV-REAO.
+           MOVE ZEROES              TO RPT-RCV-INTO.
+           MOVE ZEROES              TO RPT-RCV-CAPP.
+           IF RCV-SGV-INTM IN RCV IS NOT NUMERIC
+              MOVE 5555555555555,55 TO RPT-RCV-INTM
+           ELSE
+              MOVE RCV-SGV-INTM IN RCV TO RPT-RCV-INTM.
+           IF RCV-SGV-INTN IN RCV IS NOT NUMERIC
+              MOVE 5555555555555,55 TO RPT-RCV-INTN
+           ELSE
+              MOVE RCV-SGV-INTN IN RCV TO RPT-RCV-INTN.
+           IF RCV-SGV-REAJ IN RCV IS NOT NUMERIC
+              MOVE 5555555555555,55 TO RPT-RCV-REAJ
+           ELSE
+              MOVE RCV-SGV-REAJ IN RCV TO RPT-RCV-REAJ.
+      *     IF RCV-SGV-REAM IN RCV IS NOT NUMERIC
+      *        MOVE 5555555555555,55 TO RPT-RCV-REAM
+      *     ELSE
+      *        MOVE RCV-SGV-REAM IN RCV TO RPT-RCV-REAM.
+      * Para efectos del Reporte muevo ceros y spaces
+           MOVE ZEROES             TO RPT-RCV-IMPO.
+           MOVE ZEROES             TO RPT-RCV-REAM.
+           MOVE ZEROES             TO RPT-RCV-SEGD.
+           MOVE ZEROES             TO RPT-RCV-SEGP.
+           MOVE ZEROES             TO RPT-RCV-MCOM.
+           MOVE ZEROES             TO RPT-RCV-ICOM.
+           MOVE ZEROES             TO RPT-RCV-IPUN.
+           MOVE ZEROES             TO RPT-RCV-ICOI.
+           MOVE ZEROES             TO RPT-RCV-IPUI.
+           MOVE ZEROES             TO RPT-RCV-ICDN.
+           MOVE ZEROES             TO RPT-RCV-IPDN.
+           MOVE ZEROES             TO RPT-RCV-ICDI.
+           MOVE ZEROES             TO RPT-RCV-IPDI.
+           MOVE ZEROES             TO RPT-RCV-ICNP.
+           MOVE ZEROES             TO RPT-RCV-ICIP.
+           MOVE ZEROES             TO RPT-RCV-IPNP.
+           MOVE ZEROES             TO RPT-RCV-IPIP.
+           MOVE ZEROES             TO RPT-RCV-VIVA.
+      * RBG/CHI/FIN/5-JUL-1996
+           IF WSS-NUM-CLIN IN WSS-VARI > 41
+              PERFORM IMP-ENC.
+           PERFORM IMP-004.
+      *
+           WRITE RPT-DET FROM RPT-RCV-001  IN WSS-VARI AFTER 2.
+           WRITE RPT-DET FROM RPT-RCV-002  IN WSS-VARI AFTER 1.
+           WRITE RPT-DET FROM RPT-RCV-003  IN WSS-VARI AFTER 2.
+           WRITE RPT-DET FROM RPT-RCV-004  IN WSS-VARI AFTER 1.
+           WRITE RPT-DET FROM RPT-RCV-005  IN WSS-VARI AFTER 2.
+           WRITE RPT-DET FROM RPT-RCV-006  IN WSS-VARI AFTER 1.
+           WRITE RPT-DET FROM RPT-RCV-007  IN WSS-VARI AFTER 2.
+           WRITE RPT-DET FROM RPT-RCV-008  IN WSS-VARI AFTER 1.
+           WRITE RPT-DET FROM RPT-RCV-009  IN WSS-VARI AFTER 2.
+           WRITE RPT-DET FROM RPT-RCV-010  IN WSS-VARI AFTER 1.
+           WRITE RPT-DET FROM RPT-RCV-011  IN WSS-VARI AFTER 2.
+           WRITE RPT-DET FROM RPT-RCV-012  IN WSS-VARI AFTER 1.
+      * RBG/CHI/INI/ 10-JUL-1996
+           WRITE RPT-DET FROM RPT-RCV-013  IN WSS-VARI AFTER 2.
+           WRITE RPT-DET FROM RPT-RCV-014  IN WSS-VARI AFTER 1.
+           WRITE RPT-DET FROM RPT-RCV-015  IN WSS-VARI AFTER 2.
+           WRITE RPT-DET FROM RPT-RCV-016  IN WSS-VARI AFTER 1.
+           ADD   22      TO   WSS-NUM-CLIN IN WSS-VARI.
+      * RBG/CHI/FIN/ 10-JUL-1996
+       FIN-IMP-RCV.
+           EXIT.
+      *-----------------------------------------------------------------
+       IMP-VEN SECTION.
+       INI-IMP-VEN.
+      *
+           MOVE VEN-GLS-FLAG      IN VEN TO RPT-VEN-FLAG.
+           MOVE VEN-CIC-IOPC      IN VEN TO RPT-VEN-IOPC.
+           MOVE VEN-NUM-IVEN      IN VEN TO RPT-VEN-IVEN.
+           MOVE VEN-MSC-TACC      IN VEN TO RPT-VEN-TACC.
+           MOVE VEN-FEC-FVEN      IN VEN TO RPT-VEN-FVEN.
+           MOVE VEN-FEC-FIMV      IN VEN TO RPT-VEN-FIMV.
+           MOVE VEN-VAL-CAPI      IN VEN TO RPT-VEN-CAPI.
+           MOVE VEN-VAL-SCAP      IN VEN TO RPT-VEN-SCAP.
+           MOVE VEN-VAL-IDNI      IN VEN TO RPT-VEN-IDNI.
+           MOVE VEN-VAL-FINA      IN VEN TO RPT-VEN-FINA.
+           MOVE VEN-VAL-SFIN      IN VEN TO RPT-VEN-SFIN.
+           MOVE VEN-NUM-IVCT      IN VEN TO RPT-VEN-IVCT.
+           MOVE VEN-NUM-IEVC      IN VEN TO RPT-VEN-IEVC.
+           MOVE VEN-NUM-IDLC      IN VEN TO RPT-VEN-IDLC.
+           MOVE VEN-IND-CAUT      IN VEN TO RPT-VEN-CAUT.
+           MOVE VEN-IND-SCTB      IN VEN TO RPT-VEN-SCTB.
+           MOVE VEN-IND-SCBZ      IN VEN TO RPT-VEN-SCBZ.
+           IF VEN-VAL-MTSC IN VEN IS NOT NUMERIC
+              MOVE 5555555555555,55 TO RPT-VEN-MTSC
+           ELSE
+              MOVE VEN-VAL-MTSC      IN VEN TO RPT-VEN-MTSC.
+           MOVE VEN-IND-MTSC      IN VEN TO RPT-VEN-MTSS.
+           MOVE VEN-IND-CALC      IN VEN TO RPT-VEN-CALC.
+      * RBG/CHI/INI/ 5-JUL-1996
+           MOVE VEN-FEC-FTRN      IN VEN TO RPT-VEN-FTRN.
+           MOVE VEN-HRA-HRTR      IN VEN TO RPT-VEN-HTRN.
+           MOVE VEN-MSC-STAT      IN VEN TO RPT-VEN-STAT.
+           MOVE VEN-COD-OTRN      IN VEN TO RPT-VEN-OTRN.
+           MOVE VEN-COD-ATRN      IN VEN TO RPT-VEN-ATRN.
+           MOVE VEN-IND-CTBA      IN VEN TO RPT-VEN-CTBA.
+      * Para Efectos del Reporte muevo ceros y spaces.
+           MOVE ZEROES                  TO RPT-VEN-IMPO.
+           MOVE ZEROES                  TO RPT-VEN-SEGD.
+           MOVE ZEROES                  TO RPT-VEN-SEGP.
+           MOVE ZEROES                  TO RPT-VEN-MCOM.
+           MOVE ZEROES                  TO RPT-VEN-AJTD.
+           MOVE ZEROES                  TO RPT-VEN-INTD.
+           MOVE ZEROES                  TO RPT-VEN-COMD.
+           MOVE ZEROES                  TO RPT-VEN-ICDN.
+           MOVE ZEROES                  TO RPT-VEN-IPDN.
+           MOVE ZEROES                  TO RPT-VEN-ICDI.
+           MOVE ZEROES                  TO RPT-VEN-IPDI.
+           MOVE ZEROES                  TO RPT-VEN-SIMP.
+           MOVE ZEROES                  TO RPT-VEN-SSGD.
+           MOVE ZEROES                  TO RPT-VEN-SSGP.
+           MOVE ZEROES                  TO RPT-VEN-SCOM.
+           MOVE ZEROES                  TO RPT-VEN-VIVA.
+           MOVE ZEROES                  TO RPT-VEN-ICNP.
+           MOVE ZEROES                  TO RPT-VEN-ICIP.
+           MOVE ZEROES                  TO RPT-VEN-IPNP.
+           MOVE ZEROES                  TO RPT-VEN-IPIP.
+           MOVE SPACES                  TO RPT-VEN-AVMR.
+           MOVE ZEROES                  TO RPT-VEN-AJCD.
+           MOVE ZEROES                  TO RPT-VEN-AJKD.
+           MOVE ZEROES                  TO RPT-VEN-AJID.
+           MOVE ZEROES                  TO RPT-VEN-AIMD.
+      * RBG/CHI/FIN/ 5-JUL-1996
+           IF WSS-NUM-CLIN IN WSS-VARI > 39
+              PERFORM IMP-ENC.
+           PERFORM IMP-004.
+      *
+           WRITE RPT-DET FROM RPT-VEN-001  IN WSS-VARI AFTER 2.
+           WRITE RPT-DET FROM RPT-VEN-002  IN WSS-VARI AFTER 1.
+           WRITE RPT-DET FROM RPT-VEN-003  IN WSS-VARI AFTER 2.
+           WRITE RPT-DET FROM RPT-VEN-004  IN WSS-VARI AFTER 1.
+           WRITE RPT-DET FROM RPT-VEN-005  IN WSS-VARI AFTER 2.
+           WRITE RPT-DET FROM RPT-VEN-006  IN WSS-VARI AFTER 1.
+           WRITE RPT-DET FROM RPT-VEN-007  IN WSS-VARI AFTER 2.
+           WRITE RPT-DET FROM RPT-VEN-008  IN WSS-VARI AFTER 1.
+           WRITE RPT-DET FROM RPT-VEN-009  IN WSS-VARI AFTER 2.
+           WRITE RPT-DET FROM RPT-VEN-010  IN WSS-VARI AFTER 1.
+           WRITE RPT-DET FROM RPT-VEN-011  IN WSS-VARI AFTER 2.
+           WRITE RPT-DET FROM RPT-VEN-012  IN WSS-VARI AFTER 1.
+           WRITE RPT-DET FROM RPT-VEN-013  IN WSS-VARI AFTER 2.
+           WRITE RPT-DET FROM RPT-VEN-014  IN WSS-VARI AFTER 1.
+      * RBG/CHI/INI/ 10-JUL-1996
+           WRITE RPT-DET FROM RPT-VEN-015  IN WSS-VARI AFTER 2.
+           WRITE RPT-DET FROM RPT-VEN-016  IN WSS-VARI AFTER 1.
+           ADD   23      TO   WSS-NUM-CLIN IN WSS-VARI.
+      * RBG/CHI/INI/ 10-JUL-1996
+       FIN-IMP-VEN.
+           EXIT.
+      *-----------------------------------------------------------------
+       IMP-EVC SECTION.
+       INI-IMP-EVC.
+      *
+           MOVE EVC-GLS-FLAG      IN EVC TO RPT-EVC-FLAG.
+           MOVE EVC-CIC-IOPC      IN EVC TO RPT-EVC-IOPC.
+           MOVE EVC-NUM-IEVC      IN EVC TO RPT-EVC-IEVC.
+           MOVE EVC-NUM-VIGU      IN EVC TO RPT-EVC-VIGU.
+           MOVE EVC-NUM-VCAN      IN EVC TO RPT-EVC-VCAN.
+           MOVE EVC-NUM-SEVE      IN EVC TO RPT-EVC-SEVE.
+           MOVE EVC-IND-UTSV      IN EVC TO RPT-EVC-UTSV.
+           MOVE EVC-FEC-FPVC      IN EVC TO RPT-EVC-FPVC.
+           MOVE EVC-NUM-DESD      IN EVC TO RPT-EVC-DESD.
+           MOVE EVC-SGV-FVAR      IN EVC TO RPT-EVC-FVAR.
+           MOVE EVC-IND-FVAR      IN EVC TO RPT-EVC-FVAA.
+           MOVE EVC-VAL-VENC      IN EVC TO RPT-EVC-VENC.
+           MOVE EVC-MSC-TCVE      IN EVC TO RPT-EVC-TCVE.
+           MOVE EVC-NUM-IDLC      IN EVC TO RPT-EVC-IDLC.
+           MOVE EVC-NUM-DPVE      IN EVC TO RPT-EVC-DPVE.
+           MOVE EVC-IND-CAUT      IN EVC TO RPT-EVC-CAUT.
+           MOVE EVC-NUM-DURV      IN EVC TO RPT-EVC-DURV.
+           MOVE EVC-IND-UTDV      IN EVC TO RPT-EVC-UTDV.
+           MOVE EVC-NUM-IVCT      IN EVC TO RPT-EVC-IVCT.
+           MOVE EVC-VAL-VCVF      IN EVC TO RPT-EVC-VCVF.
+      * RBG/CHI/INI/ 8-JUL-1996
+           MOVE EVC-FEC-FTRN      IN EVC TO RPT-EVC-FTRN.
+           MOVE EVC-HRA-HRTR      IN EVC TO RPT-EVC-HTRN.
+           MOVE EVC-MSC-TACC      IN EVC TO RPT-EVC-TACC.
+           MOVE EVC-MSC-STAT      IN EVC TO RPT-EVC-STAT.
+           MOVE EVC-COD-OTRN      IN EVC TO RPT-EVC-OTRN.
+           MOVE EVC-COD-ATRN      IN EVC TO RPT-EVC-ATRN.
+      * RBG/CHI/FIN/ 8-JUL-1996
+      *
+           IF WSS-NUM-CLIN IN WSS-VARI > 55
+              PERFORM IMP-ENC.
+           PERFORM IMP-004.
+      *
+           WRITE RPT-DET FROM RPT-EVC-001  IN WSS-VARI AFTER 2.
+           WRITE RPT-DET FROM RPT-EVC-002  IN WSS-VARI AFTER 1.
+           WRITE RPT-DET FROM RPT-EVC-003  IN WSS-VARI AFTER 2.
+           WRITE RPT-DET FROM RPT-EVC-004  IN WSS-VARI AFTER 1.
+      * RBG/CHI/INI/ 10-JUL-1996
+           WRITE RPT-DET FROM RPT-EVC-005  IN WSS-VARI AFTER 2.
+           WRITE RPT-DET FROM RPT-EVC-006  IN WSS-VARI AFTER 1.
+           ADD   08      TO   WSS-NUM-CLIN IN WSS-VARI.
+      * RBG/CHI/FIN/ 10-JUL-1996
+       FIN-IMP-EVC.
+           EXIT.
+      *-----------------------------------------------------------------
+       IMP-ICG SECTION.
+       INI-IMP-ICG.
+      *
+           MOVE ICG-GLS-FLAG      IN ICG TO RPT-ICG-FLAG.
+           MOVE ICG-CIC-IOPC      IN ICG TO RPT-ICG-IOPC.
+           MOVE ICG-NUM-ICAN      IN ICG TO RPT-ICG-ICAN.
+           MOVE ICG-CIC-IOPV      IN ICG TO RPT-ICG-IOPV.
+           MOVE ICG-NUM-IVCT      IN ICG TO RPT-ICG-IVCT.
+           MOVE ICG-IND-TTAS      IN ICG TO RPT-ICG-TTAS.
+           MOVE ICG-FEC-FINI      IN ICG TO RPT-ICG-FINI.
+           MOVE ICG-MSC-BCTI      IN ICG TO RPT-ICG-BCTI.
+           MOVE ICG-MSC-PBTI      IN ICG TO RPT-ICG-PBTI.
+           MOVE ICG-MSC-BPBT      IN ICG TO RPT-ICG-BPBT.
+           MOVE ICG-MSC-SPBT      IN ICG TO RPT-ICG-SPBT.
+           MOVE ICG-COD-CVTI      IN ICG TO PRT-ICG-CVTI.
+           MOVE ICG-MSC-TFPR      IN ICG TO RPT-ICG-TFPR.
+           MOVE ICG-NUM-PREP      IN ICG TO RPT-ICG-PREP.
+           MOVE ICG-MSC-UTPR      IN ICG TO RPT-ICG-UTPR.
+           MOVE ICG-FEC-FTER      IN ICG TO RPT-ICG-FTER.
+           MOVE ICG-SGV-SPRD      IN ICG TO RPT-ICG-SPRD.
+           MOVE ICG-SGV-TINT      IN ICG TO RPT-ICG-TINT.
+           MOVE ICG-SGV-MNTO      IN ICG TO RPT-ICG-MNTO.
+      * RBG/CHI/INI/ 8-JUL-1996
+           MOVE ICG-FEC-FTRN      IN ICG TO RPT-ICG-FTRN.
+           MOVE ICG-HRA-HRTR      IN ICG TO RPT-ICG-HTRN.
+           MOVE ICG-MSC-TACC      IN ICG TO RPT-ICG-TACC.
+           MOVE ICG-MSC-STAT      IN ICG TO RPT-ICG-STAT.
+           MOVE ICG-COD-OTRN      IN ICG TO RPT-ICG-OTRN.
+           MOVE ICG-COD-ATRN      IN ICG TO RPT-ICG-ATRN.
+      * RBG/CHI/FIN/ 8-JUL-1996
+      *
+           IF WSS-NUM-CLIN IN WSS-VARI > 55
+              PERFORM IMP-ENC.
+           PERFORM IMP-004.
+      *
+           WRITE RPT-DET FROM RPT-ICG-001  IN WSS-VARI AFTER 2.
+           WRITE RPT-DET FROM RPT-ICG-002  IN WSS-VARI AFTER 1.
+           WRITE RPT-DET FROM RPT-ICG-003  IN WSS-VARI AFTER 2.
+           WRITE RPT-DET FROM RPT-ICG-004  IN WSS-VARI AFTER 1.
+      * RBG/CHI/INI/ 10-JUL-1996
+           WRITE RPT-DET FROM RPT-ICG-005  IN WSS-VARI AFTER 2.
+           WRITE RPT-DET FROM RPT-ICG-006  IN WSS-VARI AFTER 1.
+           ADD   08      TO   WSS-NUM-CLIN IN WSS-VARI.
+      * RBG/CHI/FIN/ 10-JUL-1996
+       FIN-IMP-ICG.
+           EXIT.
+      *-----------------------------------------------------------------
+       IMP-CYA SECTION.
+       INI-IMP-CYA.
+      *
+           MOVE CYA-GLS-FLAG      IN CYA TO RPT-CYA-FLAG.
+           MOVE CYA-CIC-IOPC      IN CYA TO RPT-CYA-IOPC.
+           MOVE CYA-NUM-ICAN      IN CYA TO RPT-CYA-ICAN.
+           MOVE CYA-NUM-ICYA      IN CYA TO RPT-CYA-ICYA.
+           MOVE CYA-IND-TCYA      IN CYA TO RPT-CYA-TCYA.
+           MOVE CYA-CIC-ICYA      IN CYA TO RPT-CYA-CIC.
+           MOVE CYA-VRF-ICYA      IN CYA TO RPT-CYA-VRF.
+           MOVE CYA-SGV-LIQU      IN CYA TO RPT-CYA-LIQU.
+           MOVE CYA-IND-MAUT      IN CYA TO RPT-CYA-MAUT.
+           MOVE CYA-IND-FREE      IN CYA TO RPT-CYA-FREE.
+           MOVE CYA-COD-OFIC      IN CYA TO RPT-CYA-OFIC.
+      * RBG/CHI/INI/ 8-JUL-1996
+           MOVE CYA-FEC-FTRN      IN CYA TO RPT-CYA-FTRN.
+           MOVE CYA-HRA-HRTR      IN CYA TO RPT-CYA-HTRN.
+           MOVE CYA-MSC-TACC      IN CYA TO RPT-CYA-TACC.
+           MOVE CYA-MSC-STAT      IN CYA TO RPT-CYA-STAT.
+           MOVE CYA-COD-OTRN      IN CYA TO RPT-CYA-OTRN.
+           MOVE CYA-COD-ATRN      IN CYA TO RPT-CYA-ATRN.
+      * RBG/CHI/FIN/ 8-JUL-1996
+           IF WSS-NUM-CLIN IN WSS-VARI > 57
+              PERFORM IMP-ENC.
+           PERFORM IMP-004.
+      *
+           WRITE RPT-DET FROM RPT-CYA-001  IN WSS-VARI AFTER 2.
+           WRITE RPT-DET FROM RPT-CYA-002  IN WSS-VARI AFTER 1.
+      * RBG/CHI/INI/ 10-JUL-1996
+           WRITE RPT-DET FROM RPT-CYA-003  IN WSS-VARI AFTER 2.
+           WRITE RPT-DET FROM RPT-CYA-004  IN WSS-VARI AFTER 1.
+           ADD   05      TO   WSS-NUM-CLIN IN WSS-VARI.
+      * RBG/CHI/FIN/ 10-JUL-1996
+       FIN-IMP-CYA.
+           EXIT.
+      *-----------------------------------------------------------------
+       IMP-CAN SECTION.
+       INI-IMP-CAN.
+      *
+           MOVE CAN-GLS-FLAG      IN CAN TO RPT-CAN-FLAG.
+           MOVE CAN-CIC-IOPC      IN CAN TO RPT-CAN-IOPC.
+           MOVE CAN-NUM-ICAN      IN CAN TO RPT-CAN-ICAN.
+           MOVE CAN-FEC-FTRN      IN CAN TO RPT-CAN-FTRN.
+           MOVE CAN-HRA-HRTR      IN CAN TO RPT-CAN-HTRN.
+           MOVE CAN-MSC-TACC      IN CAN TO RPT-CAN-TACC.
+           MOVE CAN-MSC-STAT      IN CAN TO RPT-CAN-STAT.
+           MOVE CAN-COD-OTRN      IN CAN TO RPT-CAN-OTRN.
+           MOVE CAN-COD-ATRN      IN CAN TO RPT-CAN-ATRN.
+           MOVE CAN-COD-OFCA      IN CAN TO RPT-CAN-OFCA.
+           MOVE CAN-COD-RCAN      IN CAN TO RPT-CAN-RCAN.
+           MOVE CAN-MSC-CANC      IN CAN TO RPT-CAN-CANC.
+           MOVE CAN-FEC-FCAN      IN CAN TO RPT-CAN-FCAN.
+           MOVE CAN-FEC-FEGR      IN CAN TO RPT-CAN-FEGR.
+           MOVE CAN-FEC-FOUT      IN CAN TO RPT-CAN-FOUT.
+           MOVE CAN-SGV-GAST      IN CAN TO RPT-CAN-GAST.
+           MOVE CAN-SGV-TPAG      IN CAN TO RPT-CAN-TPAG.
+           MOVE CAN-SGV-TREN      IN CAN TO RPT-CAN-TREN.
+           MOVE CAN-NUM-TVCC      IN CAN TO RPT-CAN-TVCC.
+           MOVE CAN-SGV-DIFE      IN CAN TO RPT-CAN-DIFE.
+           MOVE CAN-FEC-FDVA      IN CAN TO RPT-CAN-FDVA.
+      * RBG/CHI/INI/ 8-JUL-1996
+      *    MOVE CAN-IND-CTBL      IN CAN TO RPT-CAN-CTBL.
+      * Para Efectos del Reporte muevo ceros y spaces
+           MOVE SPACES                  TO RPT-CAN-CTBL.
+           MOVE ZEROES                  TO RPT-CAN-INTE.
+           MOVE ZEROES                  TO RPT-CAN-REAJ.
+           MOVE ZEROES                  TO RPT-CAN-INTD.
+           MOVE ZEROES                  TO RPT-CAN-DPES.
+           MOVE ZEROES                  TO RPT-CAN-COMD.
+           MOVE ZEROES                  TO RPT-CAN-ICOD.
+           MOVE ZEROES                  TO RPT-CAN-IPUD.
+           MOVE ZEROES                  TO RPT-CAN-ACAV.
+           MOVE ZEROES                  TO RPT-CAN-ICID.
+           MOVE ZEROES                  TO RPT-CAN-INMD.
+           MOVE ZEROES                  TO RPT-CAN-ACAM.
+           MOVE ZEROES                  TO RPT-CAN-ICDN.
+           MOVE ZEROES                  TO RPT-CAN-ICDI.
+           MOVE ZEROES                  TO RPT-CAN-IPDN.
+           MOVE ZEROES                  TO RPT-CAN-IPDI.
+           MOVE ZEROES                  TO RPT-CAN-AJCD.
+           MOVE ZEROES                  TO RPT-CAN-AJKD.
+           MOVE ZEROES                  TO RPT-CAN-AJID.
+           MOVE ZEROES                  TO RPT-CAN-AIMD.
+      * RBG/CHI/FIN/ 8-JUL-1996
+     *
+           IF WSS-NUM-CLIN IN WSS-VARI > 51
+              PERFORM IMP-ENC.
+           PERFORM IMP-004.
+      *
+           WRITE RPT-DET FROM RPT-CAN-001  IN WSS-VARI AFTER 2.
+           WRITE RPT-DET FROM RPT-CAN-002  IN WSS-VARI AFTER 1.
+           WRITE RPT-DET FROM RPT-CAN-003  IN WSS-VARI AFTER 2.
+           WRITE RPT-DET FROM RPT-CAN-004  IN WSS-VARI AFTER 1.
+           WRITE RPT-DET FROM RPT-CAN-005  IN WSS-VARI AFTER 2.
+           WRITE RPT-DET FROM RPT-CAN-006  IN WSS-VARI AFTER 1.
+           WRITE RPT-DET FROM RPT-CAN-007  IN WSS-VARI AFTER 2.
+           WRITE RPT-DET FROM RPT-CAN-008  IN WSS-VARI AFTER 1.
+           WRITE RPT-DET FROM RPT-CAN-009  IN WSS-VARI AFTER 2.
+           WRITE RPT-DET FROM RPT-CAN-010  IN WSS-VARI AFTER 1.
+      * RBG/CHI/INI/ 10-JUL-1996
+           WRITE RPT-DET FROM RPT-CAN-011  IN WSS-VARI AFTER 2.
+           WRITE RPT-DET FROM RPT-CAN-012  IN WSS-VARI AFTER 1.
+           ADD   17      TO   WSS-NUM-CLIN IN WSS-VARI.
+      * RBG/CHI/FIN/ 10-JUL-1996
+       FIN-IMP-CAN.
+           EXIT.
+      *-----------------------------------------------------------------
+       IMP-RDT SECTION.
+       INI-IMP-RDT.
+      *
+           MOVE RDT-GLS-FLAG      IN RDT TO RPT-RDT-FLAG.
+           MOVE RDT-CIC-IOPC      IN RDT TO RPT-RDT-IOPC.
+      *JUS-INI 13-OCT-1997 16:22:20
+            MOVE RDT-NUM-IDLC      IN RDT TO RPT-RDT-IDLC.
+      *    MOVE RDT-NUM-IVEN      IN RDT TO RPT-RDT-IDLC.
+      *JUS-FIN 13-OCT-1997 16:22:20
+           MOVE RDT-IND-SCTB      IN RDT TO RPT-RDT-SCTB.
+           MOVE RDT-FEC-FTRN      IN RDT TO RPT-RDT-FTRN.
+           MOVE RDT-HRA-HRTR      IN RDT TO RPT-RDT-HTRN.
+           MOVE RDT-MSC-TACC      IN RDT TO RPT-RDT-TACC.
+           MOVE RDT-MSC-STAT      IN RDT TO RPT-RDT-STAT.
+           MOVE RDT-COD-OTRN      IN RDT TO RPT-RDT-OTRN.
+           MOVE RDT-COD-ATRN      IN RDT TO RPT-RDT-ATRN.
+           MOVE RDT-VAL-SRDT      IN RDT TO RPT-RDT-SRDT.
+      *
+           IF WSS-NUM-CLIN IN WSS-VARI > 57
+              PERFORM IMP-ENC.
+           PERFORM IMP-004.
+      *
+           WRITE RPT-DET FROM RPT-RDT-001  IN WSS-VARI AFTER 2.
+           WRITE RPT-DET FROM RPT-RDT-002  IN WSS-VARI AFTER 1.
+           ADD   03      TO   WSS-NUM-CLIN IN WSS-VARI.
+      *
+       FIN-IMP-RDT.
+           EXIT.
+      *-----------------------------------------------------------------
+       IMP-RDC SECTION.
+       INI-IMP-RDC.
+      *
+           MOVE RDC-GLS-FLAG      IN RDC TO RPT-RDC-FLAG.
+           MOVE RDC-CIC-ICLI      IN RDC TO RPT-RDC-ICLI.
+           MOVE RDC-CIC-IOPC      IN RDC TO RPT-RDC-IOPC.
+           MOVE RDC-NUM-IDLC      IN RDC TO RPT-RDC-IDLC.
+           MOVE RDC-COD-TRDC      IN RDC TO RPT-RDC-TRDC.
+           MOVE RDC-NUM-DIRE      IN RDC TO RPT-RDC-DIRE.
+           MOVE RDC-VAL-LIMD      IN RDC TO RPT-RDC-LIMD.
+      * RBG/CHI/INI/ 8-JUL-1996
+           MOVE RDC-FEC-FTRN      IN RDC TO RPT-RDC-FTRN.
+           MOVE RDC-HRA-HRTR      IN RDC TO RPT-RDC-HTRN.
+           MOVE RDC-MSC-TACC      IN RDC TO RPT-RDC-TACC.
+           MOVE RDC-MSC-STAT      IN RDC TO RPT-RDC-STAT.
+           MOVE RDC-COD-OTRN      IN RDC TO RPT-RDC-OTRN.
+           MOVE RDC-COD-ATRN      IN RDC TO RPT-RDC-ATRN.
+      * RBG/CHI/FIN/ 8-JUL-1996
+      *
+           IF WSS-NUM-CLIN IN WSS-VARI > 57
+              PERFORM IMP-ENC.
+           PERFORM IMP-004.
+      *
+           WRITE RPT-DET FROM RPT-RDC-001  IN WSS-VARI AFTER 2.
+           WRITE RPT-DET FROM RPT-RDC-002  IN WSS-VARI AFTER 1.
+      * RBG/INI/CHI/ 9-JUL-1996
+           WRITE RPT-DET FROM RPT-RDC-003  IN WSS-VARI AFTER 2.
+           WRITE RPT-DET FROM RPT-RDC-004  IN WSS-VARI AFTER 1.
+           ADD   05      TO   WSS-NUM-CLIN IN WSS-VARI.
+      * RBG/FIN/CHI/ 9-JUL-1996
+       FIN-IMP-RDC.
+           EXIT.
+      *-----------------------------------------------------------------
+       IMP-RCE SECTION.
+       INI-IMP-RCE.
+      *
+           MOVE RCE-GLS-FLAG      IN RCE TO RPT-RCE-FLAG.
+           MOVE RCE-COD-TOPC      IN RCE TO RPT-RCE-TOPC.
+           MOVE RCE-COD-COPC      IN RCE TO RPT-RCE-COPC.
+           MOVE RCE-COD-OOPC      IN RCE TO RPT-RCE-OOPC.
+           MOVE RCE-GLS-NOPC      IN RCE TO RPT-RCE-NOPC.
+           MOVE RCE-NUM-IDLC      IN RCE TO RPT-RCE-IDLC.
+           MOVE RCE-KEY-SAFE      IN RCE TO RPT-RCE-SAFE.
+           MOVE RCE-KEY-CNJE      IN RCE TO RPT-RCE-CNJE.
+           MOVE RCE-KEY-DISP      IN RCE TO RPT-RCE-DISP.
+      * RBG/CHI/INI/ 8-JUL-1996
+           MOVE RCE-FEC-FTRN      IN RCE TO RPT-RCE-FTRN.
+           MOVE RCE-HRA-HRTR      IN RCE TO RPT-RCE-HTRN.
+           MOVE RCE-MSC-TACC      IN RCE TO RPT-RCE-TACC.
+           MOVE RCE-MSC-STAT      IN RCE TO RPT-RCE-STAT.
+           MOVE RCE-COD-OTRN      IN RCE TO RPT-RCE-OTRN.
+           MOVE RCE-COD-ATRN      IN RCE TO RPT-RCE-ATRN.
+      * RBG/CHI/FIN/ 8-JUL-1996
+           IF WSS-NUM-CLIN IN WSS-VARI > 57
+              PERFORM IMP-ENC.
+           PERFORM IMP-004.
+      *
+           WRITE RPT-DET FROM RPT-RCE-001  IN WSS-VARI AFTER 2.
+           WRITE RPT-DET FROM RPT-RCE-002  IN WSS-VARI AFTER 1.
+      * RBG/INI/CHI/ 9-JUL-1996
+           WRITE RPT-DET FROM RPT-RCE-003  IN WSS-VARI AFTER 2.
+           WRITE RPT-DET FROM RPT-RCE-004  IN WSS-VARI AFTER 1.
+           ADD   05      TO   WSS-NUM-CLIN IN WSS-VARI.
+      * RBG/FIN/CHI/ 9-JUL-1996
+      * Para Efectos del Reporte muevo ceros y spaces
+           MOVE SPACES                  TO RPT-DYC-FLAG.
+           MOVE SPACES                  TO RPT-DYC-TOPC.
+           MOVE SPACES                  TO RPT-DYC-COPC.
+           MOVE SPACES                  TO RPT-DYC-OOPC.
+           MOVE SPACES                  TO RPT-DYC-NOPC.
+           MOVE ZEROES                  TO RPT-DYC-IDLC.
+           MOVE ZEROES                  TO RPT-DYC-IVEN.
+           MOVE ZEROES                  TO RPT-DYC-ICAN.
+           MOVE ZEROES                  TO RPT-DYC-IDYC.
+           MOVE ZEROES                  TO RPT-DYC-LIQU.
+           MOVE ZEROES                  TO RPT-DYC-TIMP.
+           MOVE ZEROES                  TO RPT-DYC-MCAL.
+           MOVE SPACES                  TO RPT-DYC-CNDC.
+           MOVE SPACES                  TO RPT-DYC-TCDC.
+           MOVE SPACES                  TO RPT-DYC-TVOC.
+           MOVE SPACES                  TO RPT-DYC-CVOC.
+           MOVE SPACES                  TO RPT-DYC-TCOC.
+           MOVE ZEROES                  TO RPT-DYC-FACT.
+           MOVE ZEROES                  TO RPT-DYC-AIVA.
+       FIN-IMP-RCE.
+           EXIT.
+      *-----------------------------------------------------------------
+       COPY GNSBBSYS.
+      *ACCESO A TABLAS GENERALES
+       COPY GNSBFMSC.
+       COPY GNSBFTAB.
+       COPY GNSBFMSG.
+      *
+       COPY GNSBGDTC.
+       COPY GNSBGEND.
+       COPY GNSBGIDD.
+       COPY GNSBTABT.
+       COPY GNSBGABT.
+      *BUSQUEDA DE MENSAJES
+       COPY GNSBBMSG.
+      *BUSQUEDA DE TABLAS
+       COPY GNSBBTAB.
+      *BUSQUEDA DE MISCELANEOS
+       COPY GNSBBMSC.
+      *VALIDACION DE CODIGOS EN TABLAS
+       COPY GNSBVTAB.
+      *VALIDACION DE CODIGOS MISCELANEOS EN TABLAS
+       COPY GNSBVMSC.
+      *RUTINA ACCESO OPC
+       COPY COLBFOPC.
+      *RUTINA ACCESO DLC
+       COPY COLBFDLC.
+      *RUTINA ACCESO RCV
+       COPY COLBFRCV.
+      *RUTINA ACCESO VEN
+       COPY COLBFVEN.
+      *RUTINA ACCESO EVC
+       COPY COLBFEVC.
+      *RUTINA ACCESO ICG
+       COPY COLBFICG.
+      *RUTINA ACCESO CYA
+       COPY COLBFCYA.
+      *RUTINA ACCESO CAN
+       COPY COLBFCAN.
+      *RUTINA ACCESO RDT
+       COPY COLBFRDT.
+      *RUTINA ACCESO RDC
+       COPY COLBFRDC.
+      *RUTINA ACCESO RCE
+       COPY COLBFRCE.
+      *RUTINA ACCESO DBC
+      *COPY SGCBFDBC.
+      *
+      *RUTINA DESCRIPCION CODIGO OFICINA
+       COPY TABBBOFI.
+      *RUTINA VALIDACION OFICINAS
+       COPY TABBVOFI.
+      *RUTINA ACCESO REG. OFI PARA VSAM
+       COPY TABBFOFI.
+      *RUTINA FECHAS EN GNS
+       COPY GNSBGFEC.
+      *RUTINA FECHAS EN TRA
+       COPY GNSBPFEC.
+      *RUTINA CURRENT-DAY
+       COPY GNSBGHOY.
+      *************************** FIN COLPLCOL *************************

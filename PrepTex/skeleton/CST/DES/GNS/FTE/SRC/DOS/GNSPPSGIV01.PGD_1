@@ -1,0 +1,489 @@
+       IDENTIFICATION DIVISION.
+      *========================
+       PROGRAM-ID. GNSPPSGI.
+       AUTHOR. CONSIST.
+       DATE-WRITTEN. 3-JUN-1996 16:05:40
+      *
+      * TRANSACCION = GSGI
+      *
+      * PROGRAMA PRE-TRADUCTOR GENERICO
+      * RECIBE MENSAJES DE UN PC Y LOS APILA EN TSs PARA
+      * LUEGO SER LEIDAS DESDE EL TRADUCTOR,
+      *
+       ENVIRONMENT DIVISION.
+       DATA DIVISION.
+
+       WORKING-STORAGE SECTION.
+      *========================
+      * INVOCACION A LDC
+      *
+      * LDCPPTPG --> LX --> LDCPPTRI INVOCACION PARA CONSULTA TELECANAL
+      * LDC      --> LL --> LDCPPTPI INVOCACION PARA VB
+      * LDCPPTPN --> LN --> LDCPPTPG INVOCACION SERVCION LDC NUEVOS
+      *
+       77  WSS-TAG-GNSPPSGI-INI PIC X(125) VALUE
+           '<IDNPGM NOM=$GNSPPSGI$ SKL=$MANUAL$   VSN=$01.01.01$
+      -    '       GEN=$29-JUL-04 11:00$ FNC=$RCVROC+BGL$/>'.
+       01  WSS-INICIO-RECEP
+            VALUE 'INICIO-RECEP'                      PIC X(12).
+       01  WSS-RECEIVE VALUE SPACES.
+      *       Header utilizado por el Driver de Comunicacion
+           03 WSS-HEAD-DRIVE                          PIC X(0031).
+      *       Identificacion del TCP-IP
+           03 WSS-IDEN-TCPIP                          PIC X(0006).
+      * Indicador de Mensajes: I=Inicio, C=Continua, F=Fin, X=Msg.Unico
+           03 WSS-IND-MENS                            PIC X(0001).
+      *    DATA a ser transmitida de INPUT
+           03 WSS-GLS-DINP.
+              05 WSS-GLS-DINP-01                      PIC X(0003).
+              05 WSS-GLS-DINP-02                      PIC X(0032).
+              05 WSS-GLS-DINP-USR                     PIC X(0012).
+              05 WSS-GLS-DINP-PGM                     PIC X(0008).
+              05 WSS-GLS-DINP-03                      PIC X(0969).
+           03 WSS-GLS-DINP-COL                        PIC X(0669).
+           03 WSS-GLS-DINP-ISP                        PIC X(1269).
+       01  WSS-AJUS-LDC.
+           03 WSS-AJUS-LDC-HDR                        PIC X(100).
+           03 WSS-AJUS-LDC-DAT                        PIC X(924).
+       01  WSS-FIN-RECEP
+            VALUE 'FIN   -RECEP'                      PIC X(12).
+      *
+       01  WSS-INI-VAR-RCV  VALUE
+            'INI-VAR-RCV:'                  PIC X(12).
+       01  WSS-VAR-LEN-RCV VALUE ZEROES     PIC 9(05).
+       01  WSS-FIN-VAR-RCV  VALUE
+            'FIN-VAR-RCV:'                  PIC X(12).
+       01  WSS-INDI-ABP                     PIC X(02).
+       01  WSS-KEY-ABP.
+           03 WSS-KEY-ABP-TSPT.
+              05 WSS-KEY-ABP-TERM     VALUE 'IX'       PIC X(02).
+              05 WSS-KEY-ABP-TYPE     VALUE SPACES     PIC X(06).
+
+       77  WSS-COD-PPTPG               VALUE SPACES    PIC X(08).
+
+       COPY GNSWGTSK.
+       COPY GNSWGHOY.
+       COPY GNSWGSYS.
+       COPY GNSWCFIO.
+       COPY GNSWVFIO.
+       COPY GNSWGQUE.
+       COPY GNSWGFRM.
+       COPY GNSWVSCR.
+      *
+       01  WSS-SEND VALUE SPACES.
+           03 WSS-HEAD-SEND.
+      *          Status Respuesta 0=OK ; 1=ERR
+              05 WSS-RES-STAT                         PIC X(0001).
+      *          Fecha Transaccion
+              05 WSS-FEC-FTRN                         PIC X(0008).
+      *          Hora Transaccion
+              05 WSS-HRS-HTRN                         PIC X(0006).
+      *          Indicador Mensajes Pendientes 0=NO ; 1=SI
+              05 WSS-IND-MSGP                         PIC X(0001).
+      *          Largo de la parte Variable del Mensaje
+              05 WSS-NUM-LENM                         PIC 9(0005).
+      *          Codigo Transaccion
+              05 WSS-COD-TRAN                         PIC X(0008).
+      *          Codigo Sistema
+              05 WSS-COD-SIST                         PIC X(0003).
+      *          Codigo Usuario
+              05 WSS-COD-USER                         PIC X(0012).
+      *          Password
+              05 WSS-COD-PASS                         PIC X(0008).
+      *          Filler Vacio y Fijo de 111 Caracteres
+           03 WSS-GLS-FILL                            PIC X(0111).
+      *          DATA a ser transmitida de OUTPUT
+           03 WSS-GLS-DOUT                            PIC X(1088).
+       77  WSS-MSG-OKS          VALUE '0'             PIC X(1024).
+
+       01  TSIDENT.
+           05 TRANS                    PIC X(04) VALUE 'PL01'.
+           05 TSKNO                    PIC S9(07) COMP-3.
+
+       01  VARIABLES.
+           05 TERM                     PIC X(04).
+           05 WS-LARGO                PIC S9(04) COMP-4 VALUE +0.
+
+      * FIN VARIABLES AREA DE COMUNICACION BCI
+
+       01  WSS-VARI.
+      *                   LARGO RECEIVE = 31+ 6 + 1 + 1024 = 1062
+           03 WSS-LEN-RCV    VALUE +1062     COMP    PIC S9(04).
+           03 WSS-LEN-SND    VALUE +1166     COMP    PIC S9(04).
+      *
+           03 WSS-LENG VALUE +1500  COMP              PIC S9(04).
+           03 WSS-CONTADOR                            PIC 9(05).
+      *        STRING STANDARD PARA ENTREGAR MSG AL PC
+      *
+       01  WSS-SCR-OTRN         VALUE 'ABCD'          PIC X(04).
+       01  TSPT-VARI.
+           03 WSS-NOM-TSPT.
+              05 WSS-COD-TERM     VALUE 'TR'          PIC X(02).
+              05 WSS-COD-TYPE     VALUE SPACES        PIC X(06).
+           03 WSS-LEN-TSPT     VALUE +1025     COMP   PIC S9(04).
+           03 WSS-NITM-TSPT    VALUE ZEROES           PIC 9(05).
+           03 WSS-ITEM-TSPT.
+               05  WSS-INDICA                         PIC X(0001).
+               05  WSS-DATA                           PIC X(1024).
+      *
+       LINKAGE SECTION.
+      *----------------
+       01  DFHCOMMAREA.
+           02 FILLER                     PIC X(01).
+       COPY GNSLGFIO.
+
+       PROCEDURE DIVISION.
+      *===================
+
+       MAIN SECTION.
+       INI-MAIN.
+           PERFORM GET-FHOY.
+           PERFORM GNS-ERR-QUE.
+           PERFORM GNS-HDL-VSM.
+           PERFORM PROCESO-RECIBE-MSG.
+       FIN-MAIN.
+           EXEC CICS RETURN END-EXEC.
+       EXT-MAIN.
+           EXIT.
+
+       PROCESO-RECIBE-MSG SECTION.
+       INI-PROCESO-RECIBE-MSG.
+           PERFORM PROCESO-GRABA-TS.
+       FIN-PROCESO-RECIBE-MSG.
+           EXIT.
+
+       PROCESO-GRABA-TS SECTION.
+       INI-PROCESO-GRABA-TS.
+           PERFORM RCV-MSG-INP-HST.
+
+           MOVE WSS-IDEN-TCPIP TO WSS-KEY-ABP-TYPE.
+
+           IF NOT ( WSS-IND-MENS = 'I' OR WSS-IND-MENS = 'X'
+                 OR WSS-IND-MENS = 'F' OR WSS-IND-MENS = 'C' )
+                   GO TO LNK-PROCESO-GRABA-TS.
+
+           MOVE WSS-IDEN-TCPIP TO WSS-COD-TYPE.
+
+           IF WSS-IND-MENS = 'I' OR WSS-IND-MENS = 'X'
+
+               PERFORM DEL-TS-ABP
+               PERFORM DET-TS-ABP
+               PERFORM PUT-TS-ABP
+
+               MOVE WSS-NOM-TSPT   TO QUE-COLA
+               MOVE QUE-DEL        TO QUE-CMND
+               PERFORM GNS-PRO-QUE.
+
+            MOVE WSS-NOM-TSPT   TO QUE-COLA.
+            MOVE WSS-LEN-TSPT   TO QUE-LITM.
+            MOVE SPACES         TO WSS-INDICA.
+            MOVE WSS-GLS-DINP   TO WSS-DATA.
+            MOVE WSS-ITEM-TSPT  TO QUE-ITEM.
+            MOVE QUE-PUT        TO QUE-CMND.
+            PERFORM GNS-PRO-QUE.
+            IF WSS-LEN-RCV > 1062
+                MOVE WSS-NOM-TSPT   TO QUE-COLA
+                MOVE WSS-LEN-TSPT   TO QUE-LITM
+                MOVE SPACES         TO WSS-INDICA
+                MOVE WSS-GLS-DINP-COL   TO WSS-DATA
+                MOVE WSS-ITEM-TSPT  TO QUE-ITEM
+                MOVE QUE-PUT        TO QUE-CMND
+                PERFORM GNS-PRO-QUE.
+
+       LNK-PROCESO-GRABA-TS.
+           IF WSS-IND-MENS = 'F' OR WSS-IND-MENS = 'X'
+               PERFORM CALL-TPG
+               EXEC CICS
+                 RETURN
+               END-EXEC
+               GO TO FIN-PROCESO-GRABA-TS
+           ELSE
+              MOVE '0'         TO WSS-RES-STAT
+              MOVE HOY-FHOY    TO WSS-FEC-FTRN
+              MOVE HOY-HHOY    TO WSS-HRS-HTRN
+              MOVE '0'         TO WSS-IND-MSGP
+              MOVE +1024       TO WSS-NUM-LENM
+              MOVE SPACES      TO WSS-COD-TRAN
+              MOVE SPACES      TO WSS-COD-SIST
+              MOVE SPACES      TO WSS-COD-USER
+              MOVE SPACES      TO WSS-COD-PASS
+              MOVE SPACES      TO WSS-GLS-FILL
+              MOVE WSS-MSG-OKS TO WSS-GLS-DOUT
+              PERFORM ENV-MSG-OUT-HST-ULT
+              GO TO FIN-PROCESO-GRABA-TS.
+
+       FIN-PROCESO-GRABA-TS.
+           EXIT.
+
+       CALL-TPG SECTION.
+       INI-CALL-TPG.
+           PERFORM GET-TS-ABP.
+           MOVE SPACES TO WSS-INDI-ABP.
+           IF QUE-STAT = QUE-STAT-OKS
+              MOVE QUE-ITEM TO WSS-INDI-ABP
+              IF WSS-INDI-ABP = 'GG'
+                   MOVE 'GNSPPTPG' TO WSS-COD-PPTPG
+                   PERFORM INV-TPG
+              ELSE
+              IF WSS-INDI-ABP = 'TT'
+                   MOVE 'TABPPTPG' TO WSS-COD-PPTPG
+                   PERFORM INV-TPG
+              ELSE
+              IF WSS-INDI-ABP = 'SS'
+                   MOVE 'SGCPPTPG' TO WSS-COD-PPTPG
+                   PERFORM INV-TPG
+              ELSE
+              IF WSS-INDI-ABP = 'CC'
+                   MOVE 'COLPPTPG' TO WSS-COD-PPTPG
+                   PERFORM INV-TPG
+              ELSE
+              IF WSS-INDI-ABP = 'DE'
+                   MOVE 'DEUPPTPG' TO WSS-COD-PPTPG
+                   PERFORM INV-TPG
+              ELSE
+              IF WSS-INDI-ABP = 'GA'
+                   MOVE 'GARPPTPG' TO WSS-COD-PPTPG
+                   PERFORM INV-TPG
+              ELSE
+              IF WSS-INDI-ABP = 'BG'
+                   MOVE 'BGLPPTPG' TO WSS-COD-PPTPG
+                   PERFORM INV-TPG
+              ELSE
+              IF WSS-INDI-ABP = 'DD'
+                   MOVE 'DAPPPTPG' TO WSS-COD-PPTPG
+                   PERFORM INV-TPG
+              ELSE
+              IF WSS-INDI-ABP = 'LN'
+                   MOVE 'LDCPPTPG' TO WSS-COD-PPTPG
+                   PERFORM INV-TPG
+              ELSE
+              IF WSS-INDI-ABP = 'LX'
+                   PERFORM PUT-TS-NUMLDC
+                   PERFORM INV-LDCPPTRI
+              ELSE
+      * ASUME LDC
+                   PERFORM INV-LDCPPTRI.
+       FIN-CALL-TPG.
+           EXIT.
+
+       INV-LDCPPTRI SECTION.
+       INI-INV-LDCPPTRI.
+           PERFORM DEL-TS-ABP.
+           MOVE 'OK' TO QUE-ITEM.
+           PERFORM PUT-TS-ABP.
+
+           MOVE SYS-XCTL       TO SYS-CMND.
+           MOVE WSS-IDEN-TCPIP TO SYS-CMMA.
+           MOVE +6             TO SYS-TCMA.
+           MOVE 'LDCPPTRI' TO SYS-PROG.
+           PERFORM GNS-PRO-SYS.
+       FIN-INV-LDCPPTRI.
+           EXIT.
+
+       INV-TPG SECTION.
+       INI-INV-TPG.
+           PERFORM DEL-TS-ABP.
+           MOVE 'OK' TO QUE-ITEM.
+           PERFORM PUT-TS-ABP.
+           MOVE SYS-LINK       TO SYS-CMND.
+           MOVE WSS-IDEN-TCPIP TO SYS-CMMA.
+           MOVE +6             TO SYS-TCMA.
+           MOVE WSS-COD-PPTPG TO SYS-PROG.
+           PERFORM GNS-PRO-SYS.
+
+           MOVE SYS-XCTL       TO SYS-CMND.
+           MOVE WSS-IDEN-TCPIP TO SYS-CMMA.
+           MOVE +6             TO SYS-TCMA.
+           MOVE 'GNSPPSGO' TO SYS-PROG.
+           PERFORM GNS-PRO-SYS.
+       FIN-INV-TPG.
+           EXIT.
+
+       RCV-MSG-INP-HST SECTION.
+       INI-RCV-MSG-INP-HST.
+           MOVE SPACES TO WSS-RECEIVE.
+      *     MOVE +1731 TO WSS-LEN-RCV.
+      *     MOVE +2500 TO WSS-LEN-RCV.
+      *     MOVE +2700 TO WSS-LEN-RCV.
+           MOVE +3000 TO WSS-LEN-RCV.
+           EXEC CICS RECEIVE
+                     INTO(WSS-RECEIVE)
+                     LENGTH(WSS-LEN-RCV)
+                     CONVID(EIBTRMID)
+           END-EXEC.
+            MOVE WSS-LEN-RCV TO WSS-VAR-LEN-RCV.
+      * ISP-INI  30-MAR-2003 DBUG
+      *      PERFORM GNS-ERR-QUE.
+      *      MOVE 'RCVMSG' TO QUE-COLA.
+      *      MOVE QUE-DEL TO QUE-CMND.
+      *      PERFORM GNS-PRO-QUE.
+      *      PERFORM GNS-ERR-QUE.
+      *      MOVE WSS-RECEIVE TO QUE-ITEM.
+      *      MOVE +1024 TO QUE-LITM.
+      *      MOVE +2500 TO QUE-LITM.
+      *      MOVE +2700 TO QUE-LITM.
+      *      MOVE 'RCVMSG' TO QUE-COLA.
+      *      MOVE QUE-PUT TO QUE-CMND.
+      *      PERFORM GNS-PRO-QUE.
+      *     PERFORM GNS-ERR-QUE.
+      *     MOVE 'RCVTRM' TO QUE-COLA.
+      *     MOVE QUE-DEL TO QUE-CMND.
+      *     PERFORM GNS-PRO-QUE.
+      *     MOVE EIBTRMID    TO QUE-ITEM.
+      *     MOVE +1024 TO QUE-LITM.
+      *     MOVE 'RCVTRM' TO QUE-COLA.
+      *     MOVE QUE-PUT TO QUE-CMND.
+      *     PERFORM GNS-PRO-QUE.
+      * ISP-FIN  30-MAR-2003 DBUG
+
+           MOVE EIBTRMID    TO TERM.
+           MOVE EIBTASKN    TO TSKNO.
+           PERFORM GET-TSK-TERM.
+
+           IF EIBCONF  = HIGH-VALUES
+              EXEC CICS       ISSUE CONFIRMATION
+                              CONVID(TERM)
+              END-EXEC.
+
+       FIN-RCV-MSG-INP-HST.
+           EXIT.
+
+       ENV-MSG-OUT-HST-ULT SECTION.
+       INI-ENV-MSG-OUT-HST-ULT.
+           EXEC CICS SEND
+                     LENGTH(WSS-LEN-SND)
+                     FROM(WSS-SEND)
+                     CONVID(TERM)
+                     LAST
+           END-EXEC.
+           IF WSS-IND-MENS = 'F' OR WSS-IND-MENS = 'X'
+               MOVE WSS-NOM-TSPT   TO QUE-COLA
+               MOVE QUE-DEL        TO QUE-CMND
+               PERFORM GNS-PRO-QUE.
+       FIN-ENV-MSG-OUT-HST-ULT.
+           EXIT.
+
+      * ENV-MSG-OUT-HST SECTION.
+      * INI-ENV-MSG-OUT-HST.
+      *     EXEC CICS SEND
+      *               LENGTH(WSS-LEN-SND)
+      *               FROM(WSS-SEND)
+      *               CONVID(TERM)
+      *    END-EXEC.
+      * FIN-ENV-MSG-OUT-HST.
+      *     EXIT.
+
+       DET-TS-ABP SECTION.
+       INI-DET-TS-ABP.
+           IF WSS-GLS-DINP-01 = 'COL'
+                MOVE 'CC' TO QUE-ITEM
+           ELSE
+           IF WSS-GLS-DINP-PGM ='GNSPPTPG'
+                MOVE 'GG' TO QUE-ITEM
+           ELSE
+           IF WSS-GLS-DINP-PGM ='TABPPTPG'
+                MOVE 'TT' TO QUE-ITEM
+           ELSE
+           IF WSS-GLS-DINP-PGM ='SGCPPTPG'
+                MOVE 'SS' TO QUE-ITEM
+           ELSE
+           IF WSS-GLS-DINP-PGM ='COLPPTPG'
+                MOVE 'CC' TO QUE-ITEM
+           ELSE
+           IF WSS-GLS-DINP-PGM ='DEUPPTPG'
+                MOVE 'DE' TO QUE-ITEM
+           ELSE
+           IF WSS-GLS-DINP-PGM ='GARPPTPG'
+                MOVE 'GA' TO QUE-ITEM
+           ELSE
+           IF WSS-GLS-DINP-PGM ='BGLPPTPG'
+                MOVE 'BG' TO QUE-ITEM
+           ELSE
+           IF WSS-GLS-DINP-PGM ='DAPPPTPG'
+                MOVE 'DD' TO QUE-ITEM
+           ELSE
+           IF WSS-GLS-DINP-PGM ='LDCPPTPN'
+                MOVE 'LN' TO QUE-ITEM
+           ELSE
+           IF WSS-GLS-DINP-PGM ='LDCPPTPG'
+                PERFORM AJUS-MSG-LDC
+                MOVE 'LX' TO QUE-ITEM
+           ELSE
+                MOVE 'LL' TO QUE-ITEM.
+       FIN-DET-TS-ABP.
+           EXIT.
+
+       AJUS-MSG-LDC SECTION.
+       INI-AJUS-MSG-LDC.
+           MOVE WSS-GLS-DINP TO WSS-AJUS-LDC.
+           MOVE WSS-AJUS-LDC-DAT TO WSS-GLS-DINP.
+       FIN-AJUS-MSG-LDC.
+           EXIT.
+
+       KEY-ABP SECTION.
+       INI-KEY-ABP.
+           MOVE WSS-KEY-ABP TO QUE-COLA.
+       FIN-KEY-ABP.
+           EXIT.
+
+       DEL-TS-ABP SECTION.
+       INI-DEL-TS-ABP.
+           PERFORM KEY-ABP.
+           MOVE QUE-DEL TO QUE-CMND.
+           PERFORM GNS-PRO-QUE.
+       FIN-DEL-TS-ABP.
+           EXIT.
+
+       PUT-TS-NUMLDC SECTION.
+       INI-PUT-TS-NUMLDC.
+           MOVE 'NLDC' TO QUE-TYPE.
+           MOVE TSK-TERM-ALF TO QUE-TERM.
+           MOVE SPACES TO QUE-ITEM.
+           MOVE +2 TO QUE-LITM.
+           MOVE QUE-DEL TO QUE-CMND.
+           PERFORM GNS-PRO-QUE.
+           MOVE QUE-PUT TO QUE-CMND.
+           PERFORM GNS-PRO-QUE.
+
+           MOVE 'CACT' TO QUE-TYPE.
+           MOVE TSK-TERM-ALF TO QUE-TERM.
+           MOVE SPACES TO QUE-ITEM.
+           MOVE +2 TO QUE-LITM.
+           MOVE QUE-DEL TO QUE-CMND.
+           PERFORM GNS-PRO-QUE.
+           MOVE QUE-PUT TO QUE-CMND.
+           PERFORM GNS-PRO-QUE.
+       FIN-PUT-TS-NUMLDC.
+           EXIT.
+
+       PUT-TS-ABP SECTION.
+       INI-PUT-TS-ABP.
+           PERFORM KEY-ABP.
+
+           MOVE +2 TO QUE-LITM.
+           MOVE QUE-PUT TO QUE-CMND.
+           PERFORM GNS-PRO-QUE.
+       FIN-PUT-TS-ABP.
+           EXIT.
+
+       GET-TS-ABP SECTION.
+       INI-GET-TS-ABP.
+           PERFORM KEY-ABP.
+
+           MOVE  1 TO QUE-NITM.
+           MOVE +2 TO QUE-LITM.
+           MOVE QUE-GET TO QUE-CMND.
+           PERFORM GNS-PRO-QUE.
+       FIN-GET-TS-ABP.
+           EXIT.
+
+       COPY GNSBGEND.
+       COPY GNSBGHOY.
+       COPY GNSBHSYS.
+       COPY GNSBGSYS.
+       COPY GNSBIABT.
+       COPY GNSBHVSM.
+       COPY GNSBGVSM.
+       COPY GNSBGQUE.
+       COPY GNSBGTSK.
+

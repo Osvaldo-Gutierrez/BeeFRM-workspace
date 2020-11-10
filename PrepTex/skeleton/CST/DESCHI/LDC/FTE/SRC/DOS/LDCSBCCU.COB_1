@@ -1,0 +1,4079 @@
+       IDENTIFICATION DIVISION.
+      *=======================
+       PROGRAM-ID.     LDCSBCCU.
+       AUTHOR.          CONSIST.
+       
+      * CALCULA CUPO DISPONIBLE LINEAS DE CREDITO
+      * RECIBE
+      *    CIC CLF
+      *    CODIGO DE MONEDA NACIONAL
+      *    SI CONSULTA OPERACIONES ANTIGUAS SOLAMENTE
+      *        ARREGLO DE OPC's DEBE TENER LIMPIO EL 1er ELEMENTO
+      *        ARREGLO DE DLC's NO SE UTILIZA
+
+      *    SI INGRESA 1 OPERACION RENOVADORA EN CURSE 
+      *        ARREGLO DE OPC's DEBE CONTENER LA OPERACION RENOVADORA
+      *            EN EL 1er ELEMENTO Y LIMPIO EL ELEMENTOS SIGUIENTE
+      *            (SI SON MENOS QUE EL MAXIMO DEL ARREGLO)
+      *        SI ES PRORROGA
+      *            SE INDICA EN CCU-IND-RENO = 'PRO'
+      *        ARREGLO DE DLC's CANCELADOS DEBE CONTENER LOS VALORES
+      *            RESULTANTES DE LA RENOVACION (>= CERO)
+      *            Y TENER LIMPIO EL ELEMENTO SIGUIENTE 
+      *            (SI SON MENOS QUE EL MAXIMO DEL ARREGLO)
+
+      *    SI INGRESA MULTIPLES OPERACIONES NOVADORAS
+      *        ARREGLO DE OPC's DEBE CONTENER LAS OPERACION NOVADORAS
+      *            Y TENER LIMPIO EL ELEMENTO SIGUIENTE 
+      *            (SI SON MENOS QUE EL MAXIMO DEL ARREGLO)
+      *        ARREGLO DE DLC's CANCELADOS DEBE CONTENER LOS VALORES
+      *            RESULTANTES DE LA RENOVACION (>= CERO)
+
+      *    INDICADORES DE OPEN O NO DE ARCHIVOS (VMS O BATCH)
+      *        SEÑALAN QUE ARCHIVOS SE ABREN Y CIERRAN EN LA RUTINA O
+      *        ESTAN ABIERTOS EN EL PROGRAMA LLAMADOR
+
+      * DEVUELVE
+
+      * SI HAY UN ERROR :
+      *    DEVUELVE CCU-COD-MENS PARA EL ERROR PRINCIPAL DE LA CLF
+      *    DEVUELVE CCU-COD-MEN2 PARA LA CLF
+      *    DEVUELVE CCU-NUM-MENS PARA EL ERROR PRINCIPAL DE LA CLF
+      *    DEVUELVE CCU-NUM-MEN2 PARA LA CLF
+
+      *    DEVUELVE MENSAJE 1 DE ERROR O ANORMALIDAD EN CADA LDC
+      *    DEVUELVE MENSAJE 2 DE ERROR O ANORMALIDAD EN CADA LDC
+
+      *    EL ERROR SE MANEJA EN PROGRAMA LLAMADOR
+
+      * SI TODO OK LAS VARIABLES TIENEN ZEROES O SPACES RESPECTIVAMENTE
+       
+       ENVIRONMENT DIVISION.
+      *====================
+       CONFIGURATION SECTION.
+      *---------------------
+       SPECIAL-NAMES.
+               DECIMAL-POINT IS COMMA.
+       
+       DATA DIVISION.
+      *=============
+
+       WORKING-STORAGE SECTION.
+      *-----------------------
+       COPY GNSWCFIO.
+       COPY GNSWVFIO.
+       COPY GNSWGHOY.
+       COPY GNSWGSYS.
+       COPY TABWGCTE.
+       COPY TABWGXRA.
+       COPY TABWGOSC.
+
+       01  PGM-VAR-ADIC.
+           03 PGM-STAT-ADIC.
+              05 PGM-STAT-LDC.
+                 88 PGM-STAT-LDC-NUL    VALUE '  '.
+                 07 PGM-STT1-LDC        VALUE '2' PIC X(01).
+                    88 PGM-STAT-LDC-OKS VALUE '0'.
+                 07 PGM-STT2-LDC        VALUE '3' PIC X(01).
+              05 PGM-STAT-RDC.
+                 88 PGM-STAT-RDC-NUL    VALUE '  '.
+                 07 PGM-STT1-RDC        VALUE '2' PIC X(01).
+                    88 PGM-STAT-RDC-OKS VALUE '0'.
+                 07 PGM-STT2-RDC        VALUE '3' PIC X(01).
+              05 PGM-STAT-GDD.
+                 88 PGM-STAT-GDD-NUL    VALUE '  '.
+                 07 PGM-STT1-GDD        VALUE '2' PIC X(01).
+                    88 PGM-STAT-GDD-OKS VALUE '0'.
+                 07 PGM-STT2-GDD        VALUE '3' PIC X(01).
+              05 PGM-STAT-GES.
+                 88 PGM-STAT-GES-NUL    VALUE '  '.
+                 07 PGM-STT1-GES        VALUE '2' PIC X(01).
+                    88 PGM-STAT-GES-OKS VALUE '0'.
+                 07 PGM-STT2-GES        VALUE '3' PIC X(01).
+              05 PGM-STAT-FIA.
+                 88 PGM-STAT-FIA-NUL    VALUE '  '.
+                 07 PGM-STT1-FIA        VALUE '2' PIC X(01).
+                    88 PGM-STAT-FIA-OKS VALUE '0'.
+                 07 PGM-STT2-FIA        VALUE '3' PIC X(01).
+              05 PGM-STAT-AMF.
+                 88 PGM-STAT-AMF-NUL    VALUE '  '.
+                 07 PGM-STT1-AMF        VALUE '2' PIC X(01).
+                    88 PGM-STAT-AMF-OKS VALUE '0'.
+                 07 PGM-STT2-AMF        VALUE '3' PIC X(01).
+
+       COPY GNSWVIDD.
+       01  SCR-VARI.
+           03 SCR-SIST             VALUE 'GAR' PIC X(03).
+           03 SCR-QIDD                         PIC X(08).
+           03 SCR-LIDD                    COMP PIC S9(04).
+      *FLB CST  5-DEC-1994 
+           03 SCR-OTRN                         PIC X(04).
+       COPY LDCBRCLF.
+       COPY LDCBRLDC.
+       COPY LDCBRARC.
+       COPY LDCBRARG.
+       COPY LDCBRRDC REPLACING RDC BY RDL.
+
+       COPY GARBRGDD.
+       COPY GARBRGDG.
+       COPY GARBRGVT.
+       COPY GARBRGES.
+
+       COPY COLBRRDC.
+       COPY COLBROPC.
+       COPY COLBRDLC.
+
+       COPY DEUBRFIA.
+       COPY DEUBRAMF.
+
+       COPY SGCBRRCO.
+       COPY SGCBROPE.
+      *SMC-INI 24-11-1993
+       COPY COLBRTOC.
+       COPY GNSBRMSC.
+      *SMC-FIN 24-11-1993
+       COPY GNSBRTAB.
+       COPY TABBRTIO.
+       COPY TABBRCAM.
+       COPY GNSWGRQA.
+       COPY GNSWGUIB.
+       COPY GNSWGELS.
+
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-OPE-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-RCO-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-TAB-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-MSG-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-TOC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-MSC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-CAM-REQA==.
+
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-CLF-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-RDL-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-LDC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-ARC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-ARG-REQA==.
+
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-GDD-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-GDG-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-GVT-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-GES-REQA==.
+
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-RDC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-OPC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-DLC-REQA==.
+
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-FIA-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-AMF-REQA==.
+       01  WSS-VARI.
+      *SMC-INI 26-10-1993
+      * LAV INI 24-02-1994
+           03 WSS-COOC.
+              05 WSS-TOOC                           PIC X(03).
+              05 WSS-AOOC                           PIC X(03).
+           03 WSS-VCOC.
+      *FLB CST  5-MAY-1994 
+              05 WSS-TVOC                           PIC X(01).
+              05 WSS-CVOC                           PIC X(03).
+              05 WSS-TCOC                           PIC X(02).
+      * LAV FIN 24-02-1994
+           03  WSS-VSN-VCTE                         PIC X(01).
+               88  USA-CTE       VALUE 'N'.
+           03  WSS-VSN-VCEX                         PIC X(01).
+               88  USA-CEX       VALUE 'N'.
+           03  WSS-VSN-VTCR                         PIC X(01).
+               88  USA-TCR       VALUE 'N'.
+           03  WSS-VSN-VLEA                         PIC X(01).
+               88  USA-LEA       VALUE 'N'.
+      *SMC-FIN 26-10-1993
+
+      * Vector de Clientes de la CLF
+           03 VEC-CLI OCCURS 12.
+               05 CIC-CLI                           PIC X(12).
+               05 PGAR-CLI         COMP             PIC S9(04).
+
+      * Vector LCR'S de trabajo en Rutina
+      *FLB CST  2-MAY-1994 
+           03 VEC-LDC OCCURS 30.
+               05 FVEN-LDC                          PIC 9(08).
+               05 MGAR-LDC                          PIC X(01).
+      *<<<< NOT PGM_ARG
+               05 CMAX-LDC         COMP-3           PIC S9(11)V9(4).
+               05 CTOT-LDC         COMP-3           PIC S9(11)V9(4).
+               05 CUTI-LDC         COMP-3           PIC S9(11)V9(4).
+               05 CDIS-LDC         COMP-3           PIC S9(11)V9(4).
+      *>>>>
+               05 NMSG-LDC                          PIC 9(02).
+               05 NMS2-LDC                          PIC 9(02).
+               05 MENS-LDC                          PIC X(12).
+               05 MEN2-LDC                          PIC X(12).
+               05 EMP1-LDC                          PIC 9(02).
+               05 EMP2-LDC                          PIC 9(02).
+               05 EMP3-LDC                          PIC 9(02).
+               05 IUSO-LDC                          PIC X(01).
+               05 IEXI-LDC                          PIC X(01).
+               05 PARC-LDC         COMP             PIC S9(04).
+               05 PARG-LDC         COMP             PIC S9(04).
+               05 IGES-LDC                          PIC X(01).
+               05 IOES-LDC                          PIC X(01).
+               05 IMON-LDC                          PIC X(01).
+               05 ITIO-LDC                          PIC X(01).
+               05 IAUX-LDC                          PIC X(01).
+      *<<<< PGM_CHI
+      *FLB CST  22-FEB-1995 
+               05 VCLC-LDC                          PIC X(06).
+      *>>>>
+               
+      *FLB CST  2-MAY-1994 
+           03 VEC-ARC OCCURS 40.
+               05 ILDC-ARC                          PIC 9(02).
+               05 IOPC-ARC.
+                  07 CAI-IOPC-ARC                   PIC X(04).
+                  07 IIC-IOPC-ARC                   PIC 9(08).
+               05 VCOC-ARC                          PIC X(06).
+               05 TOOC-ARC                          PIC X(03).
+               05 AOOC-ARC                          PIC X(03).
+               05 IUSO-ARC                          PIC X(01).
+
+      *FLB CST  2-MAY-1994 
+           03 VEC-ARG OCCURS 40.
+               05 ILDC-ARG                          PIC 9(02).
+               05 IARG-ARG                          PIC X(15).
+               05 IFIA-ARG.
+                  07 IGAR-ARG.
+                     09 CAI-IGAR-ARG                PIC X(04).
+                     09 IIC-IGAR-ARG                PIC 9(08).
+                  07 NFIA-ARG                       PIC 9(02).
+               05 TOGA-ARG                          PIC X(03).
+               05 AOGA-ARG                          PIC X(03).
+               05 PORG-ARG                          PIC 9(03).
+               05 IUSO-ARG                          PIC X(01).
+
+           03 VEC-GAR OCCURS 30.
+               05 CLI-GAR                           PIC X(12).
+               05 KEY-FIA.
+                  07 CIC-GAR.
+                     09 CAI-GAR                     PIC X(04).
+                     09 IIC-GAR                     PIC 9(08).
+                  07 FIA-GAR                        PIC 9(02).
+               05 TIP-GAR                           PIC X(03).
+               05 STP-GAR                           PIC X(03).
+               05 LIM-GAR                           PIC X(01).
+      *<<<< NOT PGM_ARG
+      *        05 PON-GAR          COMP-3           PIC S9(11)V9(4).
+               05 TEM-GAR          COMP-3           PIC S9(11)V9(4).
+               05 VAL-GAR          COMP-3           PIC S9(11)V9(4).
+      *>>>>
+               05 PMAX-GAR         COMP             PIC S9(04).
+               05 CLA-GAR                           PIC X(01).
+
+      *FLB CST  25-NOV-1994 
+      *<<<< GES_5
+               05 VEC-GES OCCURS 5.
+      *>>>>
+                  07 IOPC-GES.
+                     09 CAI-IOPC-GES                PIC X(04).
+                     09 IIC-IOPC-GES                PIC 9(08).
+                  07 TIP-CDT-GES                    PIC X(03).
+                  07 STP-CDT-GES                    PIC X(03).
+                  07 VCB-CDT-GES.
+                     09 TIP-VCB-CDT-GES             PIC X(01).
+                     09 COD-VCB-CDT-GES             PIC X(03).
+                     09 TIP-CMB-CDT-GES             PIC X(02).
+                  07 DST-CDT-GES                    PIC X(03).
+                  07 TIP-DEU-GES                    PIC X(01).
+                  07 VCB-LIM-CDT-GES                PIC X(06).
+      *<<<< NOT PGM_ARG
+                  07 VAL-LIM-CDT-GES  COMP-3        PIC S9(11)V9(4).
+                  07 VAL-ASG-CDT-GES  COMP-3        PIC S9(11)V9(4).
+      *>>>>
+                  07 PCT-LIM-CDT-GES  COMP-3        PIC S9(3)V9(2).
+
+           03 VEC-AUG OCCURS 30.
+               05 CLI-AUG                           PIC X(12).
+               05 KEY-FIA-AUG.
+                  07 CIC-AUG.
+                     09 CAI-AUG                     PIC X(04).
+                     09 IIC-AUG                     PIC 9(08).
+                  07 FIA-AUG                        PIC 9(02).
+               05 TIP-AUG                           PIC X(03).
+               05 STP-AUG                           PIC X(03).
+               05 LIM-AUG                           PIC X(01).
+      *<<<< NOT PGM_ARG
+               05 PON-AUG          COMP-3           PIC S9(11)V9(4).
+               05 TEM-AUG          COMP-3           PIC S9(11)V9(4).
+               05 VAL-AUG          COMP-3           PIC S9(11)V9(4).
+      *>>>>
+               05 CLA-AUG                           PIC X(01).
+
+           03 VEC-AGE OCCURS 30.
+               05 CLI-AGE                           PIC X(12).
+               05 KEY-FIA-AGE.
+                  07 CIC-AGE.
+                     09 CAI-AGE                     PIC X(04).
+                     09 IIC-AGE                     PIC 9(08).
+                  07 FIA-AGE                        PIC 9(02).
+               05 TIP-AGE                           PIC X(03).
+               05 STP-AGE                           PIC X(03).
+               05 LIM-AGE                           PIC X(01).
+      *<<<< NOT PGM_ARG
+               05 PON-AGE          COMP-3           PIC S9(11)V9(4).
+               05 TEM-AGE          COMP-3           PIC S9(11)V9(4).
+               05 VAL-AGE          COMP-3           PIC S9(11)V9(4).
+      *>>>>
+               05 PMAX-AGE         COMP             PIC S9(04).
+               05 CLA-AGE                           PIC X(01).
+      *FLB CST  25-NOV-1994 
+      *<<<< GES_5
+               05 VEC-AUE OCCURS 5.
+      *>>>>
+                  07 IOPC-AUE.
+                     09 CAI-IOPC-AUE                PIC X(04).
+                     09 IIC-IOPC-AUE                PIC 9(08).
+                  07 TIP-CDT-AUE                    PIC X(03).
+                  07 STP-CDT-AUE                    PIC X(03).
+                  07 VCB-CDT-AUE.
+                     09 TIP-VCB-CDT-AUE             PIC X(01).
+                     09 COD-VCB-CDT-AUE             PIC X(03).
+                     09 TIP-CMB-CDT-AUE             PIC X(02).
+                  07 DST-CDT-AUE                    PIC X(03).
+                  07 TIP-DEU-AUE                    PIC X(01).
+                  07 VCB-LIM-CDT-AUE                PIC X(06).
+      *<<<< NOT PGM_ARG
+                  07 VAL-LIM-CDT-AUE  COMP-3        PIC S9(11)V9(4).
+      *>>>>
+                  07 PCT-LIM-CDT-AUE  COMP-3        PIC S9(3)V9(2).
+
+           03 VEC-AVL-DLC OCCURS 5.
+               05 CIC-AVL-DLC                       PIC X(12).
+               05 LIM-AVL-DLC      COMP             PIC 9(03)V9(06).
+
+           03 VEC-DLC OCCURS 100.
+               05 KEY-DLC.
+                  07 CIC-OPC.
+                     09 CAI-OPC                     PIC X(04).
+                     09 IIC-OPC                     PIC 9(08).
+                  07 NUM-DLC                        PIC 9(03).
+               05 INP-OPC                           PIC 9(08).
+               05 VCOC-OPC.
+                  07 TVOC-OPC                       PIC X(01).
+                  07 CVOC-OPC                       PIC X(03).
+                  07 TCOC-OPC                       PIC X(02).
+               05 TOOC-OPC                          PIC X(03).
+               05 AOOC-OPC                          PIC X(03).
+               05 CDOC-OPC                          PIC X(03).
+               05 MAV-DLC                           PIC 9(08).
+      *<<<< NOT PGM_ARG
+               05 VAL-DLC          COMP-3           PIC S9(11)V9(4).
+      *>>>>
+               05 PCLI-DLC         COMP             PIC S9(04).
+      *FLB CST  3-OCT-1994 EXAMINA O NO AVALES EN RDC DE COL
+               05 ICAV-DLC                          PIC X(01).
+
+           03 VEC-AVL-LCR OCCURS 10.
+               05 KFIA-AVL-LCR.
+                  07 IESC-AVL-LCR                   PIC X(12).
+                  07 NFIA-AVL-LCR                   PIC 9(02).
+               05 ICFS-AVL-LCR                      PIC X(12).
+
+      *<<<< NOT PGM_PER
+      *SMC-INI 24-11-1993         
+           03 WSS-FEC-FMAV                          PIC X(08).
+      *SMC-FIN 24-11-1993         
+      *>>>>
+      * Indicador de si OPC que se carga es OPC en curse
+           03 WSS-IND-OPCC                          PIC X(01).
+      * Indicador de si DLC cancelado se encontro en arreglo DLC
+           03 WSS-IND-DCAN                          PIC X(01).
+           03 WSS-VCAM                              PIC X(06).
+           03 WSS-KEY-IARG     VALUE SPACES         PIC X(15).
+           03 WSS-KEY-IOPC     VALUE SPACES         PIC X(12).
+           03 WSS-KEY-IRDC     VALUE SPACES         PIC X(27).
+           03 WSS-FEC-FINP     VALUE ZEROES         PIC 9(08).
+
+           03 WSS-CLI       COMP   VALUE ZEROES     PIC S9(04).
+           03 WSS-LDC       COMP   VALUE ZEROES     PIC S9(04).
+           03 WSS-ARC       COMP   VALUE ZEROES     PIC S9(04).
+           03 WSS-ARG       COMP   VALUE ZEROES     PIC S9(04).
+           03 WSS-DLC       COMP   VALUE ZEROES     PIC S9(04).
+           03 WSS-DLC-AUX   COMP   VALUE ZEROES     PIC S9(04).
+           03 WSS-DLC-ANTS  COMP   VALUE ZEROES     PIC S9(04).
+           03 WSS-GAR       COMP   VALUE ZEROES     PIC S9(04).
+           03 WSS-AUG       COMP   VALUE ZEROES     PIC S9(04).
+           03 WSS-AGE       COMP   VALUE ZEROES     PIC S9(04).
+           03 WSS-GES       COMP   VALUE ZEROES     PIC S9(04).
+           03 WSS-AUE       COMP   VALUE ZEROES     PIC S9(04).
+           03 WSS-AVL-LCR   COMP   VALUE ZEROES     PIC S9(04).
+           03 WSS-AVL-DLC   COMP   VALUE ZEROES     PIC S9(04).
+           03 WSS-LPRI      COMP   VALUE ZEROES     PIC S9(04).
+           03 WSS-POS-EMPI  COMP   VALUE ZEROES     PIC S9(04).
+           03 WSS-POS-SGIR  COMP   VALUE ZEROES     PIC S9(04).
+           03 WSS-C         COMP   VALUE ZEROES     PIC S9(04).
+           03 WSS-D         COMP   VALUE ZEROES     PIC S9(04).
+           03 WSS-E         COMP   VALUE ZEROES     PIC S9(04).
+           03 WSS-F         COMP   VALUE ZEROES     PIC S9(04).
+           03 WSS-I         COMP   VALUE ZEROES     PIC S9(04).
+           03 WSS-J         COMP   VALUE ZEROES     PIC S9(04).
+           03 WSS-K         COMP   VALUE ZEROES     PIC S9(04).
+           03 WSS-L         COMP   VALUE ZEROES     PIC S9(04).
+           03 WSS-N         COMP   VALUE ZEROES     PIC S9(04).
+           03 WSS-O         COMP   VALUE ZEROES     PIC S9(04).
+           03 WSS-P         COMP   VALUE ZEROES     PIC S9(04).
+           03 WSS-R         COMP   VALUE ZEROES     PIC S9(04).
+           03 WSS-S         COMP   VALUE ZEROES     PIC S9(04).
+           03 WSS-T         COMP   VALUE ZEROES     PIC S9(04).
+           03 WSS-Z         COMP   VALUE ZEROES     PIC S9(04).
+           03 WSS-ARG-B-C   COMP   VALUE ZEROES     PIC S9(04).
+           03 WSS-VAL-LIMD  COMP-3 VALUE ZEROES     PIC 9(03)V9(06).
+
+           03 WSS-PRI1      COMP   VALUE ZEROES     PIC 9(04).
+           03 WSS-PRI2      COMP   VALUE ZEROES     PIC 9(04).
+           03 WSS-PRI3      COMP   VALUE ZEROES     PIC 9(04).
+           03 WSS-PRI2-ANT  COMP   VALUE ZEROES     PIC 9(04).
+           03 WSS-PRI3-ARG  COMP   VALUE ZEROES     PIC 9(04).
+           03 WSS-NUM-EMPA  COMP   VALUE ZEROES     PIC 9(04).
+           03 WSS-ANT-EMPA  COMP   VALUE ZEROES     PIC 9(04).
+           03 WSS-NUM-PORC         VALUE ZEROES     PIC 9(03).
+           03 WSS-ANT-PORC-O       VALUE ZEROES     PIC 9(03).
+           03 WSS-ANT-PORC-Y       VALUE ZEROES     PIC 9(03).
+           03 WSS-NUM-MENS         VALUE ZEROES     PIC 9(02).
+      *FLB CST   26-AUG-1994 PRIORIDAD RESTRICCION GES VS DLC
+           03 WSS-RSTR      COMP   VALUE ZEROES     PIC 9(04).
+           03 VEC-RSTR-GES OCCURS 10.
+               05 RSTR-GES  COMP                    PIC 9(04).
+
+      *<<<< NOT PGM_ARG
+           03 WSS-VAL-MONE    COMP-3                PIC S9(11)V9(4).
+           03 WSS-VAL-MNAC    COMP-3                PIC S9(11)V9(4).
+           03 WSS-VAL-CMAX    COMP-3                PIC S9(11)V9(4).
+           03 WSS-VAL-XAVA    COMP-3                PIC S9(11)V9(4).
+           03 WSS-DISP-LCR    COMP-3 VALUE ZEROES   PIC S9(11)V9(4).
+           03 WSS-VAL-SCRE    COMP-3 VALUE ZEROES   PIC S9(11)V9(4).
+           03 WSS-SUMA-GAR    COMP-3 VALUE ZEROES   PIC S9(11)V9(4).
+           03 WSS-SUMA-GAR-CASO-O COMP-3 VALUE ZEROES PIC S9(11)V9(4).
+           03 WSS-AUX         COMP-3 VALUE ZEROES   PIC S9(11)V9(4).
+           03 WSS-TOPE        COMP-3 VALUE ZEROES   PIC S9(11)V9(4).
+           03 WSS-TOPE-CASO-O COMP-3 VALUE ZEROES   PIC S9(11)V9(4).
+           03 WSS-SCPA        COMP-3 VALUE ZEROES   PIC S9(11)V9(4).
+           03 WSS-VAL-GARA    COMP-3 VALUE ZEROES   PIC S9(11)V9(4).
+           03 WSS-VGAR        COMP-3 VALUE ZEROES   PIC S9(11)V9(4).
+      *>>>>
+           03 WSS-100         COMP-3 VALUE +100     PIC S9(03).
+
+           03 WSS-GAR-ARG      VALUE SPACES         PIC X(01).
+           03 WSS-IND-CRIT     VALUE SPACES         PIC X(01).
+           03 WSS-IND-EMPA     VALUE SPACES         PIC X(01).
+           03 WSS-IND-LPRI     VALUE SPACES         PIC X(01).
+           03 WSS-IND-REBJ     VALUE SPACES         PIC X(01).
+           03 WSS-IND-VEZY     VALUE SPACES         PIC X(01).
+      *FLB CST  3-OCT-1994 EXAMINA O NO AVALES EN RDC DE COL
+           03 WSS-IND-ICAV     VALUE SPACES         PIC X(01).
+      *FLB CST  23-FEB-1995 
+           03 WSS-COD-MENS     VALUE SPACES         PIC X(12).
+           03 WSS-VSN-VDMO                          PIC X(01).
+              88 RECHAZA-X-DLC-MOROSO VALUE 'S'.
+      *FLB CST  23-FEB-1995 
+           03 WSS-VSN-SGNP                          PIC X(01).
+              88 IGNORA-SOBREGIRO-NO-PACTADO VALUE 'S'.
+      *FLB CST  23-FEB-1995 FIN
+      *FLB CST  14-MAR-1995 
+           03 WSS-VSN-TIPL                          PIC X(01).
+              88 USA-TIPO-LINEA VALUE 'S'.
+           03 WSS-VSN-U1TL                          PIC X(01).
+              88 USA-1-TIPO-LINEA VALUE 'S'.
+      *FLB CST   23-FEB-1995 PARAMETROS LINEA AVANCE
+           03 WSS-TLC-DATA.
+               05 WSS-NUM-PLAV                      PIC 9(03).
+               05 WSS-COD-PLAV                      PIC X(01).
+               05 FILLER                            PIC X(01).
+               05 WSS-IND-VTOL                      PIC X(01).
+               05 FILLER                            PIC X(14).
+               05 WSS-COD-MLAV                      PIC X(06).
+               05 WSS-VAL-MMLA                      PIC 9(09).
+               05 FILLER                            PIC X(05).
+               05 WSS-IND-OESP                      PIC X(01).
+                  88 SOLO-1-OPC VALUE 'S'.
+               05 WSS-IND-MONE                      PIC X(01).
+                  88 SOLO-1-MONEDA VALUE 'S'.
+               05 WSS-IND-TOPE                      PIC X(01).
+                  88 SOLO-1-TIO VALUE 'S'.
+               05 WSS-IND-CAUX                      PIC X(01).
+                  88 SOLO-1-CODIGO-AUXILIAR VALUE 'S'.
+           03 WSS-INST                              PIC X(01).
+              88 INST-RECH-LINE-VCDA VALUE 'S'.
+           03 WSS-INST-RECH    VALUE 'S'            PIC X(01).
+           03 WSS-INST-ACEP    VALUE 'N'            PIC X(01).
+           03 WSS-1VEZ         VALUE SPACES         PIC X(01).
+      *FLB CST  14-MAR-1995 FIN
+           03 WSS-1-VEZ        VALUE ZEROES         PIC 9(01).
+      *FLB CST  23-MAR-1995 
+        COPY COLWGLDC.
+        COPY LDCWGTLC.
+        COPY GNSBRMSG.
+
+       LINKAGE SECTION.
+      *---------------
+       COPY LDCWGCCU.
+       
+       PROCEDURE DIVISION USING CCU-VARI.
+      *=================================
+       MAIN SECTION.
+      *------------
+       INI-MAIN.
+           PERFORM INI.
+      *FLB CST  23-MAR-1995 
+           IF CCU-NUM-MENS > 0 AND
+              CCU-NUM-MENS < 50
+               GO TO FIN-MAIN.
+
+       LUP-MAIN.
+
+           IF CCU-IIC-ICLI IN CCU-VARI > ZEROES AND
+              CCU-IIC-ICLF IN CCU-VARI NOT > ZEROES
+               PERFORM BUS-CLI-CLF
+               IF CCU-NUM-MENS > 0 AND
+                  CCU-NUM-MENS < 50
+                   GO TO FIN-MAIN
+               ELSE
+                   NEXT SENTENCE
+           ELSE
+               PERFORM BUS-CLF
+               IF CCU-NUM-MENS > 0 AND
+                  CCU-NUM-MENS < 50
+                   GO TO FIN-MAIN.
+
+           MOVE CLF-VAL-CMAX IN CLF TO WSS-VAL-MONE.
+           MOVE CLF-COD-VCCF IN CLF TO WSS-VCAM.        
+           PERFORM OBT-VAL-MNAC.
+           IF CCU-NUM-MENS < 21
+               GO TO FIN-MAIN.
+           MOVE WSS-VAL-MNAC TO WSS-VAL-CMAX.
+
+           PERFORM CARGA-LCR.
+           IF CCU-NUM-MENS < 21
+               GO TO FIN-MAIN.
+
+      * Valida que exista al menos una LCR vigente y no vencida.
+           IF WSS-ARC NOT > ZEROES
+               MOVE 'CLFNOLDCVIG' TO CCU-COD-MENS
+               MOVE 3             TO CCU-NUM-MENS
+               GO TO FIN-MAIN.
+
+      * Caso sin/con OPC en curse
+
+           PERFORM CARGA-ARREGLOS.
+           IF CCU-NUM-MENS < 21 OR 
+              CCU-NUM-MEN2 < 21
+               GO TO FIN-MAIN.
+
+      * Calcula cupo disponible inicial ajustado por garantias existentes
+           PERFORM CALCULO-INICIAL-CUPO-LDC.
+
+      * Procesa todas las OPCs anteriores a las en curse
+      *    Se llamo con OPC's en curse
+           IF CCU-IIC-IOPC(1) > ZEROES 
+               MOVE WSS-DLC TO WSS-DLC-AUX
+               PERFORM BUS-MAX-DLC-ANT
+           ELSE
+               MOVE WSS-DLC TO WSS-DLC-ANTS
+               MOVE ZEROES TO WSS-D.
+           PERFORM LUP-DLC.
+      *FLB CST  9-MAR-1994 
+           IF CCU-NUM-MENS < 21
+               GO TO FIN-MAIN.
+
+      * No se llamo con OPC's en curse
+           IF CCU-IIC-IOPC(1) NOT > ZEROES 
+               GO TO CAL-FINAL-MAIN.
+
+      * Obtiene cupo utilizado de la CLF, con las operaciones antiguas
+           PERFORM CALCULO-FINAL-CUPO-CLF.
+           IF CCU-VAL-CUTI > WSS-VAL-CMAX
+               MOVE 'CLFEXCEDIDA' TO CCU-COD-MENS
+               MOVE 21            TO CCU-NUM-MENS
+               PERFORM LLE-LCR
+      *FLB CST  9-MAR-1994 MODIFICADO PARA TRATAR ERROR
+               IF CCU-NUM-MENS < 21
+                   GO TO FIN-MAIN
+               ELSE
+                   PERFORM CNV-VAL-CCU
+                   GO TO FIN-MAIN.
+
+      * Verifica que OPC's (DLC's) en curse no excedan la CLF
+           IF CCU-VAL-CUTI + WSS-VAL-SCRE > WSS-VAL-CMAX
+               MOVE 'OPCEXCCLF' TO CCU-COD-MEN2
+               MOVE 21          TO CCU-NUM-MEN2
+               PERFORM LLE-LCR
+      *FLB CST  9-MAR-1994 MODIFICADO PARA TRATAR ERROR
+               IF CCU-NUM-MENS < 21
+                   GO TO FIN-MAIN
+               ELSE
+                   PERFORM CNV-VAL-CCU
+                   GO TO FIN-MAIN.
+
+      * Procesa las OPCs en curse
+           MOVE WSS-DLC TO WSS-D.
+           MOVE WSS-DLC-AUX TO WSS-DLC.
+           PERFORM LUP-DLC.
+           IF CCU-NUM-MENS < 21 OR 
+              CCU-NUM-MEN2 < 21
+               GO TO FIN-MAIN.
+
+      * Una vez procesadas todas las OPCs, analiza la situacion final de
+      * cada LCR 
+       CAL-FINAL-MAIN.
+
+      * Obtiene cupo utilizado de la CLF, con todas operaciones 
+           PERFORM CALCULO-FINAL-CUPO-CLF.
+           IF CCU-VAL-CUTI > WSS-VAL-CMAX
+               MOVE 'CLFEXCEDIDA' TO CCU-COD-MENS
+               MOVE 21            TO CCU-NUM-MENS.
+
+      * Calcula cupo disponible final, ajustado por remanente de 
+      * garantias 
+           PERFORM CALCULO-FINAL-CUPO-LDC.
+
+      * Traspasa arreglo LDC de la rutina al LCR de salida
+           PERFORM LLE-LCR.
+      *FLB CST  9-MAR-1994 MODIFICADO PARA TRATAR ERROR
+           IF CCU-NUM-MENS < 21
+               GO TO FIN-MAIN.
+           PERFORM CNV-VAL-CCU.
+
+
+       FIN-MAIN.
+      * Termina
+           PERFORM FIN.
+
+       BUS-CLI-CLF SECTION.
+       INI-BUS-CLI-CLF.
+               MOVE CCU-CIC-ICLI IN CCU-VARI TO RDC-CIC-ICLI IN RDL
+               MOVE LOW-VALUES               TO RDC-KEY-ICLF IN RDL
+               MOVE FIO-GET-NLS TO FIO-CMND
+               PERFORM LDC-FIO-RDC
+               IF NOT (
+                  FIO-STAT-OKS AND
+                  RDC-CIC-ICLI IN RDL = CCU-CIC-ICLI IN CCU-VARI
+                      )
+                   MOVE 'RDL    NEX' TO CCU-COD-MENS
+      *FLB CST  9-MAR-1994 
+      *            MOVE 20           TO CCU-NUM-MENS
+                   MOVE 1           TO CCU-NUM-MENS
+                   IF FIO-STAT-OKS
+                       MOVE FIO-END-BRW TO FIO-CMND
+                       PERFORM LDC-FIO-RDC
+                       GO TO FIN-BUS-CLI-CLF
+                   ELSE
+                       GO TO FIN-BUS-CLI-CLF.
+       LUP-BUS-CLI-CLF.
+           MOVE RDC-KEY-ICLF IN RDL TO CCU-CIC-ICLF IN CCU-VARI.
+           PERFORM BUS-CLF.
+           IF NOT FIO-STAT-OKS OR
+              FIO-STAT-OKS AND CCU-NUM-MENS = 99
+               GO TO FIN-BUS-CLI-CLF.
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM LDC-FIO-RDC.
+           IF FIO-STAT-OKS AND
+              RDC-CIC-ICLI IN RDL = CCU-CIC-ICLI IN CCU-VARI
+               GO TO LUP-BUS-CLI-CLF.
+       FIN-BUS-CLI-CLF.
+           EXIT.
+
+       BUS-CLF SECTION.
+       INI-BUS-CLF.
+           MOVE CCU-CIC-ICLF IN CCU-VARI TO CLF-KEY-ICLF IN CLF.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM LDC-FIO-CLF.
+           IF NOT FIO-STAT-OKS
+               MOVE 'CLF    NEX' TO CCU-COD-MENS
+               MOVE 1            TO CCU-NUM-MENS
+               GO TO FIN-BUS-CLF.
+
+      *FLB CST  21-JAN-1995 CCU FUNCIONE LUEGO MCA/MSI/CMX Y ANTES ACA
+           IF ( CLF-COD-STAT IN CLF = 'M' OR 'X' )
+              AND CCU-IIC-IOPC(1) > ZEROES 
+                   OR
+              ( CLF-COD-STAT IN CLF = 'M' OR 'X' ) AND 
+              CCU-IIC-IOPC(1) NOT > ZEROES AND CLF-MSC-STAT NOT = 'V'
+               MOVE CLF-CIC-CREN IN CLF TO CLF-KEY-ICLF IN CLF
+               MOVE FIO-GET-KEY TO FIO-CMND
+               PERFORM LDC-FIO-CLF
+               IF NOT FIO-STAT-OKS
+                   MOVE 'CLF    NEX' TO CCU-COD-MENS
+                   MOVE 1            TO CCU-NUM-MENS
+                   GO TO FIN-BUS-CLF
+               ELSE
+                   MOVE 'A' TO CLF-MSC-STAT IN CLF
+                   MOVE 'CLFREN-' TO CCU-COD-TMSG
+                   MOVE 'M'       TO CCU-COD-CMSG
+                   MOVE 51        TO CCU-NUM-MENS.
+      *FLB CST  21-JAN-1995 
+
+      *JVM:14/09/92 VALIDA QUE CLF ESTE NO VENCIDA.
+           IF CLF-FEC-FVEN IN CLF NOT > HOY-FHOY
+               MOVE 'CLF  NOVIG' TO CCU-COD-MENS
+               MOVE 2              TO CCU-NUM-MENS
+               GO TO FIN-BUS-CLF.
+
+      *JVM:14/09/92 VALIDA QUE CLF ESTE "V"ERIFICADA O
+      *             "A"CTIVADA 
+      *SI CLF ESTA VCD O NO ESTA VRF O ACA NO PROCESA Y
+      *SETEA NUM-MENS = 2
+
+      *FLB CST  8-MAR-1994 LLAMADA DESDE LDC, CONSULTA
+      *    IF CLF-MSC-STAT IN CLF = 'V'
+           IF CLF-MSC-STAT IN CLF = 'V' AND
+              CCU-IIC-IOPC(1) NOT > ZEROES
+               MOVE 'CLF    NOACA' TO CCU-COD-MENS
+               MOVE 51             TO CCU-NUM-MENS
+               GO TO FIN-BUS-CLF.
+
+           IF CLF-MSC-STAT IN CLF NOT = 'A'
+      *AMP-INI  22-NOV-1993 PARA PROCESAR CLF's CERRADAS Y RENOVADAS
+               AND CCU-ESTA NOT > SPACES
+      *AMP-FIN  22-NOV-1993
+               MOVE 'CLF    NOVIG' TO CCU-COD-MENS
+               MOVE 2              TO CCU-NUM-MENS
+               GO TO FIN-BUS-CLF.
+
+      *AMP-INI  22-NOV-1993 PARA PROCESAR CLF's CERRADAS Y RENOVADAS
+           IF CCU-ESTA > SPACES AND
+              CLF-MSC-STAT IN CLF NOT = CCU-ESTA
+               MOVE 'CLFSTATNOVAL' TO CCU-COD-MENS
+               MOVE 2              TO CCU-NUM-MENS
+               GO TO FIN-BUS-CLF.
+      *AMP-FIN  22-NOV-1993
+      *JVM:14/09/92
+
+           MOVE 99 TO CCU-NUM-MENS.
+           MOVE SPACES TO CCU-COD-MENS.
+       FIN-BUS-CLF.
+           EXIT.
+
+       LUP-DLC SECTION.
+       INI-LUP-DLC.
+      * Procesa DLC's cargados en arreglo
+       LUP-LUP-DLC.
+           ADD 1 TO WSS-D.
+           IF WSS-D > WSS-DLC 
+               GO TO FIN-LUP-DLC.
+
+      * Carga avales del documento
+           PERFORM CARGA-AVL-DLC.
+      *FLB CST  9-MAR-1994 
+           IF CCU-NUM-MENS < 21
+               GO TO FIN-LUP-DLC.
+
+      * Examina si DLC esta cubierto por alguna linea vigente
+           MOVE PCLI-DLC(WSS-D) TO WSS-C.
+           MOVE VAL-DLC(WSS-D)  TO WSS-SCPA.
+           MOVE CIC-OPC(WSS-D)  TO OPC-KEY-IOPC IN OPC.
+           MOVE VCOC-OPC(WSS-D) TO OPC-COD-VCOC IN OPC.
+           MOVE TOOC-OPC(WSS-D) TO OPC-COD-TOOC IN OPC.
+           MOVE AOOC-OPC(WSS-D) TO OPC-COD-AOOC IN OPC. 
+           MOVE MAV-DLC(WSS-D)  TO DLC-FEC-FMAV IN DLC.
+      *FLB CST  16-MAR-1995 
+      *    PERFORM BUS-LCR-1VEZ UNTIL 
+      *         WSS-N > WSS-ARC.
+           MOVE 22 TO WSS-NUM-MENS.
+           MOVE WSS-INST-RECH TO WSS-INST.
+           PERFORM INI-LDC.
+           PERFORM INI-ARC.
+
+           MOVE SPACES TO WSS-IND-OESP
+                          WSS-IND-MONE
+                          WSS-IND-TOPE
+                          WSS-IND-CAUX.
+
+           MOVE 'S' TO WSS-1VEZ.
+           PERFORM BUS-LCR-PRIORITARIA.
+           MOVE 'N' TO WSS-1VEZ.
+      *FLB CST  16-MAR-1995 FIN
+
+           IF WSS-IND-LPRI = 'N'
+               IF WSS-NUM-MENS < CCU-NUM-MENS
+                   IF WSS-NUM-MENS = 22
+                       MOVE 'OPCNOCLF' TO CCU-COD-MENS
+                       MOVE 22         TO CCU-NUM-MENS
+                       GO TO LUP-LUP-DLC
+                   ELSE
+                       MOVE 'VTODLC>LDC' TO CCU-COD-MENS
+                       MOVE 23           TO CCU-NUM-MENS
+                       GO TO LUP-LUP-DLC
+               ELSE
+                   GO TO LUP-LUP-DLC.
+
+      * Asigna el DLC a una o varias LCR's
+           PERFORM PRO-DLC UNTIL 
+                     WSS-SCPA NOT > ZEROES OR
+      *FLB CST  5-DEC-1994 
+      *              WSS-IND-LPRI = 'N'.
+                     WSS-IND-LPRI = 'N' OR
+                     CCU-NUM-MENS < 21.
+
+           IF CCU-NUM-MENS < 21
+               GO TO FIN-LUP-DLC.
+      *FLB CST  5-DEC-1994 FIN
+
+       SOBREGIRA-LDC.
+      * Si no encontro LCR para asignar y el numero de LCR a sobregirar
+      * es cero, entonces hay un error en la rutina, en la determinacion
+      * de la LCR prioritaria 
+           IF WSS-IND-LPRI = 'N' AND WSS-POS-SGIR NOT > ZEROES
+               MOVE 20             TO CCU-NUM-MENS
+               MOVE 'ERRBUSLDCPRI' TO CCU-COD-MENS
+               GO TO FIN-LUP-DLC.
+
+      * Al asignar una OPC en curse se excede el cupo disponible en
+      * todas las LCR's que la comprenden
+           IF WSS-IND-LPRI = 'N' AND WSS-SCPA > ZEROES AND
+              WSS-D > WSS-DLC-ANTS 
+               MOVE 22          TO CCU-NUM-MEN2
+               MOVE 'OPCEXCLDC' TO CCU-COD-MEN2
+               MOVE 1           TO NMS2-LDC(WSS-POS-SGIR)
+               MOVE 'OPCEXCLDC' TO MEN2-LDC(WSS-POS-SGIR)
+               GO TO FIN-LUP-DLC.
+
+      *    Sobregira ultima LCR examinada por OPC antigua, ya sea por
+      *    creditos o garantias
+           IF WSS-IND-LPRI = 'N' AND WSS-SCPA > ZEROES 
+               IF CUTI-LDC(WSS-POS-SGIR) + WSS-SCPA > 
+                  CMAX-LDC(WSS-POS-SGIR)
+                   ADD WSS-SCPA     TO CUTI-LDC(WSS-POS-SGIR)
+                   MOVE ZEROES      TO WSS-SCPA
+                   MOVE 1           TO NMSG-LDC(WSS-POS-SGIR)
+                   MOVE 'LDCEXCCOL' TO MENS-LDC(WSS-POS-SGIR)
+               ELSE
+                   ADD WSS-SCPA     TO CUTI-LDC(WSS-POS-SGIR)
+                   MOVE ZEROES      TO WSS-SCPA
+                   MOVE 2           TO NMSG-LDC(WSS-POS-SGIR)
+                   MOVE 'LDCEXCGAR' TO MENS-LDC(WSS-POS-SGIR).
+
+           GO TO LUP-LUP-DLC.
+       FIN-LUP-DLC.
+           EXIT.
+
+       CARGA-AVL-DLC SECTION.
+       INI-CARGA-AVL-DLC.
+      * Carga Avales del DLC en proceso
+      *FLB CST  3-OCT-1994 EXAMINA O NO AVALES EN RDC DE COL
+      * SOLO CARGA AVALES DE OPERACIONES DE CREDITO.
+           MOVE ZEROES TO WSS-AVL-DLC.
+      *    IF NUM-DLC(WSS-D) = ZEROS
+           IF ICAV-DLC(WSS-D) NOT = 'S'
+              GO TO FIN-CARGA-AVL-DLC.
+      *FLB CST  3-OCT-1994 FIN
+
+           MOVE KEY-DLC(WSS-D) TO RDC-KEY-IDLC IN RDC.
+      *FLB CST  5-DEC-1994 
+      *    MOVE 1              TO RDC-NUM-IDLC IN RDC.
+           MOVE 'RDC-KEY-IDLC' TO FIO-AKEY.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM COL-FIO-RDC.
+           IF NOT ( FIO-STAT-OKS AND
+                    RDC-CIC-IOPC IN RDC = CIC-OPC(WSS-D) )
+               GO TO BRW-CARGA-AVL-DLC.
+       LUP-CARGA-AVL-DLC.
+
+
+           IF WSS-AVL-DLC = CCU-TAVL-DLC
+               MOVE 20             TO CCU-NUM-MENS
+               MOVE 'ARRAVLDLCEXC' TO CCU-COD-MENS
+               GO TO BRW-CARGA-AVL-DLC.
+
+           ADD 1  TO WSS-AVL-DLC.
+           MOVE RDC-CIC-ICLI IN RDC TO CIC-AVL-DLC(WSS-AVL-DLC).
+           MOVE RDC-VAL-LIMD IN RDC TO LIM-AVL-DLC(WSS-AVL-DLC).
+           MOVE 'RDC-KEY-IDLC' TO FIO-AKEY.
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM COL-FIO-RDC.
+           IF FIO-STAT-OKS AND
+              RDC-CIC-IOPC IN RDC = CIC-OPC(WSS-D)
+               GO TO LUP-CARGA-AVL-DLC.
+
+       BRW-CARGA-AVL-DLC.
+           IF FIO-STAT-OKS
+               MOVE 'RDC-KEY-IDLC' TO FIO-AKEY
+               MOVE FIO-END-BRW TO FIO-CMND
+               PERFORM COL-FIO-RDC.
+       FIN-CARGA-AVL-DLC.
+           EXIT.
+
+       PRO-DLC SECTION.
+       INI-PRO-DLC.
+
+      *FLB CST  16-MAR-1995 COMO AHORA BUS-LCR-PRIORITARIA YA SE EJECUTO 
+      *  ANTES DEL ASIGNA..., AQUI SE INVIERTE EL ORDEN DE AMBOS PARRAFOS
+
+           PERFORM ASIGNA-DLC-EN-LCR.
+           IF WSS-SCPA > ZEROES
+               PERFORM BUS-LCR-PRIORITARIA.
+      *FLB CST  16-MAR-1995 FIN
+
+       FIN-PRO-DLC.
+           EXIT.
+
+       BUS-LCR-PRIORITARIA SECTION.
+       INI-BUS-LCR-PRIORITARIA.
+      * Busca LCR mas prioritaria segun restrictividad ARC y clase de ARG's
+      * En cada nivel en que se compara la prioridad de dos o mas LCR's,
+      * la primera vez que se encuentra una prioridad mayor a la que se
+      * tiene hasta ese momento, se incrementa un numero de empate. Luego,
+      * si otras LCR tienen la misma prioridad, empatan con el numero 
+      * de empate recien mencionado.
+
+           MOVE 'N' TO WSS-IND-LPRI.
+           MOVE ZEROES TO WSS-LPRI.
+           MOVE WSS-NUM-EMPA TO WSS-ANT-EMPA.
+           MOVE ZEROES TO WSS-N.
+           MOVE 9 TO WSS-PRI1.
+
+           PERFORM BUSCA-ARC-RESTRICTIVA UNTIL
+                     WSS-N > WSS-ARC.
+
+           IF WSS-PRI1 = 9
+      *FLB CST  16-MAR-1995 LINEA VENCIDA EN PANTALLA CLC
+                  AND
+              CCU-IIC-IOPC(1) NOT > ZEROES 
+                  AND
+              WSS-INST = WSS-INST-RECH
+               MOVE WSS-INST-ACEP TO WSS-INST
+               PERFORM INI-ARC
+               MOVE ZEROES TO WSS-N
+               PERFORM BUSCA-ARC-RESTRICTIVA UNTIL
+                        WSS-N > WSS-ARC
+               IF WSS-PRI1 = 9
+                   GO TO FIN-BUS-LCR-PRIORITARIA
+               ELSE
+                   NEXT SENTENCE
+           ELSE
+           IF WSS-PRI1 = 9
+      *FLB CST  16-MAR-1995 FIN
+               GO TO FIN-BUS-LCR-PRIORITARIA.
+
+           MOVE 'S' TO WSS-IND-LPRI.
+
+           IF WSS-IND-EMPA = 'N'
+               MOVE 'A' TO WSS-IND-CRIT
+               GO TO FIN-BUS-LCR-PRIORITARIA.
+
+           MOVE WSS-NUM-EMPA TO WSS-ANT-EMPA.
+           PERFORM DESEMPATA-CRITERIO-B.
+      * DESEMPATA segun CRITERIO B hasta fin empate(1)
+
+           IF WSS-IND-EMPA = 'N'
+               MOVE 'B' TO WSS-IND-CRIT
+               GO TO FIN-BUS-LCR-PRIORITARIA.
+
+           MOVE WSS-NUM-EMPA TO WSS-ANT-EMPA.
+           PERFORM DESEMPATA-CRITERIO-C.
+      * DESEMPATA segun CRITERIO C hasta fin empate(2)
+
+           IF WSS-IND-EMPA = 'N'
+               MOVE 'C' TO WSS-IND-CRIT
+               GO TO FIN-BUS-LCR-PRIORITARIA.
+
+           PERFORM DESEMPATA-CRITERIO-D.
+           MOVE 'A' TO WSS-IND-CRIT.
+
+       FIN-BUS-LCR-PRIORITARIA.
+           EXIT.
+
+       BUSCA-ARC-RESTRICTIVA SECTION.
+       INI-BUSCA-ARC-RESTRICTIVA.
+
+       LUP-BUSCA-ARC-RESTRICTIVA.
+           ADD 1 TO WSS-N.
+           IF WSS-N > WSS-ARC
+               GO TO FIN-BUSCA-ARC-RESTRICTIVA.
+
+           MOVE ILDC-ARC(WSS-N) TO WSS-Z.
+           IF IEXI-LDC(WSS-Z) = 'N' OR 
+      *FLB CST  16-MAR-1995 LINEA VENCIDA EN PANTALLA CLC
+              FVEN-LDC(WSS-Z) < DLC-FEC-FMAV IN DLC AND
+              INST-RECH-LINE-VCDA 
+                   OR
+              NOT INST-RECH-LINE-VCDA AND
+              FVEN-LDC(WSS-Z) NOT < DLC-FEC-FMAV IN DLC
+                   OR
+              IUSO-LDC(WSS-Z) NOT = 'S' AND NOT WSS-1VEZ OR 
+      *FLB CST  16-MAR-1995 FIN
+              IUSO-ARC(WSS-N) NOT = 'S' 
+               GO TO LUP-BUSCA-ARC-RESTRICTIVA.
+
+           PERFORM DET-PRIORIDAD-A.
+           GO TO LUP-BUSCA-ARC-RESTRICTIVA.
+       FIN-BUSCA-ARC-RESTRICTIVA.
+           EXIT.
+
+       DET-PRIORIDAD-A SECTION.
+       INI-DET-PRIORIDAD-A.
+      * Tabla de prioridades 
+
+      *    Prior.  Idc OPC   Moneda   Tipo Op.   Cod. Aux
+      *    ----------------------------------------------
+      *      1       OPC       -          -         -
+      *      2        -       ESP        ESP       ESP
+      *      3        -        -         ESP       ESP
+      *      4        -        -         ESP        -
+      *      5        -        -          -         -
+
+      *FLB CST  2-MAY-1994 EN PRORROGA LA OPC EN CURSE LLEGA CON LLAVE 
+      *    TRANSITORIA, ANTES DE DEJARLA CON LA LLAVE ORIGINAL.
+      *    LA LLAVE ORIGINAL ES LA QUE DEBE COINCIDIR CON LA LLAVE
+      *    EN ARC, CUANDO SE TRATA DE UN CREDITO ESPECIFICO 
+           IF IIC-IOPC-ARC(WSS-N) > ZEROES AND 
+              CCU-IND-RENO = 'PRO' AND
+              CIC-OPC(WSS-D) = CCU-CIC-IOPC(1)
+               MOVE CCU-CAI-DCAN(1) TO CAI-OPC(WSS-D)
+               MOVE CCU-IIC-DCAN(1) TO IIC-OPC(WSS-D).
+
+           IF IIC-IOPC-ARC(WSS-N) > ZEROES AND 
+              CIC-OPC(WSS-D) = IOPC-ARC(WSS-N) AND
+              WSS-PRI1 > 1
+      * Deja LCR como prioritaria
+               MOVE 1 TO WSS-PRI1
+               PERFORM NO-EMPATA-A
+               GO TO FIN-DET-PRIORIDAD-A.
+
+           IF IIC-IOPC-ARC(WSS-N) > ZEROES AND 
+              CIC-OPC(WSS-D) = IOPC-ARC(WSS-N) AND
+              WSS-PRI1 = 1
+               PERFORM EMPATA-A
+               GO TO FIN-DET-PRIORIDAD-A.
+
+           IF IIC-IOPC-ARC(WSS-N) > ZEROES 
+      *FLB CST  16-MAR-1995 
+                  OR
+              IIC-IOPC-ARC(WSS-N) NOT > ZEROES AND
+              USA-1-TIPO-LINEA AND SOLO-1-OPC               
+               MOVE 'N' TO IUSO-ARC(WSS-N)
+      *FLB CST  16-MAR-1995 
+               GO TO FIN-DET-PRIORIDAD-A.
+
+      *FLB CST  16-MAR-1995 
+      *    IF VCOC-ARC(WSS-N) > SPACES AND
+      *       TOOC-ARC(WSS-N) > SPACES AND
+      *       AOOC-ARC(WSS-N) > SPACES AND
+           IF VCOC-ARC(WSS-N) > SPACES AND
+              TOOC-ARC(WSS-N) > SPACES AND
+              AOOC-ARC(WSS-N) > SPACES AND
+              OPC-COD-VCOC IN OPC = VCOC-ARC(WSS-N) AND
+              OPC-COD-TOOC IN OPC = TOOC-ARC(WSS-N) AND
+              OPC-COD-AOOC IN OPC = AOOC-ARC(WSS-N) AND
+      *FLB CST  16-MAR-1995 FIN
+              WSS-PRI1 > 2
+               MOVE 2 TO WSS-PRI1
+               PERFORM NO-EMPATA-A
+               GO TO FIN-DET-PRIORIDAD-A.
+
+      *FLB CST  16-MAR-1995 
+      *    IF VCOC-ARC(WSS-N) > SPACES AND
+      *       TOOC-ARC(WSS-N) > SPACES AND
+      *       AOOC-ARC(WSS-N) > SPACES AND
+           IF VCOC-ARC(WSS-N) > SPACES AND
+              TOOC-ARC(WSS-N) > SPACES AND
+              AOOC-ARC(WSS-N) > SPACES AND
+              OPC-COD-VCOC IN OPC = VCOC-ARC(WSS-N) AND
+              OPC-COD-TOOC IN OPC = TOOC-ARC(WSS-N) AND
+              OPC-COD-AOOC IN OPC = AOOC-ARC(WSS-N) AND
+      *FLB CST  16-MAR-1995 FIN
+              WSS-PRI1 = 2
+               PERFORM EMPATA-A
+               GO TO FIN-DET-PRIORIDAD-A.
+
+           IF VCOC-ARC(WSS-N) > SPACES AND
+              TOOC-ARC(WSS-N) > SPACES AND
+              AOOC-ARC(WSS-N) > SPACES 
+      *FLB CST  16-MAR-1995 
+                   OR
+              USA-1-TIPO-LINEA AND
+              ( SOLO-1-MONEDA AND
+                VCOC-ARC(WSS-N) NOT > SPACES 
+                   OR
+                SOLO-1-TIO AND
+                TOOC-ARC(WSS-N) NOT > SPACES
+                   OR
+                SOLO-1-CODIGO-AUXILIAR AND
+                AOOC-ARC(WSS-N) NOT > SPACES
+              )
+               MOVE 'N' TO IUSO-ARC(WSS-N)
+      *FLB CST  16-MAR-1995 
+               GO TO FIN-DET-PRIORIDAD-A.
+
+      *    IF TOOC-ARC(WSS-N) > SPACES AND
+      *       AOOC-ARC(WSS-N) > SPACES AND
+           IF TOOC-ARC(WSS-N) > SPACES AND
+              AOOC-ARC(WSS-N) > SPACES AND
+              OPC-COD-TOOC IN OPC = TOOC-ARC(WSS-N) AND
+              OPC-COD-AOOC IN OPC = AOOC-ARC(WSS-N) AND
+      *FLB CST  16-MAR-1995 FIN
+              WSS-PRI1 > 3
+               MOVE 3 TO WSS-PRI1
+               PERFORM NO-EMPATA-A
+               GO TO FIN-DET-PRIORIDAD-A.
+
+      *FLB CST  16-MAR-1995 
+      *    IF TOOC-ARC(WSS-N) > SPACES AND
+      *       AOOC-ARC(WSS-N) > SPACES AND
+           IF TOOC-ARC(WSS-N) > SPACES AND
+              AOOC-ARC(WSS-N) > SPACES AND
+              OPC-COD-TOOC IN OPC = TOOC-ARC(WSS-N) AND
+              OPC-COD-AOOC IN OPC = AOOC-ARC(WSS-N) AND
+      *FLB CST  16-MAR-1995 FIN
+              WSS-PRI1 = 3
+               PERFORM EMPATA-A
+               GO TO FIN-DET-PRIORIDAD-A.
+
+           IF TOOC-ARC(WSS-N) > SPACES AND
+              AOOC-ARC(WSS-N) > SPACES
+      *FLB CST  16-MAR-1995
+               MOVE 'N' TO IUSO-ARC(WSS-N)
+               GO TO FIN-DET-PRIORIDAD-A.
+
+      *FLB CST  16-MAR-1995 
+      *    IF TOOC-ARC(WSS-N) > SPACES AND
+           IF TOOC-ARC(WSS-N) > SPACES AND
+              OPC-COD-TOOC IN OPC = TOOC-ARC(WSS-N) AND
+      *FLB CST  16-MAR-1995 FIN
+              WSS-PRI1 > 4
+               MOVE 4 TO WSS-PRI1
+               PERFORM NO-EMPATA-A
+               GO TO FIN-DET-PRIORIDAD-A.
+
+      *FLB CST  16-MAR-1995 
+      *    IF TOOC-ARC(WSS-N) > SPACES AND
+           IF TOOC-ARC(WSS-N) > SPACES AND
+              OPC-COD-TOOC IN OPC = TOOC-ARC(WSS-N) AND
+      *FLB CST  16-MAR-1995 FIN
+              WSS-PRI1 = 4
+               PERFORM EMPATA-A
+               GO TO FIN-DET-PRIORIDAD-A.
+
+           IF TOOC-ARC(WSS-N) > SPACES 
+      *FLB CST  16-MAR-1995
+               MOVE 'N' TO IUSO-ARC(WSS-N)
+               GO TO FIN-DET-PRIORIDAD-A.
+
+      * LINEA DE LIBRE DISPONIBILIDAD
+           IF VCOC-ARC(WSS-N) = SPACES AND
+              TOOC-ARC(WSS-N) = SPACES AND
+              AOOC-ARC(WSS-N) = SPACES AND
+              WSS-PRI1 > 5
+               MOVE 5 TO WSS-PRI1
+               PERFORM NO-EMPATA-A
+               GO TO FIN-DET-PRIORIDAD-A.
+
+           IF VCOC-ARC(WSS-N) = SPACES AND
+              TOOC-ARC(WSS-N) = SPACES AND
+              AOOC-ARC(WSS-N) = SPACES AND
+              WSS-PRI1 = 5
+               PERFORM EMPATA-A
+               GO TO FIN-DET-PRIORIDAD-A.
+
+       FIN-DET-PRIORIDAD-A.
+            EXIT.
+
+       NO-EMPATA-A SECTION.
+       INI-NO-EMPATA-A.
+      *FLB CST  16-MAR-1995 
+      * LINEA ESTA VENCIDA
+           IF FVEN-LDC(WSS-Z) < DLC-FEC-FMAV IN DLC
+               MOVE 23 TO WSS-NUM-MENS
+               MOVE 'VTODLC>LDC' TO WSS-COD-MENS.
+      *FLB CST  16-MAR-1995 FIN
+
+           IF WSS-Z > WSS-LPRI
+      *FLB CST  16-MAR-1995 
+               MOVE 'S' TO IUSO-LDC(WSS-Z)
+               MOVE WSS-Z TO WSS-LPRI
+               MOVE 'N' TO WSS-IND-EMPA
+      *       marca LCR con numero de empate(1) incrementado en 1
+               ADD 1 TO EMP1-LDC(WSS-Z)
+      *  Guarda LDC del primer empatado ARC
+               MOVE WSS-Z TO WSS-POS-EMPI
+      *  Guarda LDC para sobregiro
+               MOVE WSS-Z TO WSS-POS-SGIR
+      *FLB CST  23-MAR-1995 
+               MOVE IOES-LDC(WSS-Z) TO WSS-IND-OESP
+               MOVE IMON-LDC(WSS-Z) TO WSS-IND-MONE
+               MOVE ITIO-LDC(WSS-Z) TO WSS-IND-TOPE
+               MOVE IAUX-LDC(WSS-Z) TO WSS-IND-CAUX
+               MOVE EMP1-LDC(WSS-Z) TO WSS-NUM-EMPA.
+       FIN-NO-EMPATA-A.
+           EXIT.
+
+       EMPATA-A SECTION.
+       INI-EMPATA-A.
+           IF WSS-Z > WSS-LPRI
+      *FLB CST  16-MAR-1995 
+               MOVE 'S' TO IUSO-LDC(WSS-Z)
+               MOVE WSS-Z TO WSS-LPRI
+               MOVE 'S' TO WSS-IND-EMPA
+      *        marca LCR que empata con numero de empate(1)
+               MOVE WSS-NUM-EMPA TO EMP1-LDC(WSS-Z).
+       FIN-EMPATA-A.
+           EXIT.
+
+       DESEMPATA-CRITERIO-B SECTION.
+       INI-DESEMPATA-CRITERIO-B.
+
+           MOVE ZEROES TO WSS-LPRI.
+           MOVE SPACES TO WSS-KEY-IARG.
+           MOVE ZEROES TO WSS-ARG-B-C.
+           MOVE ZEROES TO WSS-ANT-PORC-Y.
+           MOVE 99999  TO WSS-ANT-PORC-O.
+           MOVE 3 TO WSS-PRI2-ANT.
+           SUBTRACT 1 FROM WSS-POS-EMPI GIVING WSS-Z.
+       LUP-DESEMPATA-CRITERIO-B.
+           ADD 1 TO WSS-Z.
+           IF WSS-Z > WSS-LDC
+               GO TO FIN-DESEMPATA-CRITERIO-B.
+
+           IF EMP1-LDC(WSS-Z) NOT = WSS-ANT-EMPA OR
+              'N' = IEXI-LDC(WSS-Z) OR
+              'S' NOT = IUSO-LDC(WSS-Z)
+               GO TO LUP-DESEMPATA-CRITERIO-B.
+
+           IF MGAR-LDC(WSS-Z) = 'S' AND 
+              WSS-PRI2-ANT > 1
+               MOVE 1 TO WSS-PRI2
+               PERFORM NO-EMPATA-B
+               GO TO FIN-DESEMPATA-CRITERIO-B.
+
+           IF MGAR-LDC(WSS-Z) = 'S' AND 
+              WSS-PRI2-ANT = 1
+               MOVE 'S' TO WSS-IND-EMPA
+      *       marca LCR que empata con numero de empate(1)
+               MOVE WSS-NUM-EMPA TO EMP2-LDC(WSS-Z)
+               GO TO FIN-DESEMPATA-CRITERIO-B.
+
+           PERFORM DET-PRIORIDAD-B.
+
+           IF WSS-PRI2 < WSS-PRI2-ANT
+               PERFORM NO-EMPATA-B
+               GO TO LUP-DESEMPATA-CRITERIO-B.
+
+      *FLB CST  8-SEP-1994 
+      *    IF WSS-PRI2-ANT = 2 AND WSS-PRI2 = WSS-PRI2-ANT 
+           IF WSS-PRI2-ANT = 2 AND WSS-PRI2 = WSS-PRI2-ANT OR
+              WSS-PRI2-ANT = 1 AND WSS-PRI2 = WSS-PRI2-ANT 
+               MOVE 'S' TO WSS-IND-EMPA
+      *       marca LCR que empata con numero de empate(1)
+               MOVE WSS-NUM-EMPA TO EMP2-LDC(WSS-Z)
+               GO TO LUP-DESEMPATA-CRITERIO-B.
+
+           IF WSS-PRI2-ANT = 3 
+               IF MGAR-LDC(WSS-Z) = 'Y'
+                   IF WSS-NUM-PORC > WSS-ANT-PORC-Y
+                       MOVE WSS-NUM-PORC TO WSS-ANT-PORC-Y
+                       PERFORM NO-EMPATA-B
+                   ELSE 
+                   IF WSS-NUM-PORC = WSS-ANT-PORC-Y
+                       MOVE 'S' TO WSS-IND-EMPA
+      *       marca LCR que empata con numero de empate(1)
+                       MOVE WSS-NUM-EMPA TO EMP2-LDC(WSS-Z)
+                   ELSE
+                       NEXT SENTENCE
+               ELSE
+                   IF WSS-NUM-PORC < WSS-ANT-PORC-O
+                       MOVE WSS-NUM-PORC TO WSS-ANT-PORC-O
+                       PERFORM NO-EMPATA-B
+                   ELSE 
+                   IF WSS-NUM-PORC = WSS-ANT-PORC-O
+                       MOVE 'S' TO WSS-IND-EMPA
+      *       marca LCR que empata con numero de empate(1)
+                       MOVE WSS-NUM-EMPA TO EMP2-LDC(WSS-Z).
+
+           GO TO LUP-DESEMPATA-CRITERIO-B.
+        FIN-DESEMPATA-CRITERIO-B.
+            EXIT.
+
+       NO-EMPATA-B SECTION.
+       INI-NO-EMPATA-B.
+           MOVE WSS-PRI2 TO WSS-PRI2-ANT.
+           MOVE WSS-Z TO WSS-LPRI.
+           MOVE 'N' TO WSS-IND-EMPA.
+      *    marca LCR con numero de empate(1) incrementado en 1
+           ADD 1 TO EMP2-LDC(WSS-Z).
+           MOVE EMP2-LDC(WSS-Z) TO WSS-NUM-EMPA.
+      *  Guarda LDC del primer empatado ARC
+           MOVE WSS-Z TO WSS-POS-EMPI.
+      *  Guarda LDC para sobregiro
+           MOVE WSS-Z TO WSS-POS-SGIR.
+       FIN-NO-EMPATA-B.
+           EXIT.
+
+       DET-PRIORIDAD-B SECTION.
+       INI-DET-PRIORIDAD-B.
+
+      *FLB CST  22-NOV-1994 AVAL ESPECIFICO, MISMA PRIORIDAD QUE GENERICO
+      *    Prior.     Condicion de garantias en la ARG
+      *    -------------------------------------------
+      *      1        Sin Garantias (0 ARG) o Aval
+      *      2        Garantia especifica existente para la LCR
+      *               (en 1 ARG o n ARG tipo "o")
+      *      3        % requerido (para MY, la suma. Para MO, el menor)
+
+      * Ubicar LCR en arreglo ARG
+           MOVE PARG-LDC(WSS-Z) TO WSS-O.
+
+           MOVE 3 TO WSS-PRI2.
+           IF MGAR-LDC(WSS-Z) = 'Y'
+               MOVE ZEROES TO WSS-NUM-PORC
+           ELSE
+               MOVE 99999 TO WSS-NUM-PORC.
+       LUP-DET-PRIORIDAD-B.
+           ADD 1 TO WSS-O.
+           IF WSS-O > WSS-ARG OR 
+              ILDC-ARG(WSS-O) NOT = WSS-Z
+               GO TO FIN-DET-PRIORIDAD-B.
+    
+           IF IUSO-ARG(WSS-O) = 'N' 
+               GO TO LUP-DET-PRIORIDAD-B.
+
+           IF MGAR-LDC(WSS-Z) = 'S'
+               MOVE 1 TO WSS-PRI2
+               GO TO FIN-DET-PRIORIDAD-B.
+
+      *FLB CST  31-AUG-1994 2 LDC CON SENDOS AVL ESPECIFICOS
+      * DEL MISMO AVALISTA (REPORTADO BCP)
+           IF MGAR-LDC(WSS-Z) NOT = 'Y' AND
+              TOGA-ARG(WSS-O) = 'AVL' AND 
+              IIC-IGAR-ARG(WSS-O) NOT > ZEROES AND
+              WSS-AVL-DLC > ZEROES
+               MOVE 1 TO WSS-PRI2
+      *  Guarda ARG para asignar DLC
+               MOVE IARG-ARG(WSS-O) TO WSS-KEY-IARG
+               MOVE WSS-O TO WSS-ARG-B-C
+               GO TO FIN-DET-PRIORIDAD-B.
+      *FLB CST  31-AUG-1994 FIN
+
+      *FLB CST  22-NOV-1994 AVAL ESPECIFICO, MISMA PRIORIDAD QUE GENERICO
+           IF MGAR-LDC(WSS-Z) NOT = 'Y' AND
+              TOGA-ARG(WSS-O) = 'AVL' AND 
+              IIC-IGAR-ARG(WSS-O) > ZEROES AND
+              WSS-AVL-DLC > ZEROES
+               MOVE WSS-O TO WSS-J
+               PERFORM EXA-AVL-ARG
+               IF WSS-VAL-LIMD > ZEROES
+                   MOVE 1 TO WSS-PRI2
+      *  Guarda ARG para asignar DLC
+                   MOVE IARG-ARG(WSS-O) TO WSS-KEY-IARG
+                   MOVE WSS-O TO WSS-ARG-B-C
+                   GO TO FIN-DET-PRIORIDAD-B
+               ELSE
+                   MOVE 3 TO WSS-PRI2
+                   GO TO FIN-DET-PRIORIDAD-B
+           ELSE
+           IF WSS-AVL-DLC NOT > ZEROES
+               MOVE 3 TO WSS-PRI2
+               GO TO FIN-DET-PRIORIDAD-B.
+
+           IF WSS-PRI2-ANT = 1
+               MOVE 2 TO WSS-PRI2
+               GO TO FIN-DET-PRIORIDAD-B.
+      *FLB CST  22-NOV-1994 FIN
+
+           IF IIC-IGAR-ARG(WSS-O) > ZEROES AND
+              MGAR-LDC(WSS-Z) NOT = 'Y'
+               MOVE 2 TO WSS-PRI2
+      *  Guarda ARG para asignar DLC
+               MOVE IARG-ARG(WSS-O) TO WSS-KEY-IARG
+               MOVE WSS-O TO WSS-ARG-B-C
+               GO TO FIN-DET-PRIORIDAD-B.
+
+           MOVE 3 TO WSS-PRI2.
+           IF WSS-PRI2-ANT = 3
+               IF MGAR-LDC(WSS-Z) = 'Y'
+                   ADD PORG-ARG(WSS-O) TO WSS-NUM-PORC
+               ELSE
+                   IF PORG-ARG(WSS-O) < WSS-NUM-PORC AND
+                      TOGA-ARG(WSS-O) NOT = 'AVL' 
+      *                Guarda ARG para asignar DLC
+                       MOVE IARG-ARG(WSS-O) TO WSS-KEY-IARG 
+                       MOVE WSS-O TO WSS-ARG-B-C
+                       MOVE PORG-ARG(WSS-O) TO WSS-NUM-PORC.
+
+           GO TO LUP-DET-PRIORIDAD-B.
+       FIN-DET-PRIORIDAD-B.
+           EXIT.
+    
+       DESEMPATA-CRITERIO-C SECTION.
+       INI-DESEMPATA-CRITERIO-C.
+
+           MOVE 9 TO WSS-PRI3.
+
+      *FLB CST  9-SEP-1994 TRASLADADO AQUI Y CORREGIDO
+           IF WSS-PRI2 = 2
+      *        MOVE ZEROES TO WSS-NUM-PORC
+               MOVE 999 TO WSS-NUM-PORC.
+
+           SUBTRACT 1 FROM WSS-POS-EMPI GIVING WSS-Z.
+       LUP-DESEMPATA-CRITERIO-C.
+           ADD 1 TO WSS-Z.
+           IF WSS-Z > WSS-LDC
+               GO TO FIN-DESEMPATA-CRITERIO-C.
+
+           IF EMP2-LDC(WSS-Z) NOT = WSS-ANT-EMPA OR
+              'N' = IEXI-LDC(WSS-Z) OR
+              'S' NOT = IUSO-LDC(WSS-Z)
+               GO TO LUP-DESEMPATA-CRITERIO-C.
+
+           PERFORM DET-PRIORIDAD-C.
+
+           IF WSS-PRI3-ARG < WSS-PRI3
+               MOVE WSS-PRI3-ARG TO WSS-PRI3
+               MOVE WSS-Z TO WSS-LPRI
+               MOVE 'N' TO WSS-IND-EMPA
+      *       marca LCR con numero de empate(1) incrementado en 1
+               ADD 1 TO EMP3-LDC(WSS-Z)
+               MOVE EMP3-LDC(WSS-Z) TO WSS-NUM-EMPA
+      *  Guarda LDC del primer empatado ARC
+               MOVE WSS-Z TO WSS-POS-EMPI
+      *  Guarda LDC para sobregiro
+               MOVE WSS-Z TO WSS-POS-SGIR
+               GO TO LUP-DESEMPATA-CRITERIO-C.
+
+           IF WSS-PRI3-ARG = WSS-PRI3
+               MOVE 'S' TO WSS-IND-EMPA
+      *       marca LCR que empata con numero de empate(1)
+               MOVE WSS-NUM-EMPA TO EMP3-LDC(WSS-Z)
+               GO TO LUP-DESEMPATA-CRITERIO-C.
+
+           GO TO LUP-DESEMPATA-CRITERIO-C.
+        FIN-DESEMPATA-CRITERIO-C.
+            EXIT.
+
+       DET-PRIORIDAD-C SECTION.
+       INI-DET-PRIORIDAD-C.
+
+           MOVE SPACES TO WSS-KEY-IARG.
+           MOVE ZEROES TO WSS-ARG-B-C.
+      * Ubicar LCR en arreglo ARG
+           MOVE PARG-LDC(WSS-Z) TO WSS-O.
+
+           IF WSS-PRI2 = 2
+               IF MGAR-LDC(WSS-Z) = 'Y'
+                   MOVE 1 TO WSS-PRI3-ARG
+               ELSE
+                   MOVE 3 TO WSS-PRI3-ARG.
+
+       LUP-DET-PRIORIDAD-C.
+           ADD 1 TO WSS-O.
+           IF WSS-O > WSS-ARG OR 
+              ILDC-ARG(WSS-O) NOT = WSS-Z
+               GO TO FIN-DET-PRIORIDAD-C.
+
+           IF IUSO-ARG(WSS-O) = 'N' 
+               GO TO LUP-DET-PRIORIDAD-C.
+
+           IF WSS-PRI2 = 2
+               IF PORG-ARG(WSS-O) < WSS-NUM-PORC
+                   MOVE IARG-ARG(WSS-O) TO WSS-KEY-IARG 
+                   MOVE WSS-O TO WSS-ARG-B-C
+                   MOVE PORG-ARG(WSS-O) TO WSS-NUM-PORC
+               ELSE
+                   NEXT SENTENCE
+           ELSE
+               IF MGAR-LDC(WSS-Z) = 'Y'
+                   IF TOGA-ARG(WSS-O) NOT > SPACES AND
+                      AOGA-ARG(WSS-O) NOT > SPACES 
+                       MOVE 3 TO WSS-PRI3-ARG
+                       GO TO FIN-DET-PRIORIDAD-C
+                   ELSE
+                   IF TOGA-ARG(WSS-O) NOT > SPACES 
+                       MOVE 2 TO WSS-PRI3-ARG
+                   ELSE
+                       NEXT SENTENCE
+               ELSE
+                   IF TOGA-ARG(WSS-O) NOT > SPACES AND
+                      AOGA-ARG(WSS-O) NOT > SPACES 
+                       MOVE 1 TO WSS-PRI3-ARG
+                       MOVE IARG-ARG(WSS-O) TO WSS-KEY-IARG 
+                       MOVE WSS-O TO WSS-ARG-B-C
+                       GO TO FIN-DET-PRIORIDAD-C
+                   ELSE
+                   IF TOGA-ARG(WSS-O) NOT > SPACES 
+                       MOVE 2 TO WSS-PRI3-ARG
+                       MOVE IARG-ARG(WSS-O) TO WSS-KEY-IARG
+                       MOVE WSS-O TO WSS-ARG-B-C.
+           GO TO LUP-DET-PRIORIDAD-C.
+       FIN-DET-PRIORIDAD-C.
+           EXIT.
+
+       DESEMPATA-CRITERIO-D SECTION.
+       INI-DESEMPATA-CRITERIO-D.
+
+           SUBTRACT 1 FROM WSS-POS-EMPI GIVING WSS-Z.
+           MOVE ZEROES TO WSS-DISP-LCR.
+       LUP-DESEMPATA-CRITERIO-D.
+           ADD 1 TO WSS-Z.
+           IF WSS-Z > WSS-LDC
+               GO TO FIN-DESEMPATA-CRITERIO-D.
+
+           IF EMP1-LDC(WSS-Z) NOT = WSS-NUM-EMPA OR
+              'N' = IEXI-LDC(WSS-Z) OR
+              'S' NOT = IUSO-LDC(WSS-Z)
+               GO TO LUP-DESEMPATA-CRITERIO-D.
+
+      * Desempata por cupo no utilizado
+           SUBTRACT CUTI-LDC(WSS-Z) FROM CDIS-LDC(WSS-Z) GIVING
+               WSS-AUX.
+      *FLB CST  1-SEP-1994 MODIFICADO
+      *    IF WSS-AUX NOT < WSS-DISP-LCR
+      *        MOVE CDIS-LDC(WSS-Z) TO WSS-DISP-LCR
+           IF WSS-AUX > WSS-DISP-LCR
+               MOVE WSS-AUX TO WSS-DISP-LCR
+      *FLB CST  1-SEP-1994 FIN
+               MOVE WSS-Z TO WSS-LPRI
+      *  Guarda LDC del primer empatado ARC
+               MOVE WSS-Z TO WSS-POS-EMPI
+      *  Guarda LDC para sobregiro
+               MOVE WSS-Z TO WSS-POS-SGIR
+               MOVE 'N' TO WSS-IND-EMPA.
+
+           GO TO LUP-DESEMPATA-CRITERIO-D.
+        FIN-DESEMPATA-CRITERIO-D.
+            EXIT.
+
+       ASIGNA-DLC-EN-LCR SECTION.
+       INI-ASIGNA-DLC-EN-LCR.
+      * Una vez determinada la LCR "mas prioritaria", trata de "meter" 
+      * toda o parte del DLC analizado en esa LCR. 
+
+      * Indica que se rebaje el valor de las garantias utilizadas junto
+      * calcular el cupo disponible de la LCR, ajustado por garantias 
+      * no utlizadas hasta este momento
+           MOVE 'S' TO WSS-IND-REBJ.
+
+           SUBTRACT CUTI-LDC(WSS-LPRI) FROM CDIS-LDC(WSS-LPRI)
+                GIVING WSS-TOPE.
+           IF WSS-TOPE > WSS-SCPA
+               MOVE WSS-SCPA TO WSS-TOPE.
+           MOVE WSS-TOPE        TO WSS-DISP-LCR.
+
+           IF MGAR-LDC(WSS-LPRI) = 'Y'
+               PERFORM INI-GAR
+               MOVE WSS-LPRI TO WSS-I
+               MOVE VAL-DLC(WSS-D) TO WSS-VAL-XAVA
+               PERFORM OBTIENE-DISP-LCR-CASO-Y
+           ELSE
+           IF MGAR-LDC(WSS-LPRI) = 'O' OR
+              MGAR-LDC(WSS-LPRI) = 'U'
+               PERFORM INI-GAR
+               MOVE WSS-LPRI TO WSS-I
+               MOVE VAL-DLC(WSS-D) TO WSS-VAL-XAVA
+               PERFORM OBTIENE-DISP-LCR-CASO-O.
+
+      * Si cupo disponible de LCR ajustado por garantias es > cero
+      * se resta todo o parte del monto asignado
+           IF WSS-DISP-LCR > ZEROES AND
+              WSS-SCPA NOT > WSS-DISP-LCR
+               ADD WSS-SCPA TO CUTI-LDC(WSS-LPRI)
+               MOVE ZEROES TO WSS-SCPA 
+           ELSE
+           IF WSS-DISP-LCR > ZEROES 
+               ADD WSS-DISP-LCR TO CUTI-LDC(WSS-LPRI)
+               SUBTRACT WSS-DISP-LCR FROM WSS-SCPA.
+
+      * No queda del DLC algo por asignar
+           IF WSS-SCPA NOT > ZEROES
+               GO TO FIN-ASIGNA-DLC-EN-LCR.
+
+      * La LCR a la cual se acaba de asignar el DLC se deja como no 
+      * utilizable para ese DLC, salvo si la LCR tiene condicion de 
+      * garantias "O" y la LCR se selecciono por Criterio de Prioridad 
+      * B o C. En ese caso, se marca como no utilizable para ese DLC
+      * la condicion de garantia que produjo la seleccion de la LCR, y 
+      * se revisa si le queda utilizable otra condicion de garantia 
+      * En LCR's con condicion de garantias "O"
+           MOVE 'N' TO IUSO-LDC(WSS-LPRI).
+           IF MGAR-LDC(WSS-LPRI) = 'O' AND
+              WSS-IND-CRIT NOT = 'A' AND
+              CMAX-LDC(WSS-LPRI) > CUTI-LDC(WSS-LPRI)
+               MOVE 'N' TO IUSO-ARG(WSS-ARG-B-C)
+               ADD 1 , PARG-LDC(WSS-LPRI) GIVING WSS-T
+               PERFORM REV-ARG-O VARYING WSS-T FROM WSS-T  BY 1 
+                   UNTIL WSS-T > WSS-ARG OR
+                         ILDC-ARG(WSS-T) NOT = WSS-LPRI.
+
+       FIN-ASIGNA-DLC-EN-LCR.
+           EXIT.
+
+       REV-ARG-O SECTION.
+       INI-REV-ARG-O.
+           IF IUSO-ARG(WSS-T) = 'S'
+               MOVE 'S' TO IUSO-LDC(WSS-LPRI)
+               MOVE 9999 TO WSS-T.
+       FIN-REV-ARG-O.
+           EXIT.
+
+       OBTIENE-DISP-LCR-CASO-O SECTION.
+       INI-OBTIENE-DISP-LCR-CASO-O.
+
+      * Ajustado por garantias
+      * Recibe WSS-TOPE > cero
+
+           MOVE WSS-TOPE TO WSS-TOPE-CASO-O.
+           MOVE ZEROES   TO WSS-SUMA-GAR-CASO-O.
+              
+      * Ubicar LCR en arreglo ARG
+           MOVE PARG-LDC(WSS-I) TO WSS-J.
+       LUP-OBTIENE-DISP-LCR-CASO-O.
+           ADD 1 TO WSS-J.
+
+           IF WSS-J > WSS-ARG OR
+              ILDC-ARG(WSS-J) > WSS-I OR
+              WSS-SUMA-GAR-CASO-O NOT < WSS-TOPE-CASO-O
+               GO TO EXT-OBTIENE-DISP-LCR-CASO-O.
+
+           IF WSS-IND-REBJ = 'S' AND 
+              MGAR-LDC(WSS-I) NOT = 'Y'  AND 
+              WSS-IND-CRIT NOT = 'A' AND
+                IARG-ARG(WSS-J) NOT = WSS-KEY-IARG
+      * la LCR se selecciono por CRITERIO de prioridad B/C 
+      * y no es la que condiciono la seleccion 
+                GO TO LUP-OBTIENE-DISP-LCR-CASO-O.
+
+           MOVE ZEROES TO WSS-SUMA-GAR.
+           IF TOGA-ARG(WSS-J) = 'AVL' AND WSS-IND-REBJ = 'S'
+      *    Si ARG = 'AVL' examina si existen avales requeridos
+               PERFORM EXA-AVL-ARG
+               IF WSS-VAL-LIMD = ZEROES
+                   MOVE 'N' TO IUSO-ARG(WSS-J)
+               ELSE
+                   COMPUTE WSS-SUMA-GAR ROUNDED = WSS-VAL-XAVA * 
+                                                  WSS-VAL-LIMD /
+                                                  WSS-100
+           ELSE
+      *    Se asume infinito por avales al calcular cupos inicial y final
+           IF TOGA-ARG(WSS-J) = 'AVL'
+               MOVE 9999999999999 TO WSS-SUMA-GAR
+           ELSE
+      *        Calcula el disponible de LCR ajustado por una condicion de 
+      *        garantia en particular
+               PERFORM CALCULA-DISP-GAR-1-ARG.
+           IF WSS-SUMA-GAR < WSS-TOPE
+               ADD WSS-SUMA-GAR TO WSS-SUMA-GAR-CASO-O
+               SUBTRACT WSS-SUMA-GAR FROM WSS-TOPE
+           ELSE
+               ADD WSS-TOPE TO WSS-SUMA-GAR-CASO-O.
+
+           GO TO LUP-OBTIENE-DISP-LCR-CASO-O.
+       EXT-OBTIENE-DISP-LCR-CASO-O.
+           IF WSS-DISP-LCR > WSS-SUMA-GAR-CASO-O
+               MOVE WSS-SUMA-GAR-CASO-O TO WSS-DISP-LCR.
+       FIN-OBTIENE-DISP-LCR-CASO-O.
+           EXIT.
+
+       OBTIENE-DISP-LCR-CASO-Y SECTION.
+       INI-OBTIENE-DISP-LCR-CASO-Y.
+
+      * Ajustado por garantias
+      * Recibe WSS-TOPE > cero
+
+      * No rebaja del valor definitivo VAL-GAR 
+      * salvo cuando es la segunda pasada y esta asignando DLC
+           MOVE 'N' TO WSS-IND-VEZY.
+
+      * Ubicar LCR en arreglo ARG
+           MOVE PARG-LDC(WSS-I) TO WSS-J.
+       LUP-OBTIENE-DISP-LCR-CASO-Y.
+           ADD 1 TO WSS-J.
+
+           IF WSS-J > WSS-ARG OR
+              ILDC-ARG(WSS-J) > WSS-I OR
+              WSS-DISP-LCR NOT > ZEROES
+               IF WSS-IND-REBJ = 'S' AND WSS-DISP-LCR > ZEROES
+      *            ahora corresponde hacer la "utilizacion" real de GAR
+                   PERFORM INI-GAR
+                   MOVE WSS-DISP-LCR TO WSS-TOPE
+                   MOVE 'S' TO WSS-IND-VEZY
+                   PERFORM UTILIZA-GAR-CASO-Y
+                   GO TO FIN-OBTIENE-DISP-LCR-CASO-Y
+               ELSE
+                   GO TO FIN-OBTIENE-DISP-LCR-CASO-Y.
+
+           MOVE ZEROES TO WSS-SUMA-GAR.
+           IF TOGA-ARG(WSS-J) = 'AVL' AND WSS-IND-REBJ = 'S'
+      *    Si ARG = 'AVL' examina si existen avales requeridos
+               PERFORM EXA-AVL-ARG
+               COMPUTE WSS-SUMA-GAR ROUNDED = WSS-VAL-XAVA * 
+                                              WSS-VAL-LIMD /
+                                              WSS-100
+           ELSE
+      *    Se asume infinito por avales al calcular cupos inicial y final
+           IF TOGA-ARG(WSS-J) = 'AVL'
+               MOVE 9999999999999 TO WSS-SUMA-GAR
+           ELSE
+      *        Calcula el disponible de LCR ajustado por una condicion de 
+      *        garantia en particular
+               PERFORM CALCULA-DISP-GAR-1-ARG.
+           IF WSS-SUMA-GAR < WSS-DISP-LCR
+               MOVE WSS-SUMA-GAR TO WSS-DISP-LCR.
+
+           GO TO LUP-OBTIENE-DISP-LCR-CASO-Y.
+       FIN-OBTIENE-DISP-LCR-CASO-Y.
+           EXIT.
+
+       CALCULA-DISP-GAR-1-ARG SECTION.
+       INI-CALCULA-DISP-GAR-1-ARG.
+      * Ubicar CLI en arreglo GAR
+           IF WSS-IND-REBJ = 'S' 
+               MOVE PGAR-CLI(WSS-C) TO WSS-K
+           ELSE
+               MOVE ZEROES TO WSS-K.
+       LUP-CALCULA-DISP-GAR-1-ARG.
+           ADD 1 TO WSS-K.
+           IF WSS-K > WSS-GAR OR 
+              WSS-IND-REBJ = 'S' AND
+              CLI-GAR(WSS-K) NOT = CIC-CLI(WSS-C)
+               GO TO FIN-CALCULA-DISP-GAR-1-ARG.
+
+      *FLB CST  26-AUG-1994 
+      * Garantia ya utilizada
+           IF VAL-GAR(WSS-K) NOT > ZEROES
+               GO TO LUP-CALCULA-DISP-GAR-1-ARG.
+
+      * Examina si GAR esta cubierta por especificacion ARG
+           PERFORM EXA-GAR-ARG.
+           IF WSS-GAR-ARG = 'N'
+               GO TO LUP-CALCULA-DISP-GAR-1-ARG.
+
+      * Cuando la garantia es especifica, examina si ella es pertinenete 
+      * al DLC 
+           IF WSS-IND-REBJ = 'S' AND
+              LIM-GAR(WSS-K) = 'E'
+      *FLB CST  26-AUG-1994 
+               MOVE ZEROES TO RSTR-GES(1), RSTR-GES(2), RSTR-GES(3)
+                              RSTR-GES(4), RSTR-GES(5), RSTR-GES(6)
+                              RSTR-GES(7), RSTR-GES(8)
+               PERFORM EXA-GAR-ESP VARYING WSS-L FROM 1 BY 1
+                         UNTIL WSS-L > PMAX-GAR(WSS-K)
+
+               PERFORM ASIGNA-DLC-X-GES VARYING WSS-RSTR FROM 1 BY 1
+                         UNTIL WSS-RSTR > 8 OR
+      * Se asigno todo el credito
+                               WSS-TOPE NOT > WSS-SUMA-GAR
+
+           ELSE
+               PERFORM REBAJA-GAR.
+
+      * SE ACABO LA GARANTIA, QUEDA CREDITO
+           IF WSS-TOPE > WSS-SUMA-GAR
+               GO TO LUP-CALCULA-DISP-GAR-1-ARG.
+      *FLB CST  26-AUG-1994 FIN
+
+       FIN-CALCULA-DISP-GAR-1-ARG.
+           EXIT.
+
+       REBAJA-GAR SECTION.
+       INI-REBAJA-GAR.
+      * Calcula el monto a utilizar de la garantia
+           COMPUTE WSS-VAL-GARA ROUNDED = TEM-GAR(WSS-K) /
+                                          PORG-ARG(WSS-J) *
+                                          WSS-100 .
+           ADD WSS-VAL-GARA , WSS-SUMA-GAR GIVING WSS-AUX.
+           IF WSS-AUX > WSS-TOPE 
+      *    Sobra algo de la garantia
+      *    Se resta lo utilizado de la garantia 
+               SUBTRACT WSS-SUMA-GAR FROM WSS-TOPE GIVING WSS-VAL-GARA
+               COMPUTE WSS-VAL-GARA ROUNDED = WSS-VAL-GARA *
+                                          PORG-ARG(WSS-J) / WSS-100  
+               SUBTRACT WSS-VAL-GARA FROM TEM-GAR(WSS-K)
+               MOVE WSS-TOPE TO WSS-SUMA-GAR
+
+               IF WSS-IND-REBJ = 'S' AND 
+                  ( MGAR-LDC(WSS-I) NOT = 'Y' OR
+                    MGAR-LDC(WSS-I) = 'Y' AND WSS-IND-VEZY = 'S' )
+
+      *    Se rebaja el monto de la garantia luego de ser utilizado
+      *            SUBTRACT WSS-VAL-GARA FROM PON-GAR(WSS-K)
+                   SUBTRACT WSS-VAL-GARA FROM VAL-GAR(WSS-K)
+                   GO TO FIN-REBAJA-GAR
+               ELSE
+                   GO TO FIN-REBAJA-GAR
+           ELSE
+      *    Se utiliza toda la garantia
+               ADD WSS-VAL-GARA TO WSS-SUMA-GAR
+               MOVE ZEROES TO TEM-GAR(WSS-K)
+               IF WSS-IND-REBJ = 'S' AND 
+                  ( MGAR-LDC(WSS-I) NOT = 'Y' OR
+                    MGAR-LDC(WSS-I) = 'Y' AND WSS-IND-VEZY = 'S' )
+
+      *    Se rebaja el monto de la garantia luego de ser utilizado
+      *            MOVE ZEROES TO PON-GAR(WSS-K)
+                   MOVE ZEROES TO VAL-GAR(WSS-K).
+       FIN-REBAJA-GAR.
+           EXIT.
+
+       EXA-AVL-ARG SECTION.
+       INI-EXA-AVL-ARG.
+
+           MOVE ZEROES TO WSS-VAL-LIMD.
+
+      * LCR requiere AVAL generico, sirve que DLC tenga al menos uno
+      * cualquiera. Se trata como si se cubre el 100 % del DLC
+           IF IIC-IGAR-ARG(WSS-J) NOT > ZEROES AND
+              WSS-AVL-DLC > ZEROES
+               MOVE WSS-100 TO WSS-VAL-LIMD
+               GO TO FIN-EXA-AVL-ARG.
+
+      * AVALES individualizables, deben estar aquellos que requiere la 
+      * LCR
+      * Para cada Aval (seudo Fiador) de la LCR se busca en Avales DLC
+      * Se termina si se encuentra que cubren el 100 % del DLC
+      * Los avales de LCR se tratan como 'O'
+            MOVE ZEROES TO WSS-R.
+       LUP-EXA-AVL-ARG.
+           ADD 1 TO WSS-R.
+
+           IF WSS-R > WSS-AVL-LCR 
+               GO TO FIN-EXA-AVL-ARG.
+
+           IF IESC-AVL-LCR(WSS-R) = IGAR-ARG(WSS-J)
+               PERFORM BUS-AVL-DLC-EN-AVL-LCR.
+           IF WSS-VAL-LIMD NOT < WSS-100
+               MOVE WSS-100 TO WSS-VAL-LIMD
+               GO TO FIN-EXA-AVL-ARG.
+
+           GO TO LUP-EXA-AVL-ARG.
+       FIN-EXA-AVL-ARG.
+           EXIT.
+
+       BUS-AVL-DLC-EN-AVL-LCR SECTION.
+       INI-BUS-AVL-DLC-EN-AVL-LCR.
+           MOVE ZEROES TO WSS-S.
+       LUP-BUS-AVL-DLC-EN-AVL-LCR.
+           ADD 1 TO WSS-S.
+           IF WSS-S > WSS-AVL-DLC 
+               GO TO FIN-BUS-AVL-DLC-EN-AVL-LCR.
+
+           IF CIC-AVL-DLC(WSS-S) = ICFS-AVL-LCR(WSS-R)
+               ADD LIM-AVL-DLC(WSS-S) TO WSS-VAL-LIMD.
+
+           GO TO LUP-BUS-AVL-DLC-EN-AVL-LCR.
+       FIN-BUS-AVL-DLC-EN-AVL-LCR.
+           EXIT.
+
+       EXA-GAR-ARG SECTION.
+       INI-EXA-GAR-ARG.
+      * Examina si la garantia corresponde a la condicion de garantia 
+      * en cuestion
+           MOVE 'N' TO WSS-GAR-ARG.
+
+      *FLB CST  10-MAY-1994 
+      *    IF TOGA-ARG(WSS-J) = 'GAR' AND CLA-GAR(WSS-K) NOT = 'G'
+           IF TOGA-ARG(WSS-J) NOT = 'FIA' AND CLA-GAR(WSS-K) NOT = 'G'
+                OR
+              TOGA-ARG(WSS-J) = 'FIA' AND CLA-GAR(WSS-K) NOT = 'F'
+               GO TO FIN-EXA-GAR-ARG.
+
+           IF IIC-IGAR-ARG(WSS-J) > ZEROES AND
+              IGAR-ARG(WSS-J) = CIC-GAR(WSS-K)
+               MOVE 'S' TO WSS-GAR-ARG
+               GO TO FIN-EXA-GAR-ARG.
+
+           IF IIC-IGAR-ARG(WSS-J) > ZEROES 
+               GO TO FIN-EXA-GAR-ARG.
+           
+           IF TOGA-ARG(WSS-J) = TIP-GAR(WSS-K) AND
+              AOGA-ARG(WSS-J) = STP-GAR(WSS-K)
+               MOVE 'S' TO WSS-GAR-ARG
+               GO TO FIN-EXA-GAR-ARG.
+
+           IF TOGA-ARG(WSS-J) > SPACES AND AOGA-ARG(WSS-J) > SPACES
+               GO TO FIN-EXA-GAR-ARG.
+
+           IF TOGA-ARG(WSS-J) = TIP-GAR(WSS-K) 
+               MOVE 'S' TO WSS-GAR-ARG
+               GO TO FIN-EXA-GAR-ARG.
+
+           IF TOGA-ARG(WSS-J) > SPACES 
+               GO TO FIN-EXA-GAR-ARG.
+
+           IF TOGA-ARG(WSS-J) NOT > SPACES AND 
+              AOGA-ARG(WSS-J) NOT > SPACES
+               MOVE 'S' TO WSS-GAR-ARG.
+       FIN-EXA-GAR-ARG.
+           EXIT.
+
+       EXA-GAR-ESP SECTION.
+       INI-EXA-GAR-ESP.
+      * Entrega en el vector RSTR-GES los correlativos ANF/GES que
+      * son pertinentes para el DLC
+
+      * Especifica a un DLC
+           IF IIC-IOPC-GES(WSS-K,WSS-L) NOT > ZEROES
+               GO TO ESP-GENERICA.
+
+      * No es el credito establecido en la garantia especificada 
+           IF IOPC-GES(WSS-K,WSS-L) NOT = CIC-OPC(WSS-D)
+               GO TO FIN-EXA-GAR-ESP.
+
+           MOVE WSS-L TO RSTR-GES(1).
+
+           GO TO FIN-EXA-GAR-ESP.
+
+       ESP-GENERICA.
+      * Especifica indeterminada, pueden existir varios AMF/GES
+
+      * Ya se asigno todo lo que se podia por el monto AMF/GES
+           IF VAL-LIM-CDT-GES(WSS-K,WSS-L)  > ZEROES AND
+              VAL-ASG-CDT-GES(WSS-K,WSS-L) NOT < 
+              VAL-LIM-CDT-GES(WSS-K,WSS-L) 
+               GO TO FIN-EXA-GAR-ESP.
+
+      * Especifica a (MON+TIO+AUX)
+      * Especifica mas restrictiva, despues de a 1 Credito
+           IF VCB-CDT-GES(WSS-K,WSS-L) = VCOC-OPC(WSS-D) AND
+              TIP-CDT-GES(WSS-K,WSS-L) = TOOC-OPC(WSS-D) AND
+              STP-CDT-GES(WSS-K,WSS-L) = AOOC-OPC(WSS-D) 
+               MOVE WSS-L TO RSTR-GES(2)
+               GO TO FIN-EXA-GAR-ESP.
+
+      * Especifica a un cod auxiliar de operacion (TIO+AUX)
+      * Tercera mas restrictiva
+           IF TIP-CDT-GES(WSS-K,WSS-L) = TOOC-OPC(WSS-D) AND
+              STP-CDT-GES(WSS-K,WSS-L) = AOOC-OPC(WSS-D) 
+               MOVE WSS-L TO RSTR-GES(3)
+               GO TO FIN-EXA-GAR-ESP.
+
+      * Especifica a un tipo de operacion (TIO)
+      * Cuarta mas restrictiva
+           IF TIP-CDT-GES(WSS-K,WSS-L) = TOOC-OPC(WSS-D)
+               MOVE WSS-L TO RSTR-GES(4)
+               GO TO FIN-EXA-GAR-ESP.
+
+      * Especifica a una moneda
+      * Quinta mas restrictiva
+           IF VCB-CDT-GES(WSS-K,WSS-L) = VCOC-OPC(WSS-D)
+               MOVE WSS-L TO RSTR-GES(5)
+               GO TO FIN-EXA-GAR-ESP.
+
+      * Especifica a un destino del credito
+      * Sexta mas restrictiva
+           IF DST-CDT-GES(WSS-K,WSS-L) = CDOC-OPC(WSS-D)
+               MOVE WSS-L TO RSTR-GES(6)
+               GO TO FIN-EXA-GAR-ESP.
+
+      * Especifica a un tipo de moneda
+      * Ojo con AMF para que haga esto
+      * Septima mas restrictiva
+           IF TIP-VCB-CDT-GES(WSS-K,WSS-L) > SPACES AND
+              COD-VCB-CDT-GES(WSS-K,WSS-L) NOT > SPACES AND
+              TIP-VCB-CDT-GES(WSS-K,WSS-L) = TVOC-OPC(WSS-D)
+               MOVE WSS-L TO RSTR-GES(7)
+               GO TO FIN-EXA-GAR-ESP.
+
+      * Especifica al tipo de deuda directa
+      * Octava mas restrictiva
+           IF ( TIP-DEU-GES(WSS-K,WSS-L) = 'D' OR 
+                TIP-DEU-GES(WSS-K,WSS-L) = SPACES ) AND 
+              RDC-NUM-IDLC IN RDC NOT > ZEROES
+               MOVE WSS-L TO RSTR-GES(8)
+               GO TO FIN-EXA-GAR-ESP.
+
+       FIN-EXA-GAR-ESP.
+           EXIT.
+
+       ASIGNA-DLC-X-GES SECTION.
+       INI-ASIGNA-DLC-X-GES.
+      * Utilizando los elementos del vector RSTR-GES se asigna 
+      * la garantia especifica al DLC en la prioridad correcta
+
+      * AMF/GES no es pertinente o se acabo la garantia
+           IF RSTR-GES(WSS-RSTR) = ZEROES OR
+              VAL-GAR(WSS-K) NOT > ZEROES
+               GO TO FIN-ASIGNA-DLC-X-GES.
+
+           MOVE RSTR-GES(WSS-RSTR) TO WSS-L.
+           MOVE TEM-GAR(WSS-K) TO WSS-VGAR.
+
+      * Limite por monto 
+           IF VAL-LIM-CDT-GES(WSS-K,WSS-L) > ZEROES 
+               SUBTRACT VAL-ASG-CDT-GES(WSS-K,WSS-L) FROM
+                        VAL-LIM-CDT-GES(WSS-K,WSS-L) 
+                 GIVING WSS-VGAR.
+
+      * Limite por %
+           IF PCT-LIM-CDT-GES(WSS-K,WSS-L) > ZEROES AND
+              PCT-LIM-CDT-GES(WSS-K,WSS-L) < WSS-100
+               COMPUTE WSS-AUX ROUNDED = VAL-DLC(WSS-D) *
+                            PCT-LIM-CDT-GES(WSS-K,WSS-L) / WSS-100
+               IF WSS-AUX < WSS-VGAR
+                   MOVE WSS-AUX TO WSS-VGAR.
+
+
+      * Se rebaja sin llevar a cero el monto de la garantia
+      * (ya que WSS-VGAR < TEM-GAR(WSS-K) )
+
+      * Calcula el monto a utilizar de la garantia, segun GES
+           COMPUTE WSS-VAL-GARA ROUNDED = WSS-VGAR /
+                                          PORG-ARG(WSS-J) *
+                                          WSS-100 .
+
+           ADD WSS-VAL-GARA , WSS-SUMA-GAR GIVING WSS-AUX.
+           IF WSS-AUX > WSS-TOPE 
+      *    Sobra algo de la garantia, ajustada por AMF/GES
+      *    Se resta lo utilizado de la garantia 
+               SUBTRACT WSS-SUMA-GAR FROM WSS-TOPE GIVING WSS-VAL-GARA
+               MOVE WSS-TOPE TO WSS-SUMA-GAR
+           ELSE
+      *    Se utiliza toda la parte de AMF/GES
+               ADD WSS-VAL-GARA TO WSS-SUMA-GAR.
+
+           COMPUTE WSS-VAL-GARA ROUNDED = WSS-VAL-GARA *
+                                          PORG-ARG(WSS-J) / WSS-100.
+           IF WSS-IND-REBJ = 'S' AND 
+              ( MGAR-LDC(WSS-I) NOT = 'Y' OR
+                MGAR-LDC(WSS-I) = 'Y' AND WSS-IND-VEZY = 'S' )
+
+      *    Se rebaja el monto de la garantia luego de ser utilizado
+
+               IF WSS-VGAR < TEM-GAR(WSS-K) OR
+                  WSS-AUX > WSS-TOPE 
+      *           Sobra algo de la garantia
+      *           Se resta lo utilizado de la garantia 
+                   SUBTRACT WSS-VAL-GARA FROM TEM-GAR(WSS-K)
+                   SUBTRACT WSS-VAL-GARA FROM VAL-GAR(WSS-K)
+                   ADD WSS-VAL-GARA TO VAL-ASG-CDT-GES(WSS-K,WSS-L)
+               ELSE
+      *        Se utiliza toda la garantia
+                   MOVE ZEROES TO TEM-GAR(WSS-K)
+                   MOVE ZEROES TO VAL-GAR(WSS-K)
+                   MOVE VAL-LIM-CDT-GES(WSS-K,WSS-L) TO
+                        VAL-ASG-CDT-GES(WSS-K,WSS-L)
+           ELSE
+               IF WSS-VGAR < TEM-GAR(WSS-K) OR
+                  WSS-AUX > WSS-TOPE 
+      *           Sobra algo de la garantia
+      *           Se resta lo utilizado de la garantia 
+                   SUBTRACT WSS-VAL-GARA FROM TEM-GAR(WSS-K)
+               ELSE
+      *        Se utiliza toda la garantia
+                  MOVE ZEROES TO TEM-GAR(WSS-K).
+
+       FIN-ASIGNA-DLC-X-GES.
+           EXIT.
+
+       UTILIZA-GAR-CASO-Y SECTION.
+       INI-UTILIZA-GAR-CASO-Y.
+
+      * Ajustado por garantias
+      * Recibe WSS-TOPE > cero
+
+      * Ubicar LCR en arreglo ARG
+           MOVE PARG-LDC(WSS-I) TO WSS-J.
+       LUP-UTILIZA-GAR-CASO-Y.
+           ADD 1 TO WSS-J.
+
+           IF WSS-J > WSS-ARG OR
+              ILDC-ARG(WSS-J) > WSS-I OR
+              WSS-DISP-LCR NOT > ZEROES
+               GO TO FIN-UTILIZA-GAR-CASO-Y.
+
+           MOVE ZEROES TO WSS-SUMA-GAR.
+           PERFORM CALCULA-DISP-GAR-1-ARG.
+           GO TO LUP-UTILIZA-GAR-CASO-Y.
+       FIN-UTILIZA-GAR-CASO-Y.
+           EXIT.
+
+       INI-GAR SECTION.
+       INI-INI-GAR.
+      * Existen 2 copias del valor de una garantia
+      * VAL-GAR tiene el valor original utilizado por la institucion 
+      *    para tomar decisiones comerciales
+      * TEM-GAR se disminuye por utilizacion temporal de garantias al
+      *    calcular el cupo disponible de LCR ajustado por 1 condicion de 
+      *    garantia en particular.
+           MOVE ZEROES TO WSS-J.
+
+       LUP-INI-GAR.
+           ADD 1 TO WSS-J.
+           IF WSS-J > WSS-GAR
+               GO TO FIN-INI-GAR.
+      *    MOVE VAL-GAR(WSS-J) TO PON-GAR(WSS-J).
+           MOVE VAL-GAR(WSS-J) TO TEM-GAR(WSS-J).
+           GO TO LUP-INI-GAR.
+       FIN-INI-GAR.
+           EXIT.
+
+       OBT-VAL-MNAC SECTION.
+       INI-OBT-VAL-MNAC.
+      * Transforma monto a moneda corriente del dia
+           MOVE WSS-VAL-MONE TO WSS-VAL-MNAC.
+           IF WSS-VCAM > SPACES AND 
+              WSS-VCAM NOT = CCU-COD-PESO IN CCU-VARI AND
+      *FLB CST  26-AUG-1994 MODIFICADO 
+              WSS-VAL-MONE > ZEROES AND
+              WSS-VCAM NOT = 'P'
+               MOVE WSS-VCAM TO CAM-COD-VCAM IN CAM(1)
+               MOVE FIO-GET-KEY TO FIO-CMND
+               PERFORM TAB-FIO-CAM
+               IF NOT (
+                  FIO-STAT-OKS AND CAM-IND-VIGE IN CAM = 'S'
+                     )
+                   MOVE 'CAM    NEX' TO CCU-COD-MENS
+                   MOVE 20           TO CCU-NUM-MENS
+                   MOVE CAM-KEY-CAMB IN CAM TO CCU-CAMB
+               ELSE
+                   MULTIPLY CAM-SGV-VCAM IN CAM BY
+                            WSS-VAL-MONE GIVING
+                            WSS-VAL-MNAC ROUNDED.
+       FIN-OBT-VAL-MNAC.
+           EXIT.
+
+       INI-LDC SECTION.
+       INI-INI-LDC.
+      * Inicializa los numeros de empate al procesar cada nuevo DLC
+           PERFORM INI-ARG.
+           MOVE ZEROES TO WSS-NUM-EMPA.
+           MOVE ZEROES TO WSS-ANT-EMPA.
+           MOVE ZEROES TO WSS-Z.
+       LUP-INI-LDC.
+           ADD 1 TO WSS-Z.
+           IF WSS-Z > WSS-LDC
+               GO TO FIN-INI-LDC.
+
+           MOVE ZEROES TO EMP1-LDC(WSS-Z).
+           MOVE ZEROES TO EMP2-LDC(WSS-Z).
+           MOVE ZEROES TO EMP3-LDC(WSS-Z).
+           MOVE 'N' TO IUSO-LDC(WSS-Z).
+
+           GO TO LUP-INI-LDC.
+       FIN-INI-LDC.
+           EXIT.
+
+      *FLB CST  16-MAR-1995 LINEA VENCIDA
+       INI-ARC SECTION.
+       INI-INI-ARC.
+           MOVE ZEROES TO WSS-Z.
+       LUP-INI-ARC.
+           ADD 1 TO WSS-Z.
+           IF WSS-Z > WSS-ARC
+               GO TO FIN-INI-ARC.
+
+           MOVE 'S' TO IUSO-ARC(WSS-Z).
+           GO TO LUP-INI-ARC.
+       FIN-INI-ARC.
+           EXIT.
+      *FLB CST  16-MAR-1995 FIN
+
+       INI-ARG SECTION.
+       INI-INI-ARG.
+      * Inicializa las condiciones de garantia al procesar cada nuevo DLC
+           MOVE ZEROES TO WSS-J.
+       LUP-INI-ARG.
+           ADD 1 TO WSS-J.
+           IF WSS-J > WSS-ARG
+               GO TO FIN-INI-ARG.
+
+           MOVE 'S' TO IUSO-ARG(WSS-J).
+           GO TO LUP-INI-ARG.
+       FIN-INI-ARG.
+           EXIT.
+
+       CARGA-LCR SECTION.
+       INI-CARGA-LCR.
+      * Carga LCR's de CLF
+
+           MOVE CLF-KEY-ICLF IN CLF TO LDC-CIC-ICLF IN LDC.
+           MOVE ZEROES              TO LDC-NUM-ILDC IN LDC.
+           MOVE FIO-GET-NLS  TO FIO-CMND.
+           PERFORM LDC-FIO-LDC.
+           MOVE FIO-STAT TO PGM-STAT-LDC.
+           IF NOT ( FIO-STAT-OKS AND
+                    LDC-CIC-ICLF IN LDC = CLF-KEY-ICLF IN CLF )
+               MOVE 'LDC    NEX' TO CCU-COD-MENS
+               MOVE 20 TO CCU-NUM-MENS
+               GO TO BRW-CARGA-LCR.
+               
+           MOVE ZEROES TO WSS-LDC.
+           MOVE ZEROES TO WSS-ARC.
+           MOVE ZEROES TO WSS-ARG.
+       LUP-CARGA-LCR.
+      *    IF LDC-NUM-ILDC IN LDC = CCU-TLCR
+           IF LDC-NUM-ILDC IN LDC > CCU-TLCR
+               MOVE 20          TO CCU-NUM-MENS
+               MOVE 'ARRLDCEXC' TO CCU-COD-MENS
+               GO TO BRW-CARGA-LCR.
+           MOVE LDC-FEC-FVEN IN LDC TO FVEN-LDC(LDC-NUM-ILDC IN LDC).
+           MOVE LDC-IND-MGAR IN LDC TO MGAR-LDC(LDC-NUM-ILDC IN LDC).
+
+           MOVE ZEROES       TO CTOT-LDC(LDC-NUM-ILDC IN LDC)
+                                CUTI-LDC(LDC-NUM-ILDC IN LDC)
+                                CDIS-LDC(LDC-NUM-ILDC IN LDC)
+                                NMSG-LDC(LDC-NUM-ILDC IN LDC)
+                                NMS2-LDC(LDC-NUM-ILDC IN LDC)
+                                EMP1-LDC(LDC-NUM-ILDC IN LDC)
+                                EMP2-LDC(LDC-NUM-ILDC IN LDC)
+                                EMP3-LDC(LDC-NUM-ILDC IN LDC).
+           MOVE SPACES       TO MENS-LDC(LDC-NUM-ILDC IN LDC).
+           MOVE SPACES       TO MEN2-LDC(LDC-NUM-ILDC IN LDC).
+           MOVE ZEROES       TO NMSG-LDC(LDC-NUM-ILDC IN LDC).
+           MOVE ZEROES       TO NMS2-LDC(LDC-NUM-ILDC IN LDC).
+           MOVE 'N'          TO IUSO-LDC(LDC-NUM-ILDC IN LDC).
+           IF LDC-FEC-FVEN NOT > HOY-FHOY OR
+              LDC-IND-VIGE NOT = 'S'
+               MOVE ZEROES TO CMAX-LDC(LDC-NUM-ILDC IN LDC)
+               MOVE 'N'    TO IEXI-LDC(LDC-NUM-ILDC IN LDC)
+           ELSE
+      *<<<< MON_LDC
+               MOVE LDC-COD-VCLC IN LDC TO 
+                    VCLC-LDC(LDC-NUM-ILDC IN LDC)
+               MOVE LDC-COD-VCLC IN LDC TO WSS-VCAM
+      *>>>>
+               MOVE LDC-VAL-CMAX IN LDC TO WSS-VAL-MONE
+               PERFORM OBT-VAL-MNAC
+               IF CCU-NUM-MENS < 21
+                   GO TO BRW-CARGA-LCR
+               ELSE
+                   MOVE WSS-VAL-MNAC TO CMAX-LDC(LDC-NUM-ILDC IN LDC)
+                   MOVE 'S'          TO IEXI-LDC(LDC-NUM-ILDC IN LDC)
+                   PERFORM CARGA-ARC
+                   IF CCU-NUM-MENS < 21
+                       GO TO BRW-CARGA-LCR
+                   ELSE
+                       PERFORM CARGA-ARG
+                       IF CCU-NUM-MENS < 21
+                           GO TO BRW-CARGA-LCR.
+
+      *FLB CST  14-MAR-1995 USA SOLO 1 TIPO LINEA
+           MOVE SPACES TO IGES-LDC(LDC-NUM-ILDC IN LDC).
+           MOVE SPACES TO IOES-LDC(LDC-NUM-ILDC IN LDC).
+           MOVE SPACES TO IMON-LDC(LDC-NUM-ILDC IN LDC).
+           MOVE SPACES TO ITIO-LDC(LDC-NUM-ILDC IN LDC).
+           MOVE SPACES TO IAUX-LDC(LDC-NUM-ILDC IN LDC).
+
+           IF NOT USA-TIPO-LINEA
+               GO TO FIN-CARGA-PRM-TIP-LDC.
+
+           MOVE 'DEU' TO FIO-SIST.
+           MOVE 'TLC'               TO TAB-COD-TTAB IN TAB.
+           MOVE LDC-COD-TIPO IN LDC TO TAB-COD-CTAB IN TAB.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM GNS-FIO-TAB.
+           IF NOT ( FIO-STAT-OKS AND TAB-IND-VIGE IN TAB = 'S' )
+               GO TO FIN-CARGA-PRM-TIP-LDC.
+           MOVE TAB-GLS-DATA IN TAB TO WSS-TLC-DATA.
+           MOVE WSS-IND-OESP TO IOES-LDC(LDC-NUM-ILDC IN LDC).
+           MOVE WSS-IND-MONE TO IMON-LDC(LDC-NUM-ILDC IN LDC).
+           MOVE WSS-IND-TOPE TO ITIO-LDC(LDC-NUM-ILDC IN LDC).
+           MOVE WSS-IND-CAUX TO IAUX-LDC(LDC-NUM-ILDC IN LDC).
+
+       FIN-CARGA-PRM-TIP-LDC.
+           MOVE LDC-NUM-ILDC IN LDC TO WSS-LDC.
+
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM LDC-FIO-LDC.
+           MOVE FIO-STAT TO PGM-STAT-LDC.
+           IF FIO-STAT-OKS AND
+              LDC-CIC-ICLF IN LDC = CLF-KEY-ICLF IN CLF 
+               GO TO LUP-CARGA-LCR.
+       BRW-CARGA-LCR.
+           MOVE PGM-STAT-LDC TO FIO-STAT.
+           IF FIO-STAT-OKS
+               MOVE FIO-END-BRW TO FIO-CMND
+               PERFORM LDC-FIO-LDC.
+       FIN-CARGA-LCR.
+           EXIT.
+
+       CARGA-ARC SECTION.
+       INI-CARGA-ARC.
+      * Carga ARC's de LDC
+
+           MOVE WSS-ARC      TO PARC-LDC(LDC-NUM-ILDC IN LDC).
+
+           MOVE LDC-KEY-ILDC IN LDC TO ARC-KEY-ILDC IN ARC.
+           MOVE ZEROES              TO ARC-NUM-IARC IN ARC.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM LDC-FIO-ARC.
+           IF NOT ( FIO-STAT-OKS AND
+                    ARC-KEY-ILDC IN ARC = LDC-KEY-ILDC IN LDC )
+               ADD 1 TO WSS-ARC
+               MOVE LDC-NUM-ILDC IN LDC TO ILDC-ARC(WSS-ARC)
+               MOVE SPACES              TO CAI-IOPC-ARC(WSS-ARC)
+               MOVE ZEROES              TO IIC-IOPC-ARC(WSS-ARC)
+               MOVE SPACES              TO VCOC-ARC(WSS-ARC)
+               MOVE SPACES              TO TOOC-ARC(WSS-ARC)
+               MOVE SPACES              TO AOOC-ARC(WSS-ARC)
+               GO TO BRW-CARGA-ARC.
+               
+       LUP-CARGA-ARC.
+           IF WSS-ARC = CCU-TARC
+               MOVE 20          TO CCU-NUM-MENS
+               MOVE 'ARRARCEXC' TO CCU-COD-MENS
+               GO TO BRW-CARGA-ARC.
+           ADD 1 TO WSS-ARC.
+           MOVE LDC-NUM-ILDC IN LDC TO ILDC-ARC(WSS-ARC).
+           MOVE ARC-CIC-IOPC IN ARC TO IOPC-ARC(WSS-ARC).
+           MOVE ARC-COD-VCOC IN ARC TO VCOC-ARC(WSS-ARC).
+           MOVE ARC-COD-COOC IN ARC TO TOOC-ARC(WSS-ARC).
+           MOVE ARC-COD-AOOC IN ARC TO AOOC-ARC(WSS-ARC).
+
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM LDC-FIO-ARC.
+           IF FIO-STAT-OKS AND
+              ARC-KEY-ILDC IN ARC = LDC-KEY-ILDC IN LDC 
+               GO TO LUP-CARGA-ARC.
+
+       BRW-CARGA-ARC.
+           IF FIO-STAT-OKS
+               MOVE FIO-END-BRW TO FIO-CMND
+               PERFORM LDC-FIO-ARC.
+       FIN-CARGA-ARC.
+           EXIT.
+
+       CARGA-ARG SECTION.
+       INI-CARGA-ARG.
+      * Carga ARG's de LDC
+
+           IF LDC-IND-MGAR = 'S'
+               GO TO FIN-CARGA-ARG.
+
+           MOVE LDC-KEY-ILDC IN LDC TO ARG-KEY-ILDC IN ARG.
+           MOVE ZEROES              TO ARG-NUM-IARG IN ARG.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM LDC-FIO-ARG.
+           IF NOT ( FIO-STAT-OKS AND
+                    ARG-KEY-ILDC IN ARG = LDC-KEY-ILDC IN LDC )
+               MOVE 'ARG    NEX' TO CCU-COD-MENS
+                                    MENS-LDC(LDC-NUM-ILDC IN LDC)
+               MOVE 20 TO CCU-NUM-MENS
+               GO TO BRW-CARGA-ARG.
+
+           MOVE WSS-ARG TO PARG-LDC(LDC-NUM-ILDC IN LDC).
+       LUP-CARGA-ARG.
+           IF WSS-ARG = CCU-TARG
+               MOVE 20          TO CCU-NUM-MENS
+               MOVE 'ARRARGEXC' TO CCU-COD-MENS
+               GO TO BRW-CARGA-ARG.
+           ADD 1 TO WSS-ARG.
+           MOVE LDC-NUM-ILDC IN LDC TO ILDC-ARG(WSS-ARG).
+           MOVE ARG-KEY-IARG IN ARG TO IARG-ARG(WSS-ARG).
+           MOVE ARG-CIC-IGAR IN ARG TO IGAR-ARG(WSS-ARG).
+           MOVE ZEROES              TO NFIA-ARG(WSS-ARG).
+           MOVE ARG-COD-TOGA IN ARG TO TOGA-ARG(WSS-ARG).
+           MOVE ARG-COD-AOGA IN ARG TO AOGA-ARG(WSS-ARG).
+           MOVE ARG-NUM-PORG IN ARG TO PORG-ARG(WSS-ARG).
+           MOVE 'S'                 TO IUSO-ARG(WSS-ARG).
+
+
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM LDC-FIO-ARG.
+           IF FIO-STAT-OKS AND
+              ARG-KEY-ILDC IN ARG = LDC-KEY-ILDC IN LDC 
+               GO TO LUP-CARGA-ARG.
+
+       BRW-CARGA-ARG.
+           IF FIO-STAT-OKS
+               MOVE FIO-END-BRW TO FIO-CMND
+               PERFORM LDC-FIO-ARG.
+       FIN-CARGA-ARG.
+           EXIT.
+
+       CARGA-ARREGLOS SECTION.
+       INI-CARGA-ARREGLOS.
+      * Carga CLI's DE CLF
+           MOVE CLF-KEY-ICLF IN CLF TO RDC-KEY-ICLF IN RDL.
+           MOVE 'RDC-KEY-ICLF' TO FIO-AKEY.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM LDC-FIO-RDC.
+           MOVE FIO-STAT TO PGM-STAT-RDC.
+           IF NOT (
+              FIO-STAT-OKS AND
+              RDC-KEY-ICLF IN RDL = CLF-KEY-ICLF IN CLF 
+                  )
+               MOVE 'RDL    NEX' TO CCU-COD-MENS
+               MOVE 20           TO CCU-NUM-MENS
+               GO TO BRW-CARGA-ARREGLOS.
+
+           MOVE ZEROES TO WSS-GAR.
+           MOVE ZEROES TO WSS-CLI.
+           MOVE ZEROES TO WSS-DLC.
+           MOVE ZEROES TO WSS-FEC-FINP.
+       LUP-CARGA-ARREGLOS.
+           IF WSS-CLI = CCU-TCLI
+               MOVE 20          TO CCU-NUM-MENS
+               MOVE 'ARRCLIEXC' TO CCU-COD-MENS
+               GO TO BRW-CARGA-ARREGLOS.
+
+           ADD 1 TO WSS-CLI.
+           MOVE RDC-CIC-ICLI IN RDL TO CIC-CLI(WSS-CLI).
+           MOVE WSS-GAR             TO PGAR-CLI(WSS-CLI).
+      * Carga Creditos ordenados por fecha computacional de ingreso
+           PERFORM CARGA-CRE.
+      *FLB CST  9-MAR-1994 
+           IF CCU-NUM-MENS < 21 OR
+              CCU-NUM-MEN2 < 21
+               GO TO BRW-CARGA-ARREGLOS.
+
+
+      *SMC-INI 07.10.1993 
+      *Busca las deudas del cliente para los siguientes tipos de
+      *operaciones CTE : Ctas Ctes.
+      *            CEX : Comercio Exterior.
+      *            TCR : Tarjetas de credito.
+           MOVE RDC-CIC-ICLI IN RDL TO OSC-CIC-ICLI IN OSC-VARI.
+           PERFORM SGC-OBT-OSC.
+           IF NOT OSC-STAT-OKS
+               MOVE OSC-NUM-MENS IN OSC-VARI TO CCU-NUM-MENS
+               MOVE OSC-COD-MENS IN OSC-VARI TO CCU-COD-MENS
+               GO TO BRW-CARGA-ARREGLOS.
+      *SMC-FIN 07.10.1993 
+
+      * Carga Garantias ordenadas por especificas a un credito,
+      * especificas genericas y el resto
+           PERFORM CARGA-GAR.
+           IF CCU-NUM-MENS < 21
+               GO TO BRW-CARGA-ARREGLOS.
+      * Carga Fianzas ordenadas por especificas a un credito,
+      * especificas genericas y el resto
+           PERFORM CARGA-FIA.
+           IF CCU-NUM-MENS < 21
+               GO TO BRW-CARGA-ARREGLOS.
+           PERFORM PONE-AGE-A-COLA-GAR VARYING WSS-I FROM 1 BY 1
+                     UNTIL WSS-I > WSS-AGE.
+           PERFORM PONE-AUG-A-COLA-GAR VARYING WSS-I FROM 1 BY 1
+                     UNTIL WSS-I > WSS-AUG.
+       NXT-CARGA-ARREGLOS.
+           MOVE 'RDC-KEY-ICLF' TO FIO-AKEY.
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM LDC-FIO-RDC.
+           MOVE FIO-STAT TO PGM-STAT-RDC.
+           IF FIO-STAT-OKS AND
+              RDC-KEY-ICLF IN RDL = CLF-KEY-ICLF IN CLF 
+               GO TO LUP-CARGA-ARREGLOS.
+
+      * Se llamo con OPC's en curse
+           IF CCU-IIC-IOPC(1) > ZEROES 
+      *        Verifica que todas las OPC's (DLC's) en curse se hayan 
+      *        cargado en arreglo DLC 
+               PERFORM VRF-OPCS-EN-CURSE
+               IF CCU-NUM-MEN2 < 21
+                   GO TO BRW-CARGA-ARREGLOS.
+
+      * Se rebaja monto de documentos cancelados en renovaciones
+           IF CCU-IIC-DCAN(1) > ZEROES
+               PERFORM ACT-VAL-SDLC.
+
+       BRW-CARGA-ARREGLOS.
+           MOVE PGM-STAT-RDC TO FIO-STAT.
+           IF FIO-STAT-OKS
+               MOVE 'RDC-KEY-ICLF' TO FIO-AKEY
+               MOVE FIO-END-BRW TO FIO-CMND
+               PERFORM LDC-FIO-RDC.
+       FIN-CARGA-ARREGLOS.
+           EXIT.
+
+       CALCULO-INICIAL-CUPO-LDC SECTION.
+       INI-CALCULO-INICIAL-CUPO-LDC.
+
+      * Calculo inicial o final de cupos ajustados por garantias
+      * Comparando  garantias "requeridas" con las existentes.
+
+      * Indicador no rebaja real de GAR utilizada
+      * rebaja temporal dentro de una LCR, sin afectar a las otras
+           MOVE 'N' TO WSS-IND-REBJ.
+
+      * Contiene Cupo Disponible inicial de CLF, ajustado por garantias
+           MOVE ZEROES TO CCU-VAL-CTOT.
+
+           MOVE ZEROES TO WSS-I.
+       LUP-CALCULO-INICIAL-CUPO-LDC.
+           ADD 1 TO WSS-I.
+           IF WSS-I > WSS-LDC
+               GO TO FIN-CALCULO-INICIAL-CUPO-LDC.
+
+      * LCR no vigente
+           IF IEXI-LDC(WSS-I) = 'N' 
+               GO TO LUP-CALCULO-INICIAL-CUPO-LDC.
+
+      * LCR sin condicion de garantias
+           IF MGAR-LDC(WSS-I) = 'S' 
+               MOVE CMAX-LDC(WSS-I) TO CTOT-LDC(WSS-I)
+               MOVE CMAX-LDC(WSS-I) TO CDIS-LDC(WSS-I)
+               ADD  CMAX-LDC(WSS-I) TO CCU-VAL-CTOT
+               GO TO LUP-CALCULO-INICIAL-CUPO-LDC.
+
+      * Deja Valor Gtia para rebaja temporal (de trabajo) con el Valor 
+      * Inicial de la Gtia
+           PERFORM INI-GAR.
+
+      * El tope del valor a asignar es el cupo no utilizado de la LCR
+           SUBTRACT CUTI-LDC(WSS-I) FROM CMAX-LDC(WSS-I) 
+                GIVING WSS-TOPE.
+      * El tope del valor a asignar es el cupo de la CLF
+           IF WSS-TOPE > WSS-VAL-CMAX
+               MOVE WSS-VAL-CMAX TO WSS-TOPE.
+
+           MOVE WSS-TOPE TO WSS-DISP-LCR.
+      * Ajusta cupo disponible de LCR segun condicion de garantias 
+           IF MGAR-LDC(WSS-I) = 'Y'
+               PERFORM OBTIENE-DISP-LCR-CASO-Y
+           ELSE
+               PERFORM OBTIENE-DISP-LCR-CASO-O.
+
+      * LLena los datos pertinentes con el resultado anterior
+           MOVE WSS-DISP-LCR TO CTOT-LDC(WSS-I).
+           MOVE WSS-DISP-LCR TO CDIS-LDC(WSS-I).
+           ADD CTOT-LDC(WSS-I) TO CCU-VAL-CTOT.
+           GO TO LUP-CALCULO-INICIAL-CUPO-LDC.
+       FIN-CALCULO-INICIAL-CUPO-LDC.
+           EXIT.
+
+       VRF-OPCS-EN-CURSE  SECTION.
+       INI-VRF-OPCS-EN-CURSE.
+      * Verifica que todas las OPC's (DLC's) en curse se hayan 
+      * cargado en arreglo DLC 
+      * Tambien suma montos de OPC's en curse
+           MOVE ZEROES TO WSS-VAL-SCRE.
+           MOVE ZEROES TO WSS-E.
+       LUP-VRF-OPCS-EN-CURSE.
+           ADD 1 TO WSS-E.
+           IF WSS-E > CCU-TOPC OR 
+              CCU-IIC-IOPC(WSS-E) NOT > ZEROES
+               GO TO FIN-VRF-OPCS-EN-CURSE.
+
+           IF CCU-OPC-ICRG(WSS-E) NOT = 'S'
+               MOVE 'OPCSNOCARGA' TO CCU-COD-MEN2
+               MOVE 20            TO CCU-NUM-MEN2
+               GO TO FIN-VRF-OPCS-EN-CURSE.
+
+           ADD CCU-VAL-SCRE(WSS-E) TO WSS-VAL-SCRE.
+           GO TO LUP-VRF-OPCS-EN-CURSE.
+       FIN-VRF-OPCS-EN-CURSE.
+           EXIT.
+
+       ACT-VAL-SDLC SECTION.
+       INI-ACT-VAL-SDLC.
+           MOVE ZEROES TO WSS-E.
+       LUP-ACT-VAL-SDLC.
+           ADD 1 TO WSS-E.
+           IF WSS-E > CCU-TCAN OR 
+              CCU-IIC-DCAN(WSS-E) NOT > ZEROES
+               GO TO FIN-ACT-VAL-SDLC.
+           PERFORM BUS-DCAN-EN-DLC.
+           IF WSS-IND-DCAN = 'N' 
+               MOVE 20          TO CCU-NUM-MEN2
+               MOVE 'DCANNODLC' TO CCU-COD-MEN2
+               GO TO FIN-ACT-VAL-SDLC.
+           GO TO LUP-ACT-VAL-SDLC.
+       FIN-ACT-VAL-SDLC.
+           EXIT.
+
+       BUS-DCAN-EN-DLC SECTION.
+       INI-BUS-DCAN-EN-DLC.
+           IF CCU-IND-RENO = 'NOV'
+               MOVE 'S' TO WSS-IND-DCAN
+           ELSE
+               MOVE 'N' TO WSS-IND-DCAN.
+           MOVE ZEROES TO WSS-D.
+       LUP-BUS-DCAN-EN-DLC.
+           ADD 1 TO WSS-D.
+           IF WSS-D > CCU-TDLC OR WSS-D > WSS-DLC 
+               GO TO FIN-BUS-DCAN-EN-DLC.
+           IF CCU-KEY-DCAN(WSS-E) = KEY-DLC(WSS-D)
+               MOVE CCU-VAL-SDLC(WSS-E) TO VAL-DLC(WSS-D)
+               MOVE 'S' TO WSS-IND-DCAN
+               GO TO FIN-BUS-DCAN-EN-DLC.
+           GO TO LUP-BUS-DCAN-EN-DLC.
+       FIN-BUS-DCAN-EN-DLC.
+           EXIT.
+
+       CARGA-CRE SECTION.
+       INI-CARGA-CRE.
+           MOVE RDC-CIC-ICLI IN RDL TO RDC-CIC-ICLI IN RDC.
+           MOVE SPACES              TO RDC-CAI-IOPC IN RDC.
+           MOVE ZEROES              TO RDC-IIC-IOPC IN RDC.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM COL-FIO-RDC.
+           IF NOT (
+              FIO-STAT-OKS AND
+              RDC-CIC-ICLI IN RDC = RDC-CIC-ICLI IN RDL 
+                  )
+               GO TO BRW-CARGA-CRE.
+
+       LUP-CARGA-CRE.
+      * Omite deudas indirectas
+           IF RDC-NUM-IDLC IN RDC > ZEROES
+               GO TO NXT-CARGA-CRE.
+
+      *SMC CST  30-NOV-1993 Trasladado aqui
+           MOVE RDC-CIC-IOPC IN RDC  TO OPC-KEY-IOPC IN OPC.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM COL-FIO-OPC.
+           IF NOT FIO-STAT-OKS OR 
+              OPC-MSC-STAT IN OPC NOT = 'A' AND 
+              CCU-IIC-IOPC(1) NOT > ZEROES
+               GO TO NXT-CARGA-CRE.
+
+      *FLB CST  23-MAR-1995 
+           IF LDC-FLAG IN LDC-VARI NOT = 'S'
+               GO TO FIN-SOLO-LAV.
+
+           MOVE OPC-COD-TOOC IN OPC TO TLC-TOOC.
+           MOVE OPC-COD-AOOC IN OPC TO TLC-AOOC.
+           PERFORM LDC-VAL-TLC.
+           IF MSG-COD-MENS > SPACES
+               MOVE SPACES TO MSG-COD-MENS
+               GO TO NXT-CARGA-CRE.
+       FIN-SOLO-LAV.
+
+      *SMC-INI 24-11-1993
+      * Determina si es DOCUMENTO DESCONTADO
+           MOVE 'TOC'                     TO TOC-COD-TTAB IN TOC.
+           MOVE OPC-COD-TOOC IN OPC       TO TOC-COD-TOCR IN TOC.
+           MOVE FIO-GET-KEY               TO FIO-CMND.
+           PERFORM COL-FIO-TOC.
+           IF ( NOT FIO-STAT-OKS OR TOC-MSC-STAT IN TOC = 'N' )
+               MOVE 20           TO CCU-NUM-MENS
+               MOVE 'TOC    NEX' TO CCU-COD-MENS
+               GO TO FIN-CARGA-CRE.
+      *HPM ini 18-MAY-1994
+           MOVE 'COL'               TO FIO-SIST.
+           MOVE 'OPEC'              TO MSC-COD-TMSC IN MSC.
+           MOVE TOC-MSC-OPEC IN TOC TO MSC-COD-CMSC IN MSC.
+           PERFORM GNS-FIO-MSC.
+           IF NOT FIO-STAT-OKS
+               MOVE 20           TO CCU-NUM-MENS
+               MOVE 'MSCOPECNEX' TO CCU-COD-MENS
+               GO TO FIN-CARGA-CRE.
+      *HPM fin 18-MAY-1994
+      *SMC-FIN 24-11-1993
+
+      *FLB CST  3-OCT-1994 EXAMINA O NO AVALES EN RDC DE COL
+      *FLB CST DISTINGUE DESCUENTO DE LETRAS / PAGARES
+           MOVE 'TAB'                TO FIO-SIST.
+           MOVE 'TIO'                TO TAB-COD-TTAB IN TAB.
+           MOVE OPC-COD-TOOC IN OPC  TO TAB-COD-CTAB IN TAB.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM GNS-FIO-TAB.
+           IF FIO-STAT-OKS AND 
+              TAB-CIC-CTAB IN TAB = 'DLE'
+               MOVE 'N' TO WSS-IND-ICAV
+           ELSE 
+               MOVE 'S' TO WSS-IND-ICAV.
+
+      *FLB CST  22-FEB-1995 
+           IF IGNORA-SOBREGIRO-NO-PACTADO AND
+              TAB-CIC-CTAB IN TAB = 'SGN'
+               GO TO NXT-CARGA-CRE.
+
+      * Busca el documento legal de credito
+           MOVE RDC-CIC-IOPC IN RDC TO WSS-KEY-IOPC.
+           MOVE RDC-KEY-IDLC IN RDC TO DLC-KEY-IDLC IN DLC.
+           MOVE ZEROES              TO DLC-NUM-IDLC IN DLC.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM COL-FIO-DLC.
+           IF NOT (
+                   FIO-STAT-OKS AND
+                   DLC-CIC-IOPC IN DLC = RDC-CIC-IOPC IN RDC
+                  )
+               GO TO BRW-CARGA-DLC.
+
+      *FLB CST  5-DEC-1994 
+           IF WSS-IND-ICAV = 'N'
+      *<<<< NOT PGM_PER
+      *FLB CST  14-DEC-1993 MAX-FMAV SE ENCUENTRA AL RECORRER DLC'S
+               PERFORM BUS-MAX-FMAV
+               MOVE WSS-FEC-FMAV IN WSS-VARI TO DLC-FEC-FMAV IN DLC
+      *>>>>
+               MOVE RDC-CIC-IOPC IN RDC      TO DLC-CIC-IOPC IN DLC 
+      *FLB CST  18-MAY-1994 
+      *        MOVE 1                        TO DLC-NUM-IDLC IN DLC
+               MOVE ZEROES                   TO DLC-NUM-IDLC IN DLC
+               MOVE OPC-VAL-SCRE IN OPC      TO DLC-VAL-SDLC IN DLC.
+      *SMC-FIN 24-11-1993
+
+       LUP-CARGA-DLC.
+      *SMC-INI 24-11-1993
+      * Omite documentos pagados
+           IF DLC-VAL-SDLC IN DLC NOT > ZEROES
+               GO TO NXT-CARGA-DLC.
+
+           IF OPC-MSC-STAT IN OPC NOT = 'A'
+               PERFORM EXA-OPCS-EN-CURSE
+               IF WSS-IND-OPCC NOT = 'S'
+                   GO TO BRW-CARGA-DLC
+               ELSE
+                   PERFORM VAL-OPC-EN-CURSE
+                   IF CCU-NUM-MENS < 21 OR
+                      CCU-NUM-MEN2 < 21
+                       GO TO FIN-CARGA-CRE.
+
+      *FLB CST  22-FEB-1995 
+      * Si un documento esta moroso se rechaza otorgar cupo
+           IF RECHAZA-X-DLC-MOROSO AND
+              DLC-FEC-FMAV IN DLC < HOY-FHOY
+               MOVE 'DLCMOROSO' TO WSS-COD-MENS.
+
+      * Se ajusta el valor del DLC segun % de ese CLI
+           IF RDC-VAL-LIMD < WSS-100
+               COMPUTE WSS-VAL-MONE ROUNDED =
+                       DLC-VAL-SDLC IN DLC *
+                       RDC-VAL-LIMD IN RDC / WSS-100
+           ELSE
+               MOVE DLC-VAL-SDLC IN DLC TO WSS-VAL-MONE.
+
+           MOVE OPC-COD-VCOC IN OPC TO WSS-VCAM.        
+           PERFORM OBT-VAL-MNAC.
+      *FLB CST  9-MAR-1994 
+           IF CCU-NUM-MENS < 21
+               GO TO FIN-CARGA-CRE.
+           
+           IF WSS-DLC = CCU-TDLC 
+               MOVE 20          TO CCU-NUM-MENS
+               MOVE 'ARRDLCEXC' TO CCU-COD-MENS
+               GO TO FIN-CARGA-CRE.
+
+           IF OPC-FEC-FINP IN OPC NOT < WSS-FEC-FINP
+               MOVE OPC-FEC-FINP IN OPC TO WSS-FEC-FINP
+               ADD 1 TO WSS-DLC
+               MOVE DLC-KEY-IDLC IN DLC TO KEY-DLC(WSS-DLC)
+               MOVE OPC-FEC-FINP IN OPC TO INP-OPC(WSS-DLC)
+               MOVE OPC-COD-VCOC IN OPC TO VCOC-OPC(WSS-DLC)
+               MOVE OPC-COD-TOOC IN OPC TO TOOC-OPC(WSS-DLC)
+               MOVE OPC-COD-AOOC IN OPC TO AOOC-OPC(WSS-DLC)
+               MOVE OPC-COD-CDOC IN OPC TO CDOC-OPC(WSS-DLC)
+               MOVE DLC-FEC-FMAV IN DLC TO MAV-DLC(WSS-DLC)
+               MOVE WSS-VAL-MNAC        TO VAL-DLC(WSS-DLC)
+               MOVE WSS-CLI             TO PCLI-DLC(WSS-DLC)
+      *FLB CST  3-OCT-1994 EXAMINA O NO AVALES EN RDC DE COL
+               MOVE WSS-IND-ICAV        TO ICAV-DLC(WSS-DLC)
+           ELSE
+               PERFORM ORDENA-CRE.
+
+       NXT-CARGA-DLC.
+
+      *SMC-INI 24-11-1993
+      *HPM ini 18-MAY-1994
+      *    IF TOC-MSC-OPEC IN TOC = 'D'
+           IF MSC-CIC-CMSC IN MSC = 'D'
+      *HPM fin 18-MAY-1994
+              GO TO NXT-CARGA-CRE.
+      *SMC-FIN 24-11-1993
+
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM COL-FIO-DLC.
+           IF FIO-STAT-OKS AND
+              DLC-CIC-IOPC IN DLC = RDC-CIC-IOPC IN RDC
+               GO TO LUP-CARGA-DLC.
+
+       BRW-CARGA-DLC.
+           IF FIO-STAT-OKS
+               MOVE FIO-END-BRW TO FIO-CMND
+               PERFORM COL-FIO-DLC.
+       NXT-CARGA-CRE.
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM COL-FIO-RDC.
+           IF FIO-STAT-OKS AND
+              RDC-CIC-ICLI IN RDC = RDC-CIC-ICLI IN RDL
+               GO TO LUP-CARGA-CRE.
+
+       BRW-CARGA-CRE.
+           IF FIO-STAT-OKS
+               MOVE FIO-END-BRW TO FIO-CMND
+               PERFORM COL-FIO-RDC.
+       FIN-CARGA-CRE.
+           EXIT.
+
+      *<<<< NOT PGM_PER
+      *SMC-INI 24-11-1993
+       BUS-MAX-FMAV SECTION.
+       INI-BUS-MAX-FMAV.
+       
+           MOVE ZEROES     TO WSS-FEC-FMAV IN WSS-VARI.
+
+       LUP-BUS-MAX-FMAV.       
+           IF NOT ( FIO-STAT-OKS AND
+                    DLC-CIC-IOPC IN DLC = RDC-CIC-IOPC IN RDC )
+               GO TO FIN-BUS-MAX-FMAV.
+
+           IF DLC-FEC-FMAV IN DLC > WSS-FEC-FMAV IN WSS-VARI
+              MOVE DLC-FEC-FMAV IN DLC TO WSS-FEC-FMAV IN WSS-VARI.
+
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM COL-FIO-DLC.
+           GO TO LUP-BUS-MAX-FMAV.
+
+       FIN-BUS-MAX-FMAV.
+           EXIT.
+      *SMC-FIN 24-11-1993
+      *>>>>
+
+       EXA-OPCS-EN-CURSE  SECTION.
+       INI-EXA-OPCS-EN-CURSE.
+      * Examina si OPC es OPC en curse
+           MOVE 'N' TO WSS-IND-OPCC.
+           MOVE ZEROES TO WSS-F.
+       LUP-EXA-OPCS-EN-CURSE.
+           ADD 1 TO WSS-F.
+           IF WSS-F > CCU-TOPC OR 
+              CCU-IIC-IOPC(WSS-F) NOT > ZEROES
+               GO TO FIN-EXA-OPCS-EN-CURSE.
+
+           IF OPC-KEY-IOPC IN OPC = CCU-CIC-IOPC(WSS-F)
+               MOVE 'S' TO WSS-IND-OPCC
+               MOVE 'S' TO CCU-OPC-ICRG(WSS-F)
+      *        Con esta fecha se reconoce que DLC's son de OPC's en curse
+               MOVE 99999999 TO OPC-FEC-FINP IN OPC 
+               GO TO FIN-EXA-OPCS-EN-CURSE.
+           GO TO LUP-EXA-OPCS-EN-CURSE.
+       FIN-EXA-OPCS-EN-CURSE.
+           EXIT.
+
+       VAL-OPC-EN-CURSE SECTION.
+       INI-VAL-OPC-EN-CURSE.
+
+           IF DLC-FEC-FMAV IN DLC > CLF-FEC-FVEN IN CLF 
+               MOVE 'VTODLC>CLF' TO CCU-COD-MEN2
+               MOVE 2            TO CCU-NUM-MEN2
+               GO TO FIN-VAL-OPC-EN-CURSE.
+
+           IF DLC-FEC-FMAV IN DLC > CLF-FEC-FPRV IN CLF 
+               MOVE 'VTODLC>PRV' TO CCU-COD-MEN2
+               MOVE 51           TO CCU-NUM-MEN2.
+
+           MOVE ZEROES TO WSS-N.
+      *FLB CST 23-MAR-1995 CORREGIDO
+      *    PERFORM BUS-LCR-1VEZ UNTIL 
+      *         WSS-N > WSS-ARC.
+           MOVE 22 TO WSS-NUM-MENS.
+           MOVE WSS-INST-RECH TO WSS-INST.
+           PERFORM INI-LDC.
+           PERFORM INI-ARC.
+
+           MOVE SPACES TO WSS-IND-OESP
+                          WSS-IND-MONE
+                          WSS-IND-TOPE
+                          WSS-IND-CAUX.
+
+           MOVE 'S' TO WSS-1VEZ.
+           PERFORM BUS-LCR-PRIORITARIA.
+      *FLB CST 23-MAR-1995 FIN
+
+           IF WSS-IND-LPRI = 'N'
+               IF WSS-NUM-MENS = 22
+                   MOVE 'OPCNOLDC'   TO CCU-COD-MEN2
+                   MOVE 3            TO CCU-NUM-MEN2
+               ELSE
+                   MOVE 'VTODLC>LDC' TO CCU-COD-MEN2
+                   MOVE 4            TO CCU-NUM-MEN2.
+       FIN-VAL-OPC-EN-CURSE.
+           EXIT.
+
+       ORDENA-CRE SECTION.
+       INI-ORDENA-CRE.
+           MOVE ZEROES TO WSS-C.
+       LUP-ORDENA-CRE.
+           ADD 1 TO WSS-C.
+           IF WSS-C > WSS-DLC 
+               GO TO FIN-ORDENA-CRE.
+
+           IF OPC-FEC-FINP IN OPC NOT < INP-OPC(WSS-C)
+               GO TO LUP-ORDENA-CRE.
+
+           PERFORM HACE-HUECO VARYING WSS-D FROM WSS-DLC BY -1
+               UNTIL WSS-D < WSS-C.
+
+           MOVE DLC-KEY-IDLC IN DLC TO KEY-DLC(WSS-C).
+           MOVE OPC-FEC-FINP IN OPC TO INP-OPC(WSS-C).
+           MOVE OPC-COD-VCOC IN OPC TO VCOC-OPC(WSS-C)
+           MOVE OPC-COD-TOOC IN OPC TO TOOC-OPC(WSS-C)
+           MOVE OPC-COD-AOOC IN OPC TO AOOC-OPC(WSS-C)
+           MOVE OPC-COD-CDOC IN OPC TO CDOC-OPC(WSS-C)
+           MOVE DLC-FEC-FMAV IN DLC TO MAV-DLC(WSS-C).
+           MOVE WSS-VAL-MNAC        TO VAL-DLC(WSS-C).
+           MOVE WSS-CLI             TO PCLI-DLC(WSS-C).
+      *FLB CST  3-OCT-1994 EXAMINA O NO AVALES EN RDC DE COL
+           MOVE WSS-IND-ICAV        TO ICAV-DLC(WSS-C).
+           ADD 1 TO WSS-DLC.
+       FIN-ORDENA-CRE.
+           EXIT.
+
+       HACE-HUECO SECTION.
+       INI-HACE-HUECO.
+           ADD 1 , WSS-D GIVING WSS-E.
+           MOVE KEY-DLC(WSS-D)  TO KEY-DLC(WSS-E).
+           MOVE INP-OPC(WSS-D)  TO INP-OPC(WSS-E).
+           MOVE VCOC-OPC(WSS-D) TO VCOC-OPC(WSS-E).
+           MOVE TOOC-OPC(WSS-D) TO TOOC-OPC(WSS-E).
+           MOVE AOOC-OPC(WSS-D) TO AOOC-OPC(WSS-E).
+           MOVE CDOC-OPC(WSS-D) TO CDOC-OPC(WSS-E).
+           MOVE MAV-DLC(WSS-D)  TO MAV-DLC(WSS-E).
+           MOVE VAL-DLC(WSS-D)  TO VAL-DLC(WSS-E).
+           MOVE PCLI-DLC(WSS-D) TO PCLI-DLC(WSS-E).
+      *FLB CST  3-OCT-1994 EXAMINA O NO AVALES EN RDC DE COL
+           MOVE ICAV-DLC(WSS-D) TO ICAV-DLC(WSS-E).
+       FIN-HACE-HUECO.
+           EXIT.
+
+       CARGA-GAR SECTION.
+       INI-CARGA-GAR.
+      * Carga GAR's activadas de CLI
+
+      *FLB CST  8-OCT-1993 TRASLADADAS AQUI
+           MOVE ZEROES TO WSS-AUG.
+           MOVE ZEROES TO WSS-AGE.
+
+           MOVE RDC-CIC-ICLI IN RDL TO GDD-CIC-ICLI IN GDD.
+           MOVE LOW-VALUES          TO GAR-CLV-GDD-2 IN GDD.
+           MOVE FIO-GET-NLS  TO FIO-CMND.
+           PERFORM GAR-FIO-GDD.
+           MOVE FIO-STAT TO PGM-STAT-GDD.
+           IF NOT ( FIO-STAT-OKS AND 
+                    GDD-CIC-ICLI IN GDD = RDC-CIC-ICLI IN RDL )
+               GO TO BRW-CARGA-GAR.
+
+       LUP-CARGA-GAR.
+           PERFORM CARGA-GVT.
+           IF CCU-NUM-MENS < 21
+               GO TO BRW-CARGA-GAR.
+
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM GAR-FIO-GDD.
+           MOVE FIO-STAT TO PGM-STAT-GDD.
+           IF FIO-STAT-OKS AND
+              GDD-CIC-ICLI IN GDD = RDC-CIC-ICLI IN RDL
+               GO TO LUP-CARGA-GAR.
+       BRW-CARGA-GAR.
+           MOVE PGM-STAT-GDD TO FIO-STAT.
+           IF FIO-STAT-OKS
+               MOVE FIO-END-BRW TO FIO-CMND
+               PERFORM GAR-FIO-GDD.
+       FIN-CARGA-GAR.
+           EXIT.
+
+       CARGA-GVT SECTION.
+       INI-CARGA-GVT.
+           MOVE GAR-CLV-GDD-2 IN GDD TO GAR-CLV-GDG-1 IN GDG.
+           MOVE FIO-GET-KEY  TO FIO-CMND.
+           PERFORM GAR-FIO-GDG.
+           IF NOT (
+                   FIO-STAT-OKS AND
+                   GAR-IND-CPL IN GDG = 'S' AND
+                   GAR-FEC-ALZ IN GDG NOT > ZEROES
+                  )
+               GO TO FIN-CARGA-GVT.
+
+           MOVE GAR-CLV-GDD-2 IN GDD TO GAR-CLV-GVT-1 IN GVT.
+           MOVE GAR-COD-TSN   IN GDG TO GAR-COD-TSN IN GVT.
+           MOVE FIO-GET-KEY  TO FIO-CMND.
+           PERFORM GAR-FIO-GVT.
+           IF NOT ( FIO-STAT-OKS AND GAR-VAL-PON IN GVT > ZEROES )
+               GO TO FIN-CARGA-GVT.
+
+           IF WSS-GAR + WSS-AUG + WSS-AGE = CCU-TGAR 
+               MOVE 20          TO CCU-NUM-MENS
+               MOVE 'ARRGAREXC' TO CCU-COD-MENS
+               GO TO FIN-CARGA-GVT.
+
+           IF GAR-COD-LIM IN GDG = 'E'
+               MOVE GAR-CLV-GDD-2 IN GDD TO GAR-CLV-GES-1 IN GES
+               MOVE ZEROES               TO GAR-COD-ESP   IN GES
+               MOVE FIO-GET-NLS TO FIO-CMND
+               PERFORM GAR-FIO-GES
+               MOVE FIO-STAT TO PGM-STAT-GES
+               IF NOT ( FIO-STAT-OKS AND 
+                        GAR-ID IN GES = GAR-CLV-GDD-2 IN GDD )
+                   MOVE 'G' TO GAR-COD-LIM IN GDG
+                   IF FIO-STAT-OKS
+                       MOVE FIO-END-BRW TO FIO-CMND
+                       PERFORM GAR-FIO-GES
+                   ELSE
+                       NEXT SENTENCE
+               ELSE
+      *FLB CST  27-MAY-1994 
+      *            MOVE 'E' TO LIM-GAR(WSS-GAR)
+                   PERFORM CARGA-GES
+                   GO TO FIN-CARGA-GVT.
+
+           ADD 1 TO WSS-AUG.
+           MOVE RDC-CIC-ICLI  IN RDL TO CLI-AUG(WSS-AUG).
+           MOVE GAR-CLV-GDD-2 IN GDD TO CIC-AUG(WSS-AUG).
+           MOVE ZEROES               TO FIA-AUG(WSS-AUG).
+           MOVE GAR-TIP-OPE IN GDG   TO TIP-AUG(WSS-AUG).
+           MOVE GAR-STP-OPE IN GDG   TO STP-AUG(WSS-AUG).
+           MOVE GAR-COD-LIM IN GDG   TO LIM-AUG(WSS-AUG).
+
+           MOVE GAR-VAL-PON IN GVT   TO WSS-VAL-MONE.
+           MOVE GAR-VCB IN GDG       TO WSS-VCAM.        
+           PERFORM OBT-VAL-MNAC.
+           IF CCU-NUM-MENS < 21
+               GO TO FIN-CARGA-GVT.
+           MOVE WSS-VAL-MNAC  TO VAL-AUG(WSS-AUG).
+           MOVE ZEROES        TO PON-AUG(WSS-AUG).
+           MOVE ZEROES        TO TEM-AUG(WSS-AUG).
+           MOVE 'G'           TO CLA-AUG(WSS-AUG).
+       FIN-CARGA-GVT.
+           EXIT.
+
+       CARGA-GES SECTION.
+       INI-CARGA-GES.
+
+           IF GAR-COD-CRR-CDT IN GES > ZEROES
+               PERFORM ESP-1-DLC
+               GO TO BRW-CARGA-GES.
+
+           MOVE ZEROES TO WSS-AUE.
+           IF WSS-AUE = CCU-TGES 
+               MOVE 20          TO CCU-NUM-MENS
+               MOVE 'ARRGESEXC' TO CCU-COD-MENS
+               GO TO BRW-CARGA-GES.
+
+           ADD 1 TO WSS-AGE.
+           MOVE RDC-CIC-ICLI  IN RDL TO CLI-AGE(WSS-AGE).
+           MOVE GAR-CLV-GDD-2 IN GDD TO CIC-AGE(WSS-AGE).
+           MOVE ZEROES               TO FIA-AGE(WSS-AGE).
+           MOVE GAR-TIP-OPE IN GDG   TO TIP-AGE(WSS-AGE).
+           MOVE GAR-STP-OPE IN GDG   TO STP-AGE(WSS-AGE).
+           MOVE GAR-COD-LIM IN GDG   TO LIM-AGE(WSS-AGE).
+           MOVE GAR-VAL-PON IN GVT   TO WSS-VAL-MONE.
+           MOVE GAR-VCB IN GDG       TO WSS-VCAM.        
+           PERFORM OBT-VAL-MNAC.
+           IF CCU-NUM-MENS < 21
+               GO TO BRW-CARGA-GES.
+           MOVE WSS-VAL-MNAC  TO VAL-AGE(WSS-AGE).
+           MOVE ZEROES        TO PON-AGE(WSS-AGE).
+           MOVE ZEROES        TO TEM-AGE(WSS-AGE).
+           MOVE 'G'           TO CLA-AGE(WSS-AGE).
+      *FLB CST  26-AUG-1994 
+      *    MOVE 1             TO PMAX-AGE(WSS-AGE).
+
+           ADD 1 TO WSS-AUE.
+           MOVE GAR-CIC-IOPC    IN GES TO IOPC-AUE(WSS-AGE,WSS-AUE).
+           MOVE GAR-TIP-OPE-CDT IN GES TO TIP-CDT-AUE(WSS-AGE,WSS-AUE).
+           MOVE GAR-STP-OPE-CDT IN GES TO STP-CDT-AUE(WSS-AGE,WSS-AUE).
+           MOVE GAR-VCB-CDT     IN GES TO VCB-CDT-AUE(WSS-AGE,WSS-AUE).
+           MOVE GAR-COD-DST-CDT IN GES TO DST-CDT-AUE(WSS-AGE,WSS-AUE).
+           MOVE GAR-TIP-DEU     IN GES TO TIP-DEU-AUE(WSS-AGE,WSS-AUE).
+
+           MOVE GAR-VAL-LIM-CDT IN GES TO WSS-VAL-MONE.
+           MOVE GAR-VCB-LIM-CDT IN GES TO WSS-VCAM.        
+           PERFORM OBT-VAL-MNAC.
+           IF CCU-NUM-MENS < 21
+               GO TO BRW-CARGA-GES.
+           MOVE WSS-VAL-MNAC    TO VAL-LIM-CDT-AUE(WSS-AGE,WSS-AUE).
+           MOVE GAR-VCB-LIM-CDT IN GES TO 
+                     VCB-LIM-CDT-AUE(WSS-AGE,WSS-AUE).
+      *FLB CST  26-AUG-1994 
+           IF GAR-PCT-LIM-CDT IN GES NOT > ZEROES
+               MOVE WSS-100 TO GAR-PCT-LIM-CDT IN GES.
+      *FLB CST  26-AUG-1994 
+           MOVE GAR-PCT-LIM-CDT IN GES TO 
+                PCT-LIM-CDT-AUE(WSS-AGE,WSS-AUE).
+
+      *FLB CST  26-AUG-1994 TRASLADADO AQUI POR ESTANDARIZACION
+           MOVE WSS-AUE                TO PMAX-AGE(WSS-AGE).
+
+       BRW-CARGA-GES.
+           MOVE PGM-STAT-GES TO FIO-STAT.
+           IF FIO-STAT-OKS
+               MOVE FIO-END-BRW TO FIO-CMND
+               PERFORM GAR-FIO-GES.
+       FIN-CARGA-GES.
+           EXIT.
+
+       ESP-1-DLC SECTION.
+       INI-ESP-1-DLC.
+      * Hay 1 o n GES para DLC's especificos
+
+           MOVE ZEROES TO WSS-GES.
+           ADD 1 TO WSS-GAR.
+           MOVE RDC-CIC-ICLI  IN RDL TO CLI-GAR(WSS-GAR).
+           MOVE GAR-CLV-GDD-2 IN GDD TO CIC-GAR(WSS-GAR).
+           MOVE ZEROES               TO FIA-GAR(WSS-GAR).
+           MOVE GAR-TIP-OPE IN GDG   TO TIP-GAR(WSS-GAR).
+           MOVE GAR-STP-OPE IN GDG   TO STP-GAR(WSS-GAR).
+           MOVE GAR-COD-LIM IN GDG   TO LIM-GAR(WSS-GAR).
+           MOVE GAR-VAL-PON IN GVT   TO WSS-VAL-MONE.
+           MOVE GAR-VCB     IN GDG   TO WSS-VCAM.        
+           PERFORM OBT-VAL-MNAC.
+      *FLB CST  9-MAR-1994 MODIFICADO PARA TRATAR ERROR
+           IF CCU-NUM-MENS < 21
+               GO TO FIN-ESP-1-DLC.
+           MOVE WSS-VAL-MNAC  TO VAL-GAR(WSS-GAR).
+      *    MOVE ZEROES        TO PON-GAR(WSS-GAR).
+           MOVE ZEROES        TO TEM-GAR(WSS-GAR).
+           MOVE 'G'           TO CLA-GAR(WSS-GAR).
+
+       LUP-ESP-1-DLC.
+           IF WSS-GES + WSS-AUE = CCU-TGES 
+               MOVE 20          TO CCU-NUM-MENS
+               MOVE 'ARRGESEXC' TO CCU-COD-MENS
+               GO TO FIN-ESP-1-DLC.
+
+           ADD 1 TO WSS-GES.
+           MOVE GAR-CIC-IOPC    IN GES TO IOPC-GES(WSS-GAR,WSS-GES).
+           MOVE GAR-TIP-OPE-CDT IN GES TO TIP-CDT-GES(WSS-GAR,WSS-GES).
+           MOVE GAR-STP-OPE-CDT IN GES TO STP-CDT-GES(WSS-GAR,WSS-GES).
+           MOVE GAR-VCB-CDT     IN GES TO VCB-CDT-GES(WSS-GAR,WSS-GES).
+           MOVE GAR-COD-DST-CDT IN GES TO DST-CDT-GES(WSS-GAR,WSS-GES).
+           MOVE GAR-TIP-DEU     IN GES TO TIP-DEU-GES(WSS-GAR,WSS-GES).
+
+           MOVE GAR-VAL-LIM-CDT IN GES TO WSS-VAL-MONE.
+           MOVE GAR-VCB-LIM-CDT IN GES TO WSS-VCAM.        
+           PERFORM OBT-VAL-MNAC.
+      *FLB CST  9-MAR-1994 MODIFICADO PARA TRATAR ERROR
+           IF CCU-NUM-MENS < 21
+               GO TO FIN-ESP-1-DLC.
+           MOVE WSS-VAL-MNAC    TO VAL-LIM-CDT-GES(WSS-GAR,WSS-GES).
+      *FLB CST  26-AUG-1994 
+           MOVE ZEROES          TO VAL-ASG-CDT-GES(WSS-GAR,WSS-GES).
+           MOVE GAR-VCB-LIM-CDT IN GES TO 
+                    VCB-LIM-CDT-GES(WSS-GAR,WSS-GES).
+      *FLB CST  26-AUG-1994 
+           IF GAR-PCT-LIM-CDT IN GES NOT > ZEROES
+               MOVE WSS-100 TO GAR-PCT-LIM-CDT IN GES.
+      *FLB CST  26-AUG-1994 
+           MOVE GAR-PCT-LIM-CDT IN GES TO 
+                    PCT-LIM-CDT-GES(WSS-GAR,WSS-GES).
+
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM GAR-FIO-GES.
+           MOVE FIO-STAT TO PGM-STAT-GES.
+           IF FIO-STAT-OKS AND 
+              GAR-ID IN GES = GAR-CLV-GDD-2 IN GDD
+               GO TO LUP-ESP-1-DLC.
+
+           MOVE WSS-GES TO PMAX-GAR(WSS-GAR).
+       FIN-ESP-1-DLC.
+           EXIT.
+
+       CARGA-FIA SECTION.
+       INI-CARGA-FIA.
+      * Carga FIA activadas de CLI
+      * Si no estan limitadas por monto, valor fianza es "infinito"
+
+      *FLB CST  8-OCT-1993 TRASLADADA AQUI
+           MOVE ZEROES       TO WSS-AVL-LCR.
+           
+           MOVE RDC-CIC-ICLI IN RDL TO FIA-GLS-ICYF IN FIA.
+           MOVE 'FIA-GLS-ICYF' TO FIO-AKEY.
+           MOVE FIO-GET-NLS    TO FIO-CMND.
+           PERFORM DEU-FIO-FIA.
+           MOVE FIO-STAT TO PGM-STAT-FIA.
+           IF NOT ( FIO-STAT-OKS AND 
+                    FIA-CIC-ICLI IN FIA = RDC-CIC-ICLI IN RDL )
+               GO TO BRW-CARGA-FIA.
+
+       LUP-CARGA-FIA.
+           IF FIA-FEC-FALZ IN FIA > ZEROES OR
+      *AMP 15-MAR-1994 TAMPOCO DEBE INCLUIR FIANZAS NO VERIFICADAS
+              FIA-MSC-STAT IN FIA NOT = 'S' OR
+      *FLB CST  5-JUL-1994 TAMPOCO FIANZAS VENCIDAS
+              FIA-FEC-FVEN IN FIA < HOY-FHOY AND
+              FIA-FEC-FVEN IN FIA > ZEROES
+               GO TO NXT-CARGA-FIA.
+
+           IF WSS-GAR + WSS-AUG + WSS-AGE = CCU-TGAR 
+               MOVE 20          TO CCU-NUM-MENS
+               MOVE 'ARRGAREXC' TO CCU-COD-MENS
+               GO TO BRW-CARGA-FIA.
+
+           IF FIA-COD-TOFS IN FIA = 'AVL' AND 
+              WSS-AVL-LCR < CCU-TAVL-LCR
+               ADD 1 TO WSS-AVL-LCR
+               MOVE FIA-CIC-IESC IN FIA TO IESC-AVL-LCR(WSS-AVL-LCR)
+      *         MOVE FIA-NUM-IFIA IN FIA TO NFIA-AVL-LCR(WSS-AVL-LCR)
+               MOVE ZEROES              TO NFIA-AVL-LCR(WSS-AVL-LCR)
+               MOVE FIA-CIC-ICFS IN FIA TO ICFS-AVL-LCR(WSS-AVL-LCR)
+               GO TO NXT-CARGA-FIA.
+
+           IF FIA-COD-TOFS IN FIA = 'AVL' AND 
+              WSS-AVL-LCR = CCU-TAVL-LCR
+               MOVE 20             TO CCU-NUM-MENS
+               MOVE 'ARRAVLLCREXC' TO CCU-COD-MENS
+               GO TO BRW-CARGA-FIA.
+
+      *FLB CST  26-AUG-1994 MODIFICADO
+      *   FIA     AMF
+      *----------------------------------------------------------------
+      *   cero    sin     % = 100, idem GAR con GES
+      *                   valor fianza es "infinito"
+      *   cero    cero    % = 100, idem GAR con GES
+      *                   valor fianza es "infinito"
+      *   cero    %       %AMF (si %FIA) idem GAR con GES
+      *                   valor fianza es "infinito"
+      *   cero    monto   % = 100, monto, idem GAR con GES
+
+      *    %      sin     % FIA, idem GAR con GES,
+      *                   valor fianza es "infinito"
+      *    %      cero    % FIA, idem GAR con GES,
+      *                   valor fianza es "infinito"
+      *    %      %       %AMF (si < %FIA), idem GAR con GES
+      *                   valor fianza es "infinito"
+      *    %      monto   % FIA, monto, idem GAR con GES
+
+      *   monto   sin     solo FIA, idem GAR
+      *   monto   cero    FIA con monto, idem GAR con GES
+      *   monto   %       FIA con %    , idem GAR con GES
+      *   monto   monto   FIA con monto, idem GAR con GES
+      *                   (menor monto AMF/FIA)
+           
+           IF FIA-COD-VCLF IN FIA = SPACES
+               MOVE 'P'     TO FIA-COD-VCLF IN FIA
+               MOVE WSS-100 TO FIA-VAL-LIMF IN FIA.
+      *FLB CST  26-AUG-1994 FIN
+
+           MOVE FIA-KEY-IFIA IN FIA TO AMF-KEY-IFIA IN AMF.
+           MOVE ZEROES              TO AMF-NUM-IAMF IN AMF.
+           MOVE FIO-GET-NLS   TO FIO-CMND.
+           PERFORM DEU-FIO-AMF.
+           MOVE FIO-STAT TO PGM-STAT-AMF.
+           IF NOT ( FIO-STAT-OKS AND 
+                    AMF-KEY-IFIA IN AMF = FIA-KEY-IFIA IN FIA )
+               IF FIO-STAT-OKS
+                   MOVE FIO-END-BRW TO FIO-CMND
+                   PERFORM DEU-FIO-AMF
+               ELSE
+                   NEXT SENTENCE 
+           ELSE
+      *FLB CST  27-MAY-1994 
+      *        MOVE 'E' TO LIM-GAR(WSS-GAR)
+               PERFORM CARGA-AMF
+      *FLB CST  9-MAR-1994 MODIFICADO PARA TRATAR ERROR
+               IF CCU-NUM-MENS < 21
+                   GO TO BRW-CARGA-FIA
+               ELSE
+                   GO TO NXT-CARGA-FIA.
+
+      * FIA EN % SE TRATA COMO GES (GTIA ESPECIFICA)
+           IF FIA-COD-VCLF IN FIA = 'P'
+      *FLB CST  27-MAY-1994 
+               PERFORM CARGA-FIA-EN-GES 
+      *FLB CST  9-MAR-1994 MODIFICADO PARA TRATAR ERROR
+               IF CCU-NUM-MENS < 21
+                   GO TO BRW-CARGA-FIA
+               ELSE
+                   GO TO NXT-CARGA-FIA.
+        
+           ADD 1 TO WSS-AUG.
+           MOVE RDC-CIC-ICLI IN RDL TO CLI-AUG(WSS-AUG).
+           MOVE FIA-CIC-IESC IN FIA TO CIC-AUG(WSS-AUG).
+      *FLB CST  5-DEC-1994 
+      *    MOVE ZEROES              TO FIA-AUG(WSS-AUG).
+           MOVE FIA-NUM-IFIA IN FIA TO FIA-AUG(WSS-AUG).
+           MOVE FIA-COD-TOFS IN FIA TO TIP-AUG(WSS-AUG).
+           MOVE FIA-COD-AOFS IN FIA TO STP-AUG(WSS-AUG).
+           MOVE 'G'                 TO LIM-AUG(WSS-AUG).
+
+      *FLB CST  10-MAY-1994 CORRIGE FIANZA CON MONTO 0
+ 
+           IF FIA-VAL-LIMF IN FIA > ZEROES
+               MOVE FIA-VAL-LIMF IN FIA TO WSS-VAL-MONE
+               MOVE FIA-COD-VCLF IN FIA TO WSS-VCAM
+               PERFORM OBT-VAL-MNAC
+      *FLB CST  9-MAR-1994 MODIFICADO PARA TRATAR ERROR
+               IF CCU-NUM-MENS < 21
+                   GO TO BRW-CARGA-FIA
+               ELSE
+                   MOVE WSS-VAL-MNAC TO VAL-AUG(WSS-AUG)
+           ELSE
+               MOVE 9999999999999    TO VAL-AUG(WSS-AUG).
+      *FLB CST  10-MAY-1994 FIN
+           MOVE ZEROES        TO PON-AUG(WSS-AUG).
+           MOVE ZEROES        TO TEM-AUG(WSS-AUG).
+           MOVE 'F'           TO CLA-AUG(WSS-AUG).
+
+       NXT-CARGA-FIA.
+           MOVE 'FIA-GLS-ICYF' TO FIO-AKEY.
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM DEU-FIO-FIA.
+           MOVE FIO-STAT TO PGM-STAT-FIA.
+           IF FIO-STAT-OKS AND
+              FIA-CIC-ICLI IN FIA = RDC-CIC-ICLI IN RDL
+               GO TO LUP-CARGA-FIA.
+       BRW-CARGA-FIA.
+           MOVE PGM-STAT-FIA TO FIO-STAT.
+           IF FIO-STAT-OKS
+               MOVE 'FIA-GLS-ICYF' TO FIO-AKEY
+               MOVE FIO-END-BRW TO FIO-CMND
+               PERFORM DEU-FIO-FIA.
+       FIN-CARGA-FIA.
+           EXIT.
+
+       CARGA-FIA-EN-GES SECTION.
+       INI-CARGA-FIA-EN-GES.
+
+           MOVE ZEROES TO WSS-AUE.
+
+           ADD 1 TO WSS-AGE.
+           MOVE RDC-CIC-ICLI IN RDL TO CLI-AGE(WSS-AGE).
+           MOVE FIA-CIC-IESC IN FIA TO CIC-AGE(WSS-AGE).
+      *FLB CST  5-DEC-1994 
+      *    MOVE ZEROES              TO FIA-AGE(WSS-AGE).
+           MOVE FIA-NUM-IFIA IN FIA TO FIA-AGE(WSS-AGE).
+           MOVE FIA-COD-TOFS IN FIA TO TIP-AGE(WSS-AGE).
+           MOVE FIA-COD-AOFS IN FIA TO STP-AGE(WSS-AGE).
+      *FLB CST 27-MAY-1994 
+      *    MOVE 'G'                 TO LIM-AGE(WSS-AGE).
+           MOVE 'E'                 TO LIM-AGE(WSS-AGE).
+
+           MOVE 9999999999999 TO VAL-AGE(WSS-AGE).
+           MOVE ZEROES        TO PON-AGE(WSS-AGE).
+           MOVE ZEROES        TO TEM-AGE(WSS-AGE).
+           MOVE 'F'           TO CLA-AGE(WSS-AGE).
+           MOVE 1             TO PMAX-AGE(WSS-AGE).
+
+           ADD 1 TO WSS-AUE.
+           MOVE SPACES              TO CAI-IOPC-AUE(WSS-AGE,WSS-AUE).
+           MOVE ZEROES              TO IIC-IOPC-AUE(WSS-AGE,WSS-AUE).
+           MOVE SPACES              TO TIP-CDT-AUE(WSS-AGE,WSS-AUE).
+           MOVE SPACES              TO STP-CDT-AUE(WSS-AGE,WSS-AUE).
+           MOVE SPACES              TO VCB-CDT-AUE(WSS-AGE,WSS-AUE).
+           MOVE SPACES              TO DST-CDT-AUE(WSS-AGE,WSS-AUE).
+           MOVE SPACES              TO TIP-DEU-AUE(WSS-AGE,WSS-AUE).
+      *FLB CST  27-MAY-1994
+           MOVE SPACES              TO VCB-LIM-CDT-AUE(WSS-AGE,WSS-AUE).
+      *FLB CST  27-MAY-1994
+           MOVE ZEROES              TO VAL-LIM-CDT-AUE(WSS-AGE,WSS-AUE).
+           MOVE FIA-VAL-LIMF IN FIA TO PCT-LIM-CDT-AUE(WSS-AGE,WSS-AUE).
+
+       BRW-CARGA-FIA-EN-GES.
+       FIN-CARGA-FIA-EN-GES.
+           EXIT.
+
+       CARGA-AMF SECTION.
+       INI-CARGA-AMF.
+
+           IF AMF-CIC-IOCA IN AMF > ZEROES
+               PERFORM AMF-ESP-1-DLC
+               GO TO BRW-CARGA-AMF.
+
+      *FLB CST  26-AUG-1994 PUEDEN HABER n AMF A CRED INDETERMINADOS
+
+           MOVE ZEROES TO WSS-AUE.
+           ADD 1 TO WSS-AGE.
+           MOVE RDC-CIC-ICLI IN RDL TO CLI-AGE(WSS-AGE).
+           MOVE FIA-CIC-IESC IN FIA TO CIC-AGE(WSS-AGE).
+      *FLB CST  5-DEC-1994 
+      *    MOVE ZEROES              TO FIA-AGE(WSS-AGE).
+           MOVE FIA-NUM-IFIA IN FIA TO FIA-AGE(WSS-AGE).
+           MOVE FIA-COD-TOFS IN FIA TO TIP-AGE(WSS-AGE).
+           MOVE FIA-COD-AOFS IN FIA TO STP-AGE(WSS-AGE).
+      *FLB CST 27-MAY-1994 
+      *    MOVE 'G'                 TO LIM-AGE(WSS-AGE).
+           MOVE 'E'                 TO LIM-AGE(WSS-AGE).
+
+      *FLB CST  26-AUG-1994 
+           IF FIA-COD-VCLF IN FIA = 'P'
+               MOVE 9999999999999 TO VAL-AGE(WSS-AGE)
+           ELSE
+               MOVE FIA-VAL-LIMF IN FIA TO WSS-VAL-MONE
+               MOVE FIA-COD-VCLF IN FIA TO WSS-VCAM
+               PERFORM OBT-VAL-MNAC
+      *FLB CST  9-MAR-1994 MODIFICADO PARA TRATAR ERROR
+               IF CCU-NUM-MENS < 21
+                   GO TO BRW-CARGA-AMF
+               ELSE
+                   MOVE WSS-VAL-MNAC TO VAL-AGE(WSS-AGE).
+      *FLB CST  26-AUG-1994 FIN
+           MOVE ZEROES        TO PON-AGE(WSS-AGE).
+           MOVE ZEROES        TO TEM-AGE(WSS-AGE).
+           MOVE 'F'           TO CLA-AGE(WSS-AGE).
+      *FLB CST  26-AUG-1994 
+      *    MOVE 1             TO PMAX-AGE(WSS-AGE).
+
+      *FLB CST  26-AUG-1994 SE AGREGA LOOP DE AMF
+       LUP-CARGA-AMF.
+      *FLB CST  26-AUG-1994 TRASLADADO AQUI
+           IF WSS-AUE = CCU-TGES 
+               MOVE 20          TO CCU-NUM-MENS
+               MOVE 'ARRGESEXC' TO CCU-COD-MENS
+               GO TO BRW-CARGA-AMF.
+
+           ADD 1 TO WSS-AUE.
+           MOVE AMF-CIC-IOCA IN AMF TO IOPC-AUE(WSS-AGE,WSS-AUE).
+           MOVE AMF-COD-TOOA IN AMF TO TIP-CDT-AUE(WSS-AGE,WSS-AUE).
+           MOVE AMF-COD-AOOA IN AMF TO STP-CDT-AUE(WSS-AGE,WSS-AUE).
+           MOVE AMF-COD-VCOA IN AMF TO VCB-CDT-AUE(WSS-AGE,WSS-AUE).
+           MOVE AMF-COD-CDOA IN AMF TO DST-CDT-AUE(WSS-AGE,WSS-AUE).
+           MOVE AMF-IND-TDEU IN AMF TO TIP-DEU-AUE(WSS-AGE,WSS-AUE).
+
+      *FLB CST  26-AUG-1994 MODIFICADO
+           IF FIA-COD-VCLF IN FIA = 'P' AND
+              AMF-COD-VCLA IN AMF = SPACES
+               MOVE 9999999999999 TO VAL-LIM-CDT-AUE(WSS-AGE,WSS-AUE)
+               MOVE FIA-VAL-LIMF IN FIA TO 
+                    PCT-LIM-CDT-AUE(WSS-AGE,WSS-AUE)
+           ELSE
+           IF FIA-COD-VCLF IN FIA = 'P' AND
+              AMF-COD-VCLA IN AMF = 'P'
+               MOVE 9999999999999 TO VAL-LIM-CDT-AUE(WSS-AGE,WSS-AUE)
+               IF AMF-VAL-LIMA IN AMF < FIA-VAL-LIMF IN FIA
+                   MOVE AMF-VAL-LIMA IN AMF TO
+                        PCT-LIM-CDT-AUE(WSS-AGE,WSS-AUE)
+               ELSE
+                   MOVE FIA-VAL-LIMF IN FIA TO
+                        PCT-LIM-CDT-AUE(WSS-AGE,WSS-AUE)
+           ELSE
+           IF FIA-COD-VCLF IN FIA = 'P'
+      * AMF-COD-VCLA es una moneda
+               MOVE AMF-COD-VCLA IN AMF TO WSS-VCAM
+               MOVE AMF-VAL-LIMA IN AMF TO WSS-VAL-MONE
+               PERFORM OBT-VAL-MNAC
+      *FLB CST  9-MAR-1994 MODIFICADO PARA TRATAR ERROR
+               IF CCU-NUM-MENS < 21
+                   GO TO BRW-CARGA-AMF
+               ELSE
+                   MOVE WSS-VAL-MNAC TO VAL-LIM-CDT-AUE(WSS-AGE,WSS-AUE)
+                   MOVE FIA-VAL-LIMF IN FIA TO
+                        PCT-LIM-CDT-AUE(WSS-AGE,WSS-AUE)
+           ELSE
+
+      *FIA CON MONTO
+           IF AMF-COD-VCLA IN AMF = SPACES
+      *FLB CST  10-FEB-1995 PROBLEMA LDC-679 BCP
+               MOVE FIA-COD-VCLF IN FIA TO WSS-VCAM
+               MOVE FIA-VAL-LIMF IN FIA TO WSS-VAL-MONE
+               PERFORM OBT-VAL-MNAC
+               MOVE WSS-VAL-MNAC TO VAL-LIM-CDT-AUE(WSS-AGE,WSS-AUE)
+      *FLB CST  10-FEB-1995 FIN
+               MOVE WSS-100 TO PCT-LIM-CDT-AUE(WSS-AGE,WSS-AUE)
+           ELSE
+           IF AMF-COD-VCLA IN AMF = 'P'
+               MOVE FIA-VAL-LIMF IN FIA TO
+                    VAL-LIM-CDT-AUE(WSS-AGE,WSS-AUE)
+               MOVE AMF-VAL-LIMA IN AMF TO
+                    PCT-LIM-CDT-AUE(WSS-AGE,WSS-AUE)
+           ELSE
+      * AMF-COD-VCLA es una moneda
+               MOVE AMF-COD-VCLA IN AMF TO WSS-VCAM
+               MOVE AMF-VAL-LIMA IN AMF TO WSS-VAL-MONE
+               PERFORM OBT-VAL-MNAC
+               IF CCU-NUM-MENS < 21
+                   GO TO BRW-CARGA-AMF
+               ELSE
+                   MOVE WSS-VAL-MNAC TO 
+                        VAL-LIM-CDT-AUE(WSS-AGE,WSS-AUE)
+                   MOVE WSS-100      TO 
+                        PCT-LIM-CDT-AUE(WSS-AGE,WSS-AUE).
+
+           MOVE FIO-GET-NXT   TO FIO-CMND.
+           PERFORM DEU-FIO-AMF.
+           MOVE FIO-STAT TO PGM-STAT-AMF.
+           IF FIO-STAT-OKS AND 
+              AMF-KEY-IFIA IN AMF = FIA-KEY-IFIA IN FIA
+               GO TO LUP-CARGA-AMF.
+
+           MOVE WSS-AUE TO PMAX-AGE(WSS-AGE).
+
+      *FLB CST  26-AUG-1994 FIN
+
+       BRW-CARGA-AMF.
+           MOVE PGM-STAT-AMF TO FIO-STAT.
+           IF FIO-STAT-OKS
+               MOVE FIO-END-BRW TO FIO-CMND
+               PERFORM DEU-FIO-AMF.
+       FIN-CARGA-AMF.
+           EXIT.
+
+       AMF-ESP-1-DLC SECTION.
+       INI-AMF-ESP-1-DLC.
+      * Hay 1 o n AMF para DLC's especificos
+           MOVE ZEROES TO WSS-GES.
+           ADD 1 TO WSS-GAR.
+           MOVE RDC-CIC-ICLI IN RDL TO CLI-GAR(WSS-GAR).
+           MOVE FIA-CIC-IESC IN FIA TO CIC-GAR(WSS-GAR).
+      *FLB CST  5-DEC-1994 
+      *    MOVE ZEROES              TO FIA-GAR(WSS-GAR).
+           MOVE FIA-NUM-IFIA IN FIA TO FIA-GAR(WSS-GAR).
+           MOVE FIA-COD-TOFS IN FIA TO TIP-GAR(WSS-GAR).
+           MOVE FIA-COD-AOFS IN FIA TO STP-GAR(WSS-GAR).
+           MOVE 'E'                 TO LIM-GAR(WSS-GAR).
+
+           IF FIA-COD-VCLF IN FIA NOT = 'P'
+               MOVE FIA-VAL-LIMF IN FIA TO WSS-VAL-MONE
+               MOVE FIA-COD-VCLF IN FIA TO WSS-VCAM
+               PERFORM OBT-VAL-MNAC
+      *FLB CST  9-MAR-1994 MODIFICADO PARA TRATAR ERROR
+               IF CCU-NUM-MENS < 21
+                   GO TO FIN-AMF-ESP-1-DLC
+               ELSE
+                   MOVE WSS-VAL-MNAC TO VAL-GAR(WSS-GAR)
+           ELSE
+               MOVE 9999999999999    TO VAL-AUG(WSS-GAR).
+
+      *    MOVE ZEROES       TO PON-GAR(WSS-GAR).
+           MOVE ZEROES       TO TEM-GAR(WSS-GAR).
+           MOVE 'F'          TO CLA-GAR(WSS-GAR).
+
+       LUP-AMF-ESP-1-DLC.
+           IF WSS-GES = CCU-TGES 
+               MOVE 20          TO CCU-NUM-MENS
+               MOVE 'ARRGESEXC' TO CCU-COD-MENS
+               GO TO FIN-AMF-ESP-1-DLC.
+
+           ADD 1 TO WSS-GES.
+           MOVE AMF-CIC-IOCA IN AMF TO IOPC-GES(WSS-GAR,WSS-GES).
+           MOVE AMF-COD-TOOA IN AMF TO TIP-CDT-GES(WSS-GAR,WSS-GES).
+           MOVE AMF-COD-AOOA IN AMF TO STP-CDT-GES(WSS-GAR,WSS-GES).
+           MOVE AMF-COD-VCOA IN AMF TO VCB-CDT-GES(WSS-GAR,WSS-GES).
+           MOVE AMF-COD-CDOA IN AMF TO DST-CDT-GES(WSS-GAR,WSS-GES).
+           MOVE AMF-IND-TDEU IN AMF TO TIP-DEU-GES(WSS-GAR,WSS-GES).
+
+      *FLB CST  26-AUG-1994 MODIFICADO
+           IF NOT ( AMF-COD-VCLA IN AMF = 'P' OR SPACES )
+               MOVE AMF-COD-VCLA IN AMF TO WSS-VCAM
+               MOVE AMF-VAL-LIMA IN AMF TO WSS-VAL-MONE
+               PERFORM OBT-VAL-MNAC
+      *FLB CST  9-MAR-1994 MODIFICADO PARA TRATAR ERROR
+               IF CCU-NUM-MENS < 21
+                   GO TO FIN-AMF-ESP-1-DLC
+               ELSE
+                   MOVE WSS-VAL-MNAC TO 
+                        VAL-LIM-CDT-GES(WSS-GAR,WSS-GES)
+                   MOVE WSS-100      TO 
+                        PCT-LIM-CDT-GES(WSS-GAR,WSS-GES)
+           ELSE
+               MOVE 9999999999999 TO VAL-LIM-CDT-GES(WSS-GAR,WSS-GES)
+               IF AMF-COD-VCLA IN AMF = SPACES 
+                   MOVE WSS-100      TO 
+                        PCT-LIM-CDT-GES(WSS-GAR,WSS-GES)
+               ELSE
+                   MOVE AMF-VAL-LIMA IN AMF TO 
+                        PCT-LIM-CDT-GES(WSS-GAR,WSS-GES).
+ 
+           MOVE ZEROES TO VAL-ASG-CDT-GES(WSS-GAR,WSS-GES).
+      *FLB CST  26-AUG-1994 FIN
+
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM DEU-FIO-AMF.
+           MOVE FIO-STAT TO PGM-STAT-AMF.
+           IF FIO-STAT-OKS AND 
+              AMF-KEY-IFIA IN AMF = FIA-KEY-IFIA IN FIA 
+               GO TO LUP-AMF-ESP-1-DLC.
+
+           MOVE WSS-GES TO PMAX-GAR(WSS-GAR).
+       FIN-AMF-ESP-1-DLC.
+           EXIT.
+
+       PONE-AGE-A-COLA-GAR SECTION.
+       INI-PONE-AGE-A-COLA-GAR.
+
+           ADD 1 TO WSS-GAR.
+           MOVE CLI-AGE(WSS-I) TO CLI-GAR(WSS-GAR).
+           MOVE CIC-AGE(WSS-I) TO CIC-GAR(WSS-GAR).
+           MOVE FIA-AGE(WSS-I) TO FIA-GAR(WSS-GAR).
+           MOVE TIP-AGE(WSS-I) TO TIP-GAR(WSS-GAR).
+           MOVE STP-AGE(WSS-I) TO STP-GAR(WSS-GAR).
+           MOVE LIM-AGE(WSS-I) TO LIM-GAR(WSS-GAR).
+           MOVE VAL-AGE(WSS-I) TO VAL-GAR(WSS-GAR).
+      *    MOVE ZEROES         TO PON-GAR(WSS-GAR).
+           MOVE ZEROES         TO TEM-GAR(WSS-GAR).
+           MOVE CLA-AGE(WSS-I) TO CLA-GAR(WSS-GAR).
+           MOVE PMAX-AGE(WSS-I) TO PMAX-GAR(WSS-GAR).
+
+           PERFORM PONE-AUE-A-COLA-GES VARYING WSS-J FROM 1 BY 1 
+                     UNTIL WSS-J > PMAX-AGE(WSS-I).
+       FIN-PONE-AGE-A-COLA-GAR.
+           EXIT.
+
+       PONE-AUG-A-COLA-GAR SECTION.
+       INI-PONE-AUG-A-COLA-GAR.
+
+           ADD 1 TO WSS-GAR.
+           MOVE CLI-AUG(WSS-I) TO CLI-GAR(WSS-GAR).
+           MOVE CIC-AUG(WSS-I) TO CIC-GAR(WSS-GAR).
+           MOVE FIA-AUG(WSS-I) TO FIA-GAR(WSS-GAR).
+           MOVE TIP-AUG(WSS-I) TO TIP-GAR(WSS-GAR).
+           MOVE STP-AUG(WSS-I) TO STP-GAR(WSS-GAR).
+           MOVE LIM-AUG(WSS-I) TO LIM-GAR(WSS-GAR).
+           MOVE VAL-AUG(WSS-I) TO VAL-GAR(WSS-GAR).
+      *    MOVE ZEROES         TO PON-GAR(WSS-GAR).
+           MOVE ZEROES         TO TEM-GAR(WSS-GAR).
+           MOVE CLA-AUG(WSS-I) TO CLA-GAR(WSS-GAR).
+       FIN-PONE-AUG-A-COLA-GAR.
+           EXIT.
+
+       PONE-AUE-A-COLA-GES SECTION.
+       INI-PONE-AUE-A-COLA-GES.
+
+           MOVE IOPC-AUE(WSS-I,WSS-J) TO IOPC-GES(WSS-GAR,WSS-J).
+
+           MOVE STP-CDT-AUE(WSS-I,WSS-J) TO 
+                STP-CDT-GES(WSS-GAR,WSS-J).
+
+           MOVE DST-CDT-AUE(WSS-I,WSS-J) TO
+                DST-CDT-GES(WSS-GAR,WSS-J).
+
+           MOVE VAL-LIM-CDT-AUE(WSS-I,WSS-J) TO
+                VAL-LIM-CDT-GES(WSS-GAR,WSS-J).
+
+      *FLB CST  26-AUG-1994 
+           MOVE ZEROES TO VAL-ASG-CDT-GES(WSS-GAR,WSS-J).
+
+           MOVE PCT-LIM-CDT-AUE(WSS-I,WSS-J) TO 
+                PCT-LIM-CDT-GES(WSS-GAR,WSS-J).
+
+           MOVE TIP-CDT-AUE(WSS-I,WSS-J) TO
+                TIP-CDT-GES(WSS-GAR,WSS-J).
+
+           MOVE VCB-CDT-AUE(WSS-I,WSS-J) TO
+                VCB-CDT-GES(WSS-GAR,WSS-J).
+
+           MOVE TIP-DEU-AUE(WSS-I,WSS-J) TO
+                TIP-DEU-GES(WSS-GAR,WSS-J).
+
+           MOVE VCB-LIM-CDT-AUE(WSS-I,WSS-J) TO
+                VCB-LIM-CDT-GES(WSS-GAR,WSS-J).
+
+       FIN-PONE-AUE-A-COLA-GES.
+           EXIT.
+
+      * Busca maximo DLC que es anterior a OPC's en curse
+       BUS-MAX-DLC-ANT SECTION.
+       INI-BUS-MAX-DLC-ANT.
+           MOVE ZEROES TO WSS-DLC.
+       LUP-BUS-MAX-DLC-ANT.
+           ADD 1 TO WSS-DLC.
+           IF WSS-DLC > WSS-DLC-AUX
+               MOVE WSS-DLC-AUX TO WSS-DLC
+               MOVE WSS-DLC-AUX TO WSS-D
+               GO TO FIN-BUS-MAX-DLC-ANT.
+
+           IF INP-OPC(WSS-DLC) = 99999999
+               SUBTRACT 1 FROM WSS-DLC
+               MOVE WSS-DLC TO WSS-DLC-ANTS
+               MOVE ZEROES TO WSS-D
+               GO TO FIN-BUS-MAX-DLC-ANT.
+
+           GO TO LUP-BUS-MAX-DLC-ANT.
+       FIN-BUS-MAX-DLC-ANT.
+           EXIT.
+
+       CALCULO-FINAL-CUPO-CLF SECTION.
+       INI-CALCULO-FINAL-CUPO-CLF.
+      * Calculo Final de Cupo Utilizado de CLF
+
+           MOVE ZEROES TO CCU-VAL-CDIS.
+           MOVE ZEROES TO CCU-VAL-CUTI.
+           MOVE ZEROES TO WSS-Z.
+       LUP-CALCULO-FINAL-CUPO-CLF.
+           ADD 1 TO WSS-Z.
+           IF WSS-Z > WSS-LDC
+               GO TO FIN-CALCULO-FINAL-CUPO-CLF.
+
+           ADD CUTI-LDC(WSS-Z) TO CCU-VAL-CUTI.
+           ADD CDIS-LDC(WSS-Z) TO CCU-VAL-CDIS.
+           GO TO LUP-CALCULO-FINAL-CUPO-CLF.
+       FIN-CALCULO-FINAL-CUPO-CLF.
+           EXIT.
+
+       CALCULO-FINAL-CUPO-LDC SECTION.
+       INI-CALCULO-FINAL-CUPO-LDC.
+
+      * Calculo FINAL de cupos ajustados por garantias
+      * Comparando  garantias requeridas con las remanentes 
+
+      * indicador no rebaja real de GAR utilizada
+      * rebaja temporal dentro de una LCR, sin afectar a las otras
+           MOVE 'N' TO WSS-IND-REBJ.
+
+           MOVE ZEROES TO WSS-I.
+       LUP-CALCULO-FINAL-CUPO-LDC.
+           ADD 1 TO WSS-I.
+           IF WSS-I > WSS-LDC
+               GO TO FIN-CALCULO-FINAL-CUPO-LDC.
+
+           IF IEXI-LDC(WSS-I) = 'N' 
+               GO TO LUP-CALCULO-FINAL-CUPO-LDC.
+
+           IF NMSG-LDC(WSS-I) = 1
+               SUBTRACT CUTI-LDC(WSS-I) FROM CMAX-LDC(WSS-I) 
+                          GIVING CDIS-LDC(WSS-I)
+               IF CCU-NUM-MENS > 24
+                   MOVE 24          TO CCU-NUM-MENS
+                   MOVE 'LDCEXCCOL' TO CCU-COD-MENS
+                   GO TO LUP-CALCULO-FINAL-CUPO-LDC
+               ELSE
+                   GO TO LUP-CALCULO-FINAL-CUPO-LDC.
+
+           IF NMSG-LDC(WSS-I) = 2
+               MOVE ZEROES TO CDIS-LDC(WSS-I)
+               IF CCU-NUM-MENS > 25
+                   MOVE 25          TO CCU-NUM-MENS
+                   MOVE 'LDCEXCGAR' TO CCU-COD-MENS
+                   GO TO LUP-CALCULO-FINAL-CUPO-LDC
+               ELSE
+                   GO TO LUP-CALCULO-FINAL-CUPO-LDC.
+
+           IF CCU-NUM-MENS = 21
+               MOVE ZEROES TO CDIS-LDC(WSS-I)
+               GO TO LUP-CALCULO-FINAL-CUPO-LDC.
+
+           IF MGAR-LDC(WSS-I) = 'S'
+               SUBTRACT CUTI-LDC(WSS-I) FROM CMAX-LDC(WSS-I) 
+                          GIVING CDIS-LDC(WSS-I)
+               GO TO LUP-CALCULO-FINAL-CUPO-LDC.
+
+           PERFORM INI-GAR.
+
+           SUBTRACT CUTI-LDC(WSS-I) FROM CMAX-LDC(WSS-I) 
+                GIVING WSS-TOPE.
+           MOVE WSS-TOPE TO WSS-DISP-LCR.
+           IF MGAR-LDC(WSS-I) = 'Y'
+               PERFORM OBTIENE-DISP-LCR-CASO-Y
+           ELSE
+               PERFORM OBTIENE-DISP-LCR-CASO-O.
+
+           MOVE WSS-DISP-LCR TO CDIS-LDC(WSS-I).
+           GO TO LUP-CALCULO-FINAL-CUPO-LDC.
+       FIN-CALCULO-FINAL-CUPO-LDC.
+           EXIT.
+
+       LLE-LCR SECTION.
+       LLE-LLE-LCR.
+      * Traspasa datos de arreglo LDC de trabajo a arreglo LCR de salida
+           MOVE CLF-COD-VCCF IN CLF TO WSS-VCAM.
+           MOVE ZEROES TO WSS-Z.
+       LUP-LLE-LCR.
+           ADD 1 TO WSS-Z.
+           IF WSS-Z > WSS-LDC
+               GO TO FIN-LLE-LCR.
+
+           IF IEXI-LDC(WSS-Z) NOT = 'S'
+               MOVE ZEROES TO CTOT-LDC(WSS-Z)
+               MOVE ZEROES TO CDIS-LDC(WSS-Z)
+      *FLB CST  8-OCT-1993 
+               MOVE ZEROES TO CUTI-LDC(WSS-Z)
+               MOVE ZEROES TO CTOT-LCR(WSS-Z)
+               MOVE ZEROES TO CDIS-LCR(WSS-Z)
+               MOVE ZEROES TO CUTI-LCR(WSS-Z)
+      *FLB CST  8-OCT-1993 
+               GO TO SIG-LLE-LCR.
+
+           MOVE CTOT-LDC(WSS-Z) TO WSS-VAL-MNAC.
+           PERFORM OBT-VAL-MONE.
+      *FLB CST  9-MAR-1994 MODIFICADO PARA TRATAR ERROR
+           IF CCU-NUM-MENS < 21
+               GO TO FIN-LLE-LCR.
+           MOVE WSS-VAL-MONE    TO CTOT-LCR(WSS-Z).
+
+           MOVE CUTI-LDC(WSS-Z) TO WSS-VAL-MNAC.
+           PERFORM OBT-VAL-MONE.
+           MOVE WSS-VAL-MONE    TO CUTI-LCR(WSS-Z).
+
+           MOVE CDIS-LDC(WSS-Z) TO WSS-VAL-MNAC.
+           PERFORM OBT-VAL-MONE.
+           MOVE WSS-VAL-MONE    TO CDIS-LCR(WSS-Z).
+
+       SIG-LLE-LCR.
+           MOVE MENS-LDC(WSS-Z) TO MENS-LCR(WSS-Z).
+           MOVE MEN2-LDC(WSS-Z) TO MEN2-LCR(WSS-Z).
+           MOVE NMSG-LDC(WSS-Z) TO NMSG-LCR(WSS-Z).
+           MOVE NMS2-LDC(WSS-Z) TO NMS2-LCR(WSS-Z).
+           GO TO LUP-LLE-LCR.
+       FIN-LLE-LCR.
+           EXIT.
+
+       CNV-VAL-CCU SECTION.
+       INI-CNV-VAL-CCU.
+      * CONVIERTE VALORES CCU A MONEDA CLF
+           IF CLF-COD-VCCF IN CLF = CCU-COD-PESO IN CCU-VARI
+               GO TO FIN-CNV-VAL-CCU.
+           MOVE CLF-COD-VCCF IN CLF TO WSS-VCAM.
+
+           MOVE CCU-VAL-CTOT IN CCU-VARI TO WSS-VAL-MNAC.
+           PERFORM OBT-VAL-MONE.
+      *FLB CST  9-MAR-1994 MODIFICADO PARA TRATAR ERROR
+           IF CCU-NUM-MENS < 21
+               GO TO FIN-CNV-VAL-CCU.
+           MOVE WSS-VAL-MONE    TO CCU-VAL-CTOT IN CCU-VARI.
+
+           MOVE CCU-VAL-CUTI IN CCU-VARI TO WSS-VAL-MNAC.
+           PERFORM OBT-VAL-MONE.
+           MOVE WSS-VAL-MONE    TO CCU-VAL-CUTI IN CCU-VARI.
+
+           MOVE CCU-VAL-CDIS IN CCU-VARI TO WSS-VAL-MNAC.
+           PERFORM OBT-VAL-MONE.
+           MOVE WSS-VAL-MONE    TO CCU-VAL-CDIS IN CCU-VARI.
+
+       FIN-CNV-VAL-CCU.
+           EXIT.
+
+       OBT-VAL-MONE SECTION.
+       INI-OBT-VAL-MONE.
+      * TRANSFORMA MONTO DE PESOS DEL DIA A MONEDA
+           MOVE WSS-VAL-MNAC TO WSS-VAL-MONE.
+           IF WSS-VCAM NOT = CCU-COD-PESO IN CCU-VARI AND
+      *FLB CST  8-OCT-1993 
+              WSS-VAL-MNAC NOT = ZEROES 
+               MOVE WSS-VCAM TO CAM-COD-VCAM IN CAM(1)
+               MOVE FIO-GET-KEY TO FIO-CMND
+               PERFORM TAB-FIO-CAM
+               IF NOT (
+                  FIO-STAT-OKS AND CAM-IND-VIGE IN CAM = 'S'
+                     )
+                   MOVE 'CAM    NEX' TO CCU-COD-MENS
+                   MOVE 20           TO CCU-NUM-MENS
+                   MOVE CAM-KEY-CAMB IN CAM TO CCU-CAMB
+               ELSE
+                   DIVIDE WSS-VAL-MNAC BY CAM-SGV-VCAM IN CAM GIVING
+                            WSS-VAL-MONE ROUNDED.
+       FIN-OBT-VAL-MONE.
+           EXIT.
+
+       INI-LCR SECTION.
+       INI-INI-LCR.
+           MOVE ZEROES TO WSS-Z.
+       LUP-INI-LCR.
+           ADD 1 TO WSS-Z.
+           IF WSS-Z > CCU-TLCR
+               GO TO FIN-INI-LCR.
+
+           MOVE ZEROES TO CTOT-LCR(WSS-Z)
+                          CDIS-LCR(WSS-Z).
+
+           MOVE SPACES TO MENS-LCR(WSS-Z)
+                          MEN2-LCR(WSS-Z).
+           MOVE ZEROES TO NMSG-LCR(WSS-Z)
+                          NMS2-LCR(WSS-Z).
+           GO TO LUP-INI-LCR.
+       FIN-INI-LCR.
+           EXIT.
+
+       INI SECTION.
+       INI-INI.
+       COPY GNSBGEDB.
+           MOVE 'LDCSBCCU' TO FIO-PROG.
+      *Buscar Independencia de Datos
+           IF WSS-1-VEZ NOT > ZEROES
+               MOVE CCU-QIDD TO SCR-QIDD
+               MOVE CCU-LIDD TO SCR-LIDD
+               MOVE 1 TO WSS-1-VEZ
+               PERFORM GNS-BUS-IDD.
+
+      * Inicializa Variables de Retorno
+
+           MOVE 99     TO CCU-NUM-MENS.
+           MOVE 99     TO CCU-NUM-MEN2.
+
+           MOVE SPACES  TO CCU-COD-MENS
+                           CCU-COD-MEN2
+                           CCU-COD-SIST.
+           PERFORM INI-LCR.
+
+
+           PERFORM GET-FHOY.
+           MOVE HOY-SHOY                 TO CAM-NUM-SCAM IN CAM(1).
+           MOVE HOY-AHOY                 TO CAM-NUM-ACAM IN CAM(1).
+           MOVE HOY-MHOY                 TO CAM-NUM-MCAM IN CAM(1).
+           MOVE HOY-DHOY                 TO CAM-NUM-DCAM IN CAM(1).
+           MOVE CAM-FEC-FCAM IN CAM(1)   TO CAM-FEC-FCAM IN CAM(2).
+           MOVE CCU-COD-PESO IN CCU-VARI TO CAM-COD-VCAM IN CAM(2).
+           IF CCU-IIC-ICLI IN CCU-VARI NOT NUMERIC
+               MOVE ZEROES TO CCU-IIC-ICLI IN CCU-VARI.
+
+      *SMC-INI 26-10-1993 LEE TABLA VSN PARA DETERMINAR SI SE
+      *                   USO DE FUNCIONALIDADES DE CTE, CEX
+      *                   LEA, TCR.
+      * BUSCA REGISTRO CTE.
+           MOVE 'TAB'                TO FIO-SIST.
+           MOVE 'DEU'                TO TAB-COD-SIST.
+           MOVE 'VSN '               TO TAB-COD-TTAB IN TAB.
+           MOVE 'LDCCTE      '       TO TAB-COD-CTAB IN TAB.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM GNS-FIO-TAB.
+           IF FIO-STAT-OKS
+              MOVE TAB-IND-VIGE IN TAB  TO WSS-VSN-VCTE IN WSS-VARI
+           ELSE
+              MOVE  'N'                 TO WSS-VSN-VCTE IN WSS-VARI.
+
+      * BUSCA REGISTRO CEX.
+           MOVE 'TAB'                TO FIO-SIST.
+           MOVE 'DEU'                TO TAB-COD-SIST.
+           MOVE 'VSN '               TO TAB-COD-TTAB IN TAB.
+           MOVE 'LDCCEX      '       TO TAB-COD-CTAB IN TAB.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM GNS-FIO-TAB.
+           IF FIO-STAT-OKS
+              MOVE TAB-IND-VIGE IN TAB  TO WSS-VSN-VCEX IN WSS-VARI
+           ELSE
+              MOVE  'N'                 TO WSS-VSN-VCEX IN WSS-VARI.
+
+      * BUSCA REGISTRO LEA.
+           MOVE 'TAB'                TO FIO-SIST.
+           MOVE 'DEU'                TO TAB-COD-SIST.
+           MOVE 'VSN '               TO TAB-COD-TTAB IN TAB.
+           MOVE  'LDCLEA      '      TO TAB-COD-CTAB IN TAB.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM GNS-FIO-TAB.
+           IF FIO-STAT-OKS
+              MOVE TAB-IND-VIGE IN TAB  TO WSS-VSN-VLEA IN WSS-VARI
+           ELSE
+              MOVE  'N'                 TO WSS-VSN-VLEA IN WSS-VARI.
+
+      * BUSCA REGISTRO TCR.
+           MOVE 'TAB'                TO FIO-SIST.
+           MOVE 'DEU'                TO TAB-COD-SIST.
+           MOVE 'VSN '               TO TAB-COD-TTAB IN TAB.
+           MOVE  'LDCTCR      '      TO TAB-COD-CTAB IN TAB.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM GNS-FIO-TAB.
+           IF FIO-STAT-OKS
+              MOVE TAB-IND-VIGE IN TAB  TO WSS-VSN-VTCR IN WSS-VARI
+           ELSE
+              MOVE  'N'                 TO WSS-VSN-VTCR IN WSS-VARI.
+
+      *SMC-FIN 26-10-1993 
+
+      *FLB CST  23-FEB-1995 
+      * VE SI RECHAZA AL EXISTIR ALGUN DLC MOROSO
+           MOVE 'DEU'                TO FIO-SIST.
+           MOVE 'VSN '               TO TAB-COD-TTAB IN TAB.
+           MOVE 'VALDLCMOROSO'       TO TAB-COD-CTAB IN TAB.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM GNS-FIO-TAB.
+           IF FIO-STAT-OKS
+              MOVE TAB-IND-VIGE IN TAB  TO WSS-VSN-VDMO IN WSS-VARI
+           ELSE
+              MOVE  'N'                 TO WSS-VSN-VDMO IN WSS-VARI.
+
+      *FLB CST  23-FEB-1995 
+      * IGNORA SOBREGIRO NO PACTADO
+           MOVE 'DEU'                TO FIO-SIST.
+           MOVE 'VSN '               TO TAB-COD-TTAB IN TAB.
+           MOVE 'SBRGIRNOPACT'       TO TAB-COD-CTAB IN TAB.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM GNS-FIO-TAB.
+           IF FIO-STAT-OKS
+              MOVE TAB-IND-VIGE IN TAB  TO WSS-VSN-SGNP IN WSS-VARI
+           ELSE
+              MOVE  'N'                 TO WSS-VSN-SGNP IN WSS-VARI.
+
+      *FLB CST  14-MAR-1995 Codificacion Tipo de Linea
+           MOVE 'DEU' TO FIO-SIST.
+           MOVE 'VSN'       TO TAB-COD-TTAB IN TAB.
+           MOVE 'CODTIPLDC' TO TAB-COD-CTAB IN TAB.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM GNS-FIO-TAB.
+           IF FIO-STAT-OKS
+               MOVE TAB-IND-VIGE IN TAB TO WSS-VSN-TIPL IN WSS-VARI
+               MOVE TAB-IND-VIGE IN TAB TO TLC-VSN-TIPO IN TLC-VARI
+           ELSE
+               MOVE 'N'                 TO TLC-VSN-TIPO IN TLC-VARI
+               MOVE 'N'                 TO WSS-VSN-TIPL IN WSS-VARI.
+
+      *FLB CST  14-MAR-1995 
+      * IMPIDE UTILIZAR OTRA LINEA AL COPARSE LA MAS APROPIADA
+           MOVE 'DEU'          TO FIO-SIST.
+           MOVE 'VSN '         TO TAB-COD-TTAB IN TAB.
+           MOVE 'USA1TIPLIN  ' TO TAB-COD-CTAB IN TAB.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM GNS-FIO-TAB.
+           IF FIO-STAT-OKS
+               MOVE TAB-IND-VIGE IN TAB TO WSS-VSN-U1TL IN WSS-VARI
+           ELSE
+               MOVE 'N'                 TO WSS-VSN-U1TL IN WSS-VARI.
+
+           MOVE 'COL'         TO FIO-SIST.
+           MOVE 'VSN'         TO TAB-COD-TTAB IN TAB.
+           MOVE 'TESTLDCLAV'  TO TAB-COD-CTAB IN TAB.
+           MOVE FIO-GET-KEY   TO FIO-CMND.
+           PERFORM GNS-FIO-TAB.
+           IF FIO-STAT-OKS AND TAB-IND-VIGE IN TAB = 'S'
+               MOVE 'S' TO LDC-FLAG IN LDC-VARI
+           ELSE
+               MOVE SPACES TO LDC-FLAG IN LDC-VARI.
+
+           MOVE 'DEU'         TO FIO-SIST.
+           MOVE 'TLC'         TO TAB-CIC-TTAB IN TAB.
+           MOVE 'LAV'         TO TAB-CIC-CTAB IN TAB.
+           MOVE 'TAB-CIC-TABL' TO FIO-AKEY.
+           MOVE FIO-GET-KEY   TO FIO-CMND.
+           PERFORM GNS-FIO-TAB.
+           IF FIO-STAT-OKS AND TAB-IND-VIGE IN TAB = 'S'
+               MOVE TAB-COD-CTAB IN TAB TO TLC-CODG
+               MOVE SPACES TO MSG-COD-MENS
+           ELSE
+               MOVE 18 TO CCU-NUM-MENS
+               MOVE 'CICLAVNEX' TO CCU-COD-MENS.
+
+       FIN-INI.
+           EXIT.
+
+       FIN SECTION.
+       INI-FIN.
+
+      *FLB CST  16-MAR-1995 
+           IF WSS-COD-MENS = 'DLCMOROSO' AND
+              ( OK-OPCS-ANTIGUAS OR OK-CON-MENSAJE-OPCS-ANTIGUAS )
+               MOVE 12           TO CCU-NUM-MENS
+               MOVE WSS-COD-MENS TO CCU-COD-MENS
+           ELSE
+           IF WSS-COD-MENS = 'VTODLC>LDC' AND
+              WSS-NUM-MENS NOT > CCU-NUM-MENS
+               MOVE WSS-NUM-MENS TO CCU-NUM-MENS
+               MOVE WSS-COD-MENS TO CCU-COD-MENS
+           ELSE
+      *FLB CST  16-MAR-1995 FIN
+
+      * Si esta todo OK en tipo de mensaje 1
+           IF CCU-NUM-MENS = 99
+               MOVE ZEROES TO CCU-NUM-MENS
+               MOVE SPACES TO CCU-COD-MENS.
+
+           IF CCU-NUM-MEN2 = 99
+               MOVE ZEROES TO CCU-NUM-MEN2
+               MOVE SPACES TO CCU-COD-MEN2.
+
+           MOVE 'DEU'  TO CCU-COD-SIST IN CCU-VARI.
+       COPY GNSBGGBK.
+       FIN-FIN.
+           EXIT.
+
+       COPY GNSBGHOY.
+       COPY GNSBBSYS.
+       COPY GNSBGDTC.
+       COPY GNSBGIDD.
+       COPY GNSBTABT.
+       COPY LDCBFCLF.
+       COPY LDCBFLDC.
+       COPY LDCBFARC.
+       COPY LDCBFARG.
+       COPY LDCBFRDC REPLACING RDC BY RDL
+                  ==ADR-RDC-REQA== BY ==ADR-RDL-REQA==.
+
+       COPY GARBFGDD.
+       COPY GARBFGDG.
+       COPY GARBFGVT.
+       COPY GARBFGES.
+
+       COPY COLBFRDC.
+       COPY COLBFDLC.
+       COPY COLBFOPC.
+
+       COPY DEUBFFIA.
+       COPY DEUBFAMF.
+
+       COPY SGCBFRCO.
+       COPY SGCBFOPE.
+      *>>>>
+      *SMC-INI 24-11-1993
+       COPY COLBFTOC.
+       COPY GNSBFMSC.
+      *SMC-FIN 24-11-1993
+       COPY GNSBFTAB.
+
+       COPY TABBFCAM.
+      *FLB CST  23-MAR-1995 
+       COPY LDCBVTLC.
+       SGC-OBT-OSC SECTION.
+       INI-SGC-OBT-OSC.
+      *************************************************************
+      * Obtiene Saldos de cuentas para los distintos tipos de operacion
+      * de un cliente.
+      * Parametros de Entrada: OSC-CIC-ICLI Identificador Cliente
+      * Parametros de Salida : Vector de Saldos para tipos de operacion.
+      *************************************************************
+      * Inicializa Variables
+
+           MOVE SPACES TO OSC-COD-MENS IN OSC-VARI.
+           MOVE ZEROS  TO OSC-COD-STAT IN OSC-VARI.
+       FIN-SGC-OBT-OSC.
+           EXIT.
+

@@ -1,0 +1,807 @@
+      *Operacion                : INT-IOPC
+      *Numero de la IDLC        : INT-IDLC
+      *Valor de Cambio          : INT-VCAM
+      *Fecha Colocacion         : INT-FCOL
+      *Fecha Inicial Periodo    : INT-FUNO
+      *Fecha Final   Periodo    : INT-FDOS
+      *Fecha Basa Tasa Variable : INT-FBTV ( opcional )
+      *Fecha de Proceso         : INT-FPRO ( la rutina la obtiene)
+      *
+      *devuelve:
+      *INT-TIPE                 : Tasa calculada para el periodo
+      *INT-CMSG, INT-MENS       : Codigo y mensaje
+      *INT-IETB                 : Indicador de existencia de la tasa bas
+       CBZ-CAL-INT SECTION.
+       INI-CBZ-CAL-INT.
+      * Inicializa con espacios las variables de seteo de c digos y
+      * mensajes de error.
+           MOVE SPACES TO INT-CMSG INT-MENS INT-IETB.
+           MOVE FEC-OHOY-1VEZ TO FEC-OHOY.
+      *Busca tasa(s) en registro(s) ICG(s)
+           PERFORM CBZ-BUS-TIN.
+      * Si se encontr  con alg n error en la b squeda de ICG, finaliza
+           IF INT-CMSG > SPACES
+               GO TO FIN-CBZ-CAL-INT.
+      *DAD ini  31-MAR-1994   (Memo.04-02-94)
+           IF INT-TIP2 > SPACES
+               MOVE INT-TIP2 TO INT-TIPT
+               MOVE INT-SPR2 TO INT-TINT.
+      *DAD fin  31-MAR-1994
+      *Para sumar o multiplicar tasas segun sea simple o compuesta
+      * El INT-SPBT puede tomar 2 valores: S (simple) o C (compuesta)
+           IF INT-SPBT = 'S'
+               MOVE 0 TO INT-TIPA
+           ELSE
+               MOVE 1 TO INT-TIPA.
+      *Obtiene fecha de hoy para el chequeo de tasa variable
+      * Si INT-CVTI > SPACES significa que tiene una base, por tanto es
+      * tasa variable:
+      * - Se obtiene la fecha y hora computacional y se setean las variables
+      *   INT-FPRO (Fecha Hoy) e INT-HPRO (Hora Hoy)
+           IF INT-CVTI > SPACES
+               PERFORM GET-FHOY
+               MOVE HOY-DHOY TO INT-DPRO
+               MOVE HOY-MHOY TO INT-MPRO
+               MOVE HOY-SHOY TO INT-SPRO
+               MOVE HOY-AHOY TO INT-APRO
+               MOVE HOY-HHHY TO INT-HHPR
+               MOVE HOY-MMHY TO INT-MMPR
+               MOVE HOY-SSHY TO INT-SSPR.
+      *
+      * Entra al IF, en caso que sean operaciones con respecto al flujo (normal)
+      * o bien cualquier operaci n con respecto al flujo, cuyo per odo de
+      * c lculo FUNO-FDOS sea cubierto por una ICG (esto no quita, si el cr dito
+      * tiene m ltiples ICG, puesto que una de ellas puede cubrir el
+      * per odo de c lculo)
+           IF NOT ( ( INT-TFPR = 'C' AND INT-PREP > ZEROES ) OR
+                      INT-IMAX > 1 )
+               MOVE INT-DUNO TO FEC-DEC1
+               MOVE INT-MUNO TO FEC-MEC1
+               MOVE INT-SUNO TO FEC-SEC1
+               MOVE INT-AUNO TO FEC-AEC1
+               MOVE INT-DDOS TO FEC-DEC2
+               MOVE INT-MDOS TO FEC-MEC2
+               MOVE INT-SDOS TO FEC-SEC2
+               MOVE INT-ADOS TO FEC-AEC2
+               MOVE FEC-FORM-FEC TO FEC-FORM
+               MOVE FEC-DIF-DIA  TO FEC-CMND
+      *Para GENESIS version 3.1
+      * Obtiene la cantidad de d as que hay entre la FUNO y la FDOS. Aqu
+      * si el cr dito es tasa variable se supone que la base no cambio entre
+      * estas 2 fechas, por tanto se obtiene la diferencia en d as de forma
+      * directa.
+               PERFORM CAL-FEC
+      *        PERFORM PRO-FEC
+               IF NOT FEC-STAT-OKS
+                   MOVE 'INTFEC1FEC2-' TO INT-CMSG
+                   GO TO FIN-CBZ-CAL-INT
+               ELSE
+                   MOVE FEC-NDIA TO INT-SEPD
+
+      *SMC-INI 22.09.1993
+      * Se setea INT-DDMA, INT-MDMA, INT-SDMA, INT-ADMA que son los items
+      * elementales de la variable INT-FINT, la cual sirve s lo para
+      * determinar la fecha de la base de un cr dito tasa variable y as
+      * obtener su base en la tabla CAM (valores de cambio).
+      *
+      * C mo se setea la INT-FTRN, en esta rama de la rutina:
+      * - Si la ICG es con respecto al flujo y tiene ZEROES en per odo de
+      * reparto, significa que la operaci n se comporta en esta parte de la
+      * l nea del tiempo FUNO, FDOS como una operaci n en que su c lculo
+      * de inter s de una pr xima cuota se fija mirando su base a la fecha
+      * de vencimiento del Vcto. anterior al que se est  calculando, por
+      * tanto aqu  hay que tener atenci n que el FUNO debe ser s lo la Fecha
+      * de Vencimiento de un VEN y la FDOS puede ser < o = a la Fecha de
+      * Vencimiento del siguiente VEN.
+                   IF ( INT-TFPR = 'F' AND INT-PREP = ZEROES )
+                        MOVE INT-DUNO TO INT-DDMA
+                        MOVE INT-MUNO TO INT-MDMA
+                        MOVE INT-SUNO TO INT-SDMA
+                        MOVE INT-AUNO TO INT-ADMA
+                        PERFORM GNS-CAL-TPE
+                        GO TO FIN-CBZ-CAL-INT
+                   ELSE
+      * - Si la ICG es con respecto al flujo y su per odo de reparto es mayor
+      * que 0 (INT-PREP > 0) significa que es una operaci n de cr dito
+      * repactable cada INT-PREP cuotas. Si es la primera ICG, significa que el
+      * INT-FINT es igual a ZERO por tanto la base se debe tomar a la fecha
+      * de colocaci n de la operaci n, sino (es decir la INT-FINT <> 0)
+      * significa que la base se toma al inicio de esa ICG.
+                        IF ( INT-TFPR = 'F' AND INT-PREP > ZEROES AND
+                             INT-FINT = ZEROS )
+                             MOVE INT-DCOL TO INT-DDMA
+                             MOVE INT-MCOL TO INT-MDMA
+                             MOVE INT-SCOL TO INT-SDMA
+                             MOVE INT-ACOL TO INT-ADMA
+                             PERFORM GNS-CAL-TPE
+                             GO TO FIN-CBZ-CAL-INT
+                        ELSE
+                            PERFORM GNS-CAL-TPE
+                            GO TO FIN-CBZ-CAL-INT.
+      *SMC-FIN 22.09.1993
+
+      *SMC-INI 03.09.1993
+           IF INT-DDMA NOT > ZEROS
+              MOVE INT-DCOL TO  INT-DDMA
+              MOVE INT-MCOL TO  INT-MDMA
+              MOVE INT-SCOL TO  INT-SDMA
+              MOVE INT-ACOL TO  INT-ADMA.
+
+           IF INT-SPR2 > 0
+               MOVE INT-TINT TO INT-TINC
+               MOVE INT-SPR2 TO INT-TINT
+               MOVE INT-TINC TO INT-SPR2
+           ELSE
+               MOVE INT-TINT TO INT-SPR2.
+
+           IF INT-CVTI NOT > SPACES OR INT-TFPR = 'F'
+               GO TO UNO-CBZ-CAL-INT.
+
+      * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
+      *     MOVE INT-DCOL TO FEC-ITM1 INT-DDMA.
+      *     MOVE INT-MCOL TO FEC-ITM2 INT-MDMA.
+      *     MOVE INT-SCOL TO FEC-ITM3 INT-SDMA.
+      *     MOVE INT-ACOL TO FEC-ITM4 INT-ADMA.
+
+           MOVE  INT-DDMA TO FEC-ITM1
+           MOVE  INT-MDMA TO FEC-ITM2
+           MOVE  INT-SDMA TO FEC-ITM3
+           MOVE  INT-ADMA TO FEC-ITM4.
+
+      *SMC-FIN 03.09.1993
+
+       SUM-CBZ-CAL-INT.
+           IF INT-UTPR = 'D'
+               MOVE INT-PREP    TO FEC-NDIA
+               MOVE FEC-SUM-DIA TO FEC-CMND
+           ELSE
+           IF INT-UTPR = 'M'
+               MOVE INT-PREP    TO FEC-NMES
+               MOVE FEC-SUM-MES TO FEC-CMND
+           ELSE
+               MOVE INT-PREP    TO FEC-NANO
+               MOVE FEC-SUM-ANO TO FEC-CMND.
+           MOVE FEC-FORM-FEC TO FEC-FORM.
+      *Para GENESIS version 3.1
+           PERFORM CAL-FEC.
+      *    PERFORM PRO-FEC.
+           IF NOT FEC-STAT-OKS
+               MOVE 'INTFCOLPREP+' TO INT-CMSG
+               GO TO FIN-CBZ-CAL-INT.
+           MOVE FEC-ITM1 TO INT-DAU1.
+           MOVE FEC-ITM2 TO INT-MAU1.
+           MOVE FEC-ITM3 TO INT-SAU1.
+           MOVE FEC-ITM4 TO INT-AAU1.
+           MOVE INT-DUNO TO INT-DAU2.
+           MOVE INT-MUNO TO INT-MAU2.
+           MOVE INT-SUNO TO INT-SAU2.
+           MOVE INT-AUNO TO INT-AAU2.
+           IF INT-FAU1 NOT > INT-FAU2
+               MOVE INT-DDMA TO INT-DAU2
+               MOVE INT-MDMA TO INT-MAU2
+               MOVE INT-SDMA TO INT-SAU2
+               MOVE INT-ADMA TO INT-AAU2
+               IF INT-FAU1 > INT-FAU2
+                   MOVE INT-DAU1 TO INT-DDMA
+                   MOVE INT-MAU1 TO INT-MDMA
+                   MOVE INT-SAU1 TO INT-SDMA
+                   MOVE INT-AAU1 TO INT-ADMA
+                   GO TO SUM-CBZ-CAL-INT
+               ELSE
+                   GO TO SUM-CBZ-CAL-INT.
+           MOVE FEC-ITM1 TO INT-DTIN(INT-IMAX).
+           MOVE FEC-ITM2 TO INT-MTIN(INT-IMAX).
+           MOVE FEC-ITM3 TO INT-STIN(INT-IMAX).
+           MOVE FEC-ITM4 TO INT-ATIN(INT-IMAX).
+       UNO-CBZ-CAL-INT.
+      *Obtener interes entre INT-DUNO y MIN(FTIN(1...INT-IMAX),FDOS)
+           MOVE INT-DUNO TO FEC-DEC1.
+           MOVE INT-MUNO TO FEC-MEC1.
+           MOVE INT-SUNO TO FEC-SEC1.
+           MOVE INT-AUNO TO FEC-AEC1.
+       CON-CBZ-CAL-INT.
+           MOVE 0 TO INT-SIND INT-AUX1.
+           MOVE '99999999' TO INT-FAU1.
+       LUP-CBZ-CAL-INT.
+           MOVE INT-TINX TO INT-TINT.
+
+      *SMC-INI 03.09.1993
+           MOVE INT-TIPX    TO INT-TIPT
+      *SMC-FIN 03.09.1993
+
+           ADD 1 TO INT-SIND.
+           IF ( INT-CVTI NOT > SPACES OR INT-TFPR = 'F' ) AND
+              ( INT-SIND = INT-IMAX )
+               NEXT SENTENCE
+           ELSE
+           IF INT-SIND NOT > INT-IMAX
+               IF INT-FTIN(INT-SIND) < INT-FAU1 AND
+                  INT-ITIN(INT-SIND) NOT > SPACES
+                   MOVE INT-FTIN(INT-SIND) TO INT-FAU1
+                   MOVE INT-SIND           TO INT-AUX1
+                   GO TO LUP-CBZ-CAL-INT
+               ELSE
+                   GO TO LUP-CBZ-CAL-INT.
+      *Cambio de SPREAD
+           IF INT-AUX1 > 0 AND INT-AUX1 NOT = INT-IMAX
+               MOVE INT-VTIN(INT-AUX1) TO INT-TINX
+      *SMC-INI 03.09.1993
+               MOVE INT-CTIN(INT-AUX1) TO INT-TIPX
+      *SMC-FIN 03.09.1993
+               MOVE 'X' TO INT-ITIN(INT-AUX1).
+           MOVE INT-DDOS TO INT-DAU2.
+           MOVE INT-MDOS TO INT-MAU2.
+           MOVE INT-SDOS TO INT-SAU2.
+           MOVE INT-ADOS TO INT-AAU2.
+           IF INT-FAU1 < INT-FAU2
+               MOVE INT-DAU1 TO FEC-DEC2
+               MOVE INT-MAU1 TO FEC-MEC2
+               MOVE INT-SAU1 TO FEC-SEC2
+               MOVE INT-AAU1 TO FEC-AEC2
+           ELSE
+               MOVE INT-DAU2 TO FEC-DEC2
+               MOVE INT-MAU2 TO FEC-MEC2
+               MOVE INT-SAU2 TO FEC-SEC2
+               MOVE INT-AAU2 TO FEC-AEC2.
+           MOVE FEC-FORM-FEC TO FEC-FORM.
+           MOVE FEC-DIF-DIA  TO FEC-CMND.
+      *Para GENESIS version 3.1
+           PERFORM CAL-FEC.
+      *    PERFORM PRO-FEC.
+           IF NOT FEC-STAT-OKS
+               MOVE 'INTFEC1FEC2-' TO INT-CMSG
+               GO TO FIN-CBZ-CAL-INT.
+           MOVE FEC-NDIA TO INT-SEPD.
+           PERFORM GNS-CAL-TPE.
+           IF INT-CMSG > SPACES
+      *        DISPLAY 'INT-CMSG : ' INT-CMSG
+      *        DISPLAY 'INT-MENS : ' INT-MENS
+               GO TO FIN-CBZ-CAL-INT.
+      *     DISPLAY '---------------------------------------------- '
+      *     DISPLAY 'FEC-FEC1 - FEC-FEC2 : ' FEC-FEC1 ' - ' FEC-FEC2.
+      *     DISPLAY 'FEC-NDIA            : ' FEC-NDIA.
+      *     DISPLAY 'INT-TIPT            : ' INT-TIPT.
+      *     DISPLAY 'INT-TINT            : ' INT-TINT WITH CONVERSION.
+      *     DISPLAY 'INT-TIPE            : ' INT-TIPE WITH CONVERSION.
+      *     DISPLAY '------------------------------------------------'.
+           MOVE INT-SPR2 TO INT-TINT.
+      *Se suma o se multiplica segun sea simple o compuesta
+           IF INT-SPBT = 'S'
+               ADD INT-TIPE TO INT-TIPA
+           ELSE
+               ADD 1 TO INT-TIPE
+               MULTIPLY INT-TIPE BY INT-TIPA GIVING INT-TIPA.
+      *
+      *Se termina si la fecha sumada es mayor o igual que la fecha Dos
+           IF ( INT-FAU1 NOT < INT-FAU2 )
+               IF INT-SPBT = 'S'
+                   MOVE INT-TIPA TO INT-TIPE
+                   GO TO FIN-CBZ-CAL-INT
+               ELSE
+                   SUBTRACT 1 FROM INT-TIPA GIVING INT-TIPE
+                   GO TO FIN-CBZ-CAL-INT.
+           MOVE FEC-DEC2 TO FEC-DEC1 INT-DDMA.
+           MOVE FEC-MEC2 TO FEC-MEC1 INT-MDMA.
+           MOVE FEC-SEC2 TO FEC-SEC1 INT-SDMA.
+           MOVE FEC-AEC2 TO FEC-AEC1 INT-ADMA.
+      *Si la fecha minima no fue el periodo de repacto, continua
+      *buscando minimo
+           IF INT-AUX1 NOT = INT-IMAX
+      *SMC-INI 03.09.1993
+               MOVE INT-CTIN(INT-AUX1) TO INT-TIPT
+               IF INT-CVTI NOT > SPACES OR INT-TFPR = 'F'
+                  GO TO CON-CBZ-CAL-INT
+               ELSE
+                  MOVE INT-DTIN(INT-AUX1) TO INT-DTIN(INT-IMAX)
+                  MOVE INT-MTIN(INT-AUX1) TO INT-MTIN(INT-IMAX)
+                  MOVE INT-STIN(INT-AUX1) TO INT-STIN(INT-IMAX)
+                  MOVE INT-ATIN(INT-AUX1) TO INT-ATIN(INT-IMAX).
+      *SMC-FIN 03.09.1993
+
+           MOVE INT-DTIN(INT-IMAX) TO FEC-ITM1.
+           MOVE INT-MTIN(INT-IMAX) TO FEC-ITM2.
+           MOVE INT-STIN(INT-IMAX) TO FEC-ITM3.
+           MOVE INT-ATIN(INT-IMAX) TO FEC-ITM4.
+           IF INT-UTPR = 'D'
+               MOVE INT-PREP    TO FEC-NDIA
+               MOVE FEC-SUM-DIA TO FEC-CMND
+           ELSE
+           IF INT-UTPR = 'M'
+               MOVE INT-PREP    TO FEC-NMES
+               MOVE FEC-SUM-MES TO FEC-CMND
+           ELSE
+               MOVE INT-PREP    TO FEC-NANO
+               MOVE FEC-SUM-ANO TO FEC-CMND.
+           MOVE FEC-FORM-FEC TO FEC-FORM.
+      *Para GENESIS version 3.1
+           PERFORM CAL-FEC.
+      *    PERFORM PRO-FEC.
+           IF NOT FEC-STAT-OKS
+               MOVE 'INTFCOLPREP+' TO INT-CMSG
+               GO TO FIN-CBZ-CAL-INT.
+           MOVE FEC-ITM1 TO INT-DTIN(INT-IMAX).
+           MOVE FEC-ITM2 TO INT-MTIN(INT-IMAX).
+           MOVE FEC-ITM3 TO INT-STIN(INT-IMAX).
+           MOVE FEC-ITM4 TO INT-ATIN(INT-IMAX).
+           GO TO CON-CBZ-CAL-INT.
+       FIN-CBZ-CAL-INT.
+           MOVE ZEROES TO INT-FBTV.
+           MOVE 0      TO INT-SPR2.
+           MOVE SPACES TO INT-TIPV.
+           MOVE FEC-OHOY-NVEZ TO FEC-OHOY.
+      *DAD ini  31-MAR-1994   (Memo.04-02-94)
+           MOVE SPACES TO INT-TIP2.
+      *DAD fin  31-MAR-1994
+       EXT-CBZ-CAL-INT.
+           EXIT.
+
+      *Transforma INT-SEPA segun Tipo de Periodo INT-IPER
+      * 07-MAY-1990 14:55
+       PRO-IPER SECTION.
+       INI-PRO-IPER.
+      *Busca el CIC de INT-IPER en MSC IPER de sistema TAB
+           MOVE SPACES TO INT-CMSG INT-MENS.
+           MOVE 'TAB'    TO MSC-COD-SIST FIO-SIST.
+           MOVE 'IPER'   TO MSC-COD-TMSC IN MSC.
+           MOVE INT-IPER TO MSC-COD-CMSC IN MSC.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM GNS-FIO-MSC.
+           IF FIO-STAT-OKS
+               MOVE MSC-CIC-CMSC IN MSC TO INT-IPER
+           ELSE
+               MOVE 'CICIPERNEX' TO INT-CMSG.
+       FIN-PRO-IPER.
+           EXIT.
+
+      *Obtiene tasa de interes dado un periodo, un tipo de tasa y
+      *un valor de tasa
+       OBT-VTIN SECTION.
+       INI-OBT-VTIN.
+      *Obtiene fecha de hoy para el chequeo de tasa variable
+           IF INT-CVTI > SPACES
+               PERFORM GET-FHOY
+               MOVE HOY-DHOY TO INT-DPRO
+               MOVE HOY-MHOY TO INT-MPRO
+               MOVE HOY-SHOY TO INT-SPRO
+               MOVE HOY-AHOY TO INT-APRO
+               MOVE HOY-HHHY TO INT-HHPR
+               MOVE HOY-MMHY TO INT-MMPR
+               MOVE HOY-SSHY TO INT-SSPR.
+           PERFORM GNS-CAL-TPE.
+       FIN-OBT-VTIN.
+           EXIT.
+
+       GNS-CAL-TPE SECTION.
+       INI-GNS-CAL-TPE.
+           PERFORM OBT-SEPA.
+           IF INT-CMSG > SPACES
+               GO TO FIN-GNS-CAL-TPE.
+           PERFORM OBT-TINT.
+           IF INT-CMSG > SPACES
+               GO TO FIN-GNS-CAL-TPE.
+           PERFORM OBT-TIPE.
+           IF INT-CMSG > SPACES
+               GO TO FIN-GNS-CAL-TPE.
+       FIN-GNS-CAL-TPE.
+           EXIT.
+
+      *    Descripcion     : Separacion Periodo Interes
+      *    Observaciones   :
+      *      - Ampliar otros casos Periodo Base ( futuro ? )
+       OBT-SEPA SECTION.
+       INI-OBT-SEPA.
+      * Inicializa variables de seteo de c digos y mensajes de error.
+           MOVE SPACES TO INT-CMSG INT-MENS.
+      * Esta secci n transforma el per odo de intereses (INT-SEPD) que est
+      * en d as a su base de c lculo, es decir :
+      * - Si INT-PBTI = 'D'         (Base de c lculo diario)
+      *   Mueve directamente INT-SEPD a INT-SDIA
+      * - Si (INT-PBTI = 'T' o 'M') (Base de c lculo mensual)
+      *   Mueve INT-SEPD / 30 a INT-S30D,
+      *   el resto de esta divisi n queda en INT-SDIA
+      * - Si (INT-PBTI = 'X' o 'A') (Base de c lculo anual)
+      *   Mueve INT-SEPD / 360 a INT-S360,
+      *   el resto de esta divisi n queda en INT-SDIA
+      * - En otro caso, significa que la base de c lculo es desconocida y
+      * por tanto la rutina termina con INT-CMSG = 'INTPBTIINV'
+           IF INT-PBTI = 'D'
+      *JSS     MOVE 0 TO INT-S30D , INT-SMES , INT-S360 , INT-SANO
+               MOVE 0 TO INT-S30D , INT-S360
+               MOVE INT-SEPD TO INT-SDIA
+           ELSE
+           IF INT-PBTI = 'T' OR 'M'
+      *JSS     MOVE 0 TO INT-SANO , INT-SMES , INT-S360
+               MOVE 0 TO INT-S360
+               DIVIDE 30 INTO INT-SEPD GIVING INT-S30D
+                   REMAINDER INT-SDIA
+           ELSE
+           IF INT-PBTI = 'X' OR 'A'
+      *JSS     MOVE 0 TO INT-S30D , INT-SMES , INT-SANO
+               MOVE 0 TO INT-S30D
+               DIVIDE 360 INTO INT-SEPD GIVING INT-S360
+                   REMAINDER INT-SDIA
+           ELSE
+               MOVE 'INTPBTIINV' TO INT-CMSG
+               MOVE INT-TIPT     TO INT-MEN2.
+       FIN-OBT-SEPA.
+           EXIT.
+
+      *    Descripcion     : Preparacion Tasas Formula Unica
+      *    Observaciones   :
+      *
+       OBT-TINT SECTION.
+       INI-OBT-TINT.
+      * Inicializa variables de seteo de c digos y mensajes de error
+           MOVE SPACES TO INT-CMSG INT-MENS.
+      * Esta SECTION permite setear en la variable INT-MCTI la modalidad
+      * de c lculo de la tasa de inter s: S (simple) o C (compuesta)
+      * Las bases de c lculo pueden ser diaria, mensuales (30 d as) o anuales
+      * (360 d as) y la modalidad de c lculo de la tasa va a depender de la
+      * cantidad de d as del per odo a calcular y su base de c lculo, es
+      * decir si se est  calculando un per odo mayor a su base de c lculo
+      * se habla de que la modalidad de c lculo es sobre el per odo base y
+      * si el per odo de c lculo es menor o igual a la base de c lculo
+      * entonces se habla que la modalidad de c lculo es bajo el per odo base,
+      * por ejemplo:
+      * - Si la base de c lculo es anual (INT-PBTI = 'X' o 'A') y si el
+      *   per odo de c lculo de intereses, expresado en d as es mayor que
+      *   360 d as, entonces su modalidad de c lculo es sobre el per odo base,
+      *   es decir mover INT-SPBT a INT-MCTI.
+      * - Sino, es decir el per odo de c lculo de inter s es menor o igual a
+      *   360 d as, entonces la modalidad de c lculo es bajo el per odo base,
+      *   mover INT-BPBT a INT-MCTI
+           IF INT-PBTI = 'D'
+               MOVE INT-SPBT TO INT-MCTI
+           ELSE
+           IF INT-PBTI = 'T' OR 'M'
+               IF INT-SEPD > 30
+                   MOVE INT-SPBT TO INT-MCTI
+               ELSE
+                   MOVE INT-BPBT TO INT-MCTI
+           ELSE
+           IF INT-PBTI = 'X' OR 'A'
+               IF INT-SEPD > 360
+                   MOVE INT-SPBT TO INT-MCTI
+               ELSE
+                   MOVE INT-BPBT TO INT-MCTI
+           ELSE
+               MOVE 'INTPBTIINV' TO INT-CMSG
+               GO TO FIN-OBT-TINT.
+
+           MOVE INT-TINT TO INT-TINC.
+
+      *Si es tasa variable
+      *      IF ( INT-CVTI > SPACES ) AND
+      *         ( INT-IBTV NOT = INT-IBTV-NADA-MAS )
+      * Si la ICG que cubre el per odo de c lculo es tasa variable, es decir
+      * INT-CVTI > SPACES, busca en CAM/TAB la tasa base.
+      * La key de esta tabla se compone de los siguientes campos:
+      *   INT-FINT (Fecha de base c lculo)
+      *   INT-CVTI (C digo Valor Tasa Inter s) X(03)
+      *   INT-PBTI (Base de c lculo)           X(02)
+      *   INT-VCAM (Moneda de la operaci n)    X(06)
+      *   entonces la key de la tabla CAM/TAB es:
+      *   INT-FINT + INT-FINT + 'I' + INT-CVTI + INT-PBTI + INT-VCAM
+      *   Obtenida la tasa base se la suma a la variable INT-TINC la cual
+      *   contiene el spread de la ICG
+           IF ( INT-CVTI > SPACES )
+                MOVE INT-FINT TO CAM-FEC-FCAM IN CAM(1)
+                MOVE INT-FINT TO CAM-FEC-FCAM IN CAM(2)
+
+                MOVE 'I'      TO CAM-MSC-TVAL IN CAM(1)
+                MOVE INT-CVTI TO CAM-COD-CVAL IN CAM(1)
+                MOVE INT-PBTI TO CAM-COD-TCAM IN CAM(1)
+
+                MOVE INT-VCAM TO CAM-COD-VCAM IN CAM(2)
+
+      *JSS-INI 16-DEC-1993
+                PERFORM BUS-CAM-VIG
+                IF INT-CMSG > SPACES
+                    GO TO FIN-OBT-TINT
+                ELSE
+                    ADD INT-TIV1 TO INT-TINC.
+      *JSS-FIN 16-DEC-1993
+
+      *     IF INT-CVTI > SPACES AND INT-IBTV = INT-IBTV-UNA-VEZ
+      *         ADD CAM-SGV-VCAM IN CAM TO INT-TINT
+      *         MOVE INT-IBTV-NADA-MAS TO INT-IBTV.
+
+      * Si la tasa es anticipada (INT-BCTI = 'A') entonces :
+      *  - INT-TINC = (INT-TINC*100)/(100 - INT-TINC)
+      * si es vencida queda igual.
+           IF INT-BCTI = 'A'
+               COMPUTE INT-TINC ROUNDED =
+                   ( INT-TINC * 100 ) / ( 100 - INT-TINC ).
+
+      * Luego se setea como es la tasa diaria (INT-TDIA), la tasa mensual
+      * (INT-T30D) y la tasa anual (INT-T360) dependiendo de la base de
+      * c lculo (D,M,A,T,X) y el modo de c lculo (S:simple,C:compuesta)
+           IF INT-PBTI = 'D'
+               COMPUTE INT-TDIA = INT-TINC / 100
+               COMPUTE INT-T30D = INT-TINC * 30 / 100
+               COMPUTE INT-T360 = INT-TINC * 360 / 100
+           ELSE
+           IF INT-PBTI = 'T' OR 'M'
+               COMPUTE INT-T30D = INT-TINC / 100
+               COMPUTE INT-T360 = INT-TINC * 12 / 100
+               IF INT-MCTI = 'D'
+                   COMPUTE INT-TDIA =
+                       ( 1 + ( INT-TINC / 100 ) )**( 1 / 30 ) - 1
+               ELSE
+                   COMPUTE INT-TDIA = INT-TINC / 3000
+           ELSE
+           IF INT-PBTI = 'X' OR 'A'
+               COMPUTE INT-T30D = INT-TINC / 1200
+               COMPUTE INT-T360 = INT-TINC / 100
+               IF INT-MCTI = 'D'
+                   COMPUTE INT-TDIA =
+                       ( 1 + ( INT-TINC / 100 ) )**( 1 / 360 ) - 1
+               ELSE
+                   COMPUTE INT-TDIA = INT-TINC / 36000
+           ELSE
+               MOVE 'INTPBTIINV' TO INT-CMSG.
+       FIN-OBT-TINT.
+           EXIT.
+
+      *JSS-INI 16-DEC-1993
+       BUS-CAM-VIG SECTION.
+       INI-BUS-CAM-VIG.
+           MOVE INT-FINT            TO CAM-FVCA.
+           MOVE CAM-COD-CAMB IN CAM TO CAM-CAMB.
+           IF INT-TIPT = INT-TIPV
+               GO TO CON-BUS-CAM-VIG.
+
+           MOVE CAM-CAMB TO CAM-COD-CAMB IN CAM.
+           MOVE CAM-FVCA TO CAM-FEC-FVCA IN CAM.
+           MOVE FIO-GET-LEQ TO FIO-CMND.
+       LU1-BUS-CAM-VIG.
+           MOVE 'CAM-KEY-CVIG' TO FIO-AKEY.
+           PERFORM TAB-FIO-CAM.
+           IF FIO-STAT-OKS AND
+              CAM-COD-CAMB IN CAM = CAM-CAMB
+               IF CAM-MSC-STAT IN CAM = 'S'
+                   MOVE CAM-SGV-VCAM IN CAM TO INT-TIV1
+                   MOVE CAM-FEC-FVCA IN CAM TO INT-FIV1
+                   MOVE INT-TIPT            TO INT-TIPV
+               ELSE
+                   MOVE FIO-GET-PRV TO FIO-CMND
+                   GO TO LU1-BUS-CAM-VIG
+           ELSE
+               MOVE CAM-CAMB TO CAM-COD-CAMB IN CAM
+               MOVE CAM-FVCA TO CAM-FEC-FVCA IN CAM
+               MOVE 'CAMBTSANXABT' TO INT-CMSG
+               MOVE CAM-KEY-CVIG   TO INT-MEN2
+               GO TO FIN-BUS-CAM-VIG.
+
+           MOVE CAM-CAMB TO CAM-COD-CAMB IN CAM.
+           IF CAM-FVCA = CAM-FEC-FVCA IN CAM
+               ADD 1 TO CAM-FVCA-RED.
+           MOVE CAM-FVCA TO CAM-FEC-FVCA IN CAM.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+       LU2-BUS-CAM-VIG.
+           MOVE 'CAM-KEY-CVIG' TO FIO-AKEY.
+           PERFORM TAB-FIO-CAM.
+           IF FIO-STAT-OKS AND
+              CAM-COD-CAMB IN CAM = CAM-CAMB
+               IF CAM-MSC-STAT IN CAM = 'S'
+                   MOVE CAM-SGV-VCAM IN CAM TO INT-TIV2
+                   MOVE CAM-FEC-FVCA IN CAM TO INT-FIV2
+               ELSE
+                   MOVE FIO-GET-NXT TO FIO-CMND
+                   GO TO LU2-BUS-CAM-VIG
+           ELSE
+               MOVE 0      TO INT-TIV2
+               MOVE ZEROES TO INT-FIV2.
+           GO TO FIN-BUS-CAM-VIG.
+
+       CON-BUS-CAM-VIG.
+           IF INT-FIV2 NOT > ZEROES
+               GO TO FIN-BUS-CAM-VIG.
+           IF INT-FINT < INT-FIV2
+               GO TO FIN-BUS-CAM-VIG.
+
+           MOVE INT-TIV2 TO INT-TIV1.
+           MOVE INT-FIV2 TO INT-FIV1.
+
+           MOVE 0        TO INT-TIV2.
+           MOVE ZEROES   TO INT-FIV2.
+
+           MOVE CAM-CAMB TO CAM-COD-CAMB IN CAM.
+           MOVE INT-FIV1 TO CAM-FEC-FVCA IN CAM.
+           MOVE 'CAM-KEY-CVIG' TO FIO-AKEY.
+           MOVE FIO-GET-NLS    TO FIO-CMND.
+           PERFORM TAB-FIO-CAM.
+           IF NOT ( FIO-STAT-OKS AND
+                    CAM-COD-CAMB IN CAM = CAM-CAMB AND
+                    CAM-FEC-FVCA IN CAM = INT-FIV1 )
+               MOVE 'CAMBTSANXABT'      TO INT-CMSG
+               MOVE CAM-KEY-CVIG IN CAM TO INT-MEN2
+               GO TO FIN-BUS-CAM-VIG.
+       LU3-BUS-CAM-VIG.
+           MOVE 'CAM-KEY-CVIG' TO FIO-AKEY.
+           MOVE FIO-GET-NXT    TO FIO-CMND.
+           PERFORM TAB-FIO-CAM.
+           IF FIO-STAT-OKS AND
+              CAM-COD-CAMB IN CAM = CAM-CAMB
+               IF CAM-MSC-STAT IN CAM = 'S'
+                   IF CAM-FEC-FVCA IN CAM NOT > INT-FINT
+                       MOVE CAM-SGV-VCAM IN CAM TO INT-TIV1
+                       MOVE CAM-FEC-FVCA IN CAM TO INT-FIV1
+                       MOVE 0                   TO INT-TIV2
+                   ELSE
+                       MOVE CAM-SGV-VCAM IN CAM TO INT-TIV2
+                       MOVE CAM-FEC-FVCA IN CAM TO INT-FIV2
+               ELSE
+                   GO TO LU3-BUS-CAM-VIG.
+       FIN-BUS-CAM-VIG.
+           IF INT-CMSG NOT > SPACES AND INT-IETB NOT = 'N'
+               IF INT-FINT > INT-FPRO AND INT-FINT NOT = INT-FIV1
+                   MOVE 'N' TO INT-IETB.
+       EXT-BUS-CAM-VIG.
+           EXIT.
+      *JSS-FIN 16-DEC-1993
+
+      *    Descripcion     : Obtencion Tasa del Periodo
+      *    Observaciones   :
+      *      - Modificar el calculo para Interes Compuesto considerando
+      *        la Base de Calculo para Bajo y Sobre Periodo Expresion Ta
+       OBT-TIPE SECTION.
+      * En esta SECTION retorna el valor de la tasa para un per odo de d as,
+      * las f rmulas aqu  usadas dependen si la tasa es simple o compuesta y
+      * si la base de c lculo es diaria, mensual o anual.
+       INI-OBT-TIPE.
+           MOVE SPACES TO INT-CMSG INT-MENS.
+           IF INT-MCTI = 'S'
+               COMPUTE INT-TIPE ROUNDED =
+                   INT-TDIA * INT-SDIA + INT-T30D * INT-S30D +
+                   INT-T360 * INT-S360
+           ELSE
+           IF INT-MCTI = 'C'
+               IF INT-PBTI = 'D'
+                   COMPUTE INT-TIPE ROUNDED =
+                       ( INT-TDIA + 1 ) ** INT-SDIA - 1
+               ELSE
+               IF INT-PBTI = 'T' OR 'M'
+                   COMPUTE INT-TIPE ROUNDED =
+                       ( INT-T30D + 1 ) ** INT-S30D *
+                       ( INT-SDIA * INT-TDIA + 1 ) - 1
+               ELSE
+               IF INT-PBTI = 'X' OR 'A'
+                   COMPUTE INT-TIPE ROUNDED =
+                       ( INT-T360 + 1 ) ** INT-S360 *
+                       ( INT-SDIA * INT-TDIA + 1 ) - 1
+               ELSE
+                   MOVE 'INTPBTIINV' TO INT-CMSG
+                   GO TO FIN-OBT-TIPE
+           ELSE
+           IF INT-MCTI = 'D'
+               COMPUTE INT-TIPE ROUNDED =
+                   ( INT-TDIA + 1 ) ** INT-SEPD - 1
+           ELSE
+               MOVE 'INTMCTIINV' TO INT-CMSG
+               GO TO FIN-OBT-TIPE.
+       FIN-OBT-TIPE.
+           EXIT.
+      *
+      * Rutina para obtener tasa de interes
+       CBZ-BUS-TIN SECTION.
+       INI-CBZ-BUS-TIN.
+           MOVE SPACES TO INT-TIPT.
+           MOVE 0 TO INT-SIND INT-IMAX.
+           MOVE INT-IOPC IN INT-VARI TO ICZ-CIC-IOPC IN ICZ.
+           MOVE INT-IDLC IN INT-VARI TO ICZ-NUM-ICAN IN ICZ.
+           MOVE SPACES       TO ICZ-CIC-IOPV IN ICZ.
+           MOVE ZEROES       TO ICZ-NUM-IVCT IN ICZ.
+           MOVE 'INT'        TO ICZ-IND-TTAS IN ICZ.
+           MOVE ZEROES       TO ICZ-FEC-FINI IN ICZ.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+       LUP-CBZ-BUS-TIN.
+           PERFORM CBZ-FIO-ICZ.
+           IF NOT ( FIO-STAT-OKS AND
+                    ICZ-CIC-IOPC IN ICZ = INT-IOPC IN INT-VARI AND
+                    ICZ-NUM-ICAN IN ICZ = INT-IDLC IN INT-VARI AND
+                    ICZ-CIC-IOPV IN ICZ = SPACES       AND
+                    ICZ-NUM-IVCT IN ICZ = ZEROES       AND
+                    ICZ-IND-TTAS IN ICZ = 'INT' )
+               IF INT-IDLC = 0
+                   IF INT-TIPT NOT > SPACES
+                       MOVE 'INTRICGNEX' TO INT-CMSG
+                       MOVE INT-IOPC     TO INT-MEN2
+                       GO TO FIN-CBZ-BUS-TIN
+                   ELSE
+                       GO TO FIN-CBZ-BUS-TIN
+               ELSE
+      * En caso de no encontrar ICG para un documento mayor que ZERO
+      * (INT-IDLC > 0), mueve ceros al INT-IDLC y vuelve a leerla, si no la
+      * encuentra sale con INT-CMSG = 'INTRICGNEX' y termina.
+                   IF INT-TIPT NOT > SPACES
+                       MOVE 0 TO INT-IDLC
+                       GO TO INI-CBZ-BUS-TIN
+                   ELSE
+                       GO TO FIN-CBZ-BUS-TIN.
+      *Compara fechas de ICG con fechas 1 y 2
+      * Con estas sentencias, se busca la m xima ICG tal que su fecha de inicio
+      * sea menor o igual a la Fecha desde donde se quiera obtener la tasa de
+      * inter s, por ejemplo: FUNO           FDOS
+      *
+      *                         v              v
+      *  FICG1   FICG2   FICG3   FICG4   FICG5   FICG6
+      *    +-------+-------+-------+-------+-------+
+      *
+      *    ---->---  -->--  --->--  --->--  --->---
+      *
+      *    MAX(FICG1, FICG2, FICG3, FICG4) = FICG3
+      *  Obtenida la ICG m xima se setean, en las variables INT-TIPT y
+      *  INT-TIPX, el tipo de tasa de esa ICG. Adem s, se obtiene el spread
+      *  o la tasa en caso:
+      *   a) Mueve spread en caso que sea tasa variable
+      *   b) Mueve la tasa si es tasa fija
+           MOVE INT-DUNO TO INT-DAU1.
+           MOVE INT-MUNO TO INT-MAU1.
+           MOVE INT-SUNO TO INT-SAU1.
+           MOVE INT-AUNO TO INT-AAU1.
+           MOVE INT-DDOS TO INT-DAU2.
+           MOVE INT-MDOS TO INT-MAU2.
+           MOVE INT-SDOS TO INT-SAU2.
+           MOVE INT-ADOS TO INT-AAU2.
+           IF ICZ-FEC-FINI IN ICZ NOT > INT-FAU1
+               MOVE ICZ-COD-TINT IN ICZ TO INT-TIPT INT-TIPX
+               MOVE ICZ-NUM-DINI IN ICZ TO INT-DDMA
+               MOVE ICZ-NUM-MINI IN ICZ TO INT-MDMA
+               MOVE ICZ-NUM-SINI IN ICZ TO INT-SDMA
+               MOVE ICZ-NUM-AINI IN ICZ TO INT-ADMA
+               IF ICZ-COD-CVTI IN ICZ > SPACES
+                   MOVE ICZ-SGV-SPRD IN ICZ TO INT-TINT INT-TINX
+                   GO TO NXT-CBZ-BUS-TIN
+               ELSE
+                   MOVE ICZ-SGV-TINT IN ICZ TO INT-TINT INT-TINX
+                   GO TO NXT-CBZ-BUS-TIN.
+      * - Si la m xima ICG es menor o igual a FUNO, (en el ejemplo: FICG3) y
+      *   su tipo de tasa est  en blanco (ICG-COD-TINT menor o igual a SPACES)
+      *   sale con INT-CMSG = 'INTRICGF1NEX'
+           IF INT-TIPT NOT > SPACES
+               MOVE 'INTRICGF1NEX' TO INT-CMSG
+               MOVE INT-IOPC       TO INT-MEN2
+               GO TO FIN-CBZ-BUS-TIN.
+      * - Si la lectura de la siguiente ICG a la FICG3, (en el ejemplo : FICG4)
+      *   y su fecha de inicio es mayor o igual a la FDOS (Fecha hasta la cual
+      *   se quiere obtener la tasa) termina de leer ICG.
+      *   Si no es as , es decir es menor que la FDOS, carga en un vector
+      *   todas las ICG que sean menor a la FDOS. En el vector se guardan:
+      *   la fecha de inicio, el tipo de tasa y la tasa o spread de cada ICG.
+      *   (En el ejemplo se cargar an la FICG4 y la FICG5).
+           IF ICZ-FEC-FINI IN ICZ NOT < INT-FAU2
+               GO TO FIN-CBZ-BUS-TIN.
+           ADD 1 TO INT-SIND.
+      *
+      *   La rutina s lo puede guardar hasta 20 ICGs, si hay m s termina con
+      *   el mensaje de error INT-CMSG = 'INTRICGOVFLW'.
+           IF INT-SIND > INT-LMAX
+               MOVE 'INTRICGOVFLW' TO INT-CMSG
+               MOVE INT-IOPC     TO INT-MEN2
+               GO TO FIN-CBZ-BUS-TIN.
+           IF ICZ-COD-CVTI IN ICZ > SPACES
+               MOVE ICZ-SGV-SPRD IN ICZ TO INT-VTIN(INT-SIND)
+           ELSE
+               MOVE ICZ-SGV-TINT IN ICZ TO INT-VTIN(INT-SIND).
+           MOVE ICZ-COD-TINT IN ICZ TO INT-CTIN(INT-SIND).
+           MOVE ICZ-FEC-FINI IN ICZ TO INT-FTIN(INT-SIND).
+           MOVE SPACES              TO INT-ITIN(INT-SIND).
+       NXT-CBZ-BUS-TIN.
+           MOVE INT-SIND TO INT-IMAX.
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           GO TO LUP-CBZ-BUS-TIN.
+       FIN-CBZ-BUS-TIN.
+      * La rutina termina esta SECTION agregando una ocurrencia al vector;
+      * donde guarda el tipo de tasa y la tasa o spread de la m xima ICG
+      * tal que su fecha de inicio sea menor o igual a FUNO, en el ejemplo
+      * FICG3.
+           IF INT-CMSG > SPACES
+               GO TO EXT-CBZ-BUS-TIN.
+           ADD 1 TO INT-IMAX.
+           MOVE INT-TIPT TO INT-CTIN(INT-IMAX).
+           MOVE INT-TINT TO INT-VTIN(INT-IMAX).
+           MOVE 0        TO INT-FTIN(INT-IMAX).
+           MOVE SPACES   TO INT-ITIN(INT-IMAX).
+       EXT-CBZ-BUS-TIN.
+           EXIT.

@@ -1,0 +1,1147 @@
+*%! Codigo adicional
+*% NO_TIENE_TIMESTAMP = TRUE
+*% NO_HDR_CST = TRUE
+*% LARGO_TOTAL_COMMAREA = 3000
+*% FMT_CHI = TRUE
+*% GEN_BCI = TRUE
+*% PGM_PTC = TRUE
+*% PGM_STAT_CLF = TRUE
+*% IF WSS
+      *<<<< WSS
+      *--- Tablas RDC, OPC, ICG, DLC y CEN para pantalla CDD ---
+       COPY COLBRRDC.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-RDC-REQA==.
+       COPY COLBROPC.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-OPC-REQA==.
+       COPY COLBRICG.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-ICG-REQA==.
+       COPY COLBRDLC.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-DLC-REQA==.
+       COPY COLBRCEN.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-CEN-REQA==.
+       COPY COLBRVEN.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-VEN-REQA==.
+      *----------------------------------------------------------
+       COPY TABBRCAM.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-CAM-REQA==.
+      *----------------------------------------------------------
+
+       COPY GNSWGCPT.
+       COPY GNSWGSTR.
+       COPY COLWXCDD.
+       COPY COLWGINT.
+*% IF NOT PGM_MCP AND NOT PGM_PTC
+       COPY GNSWGQUE.
+*% END
+      *>>>>
+*% END
+*% IF WSS_DTC
+      *<<<< WSS_DTC
+       01 WSS-NUM-CCUR.
+           03 WSS-NUM-ICUR-EDT  PIC  ZZ9.
+           03 WSS-NUM-ICUR-ALF  PIC X(03).
+           03 WSS-NUM-ICUR      REDEFINES
+              WSS-NUM-ICUR-ALF       PIC 9(03).
+
+      *01  WSS-MONE.
+      *    03  WSS-COD-UEFE VALUE SPACES            PIC X(06).
+      *    03  WSS-COD-PESO VALUE SPACES            PIC X(06).
+*% END
+*% IF FIN_PGM_STAT
+              05 PGM-STAT-RDC.
+                 88 PGM-STAT-RDC-NUL    VALUE '  '.
+                 07 PGM-STT1-RDC        VALUE '2' PIC X(01).
+                    88 PGM-STAT-RDC-OKS VALUE '0'.
+                 07 PGM-STT2-RDC        VALUE '3' PIC X(01).
+*% END
+*% IF FIN_SCR_VARI
+           03 SCR-NUM-PANT               PIC 9(0007).
+           03 SCR-CDD-FLD                PIC X(0850).
+*% END
+      *>>>>
+*% IF INI_SCR_COM
+      *<<<< INI_SCR_COM
+           MOVE CDD-NOM-TSCDD TO QUE-COLA.
+           MOVE CDD-LEN-TSCDD TO QUE-LITM.
+           MOVE QUE-DEL       TO QUE-CMND.
+           PERFORM GNS-PRO-QUE.
+      *>>>>
+*% END
+*% IF INI_FIO
+      *<<<< INI_FIO
+           IF SCR-OFRM-SRV
+                MOVE TSK-TERM-ALF TO CDD-COD-TERM
+                MOVE TSK-TERM-ALF TO CDD-COD-TERM-MAS
+           ELSE
+                MOVE EIBTRMID     TO CDD-COD-TERM
+                MOVE EIBTRMID     TO CDD-COD-TERM-MAS.
+           MOVE +3859 TO SCR-TCMA.
+           PERFORM GNS-ERR-QUE.
+           IF ( FRM-FFLD = FRM-FFLD-PF5 ) AND ( SCR-NUM-PANT = 1 )
+               MOVE SCR-CDD-FLD TO CDD-FLD
+               GO TO FIN-INI.
+
+           IF ( FRM-FFLD = FRM-FFLD-PF6 )
+               MULTIPLY SCR-NUM-PANT BY WSS-IMAX GIVING QUE-NITM
+               ADD 1              TO QUE-NITM
+               MOVE CDD-NOM-TSCDD TO QUE-COLA
+               MOVE CDD-LEN-TSCDD TO QUE-LITM
+               MOVE QUE-GET       TO QUE-CMND
+               PERFORM GNS-PRO-QUE
+               IF QUE-STAT NOT = QUE-STAT-OKS
+                  MOVE SCR-CDD-FLD TO CDD-FLD
+                  GO TO FIN-INI.
+      *>>>>
+*% END
+*% IF INI_FND_KEY
+      *<<<< INI_FND_KEY
+      *--- Valida que rut no sea blanco o ceros ---
+           IF DBC-NUM-ICLI IN CDD-FLD = ZEROES
+              MOVE 'CDDRUTESBLK'         TO MSG-COD-MENS
+              PERFORM GET-MSG
+              MOVE MSG-GLS-DESC TO FRM-MENS
+              GO TO FIN-BUS-CLI-KEY.
+
+           IF DBC-NUM-ICLI IN CDD-FLD NOT = ZEROES
+      *--- IDC-CLI Busca Cliente por medio de IdC ---
+               MOVE DBC-NUM-ICLI IN CDD-FLD TO DBC-NUM-ICLI IN DBC
+               MOVE DBC-IND-ICLI IN CDD-FLD TO DBC-IND-ICLI IN DBC
+               MOVE DBC-GLS-ICLI IN CDD-FLD TO DBC-GLS-ICLI IN DBC
+               MOVE 'DBC-IDC-ICLI' TO FIO-AKEY
+               MOVE FIO-GET-KEY    TO FIO-CMND
+               PERFORM GET-CLI
+               IF MSG-COD-MENS NOT > SPACES
+                   MOVE DBC-GLS-NOMC IN DBC TO CPT-STRN
+                   PERFORM CPT-BLKS
+                   MOVE CPT-STRN            TO FRM-GLS-NOMC IN CDD-FLD
+               ELSE
+                   MOVE MSG-GLS-DESC TO FRM-MENS CDD-GLS-MENS
+                   MOVE 'S' TO SCR-IERR
+                   GO TO FIN-BUS-CLI-KEY.
+
+      *--- Busca Codigo de Moneda Peso para buscar tipo de cambio ---
+           MOVE 'TAB'          TO FIO-SIST.
+           MOVE 'VLR'          TO TAB-CIC-TTAB IN TAB.
+           MOVE '0999  '       TO TAB-CIC-CTAB IN TAB.
+           MOVE 'TAB-CIC-TABL' TO FIO-AKEY.
+           MOVE FIO-GET-KEY    TO FIO-CMND.
+           PERFORM GNS-FIO-TAB.
+           IF NOT FIO-STAT-OKS
+              MOVE 'MON  NOVLD'         TO MSG-COD-MENS
+              GO TO FIN-BUS-CLI-KEY.
+
+           MOVE TAB-COD-CTAB IN TAB    TO WSS-COD-PESO IN WSS-VARI.
+
+      *--- Busca en Tabla CEN codigo de Camada al que pertenece ---
+            MOVE SPACES                    TO CEN-GLS-FLAG.
+            MOVE 'CAE'                     TO CEN-COD-ENTI.
+            MOVE DBC-CIC-ICLI IN DBC       TO CEN-CIC-IENT.
+            MOVE ZEROES                    TO CEN-FEC-FENT.
+            MOVE SPACES                    TO CEN-COD-RENT.
+            MOVE 001                       TO CEN-NUM-IENT.
+            MOVE SPACES                    TO CEN-COD-CCSE.
+            MOVE SPACES                    TO CEN-CIC-ISEN.
+            MOVE ZEROES                    TO CEN-NUM-ISEN.
+            MOVE FIO-GET-NLS               TO FIO-CMND.
+
+            PERFORM COL-FIO-CEN.
+
+            IF NOT (FIO-STAT-OKS AND
+                    DBC-CIC-ICLI IN DBC = CEN-CIC-IENT IN CEN)
+              MOVE 'N'                   TO WSS-IND-PPRE IN WSS-VARI
+              MOVE 'CDDCENNOEXT'         TO MSG-COD-MENS
+              GO TO FIN-BUS-CLI-KEY
+
+            ELSE
+
+      *--- Busca en Tabla de Camadas el porcentaje CAM ---
+            MOVE CEN-GLS-GLS3 IN CEN      TO WSS-GLS-GLS3 IN WSS-VARI
+            MOVE WSS-GLS-GLS3 IN WSS-VARI TO WSS-GLS-DETA IN WSS-VARI
+            MOVE SPACES                   TO WSS-COD-TABL IN WSS-VARI
+            MOVE WSS-VAL-ALIC IN WSS-VARI TO WSS-COD-TAB1 IN WSS-VARI
+                                             FRM-VAL-CAMA IN CDD-FLD
+
+            MOVE SPACES                   TO TAB-CIC-CTAB IN TAB
+            MOVE 'COL'                    TO FIO-SIST
+            MOVE 'COL'                    TO TAB-COD-SIST
+            MOVE 'CAM'                    TO TAB-COD-TTAB IN TAB
+            MOVE WSS-COD-TABL IN WSS-VARI TO TAB-COD-CTAB IN TAB
+            MOVE FIO-GET-NLS              TO FIO-CMND
+
+            PERFORM GNS-FIO-TAB
+            IF NOT (FIO-STAT-OKS AND
+                    TAB-COD-CTAB IN TAB = WSS-COD-TABL IN WSS-VARI)
+              MOVE 'N'                   TO WSS-IND-PPRE IN WSS-VARI
+              MOVE 'CDDCAMNOEXT'         TO MSG-COD-MENS
+              GO TO FIN-BUS-CLI-KEY
+
+            ELSE
+            MOVE TAB-COD-CTAB IN TAB      TO WSS-COD-TPPR IN WSS-VARI
+
+      *--- Valores Originales contra Valores Retornados ---
+            IF WSS-COD-TABL IN WSS-VARI = WSS-COD-TPPR IN WSS-VARI
+
+              MOVE TAB-GLS-DATA IN TAB      TO WSS-GLS-DESC IN WSS-VARI
+              MOVE WSS-DES-T010 ( 1 )       TO WSS-VAL-PORC IN WSS-VARI
+              MOVE WSS-MTO-PORC IN WSS-VARI TO FRM-VAL-TPOR IN CDD-FLD
+              MOVE 'S'                      TO WSS-IND-PPRE IN WSS-VARI
+
+      *       MOVE WSS-DES-T010 ( 2 )       TO WSS-GLS-TAUX IN WSS-VARI
+              MOVE WSS-GLS-DESC IN WSS-VARI TO WSS-GLS-T1AX IN WSS-VARI
+
+              MOVE '00' TO PGM-STAT-DBC
+              GO TO FIN-BUS-CLI-KEY
+
+            ELSE
+
+              MOVE 'N'                    TO WSS-IND-PPRE IN WSS-VARI
+              MOVE 'CDDCAMNOEQU'          TO MSG-COD-MENS
+              GO TO FIN-BUS-CLI-KEY.
+
+       FIN-BUS-CLI-KEY.
+           IF MSG-COD-MENS > SPACES
+              GO TO MSG-FND-KEY.
+
+           MOVE '00' TO PGM-STAT-DBC.
+           GO TO CON-FND-KEY.
+      *>>>>
+*% END
+*% IF PFS_SCR_ACC
+      *<<<< PFS_SCR_ACC
+           IF FRM-FFLD = FRM-FFLD-PF5 OR FRM-FFLD-PF6
+               PERFORM VAL-NUM-KEY-CDD
+               PERFORM VAL-NUM-FLD-CDD
+               PERFORM SCRL-TAB-CDD
+               PERFORM SCR-TRL.
+      *>>>>
+*% END
+*% IF FIN_FND_KEY
+      *<<<< FIN_FND_KEY
+       CON-FND-KEY.
+
+           MOVE 'S'                       TO WSS-IND-PPAG IN WSS-VARI.
+
+           MOVE DBC-CAI-ICLI IN DBC       TO RDC-CAI-ICLI IN RDC.
+           MOVE DBC-IIC-ICLI IN DBC       TO RDC-IIC-ICLI IN RDC.
+           MOVE LOW-VALUES                TO RDC-KEY-IDLC IN RDC.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+
+       LUP-LEE-RDC.
+
+           PERFORM COL-FIO-RDC.
+           IF NOT ( FIO-STAT-OKS AND
+                    RDC-CAI-ICLI IN RDC = DBC-CAI-ICLI IN DBC AND
+                    RDC-IIC-ICLI IN RDC = DBC-IIC-ICLI IN DBC )
+              GO TO CNT-FND-KEY.
+
+      *--- Codigo nuevo para situacion especial de pantalla CDD ---
+
+           IF DBC-CIC-ICLI IN DBC = RDC-CIC-ICLI IN RDC
+
+              MOVE RDC-CIC-IOPC IN RDC TO OPC-CIC-IOPC IN OPC
+              MOVE FIO-GET-KEY   TO FIO-CMND
+              PERFORM COL-FIO-OPC
+              IF NOT FIO-STAT-OKS
+                 GO TO NXT-LEE-RDC
+              ELSE
+NEW   *          IF RDC-CIC-IOPC IN RDC = OPC-CIC-IOPC IN OPC AND
+NEW   *             OPC-COD-TOOC IN OPC = WSS-GLS-TIOA IN WSS-VARI AND
+NEW   *             OPC-COD-AOOC IN OPC = WSS-GLS-AUXA IN WSS-VARI AND
+NEW   *             OPC-VAL-SCRE IN OPC > ZEROES AND
+NEW   *             OPC-MSC-STAT IN OPC = 'A'
+
+                 IF RDC-CIC-IOPC IN RDC = OPC-CIC-IOPC IN OPC AND
+                    OPC-VAL-SCRE IN OPC > ZEROES AND
+                    OPC-MSC-STAT IN OPC = 'A'
+
+NEW                 IF OPC-COD-COOC IN OPC = WSS-GLS-TIO1 IN WSS-VARI
+NEW                 OR OPC-COD-COOC IN OPC = WSS-GLS-TIO2 IN WSS-VARI
+NEW                 OR OPC-COD-COOC IN OPC = WSS-GLS-TIO3 IN WSS-VARI
+NEW                 OR OPC-COD-COOC IN OPC = WSS-GLS-TIO4 IN WSS-VARI
+
+                       PERFORM CRG-VEC-CDD
+
+      *--- Codigo nuevo por error en Carga Vector ---
+                       IF WSS-IND-ERRO = 'S'
+                          GO TO FIN-FND-KEY
+      *----------------------------------------------
+                       ELSE
+                          GO TO NXT-LEE-RDC
+
+                    ELSE
+                       GO TO NXT-LEE-RDC
+
+                 ELSE
+                    GO TO NXT-LEE-RDC.
+
+       NXT-LEE-RDC.
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           GO TO LUP-LEE-RDC.
+
+       CNT-FND-KEY.
+
+      *--- Mueve sumatoria de Saldos a Monto Capital Adeudado ---
+           MOVE WSS-NUM-TPAR IN WSS-VARI   TO FRM-VAL-CADE IN CDD-FLD.
+
+      *--- Mueve Nro de Operaciones a Nro de Operaciones Pant CDD ---
+           MOVE WSS-NUM-NOPE IN WSS-VARI   TO FRM-VAL-NOPE IN CDD-FLD.
+
+      *--- Procesa si tiene Porcentaje de Prepago en CAM ---
+           IF WSS-IND-PPRE IN WSS-VARI = 'S'
+
+              MOVE WSS-MTO-PORC IN WSS-VARI TO FRM-VAL-TPOR IN CDD-FLD
+              MOVE WSS-COD-VCOC IN WSS-VARI TO FRM-COD-VCOC IN CDD-FLD
+
+      *--- Genera mensaje segun si situacion DLC es espacios o no ---
+      *--- Si Indicador es S, permite prepago, sino no permite ------
+              IF WSS-IND-PPAG IN WSS-VARI = 'N'
+               MOVE
+           'OBS: CLIENTE DEBE REGULARIZAR OPERACIONES ANTES DE PREPAGAR'
+                                            TO FRM-GLS-OBSE IN CDD-FLD
+
+              ELSE
+
+           MOVE ZEROES                   TO WSS-VAL-PESO IN WSS-VARI
+
+           COMPUTE WSS-VAL-PESO IN WSS-VARI ROUNDED =
+           ((WSS-SUM-KPPE IN WSS-VARI * WSS-MTO-PORC IN WSS-VARI) / 100)
+            + WSS-SUM-INPE IN WSS-VARI
+
+           MOVE WSS-VAL-PESO IN WSS-VARI   TO WSS-VAL-MPMI IN WSS-VARI
+                                              FRM-VAL-TPRE IN CDD-FLD
+
+               IF WSS-VAL-PREP IN WSS-VARI > ZEROES
+                  IF WSS-VAL-PREP IN WSS-VARI < WSS-VAL-MPMI IN WSS-VARI
+
+             MOVE
+             'OBS: Monto a Prepagar es menor al Prepago Minimo exigido'
+                                            TO FRM-GLS-OBSE IN CDD-FLD
+                  ELSE
+                     MOVE WSS-VAL-PREP IN WSS-VARI
+                                            TO FRM-VAL-TPRE IN CDD-FLD
+                     COMPUTE WSS-VAL-DIFP IN WSS-VARI =
+                     WSS-VAL-PREP IN WSS-VARI - WSS-SUM-INPE IN WSS-VARI
+
+               ELSE
+                 IF WSS-VAL-PREP IN WSS-VARI = ZEROES
+                    COMPUTE WSS-VAL-DIFP IN WSS-VARI =
+                   WSS-VAL-MPMI IN WSS-VARI - WSS-SUM-INPE IN WSS-VARI.
+
+      *-------------------------------------------------
+           PERFORM SORT-VECTOR.
+           MOVE 1     TO WSS-X IN WSS-VARI.
+           PERFORM MUEVE-A-VORI
+                   UNTIL WSS-X IN WSS-VARI > WSS-UPOS IN WSS-VARI.
+      *-------------------------------------------------
+           MOVE 1     TO WSS-X IN WSS-VARI.
+           PERFORM CALCULA-TPRE
+                   UNTIL WSS-X IN WSS-VARI > WSS-UPOS IN WSS-VARI.
+      *-------------------------------------------------
+           PERFORM PUT-TAB.
+
+           MOVE '00' TO FIO-STAT.
+           MOVE SCR-STAT-CON TO SCR-STAT.
+           GO TO FIN-FND-KEY.
+      *----------------------------------------------------------
+       MSG-FND-KEY.
+           MOVE 'COL' TO MSG-COD-SIST.
+           PERFORM GET-MSG.
+           MOVE MSG-GLS-DESC TO FRM-MENS.
+           MOVE '00' TO FIO-STAT.
+           MOVE SCR-STAT-CON TO SCR-STAT.
+           GO TO FIN-FND-KEY.
+      *>>>>
+*% END
+*% IF PFS_GET_CON
+      *<<<< PFS_GET_CON
+           IF NOT ( FRM-FFLD = FRM-FFLD-PF5 OR FRM-FFLD-PF6 )
+      *>>>>
+*% END
+*% IF EOF
+      *<<<< EOF
+
+       COPY GNSBPFEC.
+
+      *-------------- Para pantalla CDD -------------------------
+       COPY COLBFRDC.
+       COPY COLBFOPC.
+       COPY COLBFDLC.
+       COPY COLBFICG.
+       COPY COLBFCEN.
+       COPY COLBFVEN.
+       COPY TABBFCAM.
+      *----------------------------------------------------------
+       COPY COLBGINT.
+
+       SORT-VECTOR SECTION.
+       INI-SORT-VECTOR.
+
+           MOVE WSS-J IN WSS-VARI    TO WSS-UPOS IN WSS-VARI.
+           MOVE 1                    TO WSS-X IN WSS-VARI.
+           MOVE 1                    TO WSS-Y IN WSS-VARI.
+
+       LUP-SORT-VECTOR.
+           COMPUTE WSS-Z IN WSS-VARI = WSS-X IN WSS-VARI + 1.
+
+           IF WSS-Z IN WSS-VARI > WSS-UPOS IN WSS-VARI
+              PERFORM LIM-MUEVE
+              GO TO FIN-SORT-VECTOR.
+
+           MOVE WSS-VAL-TINT-V IN WSS-VARI (WSS-X) TO
+                                  WSS-NUM-PVTE IN WSS-VARI.
+
+           PERFORM RECORRE-VECTOR
+                   UNTIL WSS-Z IN WSS-VARI > WSS-UPOS IN WSS-VARI.
+
+      *--- Mueve valores desde posicion pivote a posicion final ---
+           PERFORM LIM-MUEVE.
+
+           ADD 1                     TO WSS-X IN WSS-VARI.
+           MOVE WSS-X                TO WSS-Y IN WSS-VARI.
+
+           GO TO LUP-SORT-VECTOR.
+
+       FIN-SORT-VECTOR.
+           EXIT.
+
+       RECORRE-VECTOR SECTION.
+       INI-RECORRE-VECTOR.
+
+           IF WSS-NUM-PVTE IN WSS-VARI <
+                              WSS-VAL-TINT-V IN WSS-VARI (WSS-Z)
+
+              MOVE WSS-VAL-TINT-V IN WSS-VARI (WSS-Z) TO
+                                     WSS-NUM-PVTE IN WSS-VARI
+              MOVE WSS-Z IN WSS-VARI        TO WSS-Y IN WSS-VARI.
+
+           ADD 1       TO WSS-Z IN WSS-VARI.
+
+       FIN-RECORRE-VECTOR.
+           EXIT.
+
+       LIM-MUEVE SECTION.
+       INI-LIM-MUEVE.
+
+           PERFORM CLR-VEC-TEMP.
+
+      *--- Mueve desde Vector Original a Vector Temporal ---
+           MOVE WSS-CIC-IOPC-V IN WSS-VARI(WSS-Y) TO
+                WSS-CIC-IOPC-T IN WSS-VARI(WSS-X).
+
+           MOVE WSS-FEC-FCUR-V IN WSS-VARI(WSS-Y) TO
+                WSS-FEC-FCUR-T IN WSS-VARI(WSS-X).
+
+           MOVE WSS-VAL-TINT-V IN WSS-VARI(WSS-Y) TO
+                WSS-VAL-TINT-T IN WSS-VARI(WSS-X).
+
+           MOVE WSS-VAL-SKUF-V IN WSS-VARI(WSS-Y) TO
+                WSS-VAL-SKUF-T IN WSS-VARI(WSS-X).
+
+           MOVE WSS-VAL-KPPE-V IN WSS-VARI(WSS-Y) TO
+                WSS-VAL-KPPE-T IN WSS-VARI(WSS-X).
+
+           MOVE WSS-VAL-INPE-V IN WSS-VARI(WSS-Y) TO
+                WSS-VAL-INPE-T IN WSS-VARI(WSS-X).
+
+           MOVE WSS-VAL-TPPE-V IN WSS-VARI(WSS-Y) TO
+                WSS-VAL-TPPE-T IN WSS-VARI(WSS-X).
+
+      *--- Mueve en Vector Original desde posicion X a Y ---
+           MOVE WSS-CIC-IOPC-V IN WSS-VARI(WSS-X) TO
+                WSS-CIC-IOPC-V IN WSS-VARI(WSS-Y).
+
+           MOVE WSS-FEC-FCUR-V IN WSS-VARI(WSS-X) TO
+                WSS-FEC-FCUR-V IN WSS-VARI(WSS-Y).
+
+           MOVE WSS-VAL-TINT-V IN WSS-VARI(WSS-X) TO
+                WSS-VAL-TINT-V IN WSS-VARI(WSS-Y).
+
+           MOVE WSS-VAL-SKUF-V IN WSS-VARI(WSS-X) TO
+                WSS-VAL-SKUF-V IN WSS-VARI(WSS-Y).
+
+           MOVE WSS-VAL-KPPE-V IN WSS-VARI(WSS-X) TO
+                WSS-VAL-KPPE-V IN WSS-VARI(WSS-Y).
+
+           MOVE WSS-VAL-INPE-V IN WSS-VARI(WSS-X) TO
+                WSS-VAL-INPE-V IN WSS-VARI(WSS-Y).
+
+           MOVE WSS-VAL-TPPE-V IN WSS-VARI(WSS-X) TO
+                WSS-VAL-TPPE-V IN WSS-VARI(WSS-Y).
+
+      *--- Mueve desde Vector Temporal a Vector Original ---
+           MOVE WSS-CIC-IOPC-T IN WSS-VARI(WSS-X) TO
+                WSS-CIC-IOPC-V IN WSS-VARI(WSS-X).
+
+           MOVE WSS-FEC-FCUR-T IN WSS-VARI(WSS-X) TO
+                WSS-FEC-FCUR-V IN WSS-VARI(WSS-X).
+
+           MOVE WSS-VAL-TINT-T IN WSS-VARI(WSS-X) TO
+                WSS-VAL-TINT-V IN WSS-VARI(WSS-X).
+
+           MOVE WSS-VAL-SKUF-T IN WSS-VARI(WSS-X) TO
+                WSS-VAL-SKUF-V IN WSS-VARI(WSS-X).
+
+           MOVE WSS-VAL-KPPE-T IN WSS-VARI(WSS-X) TO
+                WSS-VAL-KPPE-V IN WSS-VARI(WSS-X).
+
+           MOVE WSS-VAL-INPE-T IN WSS-VARI(WSS-X) TO
+                WSS-VAL-INPE-V IN WSS-VARI(WSS-X).
+
+           MOVE WSS-VAL-TPPE-T IN WSS-VARI(WSS-X) TO
+                WSS-VAL-TPPE-V IN WSS-VARI(WSS-X).
+
+       FIN-LIM-MUEVE.
+           EXIT.
+
+       CLR-VEC-TEMP SECTION.
+       INI-CLR-VEC-TEMP.
+           MOVE SPACES TO WSS-CIC-IOPC-T(WSS-X).
+           MOVE SPACES TO WSS-FEC-FCUR-T(WSS-X).
+           MOVE ZEROES TO WSS-VAL-TINT-T(WSS-X).
+           MOVE ZEROES TO WSS-VAL-SKUF-T(WSS-X).
+           MOVE ZEROES TO WSS-VAL-KPPE-T(WSS-X).
+           MOVE ZEROES TO WSS-VAL-INPE-T(WSS-X).
+           MOVE ZEROES TO WSS-VAL-TPPE-T(WSS-X).
+
+       FIN-CLR-VEC-TEMP.
+           EXIT.
+
+      *--- Mueve datos de Vector Temp. ordenado a Vector Original ---
+       MUEVE-A-VORI SECTION.
+       INI-MUEVE-A-VORI.
+
+           MOVE WSS-CIC-IOPC-T IN WSS-VARI(WSS-X) TO
+                WSS-CIC-IOPC-V IN WSS-VARI(WSS-X).
+
+           MOVE WSS-FEC-FCUR-T IN WSS-VARI(WSS-X) TO
+                WSS-FEC-FCUR-V IN WSS-VARI(WSS-X).
+
+           MOVE WSS-VAL-TINT-T IN WSS-VARI(WSS-X) TO
+                WSS-VAL-TINT-V IN WSS-VARI(WSS-X).
+
+           MOVE WSS-VAL-SKUF-T IN WSS-VARI(WSS-X) TO
+                WSS-VAL-SKUF-V IN WSS-VARI(WSS-X).
+
+           MOVE WSS-VAL-KPPE-T IN WSS-VARI(WSS-X) TO
+                WSS-VAL-KPPE-V IN WSS-VARI(WSS-X).
+
+           MOVE WSS-VAL-INPE-T IN WSS-VARI(WSS-X) TO
+                WSS-VAL-INPE-V IN WSS-VARI(WSS-X).
+
+           MOVE WSS-VAL-TPPE-T IN WSS-VARI(WSS-X) TO
+                WSS-VAL-TPPE-V IN WSS-VARI(WSS-X).
+
+           ADD 1                     TO WSS-X IN WSS-VARI.
+
+       FIN-MUEVE-A-VORI.
+           EXIT.
+
+      *--- Calcula los valores para columna Total Prepago ---
+       CALCULA-TPRE SECTION.
+       INI-CALCULA-TPRE.
+
+      *--- Si Diferencial es cero no debe hacer nada ---
+           IF WSS-VAL-DIFP IN WSS-VARI = ZEROES
+              ADD 1                     TO WSS-X IN WSS-VARI
+              GO TO FIN-CALCULA-TPRE.
+
+      *--- Procesa para Diferencial Mayor o Igual a Saldo Capital $ ---
+           IF WSS-VAL-DIFP IN WSS-VARI NOT <
+                              WSS-VAL-KPPE-V IN WSS-VARI(WSS-X)
+
+             PERFORM MTI-TASA-KUF-PPE
+
+             MOVE ZEROES                   TO WSS-VAL-TPVC IN WSS-VARI
+                                              WSS-VAL-PESO IN WSS-VARI
+             COMPUTE WSS-VAL-PESO IN WSS-VARI ROUNDED =
+                     WSS-VAL-KPPE-V IN WSS-VARI(WSS-X) +
+                                       WSS-VAL-INPE-V IN WSS-VARI(WSS-X)
+
+             MOVE WSS-VAL-PESO IN WSS-VARI TO
+                                  WSS-VAL-TPVC IN WSS-VARI
+                                  WSS-VAL-TPPE-V IN WSS-VARI(WSS-X)
+
+             COMPUTE WSS-VAL-DIFP IN WSS-VARI =
+                                     WSS-VAL-DIFP IN WSS-VARI -
+                                     WSS-VAL-KPPE-V IN WSS-VARI(WSS-X)
+
+             PERFORM MTI-INPE-TPPE
+
+             ADD 1                     TO WSS-X IN WSS-VARI
+
+           ELSE
+      *--- Procesa para Diferencial Menor a Saldo Capital $ ---
+           IF WSS-VAL-DIFP IN WSS-VARI <
+                              WSS-VAL-KPPE-V IN WSS-VARI(WSS-X)
+
+              PERFORM MTI-TASA-KUF-PPE
+
+              MOVE ZEROES                   TO WSS-VAL-TPVC IN WSS-VARI
+                                               WSS-VAL-PESO IN WSS-VARI
+              COMPUTE WSS-VAL-PESO IN WSS-VARI ROUNDED =
+                                      WSS-VAL-DIFP IN WSS-VARI +
+                                      WSS-VAL-INPE-V IN WSS-VARI(WSS-X)
+
+              MOVE WSS-VAL-PESO IN WSS-VARI TO
+                                   WSS-VAL-TPVC IN WSS-VARI
+                                   WSS-VAL-TPPE-V IN WSS-VARI(WSS-X)
+
+              MOVE ZEROES                   TO WSS-VAL-DIFP IN WSS-VARI
+
+              PERFORM MTI-INPE-TPPE
+
+              ADD 1                     TO WSS-X IN WSS-VARI.
+
+       FIN-CALCULA-TPRE.
+           EXIT.
+
+       MTI-TASA-KUF-PPE SECTION.
+       INI-MTI-TASA-KUF-PPE.
+
+           IF SCR-OFRM-SRV
+              MOVE WSS-VAL-TINT-V IN WSS-VARI(WSS-X) TO
+                                FRM-VAL-TINT-EDT
+              MOVE FRM-VAL-TINT-EDT                  TO
+                                WSS-VAL-TINT-V-ALF IN WSS-VARI(WSS-X)
+
+              MOVE WSS-VAL-SKUF-V IN WSS-VARI(WSS-X) TO
+                                FRM-VAL-SKUF-EDT
+              MOVE FRM-VAL-SKUF-EDT                  TO
+                                WSS-VAL-SKUF-V-ALF IN WSS-VARI(WSS-X)
+
+              MOVE WSS-VAL-KPPE-V IN WSS-VARI(WSS-X) TO
+                                FRM-VAL-KPPE-EDT
+              MOVE FRM-VAL-KPPE-EDT                  TO
+                                WSS-VAL-KPPE-V-ALF IN WSS-VARI(WSS-X).
+
+       FIN-MTI-TASA-KUF-PPE.
+           EXIT.
+
+       MTI-INPE-TPPE SECTION.
+       INI-MTI-INPE-TPPE.
+
+           IF SCR-OFRM-SRV
+              MOVE WSS-VAL-INPE-V IN WSS-VARI(WSS-X) TO
+                                FRM-VAL-INPE-EDT
+              MOVE FRM-VAL-INPE-EDT         TO
+                                WSS-VAL-INPE-V-ALF IN WSS-VARI(WSS-X)
+
+              MOVE WSS-VAL-TPPE-V IN WSS-VARI(WSS-X) TO
+                                FRM-VAL-TPPE-EDT
+              MOVE FRM-VAL-TPPE-EDT         TO
+                                WSS-VAL-TPPE-V-ALF IN WSS-VARI(WSS-X).
+
+       FIN-MTI-INPE-TPPE.
+           EXIT.
+
+       PUT-TAB SECTION.
+       INI-PUT-TAB.
+           MOVE CDD-NOM-TSCDD TO QUE-COLA.
+           MOVE CDD-LEN-TSCDD TO QUE-LITM.
+           MOVE QUE-DEL       TO QUE-CMND.
+           PERFORM GNS-PRO-QUE.
+
+           MOVE 1 TO SCR-NUM-PANT.
+           MOVE LOW-VALUES TO WSS-CIC-IOPC-IDX-MTI.
+           MOVE LOW-VALUES TO WSS-CIC-IOPC-IDX-FRM.
+      *
+           MOVE 1 TO FRM-IFLD.
+           MOVE ZEROES  TO WSS-NITM IN WSS-VARI.
+
+           MOVE 1 TO WSS-F IN WSS-VARI.
+       LUP-PUT-TAB.
+           IF WSS-F IN WSS-VARI > WSS-FMAX IN WSS-VARI
+              GO TO FIN-PUT-TAB.
+
+           IF WSS-FEC-FCUR-V(WSS-F) > SPACES
+              PERFORM PUT-TAB-CDD
+              PERFORM PUT-CDD-QUE
+              PERFORM SET-FRM-IFLD
+           ELSE
+              IF FRM-IFLD = 1 AND WSS-F = 1
+                 MOVE 'COL' TO MSG-COD-SIST
+                 MOVE 'OPC    NEX' TO MSG-COD-MENS
+
+                 PERFORM GET-MSG
+                 MOVE MSG-GLS-DESC TO FRM-MENS
+                 MOVE '00' TO FIO-STAT
+                 MOVE 'S' TO SCR-IERR
+                 GO TO FIN-PUT-TAB
+              ELSE
+                 MOVE '00' TO FIO-STAT
+                 GO TO FIN-PUT-TAB.
+
+           ADD 1 TO WSS-F IN WSS-VARI.
+           GO TO LUP-PUT-TAB.
+       FIN-PUT-TAB.
+           MOVE 1                  TO QUE-NITM.
+           MOVE CDD-LEN-TSCDD-MAS  TO QUE-LITM.
+           MOVE CDD-TSCDD-MAS      TO QUE-COLA.
+
+           IF WSS-NITM > CDD-TOT-OCC-CDD
+              MOVE 'S'           TO CDD-MAS-IND-HMAS
+           ELSE
+              MOVE 'N'           TO CDD-MAS-IND-HMAS.
+
+           MOVE WSS-NITM         TO WSS-NUM-ICUR.
+           MOVE WSS-NUM-ICUR     TO WSS-NUM-ICUR-EDT.
+           MOVE WSS-NUM-ICUR-EDT TO WSS-NUM-ICUR-ALF.
+           MOVE WSS-NUM-ICUR-ALF TO CDD-MAS-NUM-TOCC.
+           MOVE CDD-MAS-ITEM     TO QUE-ITEM.
+           MOVE QUE-PUT          TO QUE-CMND.
+           PERFORM GNS-PRO-QUE.
+
+           IF WSS-NITM > WSS-IMAX
+               MOVE 'COL' TO MSG-COD-SIST
+               MOVE 'CDDOPCDMAS' TO MSG-COD-MENS
+               PERFORM GET-MSG
+               MOVE MSG-GLS-DESC TO FRM-MEN2.
+       EXT-PUT-TAB.
+           EXIT.
+
+       SET-FRM-IFLD SECTION.
+       INI-SET-FRM-IFLD.
+           IF SCR-OFRM-SRV
+                MOVE 1 TO FRM-IFLD
+           ELSE
+                ADD 1 TO FRM-IFLD.
+       FIN-SET-FRM-IFLD.
+           EXIT.
+      *--------------------------------------------
+       SCRL-TAB-CDD SECTION.
+       INI-SCRL-TAB-CDD.
+           MOVE SPACES TO MSG-COD-MENS.
+
+           IF FRM-FFLD = FRM-FFLD-PF6
+               PERFORM PUT-TAB-ASC
+           ELSE
+               PERFORM PUT-TAB-DSC.
+           IF MSG-COD-MENS > SPACES
+               MOVE 'COL' TO MSG-COD-SIST
+               PERFORM GET-MSG
+               MOVE MSG-GLS-DESC TO FRM-MEN2.
+       FIN-SCRL-TAB-CDD.
+           EXIT.
+
+      *--------------------------------------------
+       PUT-TAB-CDD SECTION.
+       INI-PUT-TAB-CDD.
+           PERFORM CLR-WSS.
+           MOVE WSS-CIC-IOPC-V(WSS-F) TO WSS-CIC-IOPC-MTI.
+           MOVE WSS-FEC-FCUR-V(WSS-F) TO WSS-FEC-FCUR-MTI.
+           MOVE WSS-VAL-TINT-V(WSS-F) TO WSS-VAL-TINT-MTI.
+           MOVE WSS-VAL-SKUF-V(WSS-F) TO WSS-VAL-SKUF-MTI.
+           MOVE WSS-VAL-KPPE-V(WSS-F) TO WSS-VAL-KPPE-MTI.
+           MOVE WSS-VAL-INPE-V(WSS-F) TO WSS-VAL-INPE-MTI.
+           MOVE WSS-VAL-TPPE-V(WSS-F) TO WSS-VAL-TPPE-MTI.
+
+           MOVE WSS-CIC-IOPC-MTI TO WSS-CIC-IOPC-FRM.
+           MOVE WSS-FEC-FCUR-MTI TO WSS-FEC-FCUR-FRM.
+           MOVE WSS-VAL-TINT-MTI TO WSS-VAL-TINT-FRM.
+           MOVE WSS-VAL-SKUF-MTI TO WSS-VAL-SKUF-FRM.
+           MOVE WSS-VAL-KPPE-MTI TO WSS-VAL-KPPE-FRM.
+           MOVE WSS-VAL-INPE-MTI TO WSS-VAL-INPE-FRM.
+           MOVE WSS-VAL-TPPE-MTI TO WSS-VAL-TPPE-FRM.
+
+           IF FRM-IFLD > WSS-IMAX
+              GO TO FIN-PUT-TAB-CDD.
+
+           MOVE WSS-CIC-IOPC-MTI TO FRM-CIC-IOPC IN CDD-FLD(FRM-IFLD).
+           MOVE WSS-FEC-FCUR-MTI TO FRM-FEC-FCUR IN CDD-FLD(FRM-IFLD).
+           MOVE WSS-VAL-TINT-MTI TO FRM-VAL-TINT IN CDD-FLD(FRM-IFLD).
+           MOVE WSS-VAL-SKUF-MTI TO FRM-VAL-SKUF IN CDD-FLD(FRM-IFLD).
+           MOVE WSS-VAL-KPPE-MTI TO FRM-VAL-KPPE IN CDD-FLD(FRM-IFLD).
+           MOVE WSS-VAL-INPE-MTI TO FRM-VAL-INPE IN CDD-FLD(FRM-IFLD).
+           MOVE WSS-VAL-TPPE-MTI TO FRM-VAL-TPPE IN CDD-FLD(FRM-IFLD).
+
+       FIN-PUT-TAB-CDD.
+           EXIT.
+      *----------------------------------------------------
+       PUT-CDD-QUE SECTION.
+       INI-PUT-CDD-QUE.
+           ADD 1 TO WSS-NITM.
+           MOVE CDD-NOM-TSCDD    TO QUE-COLA.
+           MOVE CDD-LEN-TSCDD    TO QUE-LITM.
+           MOVE WSS-NITM         TO QUE-NITM.
+           MOVE SPACES           TO QUE-ITEM.
+           IF SCR-OFRM-SRV
+               MOVE WSS-CIC-IOPC-IDX-MTI TO QUE-ITEM
+           ELSE
+               MOVE WSS-CIC-IOPC-IDX-FRM TO QUE-ITEM.
+           MOVE QUE-PUT  TO QUE-CMND.
+           PERFORM GNS-PRO-QUE.
+       FIN-PUT-CDD-QUE.
+           EXIT.
+      *----------------------------------------------------
+
+       PUT-TAB-ASC SECTION.
+       INI-PUT-TAB-ASC.
+           MOVE SPACES TO MSG-COD-MENS.
+           MULTIPLY SCR-NUM-PANT BY WSS-IMAX GIVING QUE-NITM.
+           MOVE 0 TO FRM-IFLD.
+       LUP-PUT-TAB-ASC.
+           ADD 1              TO QUE-NITM.
+           MOVE CDD-NOM-TSCDD TO QUE-COLA.
+           MOVE CDD-LEN-TSCDD TO QUE-LITM.
+           MOVE QUE-GET       TO QUE-CMND.
+           PERFORM GNS-PRO-QUE.
+           IF QUE-STAT NOT = QUE-STAT-OKS
+               IF FRM-IFLD = 0
+                   MOVE 'CDDOPCNONXT' TO MSG-COD-MENS
+                   GO TO FIN-PUT-TAB-ASC
+               ELSE
+                   GO TO FIN-PUT-TAB-ASC.
+           ADD 1 TO FRM-IFLD.
+           MOVE QUE-ITEM TO FRM-CIC-IOPC-IDX(FRM-IFLD).
+      *    PERFORM EDT-VAL-CDD.
+           IF FRM-IFLD < WSS-IMAX
+               GO TO LUP-PUT-TAB-ASC.
+       FIN-PUT-TAB-ASC.
+           IF FRM-IFLD > 0 AND FRM-IFLD < WSS-IMAX
+               ADD 1 FRM-IFLD GIVING WSS-I
+               PERFORM CLR-FRM VARYING WSS-I FROM WSS-I BY 1
+                                 UNTIL WSS-I > WSS-IMAX.
+           IF FRM-IFLD > 0
+               ADD 1 TO SCR-NUM-PANT.
+           IF FRM-IFLD = WSS-IMAX
+               ADD 1              TO QUE-NITM
+               MOVE CDD-NOM-TSCDD TO QUE-COLA
+               MOVE CDD-LEN-TSCDD TO QUE-LITM
+               MOVE QUE-GET       TO QUE-CMND
+               PERFORM GNS-PRO-QUE
+               IF QUE-STAT = QUE-STAT-OKS
+                  MOVE 'COL'        TO MSG-COD-SIST
+                  MOVE 'CDDOPCDMAS' TO MSG-COD-MENS.
+
+       EXT-PUT-TAB-ASC.
+           EXIT.
+
+       PUT-TAB-DSC SECTION.
+       INI-PUT-TAB-DSC.
+           MOVE SPACES TO MSG-COD-MENS.
+           IF SCR-NUM-PANT = 1
+               MOVE 'CDDOPCNOPRV' TO MSG-COD-MENS
+               GO TO EXT-PUT-TAB-DSC.
+
+           SUBTRACT 1 FROM SCR-NUM-PANT GIVING QUE-NITM.
+           MULTIPLY QUE-NITM BY WSS-IMAX GIVING QUE-NITM.
+           ADD 1 TO QUE-NITM.
+           ADD 1 WSS-IMAX GIVING FRM-IFLD.
+       LUP-PUT-TAB-DSC.
+           SUBTRACT  1 FROM QUE-NITM.
+           MOVE CDD-NOM-TSCDD TO QUE-COLA
+           MOVE CDD-LEN-TSCDD TO QUE-LITM
+           MOVE QUE-GET       TO QUE-CMND.
+           PERFORM GNS-PRO-QUE.
+           IF QUE-STAT NOT = QUE-STAT-OKS
+               IF FRM-IFLD > WSS-IMAX
+                   MOVE 'CDDOPCNOPRV' TO MSG-COD-MENS
+                   GO TO FIN-PUT-TAB-DSC
+               ELSE
+                   GO TO FIN-PUT-TAB-DSC.
+           SUBTRACT 1 FROM FRM-IFLD.
+           MOVE QUE-ITEM TO FRM-CIC-IOPC-IDX(FRM-IFLD).
+      *    PERFORM EDT-VAL-CDD.
+           IF FRM-IFLD > 1
+               GO TO LUP-PUT-TAB-DSC.
+       FIN-PUT-TAB-DSC.
+
+           IF FRM-IFLD NOT > WSS-IMAX AND FRM-IFLD > 1
+               SUBTRACT 1 FROM FRM-IFLD GIVING WSS-I
+               PERFORM CLR-FRM VARYING WSS-I FROM WSS-I BY -1
+                                 UNTIL WSS-I < 1.
+
+           IF FRM-IFLD NOT > WSS-IMAX
+               SUBTRACT 1 FROM SCR-NUM-PANT
+               MOVE 'COL'        TO MSG-COD-SIST
+               MOVE 'CDDOPCDMAS' TO MSG-COD-MENS.
+       EXT-PUT-TAB-DSC.
+           EXIT.
+
+      *------------------------------------------------------
+       COPY SGCBGCLI.
+
+       COPY GNSBGCPT.
+       COPY GNSBGSTR.
+       COPY GNSBBTAB.
+       COPY GNSBBMSC.
+
+       EDT-VAL-CDD SECTION.
+       INI-EDT-VAL-CDD.
+       FIN-EDT-VAL-CDD.
+           EXIT.
+
+       CLR-FRM SECTION.
+       INI-CLR-FRM.
+           MOVE SPACES TO FRM-CIC-IOPC IN CDD-FLD(WSS-I).
+           MOVE SPACES TO FRM-FEC-FCUR IN CDD-FLD(WSS-I).
+           MOVE ZEROES TO FRM-VAL-TINT IN CDD-FLD(WSS-I).
+           MOVE ZEROES TO FRM-VAL-SKUF IN CDD-FLD(WSS-I).
+           MOVE ZEROES TO FRM-VAL-KPPE IN CDD-FLD(WSS-I).
+           MOVE ZEROES TO FRM-VAL-INPE IN CDD-FLD(WSS-I).
+           MOVE ZEROES TO FRM-VAL-TPPE IN CDD-FLD(WSS-I).
+
+       FIN-CLR-FRM.
+           EXIT.
+
+       CLR-WSS SECTION.
+       INI-CLR-WSS.
+           MOVE SPACES TO WSS-CIC-IOPC-FRM.
+           MOVE SPACES TO WSS-FEC-FCUR-FRM.
+           MOVE ZEROES TO WSS-VAL-TINT-FRM.
+           MOVE ZEROES TO WSS-VAL-SKUF-FRM.
+           MOVE ZEROES TO WSS-VAL-KPPE-FRM.
+           MOVE ZEROES TO WSS-VAL-INPE-FRM.
+           MOVE ZEROES TO WSS-VAL-TPPE-FRM.
+
+           IF SCR-OFRM-SRV
+               PERFORM CLR-FRM-MTX.
+       FIN-CLR-WSS.
+           EXIT.
+
+       CLR-FRM-MTX SECTION.
+       INI-CLR-FRM-MTX.
+           MOVE SPACES TO FRM-CIC-IOPC IN CDD-FLD(1).
+           MOVE SPACES TO FRM-FEC-FCUR IN CDD-FLD(1).
+           MOVE ZEROES TO FRM-VAL-TINT IN CDD-FLD(1).
+           MOVE ZEROES TO FRM-VAL-SKUF IN CDD-FLD(1).
+           MOVE ZEROES TO FRM-VAL-KPPE IN CDD-FLD(1).
+           MOVE ZEROES TO FRM-VAL-INPE IN CDD-FLD(1).
+           MOVE ZEROES TO FRM-VAL-TPPE IN CDD-FLD(1).
+
+       FIN-CLR-FRM-MTX.
+           EXIT.
+
+       CRG-VEC-CDD SECTION.
+       INI-CRG-VEC-CDD.
+           ADD 1 TO WSS-J.
+           IF WSS-J IN WSS-VARI > WSS-JMAX IN WSS-VARI
+               GO TO FIN-CRG-VEC-CDD.
+           PERFORM CLR-CDD-VEC.
+
+      *--- Busca Tipo de Cambio para Moneda de Operacion ---
+           IF WSS-J = 1
+              PERFORM GET-FHOY
+              MOVE HOY-SHOY       TO WSS-FEC-SPRO IN WSS-VARI
+              MOVE HOY-AHOY       TO WSS-FEC-APRO IN WSS-VARI
+              MOVE HOY-MHOY       TO WSS-FEC-MPRO IN WSS-VARI
+              MOVE HOY-DHOY       TO WSS-FEC-DPRO IN WSS-VARI
+
+              IF WSS-COD-PESO IN WSS-VARI NOT = OPC-COD-VCOC IN OPC
+
+                 MOVE OPC-COD-VCOC IN OPC      TO CAM-COD-VCAM IN CAM(1)
+                 MOVE WSS-COD-PESO IN WSS-VARI TO CAM-COD-VCAM IN CAM(2)
+
+                 MOVE WSS-FEC-DPRO IN WSS-VARI TO CAM-NUM-DCAM IN CAM(1)
+                 MOVE WSS-FEC-MPRO IN WSS-VARI TO CAM-NUM-MCAM IN CAM(1)
+                 MOVE WSS-FEC-SPRO IN WSS-VARI TO CAM-NUM-SCAM IN CAM(1)
+                 MOVE WSS-FEC-APRO IN WSS-VARI TO CAM-NUM-ACAM IN CAM(1)
+                 MOVE CAM-FEC-FCAM IN CAM(1)   TO CAM-FEC-FCAM IN CAM(2)
+                 MOVE 'TAB'       TO FIO-SIST
+                 MOVE FIO-GET-KEY TO FIO-CMND
+                 PERFORM TAB-FIO-CAM
+
+                 IF FIO-STAT-OKS AND CAM-MSC-STAT IN CAM = 'S'
+                    MOVE CAM-SGV-VCAM IN CAM TO WSS-TIP-CAMP IN WSS-VARI
+                    MOVE OPC-COD-VCOC IN OPC TO WSS-COD-VCOC IN WSS-VARI
+                 ELSE
+                    MOVE 'S'    TO WSS-IND-ERRO IN WSS-VARI
+                    GO TO FIN-CRG-VEC-CDD.
+
+      *--- Campos de tabla OPC para pantala CDD ---
+
+           MOVE OPC-CIC-IOPC IN OPC TO
+                                WSS-CIC-IOPC-V IN WSS-VARI(WSS-J).
+
+           MOVE OPC-NUM-SINP IN OPC TO WSS-NUM-STRA IN WSS-VARI.
+           MOVE OPC-NUM-AINP IN OPC TO WSS-NUM-ATRA IN WSS-VARI.
+           MOVE OPC-NUM-MINP IN OPC TO WSS-NUM-MTRA IN WSS-VARI.
+           MOVE OPC-NUM-DINP IN OPC TO WSS-NUM-DTRA IN WSS-VARI.
+           MOVE WSS-FEC-FTRA IN WSS-VARI TO
+                                WSS-FEC-FCUR-V IN WSS-VARI(WSS-J).
+
+      *--- Toma Saldo Capital de Operacion y la guarda en vector ---
+           MOVE OPC-VAL-SCRE IN OPC TO
+                                WSS-VAL-SCRE IN WSS-VARI.
+           MOVE WSS-VAL-SCRE IN WSS-VARI TO
+                                WSS-VAL-SKUF-V IN WSS-VARI(WSS-J).
+
+      *--- Acumula Monto Capital Adeudado de Operaciones ---
+           COMPUTE WSS-NUM-TPAR IN WSS-VARI =
+                       WSS-NUM-TPAR IN WSS-VARI + OPC-VAL-SCRE IN OPC.
+           COMPUTE WSS-NUM-NOPE IN WSS-VARI =
+                       WSS-NUM-NOPE IN WSS-VARI + 1.
+
+      *---------------------------------------------------------------
+      *--- Calcula Capital Prepago Pesos de la Operacion ---
+           MOVE ZEROES                   TO WSS-VAL-PESO IN WSS-VARI.
+           COMPUTE WSS-VAL-PESO IN WSS-VARI ROUNDED =
+                       WSS-TIP-CAMP IN WSS-VARI * OPC-VAL-SCRE IN OPC.
+           MOVE WSS-VAL-PESO IN WSS-VARI TO
+                                    WSS-VAL-KPPE IN WSS-VARI
+                                    WSS-VAL-KPPE-V IN WSS-VARI(WSS-J).
+
+      *--- Acumula Capital Prepago Pesos de Operaciones ---
+           COMPUTE WSS-SUM-KPPE IN WSS-VARI =
+                   WSS-SUM-KPPE IN WSS-VARI + WSS-VAL-KPPE IN WSS-VARI.
+
+      *---------------------------------------------------------------
+      *--- Lee Tasa de Interes en ICG para la Operacion ---
+
+           MOVE 'ICG-KEY-IICG'      TO FIO-AKEY.
+           MOVE OPC-CIC-IOPC IN OPC TO ICG-CIC-IOPC IN ICG.
+           MOVE ZEROES              TO ICG-NUM-ICAN IN ICG.
+           MOVE SPACES              TO ICG-CIC-IOPV IN ICG.
+           MOVE ZEROES              TO ICG-NUM-IVCT IN ICG.
+           MOVE 'INT'               TO ICG-IND-TTAS IN ICG.
+           MOVE ZEROES              TO ICG-FEC-FINI IN ICG.
+           MOVE ZEROES              TO ICG-SGV-TINT IN ICG.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM COL-FIO-ICG.
+           IF NOT (FIO-STAT-OKS AND
+                   ICG-CIC-IOPC IN ICG = OPC-CIC-IOPC IN OPC AND
+                   ICG-NUM-ICAN IN ICG = ZEROES AND
+                   ICG-CIC-IOPV IN ICG = SPACES AND
+                   ICG-NUM-IVCT IN ICG = ZEROES AND
+                   ICG-IND-TTAS IN ICG = 'INT')
+      *        MOVE 'N' TO PFS-IICG-SEL
+              GO TO FIN-CRG-VEC-CDD.
+
+           IF ICG-COD-CVTI IN ICG > SPACES
+              MOVE ICG-SGV-SPRD IN ICG
+                           TO WSS-VAL-TINT IN WSS-VARI
+              MOVE WSS-VAL-TINT IN WSS-VARI
+                           TO WSS-VAL-TINT-V IN WSS-VARI(WSS-J)
+           ELSE
+              MOVE ICG-SGV-TINT IN ICG
+                           TO WSS-VAL-TINT IN WSS-VARI
+              MOVE WSS-VAL-TINT IN WSS-VARI
+                           TO WSS-VAL-TINT-V IN WSS-VARI(WSS-J).
+
+      *--- Busca Situacion Contable de Operacion en DLC ---
+
+           MOVE RDC-CIC-IOPC IN RDC   TO DLC-CIC-IOPC IN DLC.
+           MOVE 001                   TO DLC-NUM-IDLC IN DLC.
+           MOVE 'DLC-KEY-IDLC'        TO FIO-AKEY.
+           MOVE FIO-GET-NLS           TO FIO-CMND.
+           PERFORM COL-FIO-DLC.
+           IF NOT (FIO-STAT-OKS AND
+                   RDC-CIC-IOPC IN RDC = DLC-CIC-IOPC IN DLC)
+
+      *        MOVE 'N' TO PFS-IDLC-SEL
+              GO TO FIN-CRG-VEC-CDD.
+
+      *---------------------------------------------------------------
+      *--- Lee Vencimientos (VEN) asociada a Operacion ---
+
+           MOVE SPACES              TO VEN-KEY-IVEN IN VEN.
+           MOVE OPC-CIC-IOPC IN OPC TO VEN-CIC-IOPC IN VEN.
+           MOVE 1                   TO VEN-NUM-IVEN IN VEN.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM COL-FIO-VEN.
+           IF NOT (FIO-STAT-OKS AND
+                   VEN-CIC-IOPC IN VEN = OPC-CIC-IOPC IN OPC)
+              MOVE 'S'    TO WSS-IND-ERRO IN WSS-VARI
+              GO TO FIN-CRG-VEC-CDD.
+
+           IF VEN-IND-SCTB IN VEN NOT = SPACES
+              MOVE 'N'    TO WSS-IND-PPAG IN WSS-VARI
+              GO TO FIN-CRG-VEC-CDD.
+
+      *--- Podria ser el caso de que no se haya ejecutado COLPGMOR ---
+           IF VEN-FEC-FVEN IN VEN < WSS-FEC-PROC IN WSS-VARI
+              MOVE 'N'         TO WSS-IND-PPAG IN WSS-VARI
+              MOVE ZEROES      TO WSS-VAL-INPE IN WSS-VARI
+              GO TO FIN-CRG-VEC-CDD.
+
+      *--- Fecha Devengo ( Ultimo Pago Total Intereses ) ---
+           MOVE DLC-NUM-DDEV IN DLC     TO FEC-DEC1.
+           MOVE DLC-NUM-MDEV IN DLC     TO FEC-MEC1.
+           MOVE DLC-NUM-SDEV IN DLC     TO FEC-SEC1.
+           MOVE DLC-NUM-ADEV IN DLC     TO FEC-AEC1.
+
+           MOVE WSS-FEC-DPRO IN WSS-VARI  TO FEC-DEC2.
+           MOVE WSS-FEC-MPRO IN WSS-VARI  TO FEC-MEC2.
+           MOVE WSS-FEC-SPRO IN WSS-VARI  TO FEC-SEC2.
+           MOVE WSS-FEC-APRO IN WSS-VARI  TO FEC-AEC2.
+
+           MOVE ICG-COD-TINT IN ICG     TO INT-TIPT.
+           MOVE ICG-SGV-TINT IN ICG     TO INT-TINT.
+           MOVE OPC-COD-VCOC IN OPC     TO INT-VCAM.
+           MOVE FEC-FEC1                TO INT-FUNO.
+           MOVE FEC-FEC2                TO INT-FDOS.
+
+           MOVE OPC-NUM-DCOL IN OPC     TO INT-DCOL.
+           MOVE OPC-NUM-MCOL IN OPC     TO INT-MCOL.
+           MOVE OPC-NUM-SCOL IN OPC     TO INT-SCOL.
+           MOVE OPC-NUM-ACOL IN OPC     TO INT-ACOL.
+
+           MOVE WSS-FEC-DPRO IN WSS-VARI  TO INT-DBTV.
+           MOVE WSS-FEC-MPRO IN WSS-VARI  TO INT-MBTV.
+           MOVE WSS-FEC-SPRO IN WSS-VARI  TO INT-SBTV.
+           MOVE WSS-FEC-APRO IN WSS-VARI  TO INT-ABTV.
+
+           MOVE OPC-CIC-IOPC IN OPC     TO INT-IOPC.
+           MOVE DLC-NUM-IDLC IN DLC     TO INT-IDLC.
+           PERFORM COL-CAL-INT.
+           IF INT-CMSG > SPACES
+              MOVE ZEROES      TO WSS-VAL-INPE IN WSS-VARI
+              GO TO FIN-CRG-VEC-CDD.
+
+      *---------------------------------------------------------------
+      *--- Calcula Intereses Pesos de la Operacion ---
+           MOVE ZEROES                   TO WSS-VAL-PESO IN WSS-VARI.
+           COMPUTE WSS-VAL-PESO IN WSS-VARI ROUNDED =
+                       INT-TIPE * WSS-VAL-KPPE-V IN WSS-VARI(WSS-J).
+
+           MOVE WSS-VAL-PESO IN WSS-VARI TO
+                                    WSS-VAL-INPE IN WSS-VARI
+                                    WSS-VAL-INPE-V IN WSS-VARI(WSS-J).
+
+      *--- Acumula Intereses Pesos de las Operaciones ---
+           COMPUTE WSS-SUM-INPE IN WSS-VARI =
+                   WSS-SUM-INPE IN WSS-VARI + WSS-VAL-INPE IN WSS-VARI.
+
+      *---------------------------------------------------------------
+      *--- Copia valor Intereses a Total Prepago Pesos de Operacion ---
+           MOVE WSS-VAL-INPE IN WSS-VARI   TO WSS-VAL-PESO IN WSS-VARI.
+
+           MOVE WSS-VAL-PESO IN WSS-VARI   TO WSS-VAL-TPPE IN WSS-VARI.
+
+           MOVE WSS-VAL-TPPE IN WSS-VARI TO
+                                WSS-VAL-TPPE-V IN WSS-VARI(WSS-J).
+      *--- Acumula Total Prepago Pesos de Operaciones ---
+           COMPUTE WSS-SUM-TPPE IN WSS-VARI =
+                   WSS-SUM-TPPE IN WSS-VARI + WSS-VAL-TPPE IN WSS-VARI.
+      *---------------------------------------------------------------
+
+       FIN-CRG-VEC-CDD.
+           EXIT.
+
+       CLR-CDD-VEC SECTION.
+       INI-CLR-CDD-VEC.
+           MOVE SPACES TO WSS-CIC-IOPC-V(WSS-J).
+           MOVE SPACES TO WSS-FEC-FCUR-V(WSS-J).
+           MOVE ZEROES TO WSS-VAL-TINT-V(WSS-J).
+           MOVE ZEROES TO WSS-VAL-SKUF-V(WSS-J).
+           MOVE ZEROES TO WSS-VAL-KPPE-V(WSS-J).
+           MOVE ZEROES TO WSS-VAL-INPE-V(WSS-J).
+           MOVE ZEROES TO WSS-VAL-TPPE-V(WSS-J).
+
+       FIN-CLR-CDD-VEC.
+           EXIT.
+
+       PRO-FLD-QUE SECTION.
+       INI-PRO-FLD-QUE.
+           MOVE 'P' TO  WSS-CIC-IOPC-MTI-ATR.
+           MOVE 'P' TO  WSS-FEC-FCUR-MTI-ATR.
+           MOVE 'P' TO  WSS-VAL-TINT-MTI-ATR.
+           MOVE 'P' TO  WSS-VAL-SKUF-MTI-ATR.
+           MOVE 'P' TO  WSS-VAL-KPPE-MTI-ATR.
+           MOVE 'P' TO  WSS-VAL-INPE-MTI-ATR.
+           MOVE 'P' TO  WSS-VAL-TPPE-MTI-ATR.
+
+       FIN-PRO-FLD-QUE.
+           EXIT.
+      *>>>> EOF
+*% END

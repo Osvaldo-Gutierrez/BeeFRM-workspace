@@ -1,0 +1,486 @@
+$SET SHARING = SHAREDBYALL
+$RESET DEBUG
+  BEGIN
+  DATABASE BDCST;
+  DEFINE  DEBUGER(MSG) =
+$SET OMIT = NOT DEBUG
+          WRITE(MYSELF.TASKFILE,(LENGTH(MSG)+5) DIV 6,MSG !! "     ");
+$POP OMIT
+          #;
+  EBCDIC  ARRAY REG_TAB[0:206];
+  EBCDIC  ARRAY KEYTAB00  [0:17];
+  ARRAY   TAB_NAME[0:0],
+          TAB_REC[0:500],
+          TAB_KEY0_0[0:0,0:0],
+          TAB_KEY0_1[0:0,0:0],
+          TAB_KEY1_0[0:0,0:0],
+          TAB_KEY1_1[0:0,0:0],
+          TAB_KEY2_0[0:0,0:0],
+          DUMMY[0:0];
+  REAL    REC_COUNT,
+          DMSTATUS,
+          I_COD,
+          TOP_TAB_NAME,
+          TAB_COUNT,
+          INX_TAB,
+          INX_ENTRY,
+          ID_TAB,
+          ID,
+          N,
+          R;
+  INTEGER TOP_TAB_CODTAB,
+          TOP_TAB_RECTAB,
+          I;
+      
+  DEFINE
+    CHECK(DMSTATUS) =
+      IF BOOLEAN(DMSTATUS) THEN
+        IF DMSTATUS.DMERROR NEQ NOTFOUND THEN
+          BEGIN
+          DMS_DSP;
+          DMTERMINATE(DMSTATUS);
+          END #
+    ,
+%    Descripcion del registro de tabla
+     V_GLS_FLAG(I) = POINTER(TAB_REC[(I)+1])   #
+    ,V_STP_ITRS(I) = POINTER(TAB_REC[(I)+1])+1 #
+    ,V_NUM_STRN(I) = TAB_REC[(I)+0].[47:12]    #
+    ,V_NUM_MTRN(I) = TAB_REC[(I)+0].[35:06] #
+    ,V_NUM_DTRN(I) = TAB_REC[(I)+0].[29:06] #
+    ,V_NUM_HHTR(I) = TAB_REC[(I)+0].[23:06] #
+    ,V_NUM_MMTR(I) = TAB_REC[(I)+0].[17:06] #
+    ,V_NUM_SSTR(I) = TAB_REC[(I)+0].[11:06] #
+    ,V_MSC_TACC(I) = POINTER(TAB_REC[(I)+1])+4 #
+    ,V_GLS_DCOR(I) = POINTER(TAB_REC[(I)+4])+4 #
+    ;
+      
+      
+  PROCEDURE DMS_DSP;
+    BEGIN
+      
+    DISPLAY ("ABORTO EN PROGRAMA");
+    DISPLAY ("DMSTATUS(DMSTRUCTURE): " !!
+              STRING(DMSTATUS.DMSTRUCTURE,*));
+    DISPLAY ("DMSTATUS(DMERROR)    : " !!
+              STRING(DMSTATUS.DMERROR,*));
+    END OF DMS_DSP;
+      
+      
+      
+  PROCEDURE STORE_REG_TAB(INX);
+    VALUE   INX;
+    INTEGER INX;
+    BEGIN
+    INTEGER INX_TAB ;
+      
+%   En este procedimiento se almacena el registro de la tabla en
+%
+%   words, se usa un puntero Base para indicar el comienzo de cada
+%   entrada y un juego de defines que indican el desplazamiento
+%   para cada uno de los campos de la entrada en la tabla.
+      
+    DEBUGER("STORE_REG_TAB: INX="!!STRING(INX,*) !! " " !!
+            STRING(REG_TAB[0],100));
+    INX_TAB := INX * 25;
+    IF SIZE(TAB_REC) < INX_TAB + 25 THEN
+      RESIZE(TAB_REC, SIZE(TAB_REC)+2500, RETAIN);
+    REPLACE V_GLS_FLAG(INX_TAB) BY REG_TAB[1] FOR 1;
+    REPLACE V_STP_ITRS(INX_TAB) BY REG_TAB[19] FOR 3;
+    V_NUM_STRN(INX_TAB) := INTEGER(REG_TAB[22],4) DIV 1;
+    V_NUM_MTRN(INX_TAB) := INTEGER(REG_TAB[26],2) DIV 1;
+    V_NUM_DTRN(INX_TAB) := INTEGER(REG_TAB[28],2) DIV 1;
+    V_NUM_HHTR(INX_TAB) := INTEGER(REG_TAB[30],2) DIV 1;
+    V_NUM_MMTR(INX_TAB) := INTEGER(REG_TAB[32],2) DIV 1;
+    V_NUM_SSTR(INX_TAB) := INTEGER(REG_TAB[34],2) DIV 1;
+    REPLACE V_MSC_TACC(INX_TAB) BY REG_TAB[36] FOR 18;
+    REPLACE V_GLS_DCOR(INX_TAB) BY REG_TAB[83] FOR 123;
+    DEBUGER("STORE_REG_TAB EXIT: INX_TAB=" !! STRING(INX_TAB,*)!!
+            ",STRN="!!STRING(V_NUM_STRN(INX_TAB),*)!!
+            ",V_MSC_TACC="!!STRING(V_MSC_TACC(INX_TAB),18));
+    END OF STORE_REG_TAB;
+      
+      
+  PROCEDURE ADD_KEY0(INX_TAB);
+    VALUE INX_TAB;
+    INTEGER INX_TAB;
+    BEGIN
+    INTEGER I;
+      
+    IF (SIZE(TAB_KEY0_0) < INX_TAB + 1) THEN
+      BEGIN
+      RESIZE(TAB_KEY0_0, INX_TAB + 20, RETAIN);
+      RESIZE(TAB_KEY0_1, INX_TAB + 20, RETAIN);
+      END;
+    I := TAB_KEY0_0[INX_TAB,0].[47:16];
+    IF I = 0 THEN
+      TAB_KEY0_0[INX_TAB,0].[31:16] := TOP_TAB_RECTAB DIV 1;
+    I :=* + 1;
+    IF (SIZE(TAB_KEY0_0[INX_TAB,*]) < I + 1) THEN
+      BEGIN
+      RESIZE(TAB_KEY0_0[INX_TAB,*],I + 20, RETAIN);
+      RESIZE(TAB_KEY0_1[INX_TAB,*],I + 20, RETAIN);
+      END;
+    REPLACE POINTER(TAB_KEY0_0[INX_TAB,I])
+         BY REG_TAB[07] FOR 6;
+    REPLACE POINTER(TAB_KEY0_1[INX_TAB,I])
+         BY REG_TAB[13] FOR 6;
+%   DEBUGER("ADD_KEY0: KEY=" !! STRING(REG_TAB[7],12) !!
+%           ", TABLA=" !! STRING(INX_TAB,*) !!
+%           ", OFFSET=" !! STRING(I,*) !!
+%           ", ALMACENADO="!!STRING(POINTER(TAB_KEY0_0[INX_TAB,I]),6)
+%           !!STRING(POINTER(TAB_KEY0_1[INX_TAB,I]),6));
+    TAB_KEY0_0[INX_TAB,0].[47:16] := I DIV 1;
+    END;
+      
+      
+  PROCEDURE ADD_KEY1(INX_TAB);
+    VALUE INX_TAB;
+    INTEGER INX_TAB;
+    BEGIN
+    INTEGER I;
+      
+    IF (SIZE(TAB_KEY1_0) < INX_TAB + 1) THEN
+      BEGIN
+      RESIZE(TAB_KEY1_0, INX_TAB + 20, RETAIN);
+      RESIZE(TAB_KEY1_1, INX_TAB + 20, RETAIN);
+      END;
+    I := TAB_KEY1_0[INX_TAB,0].[47:16];
+    IF I = 0 THEN
+      TAB_KEY1_0[INX_TAB,0].[31:16] := TOP_TAB_RECTAB DIV 1;
+    I :=* + 1;
+    IF (SIZE(TAB_KEY1_0[INX_TAB,*]) < I + 1) THEN
+      BEGIN
+      RESIZE(TAB_KEY1_0[INX_TAB,*],I + 20, RETAIN);
+      RESIZE(TAB_KEY1_1[INX_TAB,*],I + 20, RETAIN);
+      END;
+    REPLACE POINTER(TAB_KEY1_0[INX_TAB,I])
+         BY REG_TAB[60] FOR 6;
+    REPLACE POINTER(TAB_KEY1_1[INX_TAB,I])
+         BY REG_TAB[66] FOR 6;
+    DEBUGER("ADD_KEY1: KEY=" !! STRING(REG_TAB[60],12) !!
+            ", TABLA=" !! STRING(INX_TAB,*) !!
+            ", OFFSET=" !! STRING(I,*) !!
+            ", ALMACENADO="!!STRING(POINTER(TAB_KEY1_0[INX_TAB,I]),6)
+            !!STRING(POINTER(TAB_KEY1_1[INX_TAB,I]),6));
+    TAB_KEY1_0[INX_TAB,0].[47:16] := I DIV 1;
+    END;
+      
+      
+  PROCEDURE ADD_KEY2(INX_TAB);
+    VALUE INX_TAB;
+    INTEGER INX_TAB;
+    BEGIN
+    INTEGER I;
+      
+    IF (SIZE(TAB_KEY2_0) < INX_TAB + 1) THEN
+      RESIZE(TAB_KEY2_0, INX_TAB + 20, RETAIN);
+    I := TAB_KEY2_0[INX_TAB,0].[47:16];
+    IF I = 0 THEN
+      TAB_KEY2_0[INX_TAB,0].[31:16] := TOP_TAB_RECTAB DIV 1;
+    I :=* + 1;
+    IF (SIZE(TAB_KEY2_0[INX_TAB,*]) < I + 1) THEN
+      RESIZE(TAB_KEY2_0[INX_TAB,*],I + 20, RETAIN);
+    REPLACE POINTER(TAB_KEY2_0[INX_TAB,I])
+         BY REG_TAB[78] FOR 5;
+    TAB_KEY2_0[INX_TAB,0].[47:16] := I DIV 1;
+    END;
+      
+      
+  PROCEDURE LOAD_RECORD(INX_TAB);
+    VALUE   INX_TAB;
+    INTEGER INX_TAB;
+    BEGIN
+      
+%   Se almacena primero el registro completo excluyendo las claves
+    STORE_REG_TAB(TOP_TAB_RECTAB);
+      
+%   Se almacenan luego las claves
+    ADD_KEY0(INX_TAB);
+    ADD_KEY1(INX_TAB);
+    ADD_KEY2(INX_TAB);
+    TOP_TAB_RECTAB :=* + 1;
+    END OF LOAD_RECORD;
+      
+      
+  PROCEDURE LOAD_TAB_NAME;
+    BEGIN
+      
+%   Cada nombre de tabla que debemos administrar queda almacenada
+%   en el arreglo TAB_NAME, 1 word por cada tabla. La variable
+%   TOP_TAB_NAME apunta a la proxima palabra disponible.
+      
+    IF (SIZE(TAB_NAME) < TOP_TAB_NAME + 1) THEN
+      RESIZE(TAB_NAME,TOP_TAB_NAME + 10, RETAIN);
+    REPLACE POINTER(TAB_NAME[TOP_TAB_NAME] )
+         BY REG_TAB[7] FOR 6;
+    DEBUGER("LOAD_TAB_NAME: " !! STRING(POINTER(TAB_NAME[TOP_TAB_NAME]),
+            6) );
+    TOP_TAB_NAME :=* + 1;
+    END OF LOAD_TAB_NAME;
+      
+      
+  PROCEDURE LOAD_TABS;
+    BEGIN
+      
+%   Primero cargamos a memoria los nombres de las tablas que debemos
+%   administrar, esta lista esta en la tabla TAL del sistema GNS.
+      
+    REPLACE KEYTAB00 BY "GNSTAL            " FOR 18;
+    FIND FIRST GNSTAB00 OF GNSTAB
+      WHERE GNSTAB-KY0-TABS = KEYTAB00: DMSTATUS;
+    IF BOOLEAN(DMSTATUS) THEN
+      CHECK(DMSTATUS);
+    GET GNSTAB ( REG_TAB[0] := GNSTAB-REG );
+    IF (REG_TAB[7] = "            ") THEN
+      BEGIN
+      FIND NEXT GNSTAB00 OF GNSTAB : DMSTATUS ;
+      CHECK(DMSTATUS);
+      GET GNSTAB ( REG_TAB[0] := GNSTAB-REG );
+      END;
+      
+    WHILE (DMSTATUS.DMERROR NEQ NOTFOUND) AND
+          (REG_TAB[1] = "GNSTAL") DO
+      BEGIN
+      
+      LOAD_TAB_NAME;
+      
+      FIND NEXT GNSTAB00 OF GNSTAB : DMSTATUS ;
+      CHECK(DMSTATUS);
+      GET GNSTAB ( REG_TAB[0] := GNSTAB-REG );
+      END;
+      
+      
+%   A continuación se cargan las tablas indicadas en la tabla TAL de
+%   GNS
+      
+    TAB_COUNT := 0;
+    WHILE (TAB_COUNT < TOP_TAB_NAME) DO
+      BEGIN
+      REPLACE KEYTAB00 BY " " FOR 18;
+      REPLACE KEYTAB00 BY POINTER(TAB_NAME[TAB_COUNT]) FOR 6;
+      
+      FIND FIRST GNSTAB00 OF GNSTAB
+        WHERE GNSTAB-KY0-TABS = KEYTAB00: DMSTATUS;
+      IF BOOLEAN(DMSTATUS) THEN
+        CHECK(DMSTATUS);
+      GET GNSTAB ( REG_TAB[0] := GNSTAB-REG );
+      
+      WHILE (DMSTATUS.DMERROR NEQ NOTFOUND) AND
+            (REG_TAB[1] = POINTER(TAB_NAME[TAB_COUNT]) FOR 6) DO
+        BEGIN
+      
+        LOAD_RECORD(TAB_COUNT);
+      
+        FIND NEXT GNSTAB00 OF GNSTAB : DMSTATUS ;
+        CHECK(DMSTATUS);
+        GET GNSTAB ( REG_TAB[0] := GNSTAB-REG );
+        END;
+      
+      TAB_COUNT :=* + 1;
+      END;
+      
+    END OF LOAD_TABS;
+      
+      
+  PROCEDURE EXPAND_RECORD(INX_TAB,INX,REG);
+    INTEGER INX_TAB, INX;
+    EBCDIC ARRAY REG[0];
+    BEGIN
+    LABEL EXIT;
+    REAL    I, INX_ENTRY;
+      
+    INX_ENTRY := (INX+TAB_KEY0_0[INX_TAB,0].[31:16]);
+    IF (INX <= 0 ) THEN
+      BEGIN
+      DEBUGER("EXPAND: I ES 0 O MENOR");
+      GO TO EXIT;
+      END;
+    I := (INX_ENTRY - 1) * 25;
+    IF (SIZE(TAB_REC) < I + 25) THEN
+      BEGIN
+      DEBUGER("EXPAND: I="!!STRING(I,*)!!" MUY GRANDE"!!
+              " SIZE(TAB_REC)="!!STRING(SIZE(TAB_REC),*));
+      GO TO EXIT;
+      END;
+    DEBUGER("EXPAND: "!!STRING(I,*)!!" "!!STRING(V_STP_ITRS(I),3));
+    REPLACE REG[00] BY V_GLS_FLAG(I) FOR 1;
+    REPLACE REG[01] BY POINTER(TAB_NAME[INX_TAB]) FOR 6;
+    REPLACE REG[07] BY POINTER(TAB_KEY0_0[INX_TAB,INX]) FOR 6;
+    REPLACE REG[13] BY POINTER(TAB_KEY0_1[INX_TAB,INX]) FOR 6;
+    REPLACE REG[19] BY V_STP_ITRS(I) FOR 3;
+    REPLACE REG[22] BY V_NUM_STRN(I) FOR 4 DIGITS;
+    REPLACE REG[26] BY V_NUM_MTRN(I) FOR 2 DIGITS;
+    REPLACE REG[28] BY V_NUM_DTRN(I) FOR 2 DIGITS;
+    REPLACE REG[30] BY V_NUM_HHTR(I) FOR 2 DIGITS;
+    REPLACE REG[32] BY V_NUM_MMTR(I) FOR 2 DIGITS;
+    REPLACE REG[34] BY V_NUM_SSTR(I) FOR 2 DIGITS;
+    REPLACE REG[36] BY V_MSC_TACC(I) FOR 18;
+    REPLACE REG[54] BY POINTER(TAB_NAME[INX_TAB]) FOR 6;
+    REPLACE REG[60] BY POINTER(TAB_KEY1_0[INX_TAB,INX]) FOR 6;
+    REPLACE REG[66] BY POINTER(TAB_KEY1_1[INX_TAB,INX]) FOR 6;
+    REPLACE REG[72] BY POINTER(TAB_NAME[INX_TAB]) FOR 6;
+    REPLACE REG[78] BY POINTER(TAB_KEY2_0[INX_TAB,INX]) FOR 5;
+    REPLACE REG[83] BY V_GLS_DCOR(I) FOR 123;
+    DEBUGER("EXPAND EXIT: " !! STRING(REG[0],119));
+    EXIT:
+    END OF EXPAND_RECORD;
+      
+      
+  EXPORT EXPAND_RECORD;
+      
+      
+  PROCEDURE BTM_GKY(KEY_NUM, REG);
+    INTEGER KEY_NUM;
+    EBCDIC ARRAY REG[0];
+    BEGIN
+    ARRAY DUMMY [0:0];
+    REAL  ID_TAB,
+          ID,
+          INX_ENTRY,
+          INX_TAB;
+      
+      
+    PROCEDURE BUSCA_CLAVE0;
+      BEGIN
+      BOOLEAN ENCONTRADO;
+      LABEL EXIT;
+      
+      DEBUGER("BUSCA_CLAVE0");
+      REPLACE POINTER(DUMMY)
+           BY REG[1] FOR 6;
+      ID_TAB := DUMMY[0];
+      INX_TAB := ARRAYSEARCH(ID_TAB, 4"FFFFFFFFFFFF", TAB_NAME);
+      IF (INX_TAB < 0) THEN
+        BEGIN
+        DISPLAY("TABLA NO EXISTE EN TABLA TAL:"!!
+                STRING(POINTER(DUMMY),6));
+        MYSELF.STATUS := VALUE(TERMINATED);
+        KEY_NUM := 23;
+        GO TO EXIT;
+        END;
+      
+      REPLACE POINTER(DUMMY) BY REG[7] FOR 6;
+      ID := DUMMY[0];
+      ENCONTRADO := FALSE;
+      INX_ENTRY := SIZE(TAB_KEY0_0[INX_TAB,*]) - 1;
+      WHILE NOT ENCONTRADO DO
+        BEGIN
+        INX_ENTRY:=ARRAYSEARCH(ID,4"FFFFFFFFFFFF",
+                           TAB_KEY0_0[INX_TAB,INX_ENTRY]);
+        IF (INX_ENTRY < 0 ) THEN
+          BEGIN
+          KEY_NUM := 23;
+          GO TO EXIT;
+          END
+        ELSE
+          IF(REG[13]=POINTER(TAB_KEY0_1[INX_TAB,INX_ENTRY])FOR 6) THEN
+            ENCONTRADO := TRUE
+          ELSE
+            INX_ENTRY :=* - 1;
+        END;
+      EXPAND_RECORD(INX_TAB,INX_ENTRY,REG);
+      EXIT:
+      END OF BUSCA_CLAVE0;
+      
+      
+    PROCEDURE BUSCA_CLAVE1;
+      BEGIN
+      BOOLEAN ENCONTRADO;
+      LABEL EXIT;
+      
+      DEBUGER("BUSCA_CLAVE1:"!!STRING(REG[0],66));
+      REPLACE POINTER(DUMMY)
+           BY REG[54] FOR 6;
+      ID_TAB := DUMMY[0];
+      INX_TAB := ARRAYSEARCH(ID_TAB, 4"FFFFFFFFFFFF", TAB_NAME);
+      IF (INX_TAB < 0) THEN
+        BEGIN
+        DEBUGER("TABLA NO ENCONTRADA:"!!STRING(REG[54],6));
+        DISPLAY("TABLA NO EXISTE EN TABLA TAL:"!!
+                STRING(POINTER(DUMMY),6));
+        MYSELF.STATUS := VALUE(TERMINATED);
+        KEY_NUM := 23;
+        GO TO EXIT;
+        END;
+      
+      REPLACE POINTER(DUMMY) BY REG[60] FOR 6;
+      ID := DUMMY[0];
+      ENCONTRADO := FALSE;
+      INX_ENTRY := SIZE(TAB_KEY1_0[INX_TAB,*]) - 1;
+      DEBUGER("SET INX_ENTRY:"!!STRING(INX_ENTRY,*));
+      WHILE NOT ENCONTRADO DO
+        BEGIN
+        INX_ENTRY := ARRAYSEARCH(ID,4"FFFFFFFFFFFF",
+                                 TAB_KEY1_0[INX_TAB,INX_ENTRY]);
+        DEBUGER("INX_ENTRY:"!!STRING(INX_ENTRY,*));
+        IF (INX_ENTRY < 0 ) THEN
+          BEGIN
+          KEY_NUM := 23;
+          GO TO EXIT;
+          END
+        ELSE
+          IF(REG[66]=POINTER(TAB_KEY1_1[INX_TAB,INX_ENTRY]) FOR 6) THEN
+            ENCONTRADO := TRUE
+          ELSE
+            INX_ENTRY :=* - 1;
+        END;
+      EXPAND_RECORD(INX_TAB,INX_ENTRY,REG);
+      EXIT:
+      END OF BUSCA_CLAV1;
+      
+      
+    PROCEDURE BUSCA_CLAVE2;
+      BEGIN
+      LABEL EXIT;
+      
+      REPLACE POINTER(DUMMY)
+           BY REG[72] FOR 6;
+      ID_TAB := DUMMY[0];
+      INX_TAB := ARRAYSEARCH(ID_TAB, 4"FFFFFFFFFFFF", TAB_NAME);
+      IF (INX_TAB < 0) THEN
+        BEGIN
+        DISPLAY("TABLA NO EXISTE EN TABLA TAL:"!!
+                STRING(POINTER(DUMMY),6));
+        MYSELF.STATUS := VALUE(TERMINATED);
+        KEY_NUM := 23;
+        GO TO EXIT;
+        END;
+      
+      REPLACE POINTER(DUMMY) BY REG[78] FOR 5;
+      ID := DUMMY[0];
+      INX_ENTRY:=ARRAYSEARCH(ID,4"FFFFFFFFFF00",TAB_KEY2_0[INX_TAB,*]);
+      IF (INX_ENTRY < 0 ) THEN
+        BEGIN
+        KEY_NUM := 23;
+        GO TO EXIT;
+        END;
+      EXPAND_RECORD(INX_TAB,INX_ENTRY,REG);
+      EXIT:
+      END OF BUSCA_CLAVE2;
+      
+    %%%%%%%%%% MAIN of Busca_Registro %%%%%%%%%%%%%%%%%%%%%%%%
+      
+    CASE KEY_NUM OF
+      BEGIN
+      (0): BUSCA_CLAVE0;
+      (1): BUSCA_CLAVE1;
+      (2): BUSCA_CLAVE2;
+      ELSE:DISPLAY ("CLAVE NO DEFINIDA PARA TABLA");
+      END OF CASE;
+    END OF BTM_GKY;
+      
+  EXPORT BTM_GKY;
+      
+%%%%%%%%%%%%%%% O U T H E R    B L O C K %%%%%%%%%%%%%%%%%%%%%
+      
+  OPEN INQUIRY BDCST : DMSTATUS;
+  CHECK(DMSTATUS);
+      
+  LOAD_TABS;
+      
+  CLOSE BDCST : DMSTATUS;
+  CHECK(DMSTATUS);
+      
+  FREEZE(TEMPORARY);
+      
+  END OF PROGRAM.

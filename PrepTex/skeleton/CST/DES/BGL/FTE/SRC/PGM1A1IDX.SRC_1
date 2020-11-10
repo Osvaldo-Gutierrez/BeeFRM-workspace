@@ -1,0 +1,310 @@
+*% IF CMAVARI
+*% IF PGM_IBM
+           02 CMA-VARI.
+*% ELSE
+           03 CMA-VARI.
+*% END
+              05  WSS-POS-INI            COMP-3       PIC S9(2).
+              05  WSS-POS-FIN            COMP-3       PIC S9(5).
+              05  WSS-IND-ACUM           VALUE 0      PIC 9(01).
+                  88 DESPLIEGA           VALUE 0.
+                  88 ACUMULA             VALUE 0.
+                  88 SOLO-ACUMULA        VALUE 1.
+                  88 YA-ACUMULO          VALUE 1.
+              05  WSS-CLV-INI.
+                  07 {KEYPADREG}-INI                 PIC X({LENKEYPAD}).
+              05  WSS-CLV-FIN.
+                  07 {KEYPADREG}-FIN                 PIC X({LENKEYPAD}).
+*% IF RAIZ_COMUN
+*%! Los registros desplegados tienen raiz comun que los restringe
+              05  {RAIZCOMUN}                            PIC X({LENRAIZ}).
+*% END
+*% IF PGM_VMS
+              05  WSS-CLV-ACT.
+                  07 {KEYPADREG}-ACT                 PIC X({LENKEYPAD}).
+*% END
+      *>>>>
+*% END
+*% IF WSSVARI
+       01  WSS-VARI.
+           03  WSS-IMAX               VALUE {IMAX}     PIC 9(02).
+      * PARA USAR GARSRC:ERRFNDKEY.SRC
+           03  WSS-IBUS                               PIC 9(01).
+           03  WSS-IBUS-{HIJ}                           PIC 9(01).
+*% IF ACUMULA
+           03  WSS-YA-ACUMULO         VALUE 1         PIC 9(01).
+*% END
+      *>>>>
+*% END
+*% IF INIFNDKEY
+      * WSS-POS-INI CONTIENE LA POSICION ALCANZADA AL LLENAR LA PANTALLA
+      *    DE ATRAS HACIA ADELANTE (<= IMAX)
+      * WSS-POS-FIN CONTIENE LA POSICION ALCANZADA AL LLENAR LA PANTALLA
+      *    DE ADELANTE HACIA ATRAS (PUEDE SER MAYOR > IMAX)
+
+      * ASUME MENSAJE DEL SISTEMA DEL PADRE EN ERRFNDKEY.SRC
+           MOVE 1 TO WSS-IBUS, WSS-IBUS-{HIJ}.
+
+           IF FRM-FFLD = FRM-FFLD-PF5
+*% FOR I = 1 TO {NREG}
+               MOVE PGM-SNUL TO PGM-STAT-{REG{I}}
+*% NEXT I
+               IF WSS-POS-INI > 1
+                   MOVE '{PAD}    NOPRV' TO MSG-COD-MENS
+                   GO TO ERR-FND-KEY
+               ELSE
+*% IF PGM_DTC OR PGM_VSI
+                   MOVE WSS-CLV-INI TO {KEYPADREG} IN {PAD}
+                   MOVE FIO-GET-NLS TO FIO-CMND
+                   MOVE '{KEYBUSPAD}' TO FIO-AKEY
+                   PERFORM {SISFIO}-FIO-{PAD}
+                   IF NOT FIO-STAT-OKS
+                       MOVE 'PGM    ERR' TO MSG-COD-MENS
+                       GO TO ERR-FND-KEY
+                   ELSE
+*% IF PGM_VSI OR ARC_BAS_VSI
+                       MOVE '{KEYNXTPAD}' TO FIO-AKEY
+                       MOVE FIO-GET-PRV TO FIO-CMND
+                       PERFORM {SISFIO}-FIO-{PAD}
+*% END
+                       MOVE FIO-GET-PRV TO FIO-CMND
+                       MOVE '{KEYNXTPAD}' TO FIO-AKEY
+                       GO TO LEE-{PAD}
+*% ELSE
+*%! VAX
+*% IF PAD_ALF
+               MOVE '{KEYPRVPAD}' TO FIO-AKEY
+               MOVE FIO-GET-PRV TO FIO-CMND
+*% ELSE
+               MOVE WSS-CLV-INI TO WSS-CLV-ACT
+               SUBTRACT 1 FROM {KEYBUSPAD}-ACT IN
+                                   WSS-CLV-ACT
+               MOVE WSS-CLV-ACT TO {KEYBUSPAD} IN {PAD}
+               MOVE FIO-GET-KEY TO FIO-CMND
+               MOVE '{KEYBUSPAD}' TO FIO-AKEY
+*% END
+               GO TO LEE-{PAD}
+*% END
+           ELSE
+           IF FRM-FFLD = FRM-FFLD-PF6
+*% FOR I = 1 TO {NREG}
+               MOVE PGM-SNUL TO PGM-STAT-{REG{I}}
+*% NEXT I
+               IF WSS-POS-FIN < WSS-IMAX
+                   MOVE '{PAD}    NONXT' TO MSG-COD-MENS
+                   GO TO ERR-FND-KEY
+               ELSE
+                   MOVE WSS-CLV-FIN TO {KEYPADREG} IN {PAD}
+                   MOVE FIO-GET-NLS TO FIO-CMND
+                   MOVE '{KEYBUSPAD}' TO FIO-AKEY
+                   PERFORM {SISFIO}-FIO-{PAD}
+                   MOVE FIO-GET-NXT TO FIO-CMND
+                   MOVE '{KEYNXTPAD}' TO FIO-AKEY
+                   GO TO LEE-{PAD}.
+
+      * INICIALIZA POSICION DE PUNTERO Y LLAVES
+           MOVE ZEROES TO WSS-POS-INI, WSS-POS-FIN, WSS-IND-ACUM.
+           MOVE SPACES TO WSS-CLV-INI, WSS-CLV-FIN.
+*% IF PGM_VAX
+
+           MOVE SPACES TO {PAD}.
+           MOVE SPACES TO WSS-CLV-ACT.
+*% END
+           MOVE FRM-FFLD-PF6 TO FRM-FFLD.
+
+*% INCLUDE INIVAR OF 'GEN:{SISREG}PQ{FRM}.GEN'
+
+           PERFORM KEY-ALL-{FRM}.
+           MOVE '{KEYNXTPAD}' TO FIO-AKEY.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+*% INCLUDE LEEPAD OF 'GEN:{SISREG}PQ{FRM}.GEN'
+           GO TO LEE-{PAD}.
+*% END
+*% IF FINFNDKEY
+       LEE-{PAD}.
+           PERFORM {SISFIO}-FIO-{PAD}.
+           MOVE FIO-STAT TO PGM-STAT-{PAD}.
+*% IF RAIZ_COMUN
+*%! Los registros desplegados tienen raiz comun que los restringe
+           IF WSS-POS-FIN = ZEROES 
+               MOVE {KEYPADREG} IN {PAD} TO {RAIZCOMUN} IN CMA-VARI
+           ELSE
+               MOVE {KEYPADREG} IN {PAD} TO {RAIZCOMUN} IN WSS-VARI.
+*% INCLUDE RAIZCO OF 'GEN:{SISREG}PQ{FRM}.GEN'
+*% END
+
+           IF NOT FIO-STAT-OKS
+*% IF RAIZ_COMUN
+              OR {RAIZCOMUN} IN CMA-VARI NOT = {RAIZCOMUN} IN WSS-VARI
+*% END
+               IF WSS-POS-FIN = ZEROES
+                   MOVE '{PAD}    NEX' TO MSG-COD-MENS
+                   GO TO ERR-FND-KEY
+               ELSE
+                   IF FRM-FFLD = FRM-FFLD-PF5
+                       MOVE '{PAD}    NOPRV' TO MSG-COD-MENS
+                       GO TO ERR-FND-KEY
+                   ELSE
+                       MOVE '{PAD}    NONXT' TO MSG-COD-MENS
+                       GO TO ERR-FND-KEY.
+
+*% IF ARC_BAS_VSI OR PGM_VSI
+           MOVE FIO-END-BRW TO FIO-CMND.
+           PERFORM {SISFIO}-FIO-{PAD}.
+*% END
+*%!      * BUSCA OTROS REGISTROS ASOCIADOS AL PADRE, EVENTUALMENTE
+*% INCLUDE ANLPAD OF 'GEN:{SISREG}PQ{FRM}.GEN'
+
+*% IF PGM_VAX
+           MOVE {KEYPADREG} IN {PAD} TO {KEYPADREG}-ACT
+                                        IN CMA-VARI.
+*% END
+
+       CARGA-{PAD}.
+      *    INICIALIZA POSICION DEL INDICE DEL GRUPO DE OCURRENCIAS
+           IF FRM-FFLD = FRM-FFLD-PF6
+               MOVE 1 TO WSS-POS-INI
+               MOVE ZEROES TO FRM-IFLD
+           ELSE
+               ADD 1 , WSS-IMAX GIVING FRM-IFLD.
+
+           MOVE SPACES TO MSG-COD-MENS.
+           PERFORM PUT-TAB-{PAD}.
+
+*% IF ACUMULA
+           MOVE WSS-YA-ACUMULO TO WSS-IND-ACUM.
+*% END
+           IF FRM-FFLD = FRM-FFLD-PF5
+               MOVE FRM-IFLD TO WSS-POS-INI
+               SUBTRACT 1 FROM FRM-IFLD
+               PERFORM LIM-RES-LIN UNTIL FRM-IFLD < 1
+           ELSE
+           IF FRM-FFLD = FRM-FFLD-PF6
+               ADD 1 TO FRM-IFLD
+               PERFORM LIM-RES-LIN UNTIL FRM-IFLD > WSS-IMAX
+               IF WSS-POS-FIN > WSS-IMAX
+                   MOVE WSS-IMAX TO WSS-POS-FIN.
+
+      * MUEVE ACUMULADORES A {FRM}-FLD
+*% INCLUDE TOTVAR OF 'GEN:{SISREG}PQ{FRM}.GEN'
+
+           IF MSG-COD-MENS > SPACES
+               MOVE '{SISREG}' TO FIO-SIST
+               MOVE SPACES TO FIO-AKEY
+               PERFORM GET-MSG
+               MOVE MSG-GLS-DESC TO FRM-MENS.
+
+           MOVE '00' TO FIO-STAT.
+           GO TO FIN-FND-KEY.
+
+*% END
+*% IF PUTTAB
+       PUT-TAB-{PAD} SECTION.
+       INI-PUT-TAB-{PAD}.
+
+*% INCLUDE SELECCION OF 'GEN:{SISREG}PQ{FRM}.GEN'
+           IF FRM-FFLD = FRM-FFLD-PF5
+               SUBTRACT 1 FROM FRM-IFLD
+               IF FRM-IFLD = WSS-IMAX
+                   MOVE {KEYPADREG} IN {PAD} TO 
+                        {KEYPADREG}-INI IN WSS-CLV-INI
+                   MOVE {KEYPADREG} IN {PAD} TO 
+                        {KEYPADREG}-FIN IN WSS-CLV-FIN
+               ELSE
+                   MOVE {KEYPADREG} IN {PAD} TO 
+                        {KEYPADREG}-INI IN WSS-CLV-INI
+           ELSE
+               ADD 1 TO WSS-POS-FIN
+*% IF ACUMULA
+               IF ACUMULA AND WSS-POS-FIN > WSS-IMAX
+      *        SOLO ACUMULA, SIN DESPLEGAR
+                   GO TO DSPL-O-ACUM
+               ELSE
+                   ADD 1 TO FRM-IFLD
+                   IF FRM-IFLD = 1
+                       MOVE {KEYPADREG} IN {PAD} TO 
+                            {KEYPADREG}-INI IN WSS-CLV-INI
+                       MOVE {KEYPADREG} IN {PAD} TO 
+                            {KEYPADREG}-FIN IN WSS-CLV-FIN
+                   ELSE
+                   IF FRM-IFLD NOT > WSS-IMAX
+                       MOVE {KEYPADREG} IN {PAD} TO 
+                            {KEYPADREG}-FIN IN WSS-CLV-FIN.
+*% ELSE
+               ADD 1 TO FRM-IFLD
+               IF FRM-IFLD = 1
+                   MOVE {KEYPADREG} IN {PAD} TO 
+                        {KEYPADREG}-INI IN WSS-CLV-INI
+                   MOVE {KEYPADREG} IN {PAD} TO 
+                        {KEYPADREG}-FIN IN WSS-CLV-FIN
+               ELSE
+               IF FRM-IFLD NOT > WSS-IMAX
+                   MOVE {KEYPADREG} IN {PAD} TO 
+                        {KEYPADREG}-FIN IN WSS-CLV-FIN.
+*% END
+
+*% INCLUDE MOVFLD OF 'GEN:{SISREG}PQ{FRM}.GEN'
+
+*% INCLUDE BUSTAB OF 'GEN:{SISREG}PQ{FRM}.GEN'
+
+       DSPL-O-ACUM.
+*% INCLUDE SUMVAL OF 'GEN:{SISREG}PQ{FRM}.GEN'
+
+       NXT-PUT-TAB-{PAD}.
+           IF FRM-FFLD = FRM-FFLD-PF5 
+               IF FRM-IFLD > 1
+*% IF PGM_VAX AND NOT PAD_ALF
+                   SUBTRACT 1 FROM {KEYPADREG}-ACT
+                   MOVE WSS-CLV-ACT TO {KEYPADREG} IN {PAD}
+                   MOVE FIO-GET-KEY TO FIO-CMND
+                   MOVE '{KEYBUSPAD}' TO FIO-AKEY
+*% ELSE
+                   MOVE FIO-GET-PRV TO FIO-CMND
+                   MOVE '{KEYNXTPAD}' TO FIO-AKEY
+*% END
+               ELSE
+                   GO TO FIN-PUT-TAB-{PAD}
+           ELSE
+*% IF NOT ACUMULA
+               IF FRM-IFLD < WSS-IMAX
+                   MOVE '{KEYNXTPAD}' TO FIO-AKEY
+                   MOVE FIO-GET-NXT TO FIO-CMND
+               ELSE
+                   GO TO FIN-PUT-TAB-{PAD}.
+*% ELSE
+           IF YA-ACUMULO
+               IF FRM-IFLD < WSS-IMAX
+                   MOVE '{KEYNXTPAD}' TO FIO-AKEY
+                   MOVE FIO-GET-NXT TO FIO-CMND
+               ELSE
+                   GO TO FIN-PUT-TAB-{PAD}
+           ELSE
+               MOVE '{KEYNXTPAD}' TO FIO-AKEY
+               MOVE FIO-GET-NXT TO FIO-CMND.
+*% END
+
+           PERFORM {SISFIO}-FIO-{PAD}.
+*% IF RAIZ_COMUN
+            MOVE {KEYPADREG} IN {PAD} TO {RAIZCOMUN} IN WSS-VARI.
+*% END
+           IF FIO-STAT-OKS 
+*% IF RAIZ_COMUN
+*%! Los registros desplegados tienen raiz comun que los restringe
+              AND {RAIZCOMUN} IN CMA-VARI = {RAIZCOMUN} IN WSS-VARI
+*% END
+               GO TO INI-PUT-TAB-{PAD}.
+
+       FIN-PUT-TAB-{PAD}.
+           EXIT.
+*% END
+*% IF LIMRESLIN
+       LIM-RES-LIN SECTION.
+       INI-LIM-RES-LIN.
+*% INCLUDE LIMRESLIN OF 'GEN:{SISREG}PQ{FRM}.GEN'
+           IF FRM-FFLD = FRM-FFLD-PF5 
+               SUBTRACT 1 FROM FRM-IFLD
+           ELSE
+               ADD 1 TO FRM-IFLD.
+       FIN-LIM-RES-LIN.
+           EXIT.
+*% END

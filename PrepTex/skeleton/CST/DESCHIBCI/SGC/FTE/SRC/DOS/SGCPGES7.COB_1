@@ -1,0 +1,2344 @@
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID.    SGCPGES7.
+       AUTHOR.        G URETA Q.
+       DATE-WRITTEN.  8 JUN 1990.
+       DATE-COMPILED.
+      *
+      ******************************************************************
+      *  INTERSOFT                                                     *
+      *  MIGRACION A COBOL OS/390                                      *
+      *  FECHA: 15 DE ABRIL DE 1998                                    *
+      ******************************************************************
+      ***********************************************************
+      *                                                         *
+      * OBJETIVO :   CARGAR LAS OPERACIONES DE BANCREDITO       *
+      *              EN EL ARCHIVO DE MOVIMIENTOS PARA USO      *
+      *              DE LOS PROGRAMAS ACTUALIZADORES DE LA      *
+      *              RCO, OPE Y VAR                             *
+      *                                                         *
+      * ARCHIVOS :   BANCRED: MAESTRO BANCREDITO                *
+      *              ACB    : TABLA DE ASIGNACION DE CLAVES     *
+      *              TAB    : TABLA DE TABLAS 230               *
+      *              DBC    : TABLA DATOS BASICOS CLIENTES      *
+      *              OPE    : TABLA DEL OPERACIONES             *
+      *              CIC    : TABLA DE SEMILLAS CIC-OPE         *
+      *              VAR    : TABLA DATOS VARIABLES             *
+      *              FSORT  : ARCHIVO SORT                      *
+      *              MOVRCO : ARCHIVO MOVIMIENTOS GENERADOS RCO *
+      *              MOVOPE : ARCHIVO MOVIMIENTOS GENERADOS OPE *
+      *              MOVVAR : ARCHIVO MOVIMIENTOS GENERADOS VAR *
+      *              TABCAM : TABLA DE MONEDAS EN JCL           *
+      ***********************************************************
+
+       ENVIRONMENT DIVISION.
+       CONFIGURATION SECTION.
+       SPECIAL-NAMES.
+                     DECIMAL-POINT IS COMMA
+                     C01 IS CANAL-1.
+       INPUT-OUTPUT SECTION.
+       FILE-CONTROL.
+           SELECT BANCRED  ASSIGN TO BANCRED
+                           ORGANIZATION IS INDEXED
+                           ACCESS MODE IS SEQUENTIAL
+                           RECORD KEY IS W-CLAVE-FON-TIT
+                           FILE STATUS IS FS-BANCRED.
+
+           SELECT FSORT    ASSIGN TO SORTWK01.
+
+           SELECT MOVRCO   ASSIGN TO MOVRCO
+                           ORGANIZATION  IS INDEXED
+                           ACCESS MODE   IS DYNAMIC
+                           RECORD KEY    IS MRC-CLAVE
+                           FILE STATUS   IS FS-MOVRCO.
+
+           SELECT MOVOPE   ASSIGN TO MOVOPE
+                           ORGANIZATION  IS INDEXED
+                           ACCESS MODE   IS DYNAMIC
+                           RECORD KEY    IS MOP-CLAVE
+                           FILE STATUS   IS FS-MOVOPE.
+
+           SELECT MOVVAR   ASSIGN TO MOVVAR
+                           ORGANIZATION  IS INDEXED
+                           ACCESS MODE   IS DYNAMIC
+                           RECORD KEY    IS MVA-CLAVE
+                           FILE STATUS   IS FS-MOVVAR.
+
+           SELECT TABCAM   ASSIGN TO TABCAM
+                           FILE STATUS   IS FS-TABCAM.
+       EJECT
+       DATA DIVISION.
+       FILE SECTION.
+       FD  BANCRED       LABEL RECORD STANDARD
+                         RECORD CONTAINS 63 CHARACTERS.
+
+           COPY APERBAN.
+       EJECT
+       FD  MOVRCO        LABEL RECORD STANDARD.
+
+           COPY GESRMRC.
+       EJECT
+       FD  MOVOPE        LABEL RECORD STANDARD.
+
+           COPY GESRMOP.
+       EJECT
+       FD  MOVVAR        LABEL RECORD STANDARD.
+
+           COPY GESRMVA.
+       EJECT
+       FD  TABCAM        LABEL RECORD STANDARD
+                         RECORD CONTAINS 80 CHARACTERS.
+
+       01  REG-TABCAM.
+           03 MONEDA               PIC X(03).
+           03 FILLER               PIC X(01).
+           03 CODMON               PIC X(06).
+           03 FILLER               PIC X(70).
+       EJECT
+       SD  FSORT
+           RECORD CONTAINS 58 CHARACTERS.
+
+       01  REG-FSORT.
+           03 SD-CIC-ICLI          PIC X(12).
+           03 SD-CIC-IOPE          PIC X(12).
+           03 SD-NUM-DIRE          PIC 9(02).
+           03 SD-COD-AOPR          PIC X(03).
+           03 SD-MONTO             PIC 9(09)V9(04).
+           03 SD-OPERACION         PIC X(02).
+           03 SD-CIC-ICLI-2        PIC X(12).
+           03 SD-NUM-DIRE-2        PIC 9(02).
+
+       EJECT
+       WORKING-STORAGE SECTION.
+
+       77  FIN-SD                  PIC 9(01) VALUE 0.
+       77  WS-COD-AOPR             PIC 9(03) VALUE 0.
+       77  WS-STATUS-ACB           PIC 9(01) VALUE 0.
+       77  WS-STATUS               PIC 9(01) VALUE 0.
+       77  WK-DIG-VER              PIC X(01) VALUE '0'.
+       77  WK-RUT-TRB              PIC 9(08).
+       77  WK-TIT                  PIC 9(01).
+       77  WK-RUT-9                PIC 9(09).
+       77  WK-RUT-TIT-8            PIC 9(08).
+       77  WK-VRT-TIT-8            PIC X(01).
+       77  WK-RUT-SEC-8            PIC 9(08).
+       77  WK-VRT-SEC-8            PIC X(01).
+       77  NTAB                    PIC 9(02).
+       77  WK-OPE-SD-ANT           PIC X(12).
+
+       01  WS-PRIM-DHAB            PIC X(02) VALUE 'NO'.
+
+       01  WK-CIC-OPE.
+           03 WK-CAI-ASG           PIC X(04).
+           03 WK-COD-CRR           PIC X(08).
+
+       01  ESTADOS.
+           03 FS-BANCRED           PIC X(02) VALUE ZEROS.
+           03 FS-MOVRCO            PIC X(02) VALUE ZEROS.
+           03 FS-MOVOPE            PIC X(02) VALUE ZEROS.
+           03 FS-MOVVAR            PIC X(02) VALUE ZEROS.
+           03 FS-TABCAM            PIC X(02) VALUE ZEROS.
+
+       01  WK-FECHAS-Y-HORAS.
+           03 WS-FECHA.
+              05 WS-FEC-SS         PIC 9(02).
+              05 WS-FEC-AA         PIC 9(02).
+              05 WS-FEC-MM         PIC 9(02).
+              05 WS-FEC-DD         PIC 9(02).
+           03 WS-FECHA-INV.
+              05 WS-FEC-DD-INV     PIC 9(02).
+              05 WS-FEC-MM-INV     PIC 9(02).
+              05 WS-FEC-SS-INV     PIC 9(02).
+              05 WS-FEC-AA-INV     PIC 9(02).
+           03 WS-FDDMMAA.
+              05 WS-FDD            PIC 9(02).
+              05 WS-FMM            PIC 9(02).
+              05 WS-FAA            PIC 9(02).
+           03 WS-FDDMMAA2.
+              05 WS-FDD2           PIC 9(02).
+              05 WS-FMM2           PIC 9(02).
+              05 WS-FAA2           PIC 9(02).
+
+       01  CONTADORES.
+           03 WA-IGN-BANCRED       PIC 9(08) VALUE ZEROES.
+           03 W-CONT-BANCRED       PIC 9(08) VALUE ZEROES.
+           03 W-CONT-ACB-L         PIC 9(08) VALUE ZEROES.
+           03 W-CONT-ACB-C         PIC 9(08) VALUE ZEROES.
+           03 W-CONT-DBC           PIC 9(08) VALUE ZEROES.
+           03 W-CONT-OPE           PIC 9(08) VALUE ZEROES.
+           03 W-CONT-MOVRCO        PIC 9(08) VALUE ZEROES.
+           03 W-CONT-MOVOPE        PIC 9(08) VALUE ZEROES.
+           03 W-CONT-MOVVAR        PIC 9(08) VALUE ZEROES.
+           03 W-CONT-SORT-GRABAD   PIC 9(08) VALUE ZEROES.
+           03 W-CONT-SORT-LEIDOS   PIC 9(08) VALUE ZEROES.
+
+       01  WP-PARAMETRO.
+           05 WP-FILLER-PAR0            PIC X(07).
+           05 WP-FECHA-PRO.
+              10 WP-DIA-PRO             PIC 9(02).
+              10 WP-MES-PRO             PIC 9(02).
+              10 WP-SIG-PRO             PIC 9(02).
+              10 WP-ANO-PRO             PIC 9(02).
+           05 WP-FILLER-PAR1            PIC X(65).
+
+       01  WP-PARAMETRO-1.
+           05 WP-FILLER-PAR0A           PIC X(07).
+           05 CARGA-INIC                PIC X(01).
+           05 WP-FILLER-PAR2            PIC X(72).
+
+       01  WK-SEP-RUT-8.
+           03 WK-SEP-8             PIC X(08).
+           03 WK-SEP-1             PIC X(01).
+           03 FILLER               PIC X(51).
+
+       01  WS-CLAVE-ACB.
+           03 WS-RUT-TIT-1         PIC X(9).
+           03 WS-RUT-TIT-2         PIC X(9).
+           03 WS-TIP-FON           PIC X(2).
+           03 WS-NUM-CTA           PIC X(2).
+
+       01  TAB-MONEDAS.
+           03 TAB-MON OCCURS 0 TO 20 TIMES
+                      DEPENDING ON NTAB INDEXED BY IND.
+              05 TAB-MONEDA        PIC X(03).
+              05 TAB-CODMON        PIC X(06).
+       EJECT
+           COPY RTNWCALE.
+       EJECT
+      *------------------------------------------------------------*
+      *                        UIB                                 *
+      *------------------------------------------------------------*
+       01  UIB.
+           03  FILLER                  PIC X(32) VALUE 'SGCPGES7'.
+      *------------------------------------------------------------*
+      *                      REQUEST AREA                          *
+      *------------------------------------------------------------*
+       01  REQ-AREA-DBC.
+           03  DBC-COMMAND             PIC X(5).
+           03  DBC-TABLE               PIC X(3)  VALUE 'DBC'.
+           03  DBC-KEY                 PIC X(5)  VALUE 'DBC02'.
+           03  DBC-RET-COD             PIC X(2)  VALUE SPACES.
+           03  DBC-INT-RC              PIC X(1).
+           03  DBC-DB-ID               PIC S9(4) COMP VALUE +100.
+           03  DBC-REC-ID              PIC X(7).
+           03  FILLER                  PIC X(25).
+           03  DBC-CONT-MAX            PIC S9(4) COMP.
+           03  DBC-CONT-IO             PIC S9(4) COMP.
+           03  FILLER                  PIC X(22).
+           03  DBC-VALUE.
+               05 DBC-RUT              PIC X(08).
+               05 DBC-IND              PIC X(01).
+               05 DBC-GLS              PIC X(03).
+
+       01  REQ-AREA-VAR.
+           03  VAR-COMMAND             PIC X(5).
+           03  VAR-TABLE               PIC X(3)  VALUE 'VAR'.
+           03  VAR-KEY                 PIC X(5)  VALUE 'VAR01'.
+           03  VAR-RET-COD             PIC X(2)  VALUE SPACES.
+           03  VAR-INT-RC              PIC X(1).
+           03  VAR-DB-ID               PIC S9(4) COMP VALUE +360.
+           03  VAR-REC-ID              PIC X(7).
+           03  FILLER                  PIC X(25).
+           03  VAR-CONT-MAX            PIC S9(4) COMP.
+           03  VAR-CONT-IO             PIC S9(4) COMP.
+           03  FILLER                  PIC X(22).
+           03  VAR-VALUE.
+               05 VAR-CLV-VAR          PIC X(21).
+
+       01  REQ-AREA-RCO.
+           03  RCO-COMMAND             PIC X(5).
+           03  RCO-TABLE               PIC X(3)  VALUE 'RCO'.
+           03  RCO-KEY                 PIC X(5)  VALUE 'RCO01'.
+           03  RCO-RET-COD             PIC X(2)  VALUE SPACES.
+           03  RCO-INT-RC              PIC X(1).
+           03  RCO-DB-ID               PIC S9(4) COMP VALUE +362.
+           03  RCO-REC-ID              PIC X(7).
+           03  FILLER                  PIC X(25).
+           03  RCO-CONT-MAX            PIC S9(4) COMP.
+           03  RCO-CONT-IO             PIC S9(4) COMP.
+           03  FILLER                  PIC X(22).
+           03  RCO-VALUE.
+               05 RCO-CIC-OPE          PIC X(12).
+
+       01  REQ-AREA-OPE.
+           03  OPE-COMMAND             PIC X(5).
+           03  OPE-TABLE               PIC X(3)  VALUE 'OPE'.
+           03  OPE-KEY                 PIC X(5)  VALUE 'OPE00'.
+           03  OPE-RET-COD             PIC X(2)  VALUE SPACES.
+           03  OPE-INT-RC              PIC X(1).
+           03  OPE-DB-ID               PIC S9(4) COMP VALUE +362.
+           03  OPE-REC-ID              PIC X(7).
+           03  FILLER                  PIC X(25).
+           03  OPE-CONT-MAX            PIC S9(4) COMP.
+           03  OPE-CONT-IO             PIC S9(4) COMP.
+           03  FILLER                  PIC X(22).
+           03  OPE-VALUE.
+               05 OPE-CIC-OPE          PIC X(12).
+
+       01  REQ-AREA-TAB.
+           03  TAB-COMMAND             PIC X(5).
+           03  TAB-TABLE               PIC X(3)  VALUE 'TAB'.
+           03  TAB-KEY                 PIC X(5)  VALUE 'TAB00'.
+           03  TAB-RET-COD             PIC X(2)  VALUE SPACES.
+           03  TAB-INT-RC              PIC X(1).
+           03  TAB-DB-ID               PIC S9(4) COMP VALUE +230.
+           03  TAB-REC-ID              PIC X(7).
+           03  FILLER                  PIC X(25).
+           03  TAB-CONT-MAX            PIC S9(4) COMP.
+           03  TAB-CONT-IO             PIC S9(4) COMP.
+           03  FILLER                  PIC X(22).
+           03  TAB-VALUE.
+               05 TAB-COD-TTB          PIC X(03) VALUE 'RSC'.
+               05 TAB-RUT-CTB          PIC X(09).
+               05 TAB-VRT-CTB          PIC X(01).
+               05 FILLER               PIC X(02) VALUE '  '.
+
+       01  REQ-AREA-ACB.
+           03  ACB-COMMAND             PIC X(5).
+           03  ACB-ACBLE               PIC X(3)  VALUE 'ACB'.
+           03  ACB-KEY                 PIC X(5)  VALUE 'ACB00'.
+           03  ACB-RET-COD             PIC X(2)  VALUE SPACES.
+           03  ACB-INT-RC              PIC X(1).
+           03  ACB-DB-ID               PIC S9(4) COMP VALUE +354.
+           03  ACB-REC-ID              PIC X(7).
+           03  FILLER                  PIC X(25).
+           03  ACB-CONT-MAX            PIC S9(4) COMP.
+           03  ACB-CONT-IO             PIC S9(4) COMP.
+           03  FILLER                  PIC X(22).
+           03  ACB-VALUE.
+               05 ACB-CLV-ACB          PIC X(22).
+
+       01  REQ-AREA-CIC.
+           03  CIC-COMMAND             PIC X(5).
+           03  CIC-CICLE               PIC X(3)  VALUE 'CIC'.
+           03  CIC-KEY                 PIC X(5)  VALUE 'CIC00'.
+           03  CIC-RET-COD             PIC X(2)  VALUE SPACES.
+           03  CIC-INT-RC              PIC X(1).
+           03  CIC-DB-ID               PIC S9(4) COMP VALUE +180.
+           03  CIC-REC-ID              PIC X(7).
+           03  FILLER                  PIC X(25).
+           03  CIC-CONT-MAX            PIC S9(4) COMP.
+           03  CIC-CONT-IO             PIC S9(4) COMP.
+           03  FILLER                  PIC X(22).
+           03  CIC-VALUE.
+               05 CIC-COD-TCC          PIC X(04) VALUE '1300'.
+               05 CIC-COD-OCC          PIC X(08).
+
+       EJECT
+      *------------------------------------------------------------*
+      *    REGISTRO DE "DATOS BASICOS DEL CLIENTE"                 *
+      *------------------------------------------------------------*
+       01  WA-DBC.
+      *    COPYDD DGC-R-DBC.DGC-E-DBC00(PROD),1,D
+      *                             EQUIVALENTE AL REGISTRO DBC
+           02  DGC-E-DBC00.
+      *                             DATOS BASICOS DEL CLIENTE
+               03  DBC.
+      *                             FILLER COMPATIBILIDAD VSAM/MVS
+                   04  DBC-GLS-FLAG PICTURE X(1).
+      *                             KEY CLAVE PRIMARIA REGISTRO
+                   04  DBC-KEY-IREG.
+      *                             IDENTIFICACION DATOS BASICOS CLIENTE
+                       05  DBC-KEY-IDBC.
+      *                             COD. INT. COMP. CLIENTE
+                       06  DBC-CIC-ICLI.
+      *                             CENTRO ASIGNACION IDENTIFICACION
+                       07  DBC-CAI-ICLI.
+                       08  DBC-COD-TCLI
+                                    PICTURE X(1).
+                       08  DBC-COD-CCLI
+                                    PICTURE X(3).
+      *                             IDENT. INTERNA COMPUTACIONAL
+                       07  DBC-IIC-ICLI
+                                    PICTURE X(8).
+      *                             TIME STAMP TRANSACCION
+                       05  DBC-STP-ITRN.
+      *                             FECHA TRANSACCION
+                       06  DBC-FEC-FTRN.
+                       07  DBC-NUM-STRN
+                                    PICTURE 9(2).
+                       07  DBC-NUM-ATRN
+                                    PICTURE 9(2).
+                       07  DBC-NUM-MTRN
+                                    PICTURE 9(2).
+                       07  DBC-NUM-DTRN
+                                    PICTURE 9(2).
+      *                             HORA TRANSACCION
+                       06  DBC-HRA-HRTR.
+                       07  DBC-NUM-HHTR
+                                    PICTURE 9(2).
+                       07  DBC-NUM-MMTR
+                                    PICTURE 9(2).
+                       07  DBC-NUM-SSTR
+                                    PICTURE 9(2).
+      *                             INDICADOR TIPO ACCION
+                   04  DBC-MSC-TACC PICTURE X(1).
+      *                             INDICADOR STATUS
+                   04  DBC-MSC-STAT PICTURE X(1).
+      *                             CODIGO ORIGEN TRANSACCION
+                   04  DBC-COD-OTRN.
+      *                             INDICADOR TIPO ORIGEN
+                       05  DBC-MSC-TTRN
+                                    PICTURE X(1).
+      *                             CODIGO TIPO ORIGEN
+                       05  DBC-COD-TTRN
+                                    PICTURE X(3).
+      *                             AUTOR TRANSACCION
+                   04  DBC-COD-ATRN PICTURE X(12).
+      *                             KEY RUT CLIENTE + INDICADOR O CALIFI
+                   04  DBC-IDC-ICLI.
+      *                             RUT CLIENTE
+                       05  DBC-NUM-ICLI
+                                    PICTURE X(8).
+      *                             INDICADOR TIPO RUT
+                       05  DBC-IND-ICLI
+                                    PICTURE X(1).
+      *                             EXTENSION DEL RUT
+                       05  DBC-GLS-ICLI
+                                    PICTURE X(3).
+      *                             KEY DIGITO VERIFICADOR DEL RUT
+                   04  DBC-VRF-ICLI PICTURE X(1).
+      *                             KEY NOMBRE CLIENTE GENERICO (PERSONA
+                   04  DBC-GLS-NOMC.
+                       05  DBC-GLS-APAT
+                                    PICTURE X(25).
+                       05  DBC-GLS-AMAT
+                                    PICTURE X(25).
+                       05  DBC-GLS-NOMB
+                                    PICTURE X(25).
+      *                             SOUNDEX DEL NOMBRE DE CLIENTE
+                   04  DBC-SNX-NOMC.
+                       05  DBC-SNX-APAT
+                                    PICTURE X(3).
+                       05  DBC-SNX-AMAT
+                                    PICTURE X(3).
+                       05  DBC-SNX-NOMB
+                                    PICTURE X(3).
+      *                             NUMERO DE DIRECCION DE ENVIO CORRESP
+                   04  DBC-NUM-DCOR PICTURE 9(2).
+      *                             OPR IND TIPO CLIENTE ( PERSONA O EMP
+                   04  DBC-IND-TICL PICTURE X(1).
+      *                             TIPO CLIENTE (POTENCIAL,NO CLIENTE,G
+                   04  DBC-COD-TICL PICTURE X(2).
+      *                             CODIGO CLASIFICACION COMERCIAL
+                   04  DBC-COD-CLCM PICTURE X(2).
+      *                             RCM CODIGO DEL EJECUTIVO ENCARGADO D
+                   04  DBC-COD-EJEC PICTURE X(12).
+      *                             OPR CODIGO DE OFICINA DONDE OPERA EL
+                   04  DBC-COD-OFIC PICTURE X(3).
+      *                             RCM INDICADOR SI OPERA EN OTRA OFICI
+                   04  DBC-IND-OOFI PICTURE X(1).
+      *                             EXT CODIGO ACTIVIDAD ECONOMICA
+                   04  DBC-COD-ACTI PICTURE X(9).
+      *                             EXT ORIGEN Y DESTINO SECT (COMP.INST
+                   04  DBC-COD-ODSE PICTURE X(3).
+      *                             INF FECHA INGRESO AL PLAN
+                   04  DBC-FEC-FPLN.
+                       05  DBC-NUM-SPLN
+                                    PICTURE 9(2).
+                       05  DBC-NUM-APLN
+                                    PICTURE 9(2).
+                       05  DBC-NUM-MPLN
+                                    PICTURE 9(2).
+                       05  DBC-NUM-DPLN
+                                    PICTURE 9(2).
+      *                             CODIGO DE SEGMENTO
+                   04  DBC-COD-SETO PICTURE X(5).
+      *                             PERIODO DE SEGMENTO (SSAAMM)
+                   04  DBC-PDO-SETO PICTURE X(6).
+      *                             INF INDICADOR DE MULTAS BANCO CENTRA
+                   04  DBC-IND-MUBC PICTURE X(1).
+      *                             INF INDICADOR DE JUICIOS BANCO CENTR
+                   04  DBC-IND-JUBC PICTURE X(1).
+      *                             EXT CODIGO ESTADO CLIENTE ( COMO DEU
+                   04  DBC-MSC-SCLI PICTURE X(1).
+      *                             FECHA ESTADO CLIENTE
+                   04  DBC-FEC-FSCL.
+                       05  DBC-NUM-SSCL
+                                    PICTURE 9(2).
+                       05  DBC-NUM-ASCL
+                                    PICTURE 9(2).
+                       05  DBC-NUM-MSCL
+                                    PICTURE 9(2).
+                       05  DBC-NUM-DSCL
+                                    PICTURE 9(2).
+      *                             CODIGO DE BLOQUEO DEL CLIENTE
+                   04  DBC-COD-BLOC PICTURE X(2).
+      *                             NUMERO TOTAL DE DIRECCIONES
+                   04  DBC-NUM-TDIR PICTURE 9(2).
+      *                             NUMERO TOTAL DE COMENTARIOS
+                   04  DBC-NUM-TCMT PICTURE 9(3).
+      *                             FECHA INICIO OPERACION
+                   04  DBC-FEC-FIOP.
+                       05  DBC-NUM-SIOP
+                                    PICTURE 9(2).
+                       05  DBC-NUM-AIOP
+                                    PICTURE 9(2).
+                       05  DBC-NUM-MIOP
+                                    PICTURE 9(2).
+                       05  DBC-NUM-DIOP
+                                    PICTURE 9(2).
+      *                             FECHA TERMINO OPERACION
+                   04  DBC-FEC-FTOP.
+                       05  DBC-NUM-STOP
+                                    PICTURE 9(2).
+                       05  DBC-NUM-ATOP
+                                    PICTURE 9(2).
+                       05  DBC-NUM-MTOP
+                                    PICTURE 9(2).
+                       05  DBC-NUM-DTOP
+                                    PICTURE 9(2).
+      *                             NUMERO OPERACIONES FECHA TERMINO NUL
+                   04  DBC-NUM-OFTN PICTURE 9(3).
+      *                             FECHA INGRESO DE DATOS A LA BASE DE
+                   04  DBC-FEC-FINP.
+                       05  DBC-NUM-SINP
+                                    PICTURE 9(2).
+                       05  DBC-NUM-AINP
+                                    PICTURE 9(2).
+                       05  DBC-NUM-MINP
+                                    PICTURE 9(2).
+                       05  DBC-NUM-DINP
+                                    PICTURE 9(2).
+       EJECT
+      *------------------------------------------------------------*
+      *    REGISTRO DE "DATOS VARIABLES"                           *
+      *------------------------------------------------------------*
+       01  WA-VAR.
+      *    COPYDD GES-R-VAR.GES-E-VAR01(PROD),1,D
+      *                             EQUIVALENTE AL REGISTRO VAR
+           02  GES-E-VAR01.
+      *                             DATOS VARIABLES DE OPERACIONES
+               03  VAR.
+      *                             CLAVE DE TABLA.
+                   04  OPE-CLV-VAR-1.
+      *                             CODIGO DE OPERACION
+                       05  OPE-COP.
+      *                             NUMERO DE SISTEMA
+                       06  OPE-NUM-SIS
+                                    PICTURE X(4).
+      *                             CODIGO CORRELATIVO
+                       06  OPE-COD-CRR
+                                    PICTURE X(8).
+      *                             FECHA DE VIGENCIA
+                       05  OPE-FEC-VIG.
+      *                             FECHA (ANO) DE VIGENCIA
+                       06  OPE-FA-VIG
+                                    PICTURE X(4).
+      *                             FECHA (MES) DE VIGENCIA
+                       06  OPE-FM-VIG
+                                    PICTURE X(2).
+      *                             FECHA (DIA) DE VIGENCIA
+                       06  OPE-FD-VIG
+                                    PICTURE X(2).
+      *                             NUMERO DE SECUENCIA DEL REGISTRO
+                       05  OPE-NUM-SEC
+                                    PICTURE X(1).
+      *                             FECHA ULTIMO MOVIMIENTO
+                   04  OPE-FEC-ULT-MOV.
+      *                             FECHA (ANO) ULTIMO MOVTO.
+                       05  OPE-FA-ULT-MOV
+                                    PICTURE 9(4).
+      *                             FECHA (MES) ULTIMO MOVTO.
+                       05  OPE-FM-ULT-MOV
+                                    PICTURE 9(2).
+      *                             FECHA (DIA) ULTIMO MOVTO.
+                       05  OPE-FD-ULT-MOV
+                                    PICTURE 9(2).
+      *                             MONTO 1
+                   04  OPE-VAL-VAR-1
+                                    PICTURE S9(12)V9(3)
+                                        COMPUTATIONAL-3.
+      *                             MONTO 2
+                   04  OPE-VAL-VAR-2
+                                    PICTURE S9(12)V9(3)
+                                        COMPUTATIONAL-3.
+      *                             MONTO 3
+                   04  OPE-VAL-VAR-3
+                                    PICTURE S9(12)V9(3)
+                                        COMPUTATIONAL-3.
+      *                             MONTO 4
+                   04  OPE-VAL-VAR-4
+                                    PICTURE S9(12)V9(3)
+                                        COMPUTATIONAL-3.
+      *                             MONTO 5
+                   04  OPE-VAL-VAR-5
+                                    PICTURE S9(12)V9(3)
+                                        COMPUTATIONAL-3.
+      *                             MONTO 6
+                   04  OPE-VAL-VAR-6
+                                    PICTURE S9(12)V9(3)
+                                        COMPUTATIONAL-3.
+      *                             TASA 1
+                   04  OPE-TAS-VAR-1
+                                    PICTURE S9(3)V9(4)
+                                        COMPUTATIONAL-3.
+      *                             TASA 2
+                   04  OPE-TAS-VAR-2
+                                    PICTURE S9(3)V9(4)
+                                        COMPUTATIONAL-3.
+      *                             CANTIDAD 1
+                   04  OPE-CTD-VAR-1
+                                    PICTURE S9(5)
+                                        COMPUTATIONAL-3.
+      *                             CANTIDAD 2
+                   04  OPE-CTD-VAR-2
+                                    PICTURE S9(5)
+                                        COMPUTATIONAL-3.
+      *                             CANTIDAD 3
+                   04  OPE-CTD-VAR-3
+                                    PICTURE S9(5)
+                                        COMPUTATIONAL-3.
+      *                             CANTIDAD 4
+                   04  OPE-CTD-VAR-4
+                                    PICTURE S9(5)
+                                        COMPUTATIONAL-3.
+      *                             CODIGO 1
+                   04  OPE-COD-VAR-1
+                                    PICTURE X(15).
+      *                             CODIGO 2
+                   04  OPE-COD-VAR-2
+                                    PICTURE X(15).
+      *                             FECHA 1
+                   04  OPE-FEC-VAR-1.
+      *                             FECHA (ANO) 1
+                       05  OPE-FA-VAR-1
+                                    PICTURE 9(4).
+      *                             FECHA (MES) 1
+                       05  OPE-FM-VAR-1
+                                    PICTURE 9(2).
+      *                             FECHA (DIA) 1
+                       05  OPE-FD-VAR-1
+                                    PICTURE 9(2).
+      *                             FECHA 2
+                   04  OPE-FEC-VAR-2.
+      *                             FECHA (ANO) 2.
+                       05  OPE-FA-VAR-2
+                                    PICTURE 9(4).
+      *                             FECHA (MES) 2.
+                       05  OPE-FM-VAR-2
+                                    PICTURE 9(2).
+      *                             FECHA (DIA) 2.
+                       05  OPE-FD-VAR-2
+                                    PICTURE 9(2).
+      *                             FECHA ULT. ACT. REGISTRO VAR.
+                   04  VAR-FEC-ULT-ACT.
+      *                             FECHA (ANO) ULT. ACT. REGISTRO VAR
+                       05  VAR-FA-ULT-ACT
+                                    PICTURE 9(4).
+      *                             FECHA (MES) ULT. ACT. REGISTRO VAR
+                       05  VAR-FM-ULT-ACT
+                                    PICTURE 9(2).
+      *                             FECHA (DIA) ULT. ACT. REGISTRO VAR
+                       05  VAR-FD-ULT-ACT
+                                    PICTURE 9(2).
+      *                             ESTADO DEL REGISTRO VAR
+                   04  VAR-COD-EST  PICTURE X(1).
+      *                             UTILIDAD DEL MES
+                   04  OPE-VAL-UTL-MES
+                                    PICTURE S9(12)V9(3)
+                                        COMPUTATIONAL-3.
+                   04  FILLER-1     PICTURE X(4).
+       EJECT
+      *------------------------------------------------------------*
+      *    REGISTRO DE "RELACION CLIENTE-OPERACION"                *
+      *------------------------------------------------------------*
+       01  WA-RCO.
+      *    COPYDD OPE-R-RCO.OPE-E-RCO00(PROD),1,D
+      *                             EQUIVALENTE AL REGISTRO RCO
+           02  OPE-E-RCO00.
+      *                             RELACION CLIENTE OPERACION
+               03  RCO.
+      *                             FILLER COMPATIBILIDAD VSAM/MVS
+                   04  RCO-GLS-FLAG PICTURE X(1).
+      *                             KEY CLAVE PRIMARIA REGISTRO
+                   04  RCO-KEY-IREG.
+      *                             IDENTIFICACION RELACION CLIENTE OPER
+                       05  RCO-KEY-IRCO.
+      *                             COD. INT. COMP. CLIENTE
+                       06  RCO-CIC-ICLI.
+      *                             CENTRO ASIGNACION IDENTIFICACION
+                       07  RCO-CAI-ICLI.
+                       08  RCO-COD-TCLI
+                                    PICTURE X(1).
+                       08  RCO-COD-CCLI
+                                    PICTURE X(3).
+      *                             IDENT. INTERNA COMPUTACIONAL
+                       07  RCO-IIC-ICLI
+                                    PICTURE X(8).
+      *                             IDENTIFICACION OPERACION RELACION
+                       06  RCO-KEY-IOPE.
+      *                             COD. INT. COMP. OPERACION
+                       07  RCO-CIC-IOPE.
+      *                             CENTRO ASIGNACION IDENTIFICACION
+                       08  RCO-CAI-IOPE.
+                       09  RCO-COD-TOPE
+                                    PICTURE X(1).
+                       09  RCO-COD-COPE
+                                    PICTURE X(3).
+      *                             IDENT. INTERNA COMPUTACIONAL
+                       08  RCO-IIC-IOPE.
+                       09  RCO-COD-OOPE.
+                       10  RCO-COD-SOPE
+                                    PICTURE X(2).
+                       10  RCO-IND-SOPE
+                                    PICTURE X(1).
+                       09  RCO-GLS-NOPE
+                                    PICTURE X(5).
+      *                             TIME STAMP TRANSACCION
+                       05  RCO-STP-ITRN.
+      *                             FECHA TRANSACCION
+                       06  RCO-FEC-FTRN.
+                       07  RCO-NUM-STRN
+                                    PICTURE 9(2).
+                       07  RCO-NUM-ATRN
+                                    PICTURE 9(2).
+                       07  RCO-NUM-MTRN
+                                    PICTURE 9(2).
+                       07  RCO-NUM-DTRN
+                                    PICTURE 9(2).
+      *                             HORA TRANSACCION
+                       06  RCO-HRA-HRTR.
+                       07  RCO-NUM-HHTR
+                                    PICTURE 9(2).
+                       07  RCO-NUM-MMTR
+                                    PICTURE 9(2).
+                       07  RCO-NUM-SSTR
+                                    PICTURE 9(2).
+      *                             INDICADOR TIPO ACCION
+                   04  RCO-MSC-TACC PICTURE X(1).
+      *                             INDICADOR STATUS
+                   04  RCO-MSC-STAT PICTURE X(1).
+      *                             CODIGO ORIGEN TRANSACCION
+                   04  RCO-COD-OTRN.
+      *                             INDICADOR TIPO ORIGEN
+                       05  RCO-MSC-TTRN
+                                    PICTURE X(1).
+      *                             CODIGO TIPO ORIGEN
+                       05  RCO-COD-TTRN
+                                    PICTURE X(3).
+      *                             AUTOR TRANSACCION
+                   04  RCO-COD-ATRN PICTURE X(12).
+      *                             CODIGO STATUS
+                   04  RCO-COD-STAT PICTURE X(3).
+      *                             COD RELACION CLIENTE OPERACION
+                   04  RCO-COD-RCOP PICTURE X(3).
+      *                             NUMERO DE DIRECCION
+                   04  RCO-NUM-DIRE PICTURE 9(2).
+      *                             PORCENTAJE RELACION
+                   04  RCO-VAL-PRCO PICTURE 9(3)V9(6)
+                                        COMPUTATIONAL.
+      *                             CODIGO CLASE OPERACION
+                   04  RCO-COD-COPR.
+      *                             CODIGO TIPO OPERACION
+                       05  RCO-COD-TOPR
+                                    PICTURE X(3).
+      *                             CODIGO AUXILIAR OPERACION
+                       05  RCO-COD-AOPR
+                                    PICTURE X(3).
+      *                             FECHA INICIO DE LA RELACION
+                   04  OPE-FEC-INI-REL.
+      *                             ANO INICIO DE LA RELACION
+                       05  OPE-FA-INI-REL
+                                    PICTURE X(4).
+      *                             MES INICIO DE LA RELACION
+                       05  OPE-FM-INI-REL
+                                    PICTURE X(2).
+      *                             DIA INICIO DE LA RELACION
+                       05  OPE-FD-INI-REL
+                                    PICTURE X(2).
+      *                             FECHA TERMINO DE LA RELACION
+                   04  OPE-FEC-TER-REL.
+      *                             ANO TERMINO DE LA RELACION
+                       05  OPE-FA-TER-REL
+                                    PICTURE X(4).
+      *                             MES TERMINO DE LA RELACION
+                       05  OPE-FM-TER-REL
+                                    PICTURE X(2).
+      *                             DIA TERMINO DE LA RELACION
+                       05  OPE-FD-TER-REL
+                                    PICTURE X(2).
+                   04  FILLER-1     PICTURE X(20).
+       EJECT
+      *------------------------------------------------------------*
+      *    REGISTRO DE "OPERACIONES"                               *
+      *------------------------------------------------------------*
+       01  WA-OPE.
+      *    COPYDD OPE-R-OPE.OPE-E-OPE00(PROD),1,D
+      *                             EQUIVALENTE AL REGISTRO OPE
+           02  OPE-E-OPE00.
+      *                             OPERACIONES
+               03  OPE.
+      *                             FILLER COMPATIBILIDAD VSAM/MVS
+                   04  OPE-GLS-FLAG PICTURE X(1).
+      *                             KEY CLAVE PRIMARIA REGISTRO
+                   04  OPE-KEY-IREG.
+      *                             IDENTIFICACION OPERACION
+                       05  OPE-KEY-IOPE.
+      *                             COD. INT. COMP. OPERACION
+                       06  OPE-CIC-IOPE.
+      *                             CENTRO ASIGNACION IDENTIFICACION
+                       07  OPE-CAI-IOPE.
+                       08  OPE-COD-TOPE
+                                    PICTURE X(1).
+                       08  OPE-COD-COPE
+                                    PICTURE X(3).
+      *                             IDENT. INTERNA COMPUTACIONAL
+                       07  OPE-IIC-IOPE.
+                       08  OPE-COD-OOPE.
+                       09  OPE-COD-SOPE
+                                    PICTURE X(2).
+                       09  OPE-IND-SOPE
+                                    PICTURE X(1).
+                       08  OPE-GLS-NOPE
+                                    PICTURE X(5).
+      *                             TIME STAMP TRANSACCION
+                       05  OPE-STP-ITRN.
+      *                             FECHA TRANSACCION
+                       06  OPE-FEC-FTRN.
+                       07  OPE-NUM-STRN
+                                    PICTURE 9(2).
+                       07  OPE-NUM-ATRN
+                                    PICTURE 9(2).
+                       07  OPE-NUM-MTRN
+                                    PICTURE 9(2).
+                       07  OPE-NUM-DTRN
+                                    PICTURE 9(2).
+      *                             HORA TRANSACCION
+                       06  OPE-HRA-HRTR.
+                       07  OPE-NUM-HHTR
+                                    PICTURE 9(2).
+                       07  OPE-NUM-MMTR
+                                    PICTURE 9(2).
+                       07  OPE-NUM-SSTR
+                                    PICTURE 9(2).
+      *                             INDICADOR TIPO ACCION
+                   04  OPE-MSC-TACC PICTURE X(1).
+      *                             INDICADOR STATUS
+                   04  OPE-MSC-STAT PICTURE X(1).
+      *                             CODIGO ORIGEN TRANSACCION
+                   04  OPE-COD-OTRN.
+      *                             INDICADOR TIPO ORIGEN
+                       05  OPE-MSC-TTRN
+                                    PICTURE X(1).
+      *                             CODIGO TIPO ORIGEN
+                       05  OPE-COD-TTRN
+                                    PICTURE X(3).
+      *                             AUTOR TRANSACCION
+                   04  OPE-COD-ATRN PICTURE X(12).
+      *                             CODIGO STATUS
+                   04  OPE-COD-STAT PICTURE X(3).
+      *                             VALOR DE CAMBIO OPERACION
+                   04  OPE-COD-VCOP.
+      *                             MISCELANEO TIPO VALOR
+                       05  OPE-MSC-TVOP
+                                    PICTURE X(1).
+      *                             CODIGO VALOR
+                       05  OPE-COD-CVOP
+                                    PICTURE X(3).
+      *                             CODIGO TIPO CAMBIO
+                       05  OPE-COD-TCOP
+                                    PICTURE X(2).
+      *                             CODIGO CLASE OPERACION
+                   04  OPE-COD-COPR.
+                       05  OPE-COD-TOPR
+                                    PICTURE X(3).
+                       05  OPE-COD-AOPR
+                                    PICTURE X(3).
+      *                             CODIGO OFICINA
+                   04  OPE-COD-OFOP PICTURE X(3).
+      *                             EJECUTIVO
+                   04  OPE-COD-EJOP PICTURE X(12).
+      *                             FECHA INICIO OPERACION
+                   04  OPE-FEC-FIOP.
+                       05  OPE-NUM-SIOP
+                                    PICTURE 9(2).
+                       05  OPE-NUM-AIOP
+                                    PICTURE 9(2).
+                       05  OPE-NUM-MIOP
+                                    PICTURE 9(2).
+                       05  OPE-NUM-DIOP
+                                    PICTURE 9(2).
+      *                             FECHA TERMINO OPERACION
+                   04  OPE-FEC-FTOP.
+                       05  OPE-NUM-STOP
+                                    PICTURE 9(2).
+                       05  OPE-NUM-ATOP
+                                    PICTURE 9(2).
+                       05  OPE-NUM-MTOP
+                                    PICTURE 9(2).
+                       05  OPE-NUM-DTOP
+                                    PICTURE 9(2).
+      *                             MOTIVO TERMINO OPERACION
+                   04  OPE-COD-MOTT PICTURE X(2).
+      *                             FECHA REAPERTURA OPERACION
+                   04  OPE-FEC-FROP.
+                       05  OPE-NUM-SROP
+                                    PICTURE 9(2).
+                       05  OPE-NUM-AROP
+                                    PICTURE 9(2).
+                       05  OPE-NUM-MROP
+                                    PICTURE 9(2).
+                       05  OPE-NUM-DROP
+                                    PICTURE 9(2).
+      *                             IND MULTIPLES CLIENTES ( Y, O, ETC)
+                   04  OPE-IND-MCLI PICTURE X(2).
+      *                             PRODUCTO DE MARKETING
+                   04  OPE-COD-PDT  PICTURE X(6).
+      *                             FUNCION (PARA COSTO POR FUNCION)
+                   04  OPE-COD-FCN  PICTURE X(3).
+      *                             CODIGO DE PLAZO DE LA OPERACION
+                   04  OPE-COD-PZO  PICTURE X(2).
+      *                             AREA DE GESTION 1
+                   04  OPE-COD-AGE-1
+                                    PICTURE X(4).
+      *                             CODIGO OPERACION RELACIONADA 1
+                   04  OPE-COP-REL-1.
+      *                             NUMERO DE SISTEMA OPERACION 1
+                       05  OPE-NUM-SIS-1
+                                    PICTURE X(4).
+      *                             CODIGO CORRELATIVO OPERACION 1
+                       05  OPE-COD-CRR-1
+                                    PICTURE X(8).
+      *                             CODIGO OPERACION RELACIONADA 2
+                   04  OPE-COP-REL-2.
+      *                             NUMERO DE SISTEMA OPERACION 2
+                       05  OPE-NUM-SIS-2
+                                    PICTURE X(4).
+      *                             CODIGO CORRELATIVO OPERACION 2
+                       05  OPE-COD-CRR-2
+                                    PICTURE X(8).
+      *                             CODIGO TIPO TASA
+                   04  OPE-TIP-TAS  PICTURE X(12).
+      *                             TASA
+                   04  OPE-TAS      PICTURE S9(3)V9(4)
+                                        COMPUTATIONAL-3.
+      *                             CODIGO 1
+                   04  OPE-COD-1    PICTURE X(3).
+      *                             CODIGO 2
+                   04  OPE-COD-2    PICTURE X(4).
+      *                             CODIGO 3
+                   04  OPE-COD-3    PICTURE X(5).
+      *                             INDICADOR 1
+                   04  OPE-IND-1    PICTURE X(1).
+      *                             FECHA 1
+                   04  OPE-FEC-1.
+      *                             FECHA (ANO) 1
+                       05  OPE-FA-1 PICTURE 9(4).
+      *                             FECHA (MES) 1
+                       05  OPE-FM-1 PICTURE 9(2).
+      *                             FECHA (MES) 1
+                       05  OPE-FD-1 PICTURE 9(2).
+      *                             EJECUTIVO 1
+                   04  OPE-COD-EJE-1
+                                    PICTURE X(12).
+      *                             MONTO 1
+                   04  OPE-VAL-1    PICTURE S9(12)V9(3)
+                                        COMPUTATIONAL-3.
+      *                             UTILIDAD DEL PERIODO
+                   04  OPE-VAL-UTL-PDO
+                                    PICTURE S9(12)V9(3)
+                                        COMPUTATIONAL-3.
+      *                             FECHA DE UTILIDAD DEL PERIODO
+                   04  OPE-FEC-UTL-PDO.
+      *                             FECHA (ANO) UTILIDAD DEL PERIODO
+                       05  OPE-FA-UTL-PDO
+                                    PICTURE 9(4).
+      *                             FECHA (MES) UTILIDAD DEL PERIODO
+                       05  OPE-FM-UTL-PDO
+                                    PICTURE 9(2).
+      *                             FECHA (DIA) UTILIDAD DEL PERIODO
+                       05  OPE-FD-UTL-PDO
+                                    PICTURE 9(2).
+                   04  FILLER-1     PICTURE X(4).
+       EJECT
+      *------------------------------------------------------------*
+      *    REGISTRO DE "TABLAS DE ASIGNACION DE CLAVES BANCREDITO" *
+      *------------------------------------------------------------*
+       01  WA-ACB.
+      *    COPYDD TGE-R-ACB.TGE-E-ACB00(PROD),1,D
+      *                             EQUIVALENTE AL REGISTRO ACB
+           02  TGE-E-ACB00.
+      *                             ASIGNACION DE CLAVES BANCREDITO
+               03  ACB.
+      *                             CLAVE
+                   04  OBC-CLV-ACB-1.
+      *                             RUT TITULAR 1 (FORM. BANCREDITO)
+                       05  OBC-RUT-TIT-1
+                                    PICTURE X(9).
+      *                             RUT TITULAR 2 (FORM. BANCREDITO)
+                       05  OBC-RUT-TIT-2
+                                    PICTURE X(9).
+      *                             TIPO DE FONDO
+                       05  OBC-TIP-FON
+                                    PICTURE X(2).
+      *                             NUMERO DE LA CUENTA
+                       05  OBC-NUM-CTA
+                                    PICTURE X(2).
+      *                             DIGITO VERIFICADOR TITULAR 1
+                   04  OBC-VRT-TIT-1
+                                    PICTURE X(1).
+      *                             DIGITO VERIFICADOR TITULAR 2
+                   04  OBC-VRT-TIT-2
+                                    PICTURE X(1).
+      *                             CODIGO DE OPERACION
+                   04  OBC-COP.
+      *                             NUMERO DE SISTEMA
+                       05  OBC-NUM-SIS
+                                    PICTURE X(4).
+      *                             CODIGO CORRELATIVO
+                       05  OBC-COD-CRR
+                                    PICTURE X(8).
+      *                             FECHA DE INGRESO REG. ACB
+                   04  ACB-FEC-ING.
+      *                             FECHA INGR. REG. ACB. (ANO)
+                       05  ACB-FA-ING
+                                    PICTURE 9(4).
+      *                             FECHA ING. REG. ACB. (MES)
+                       05  ACB-FM-ING
+                                    PICTURE 9(2).
+      *                             FECHA ING. REG. ACB. (DIA)
+                       05  ACB-FD-ING
+                                    PICTURE 9(2).
+                   04  FILLER-1     PICTURE X(20).
+       EJECT
+      *------------------------------------------------------------*
+      *    REGISTRO DE "TABLAS DE TABLAS SUP"                      *
+      *------------------------------------------------------------*
+       01  WA-TAB.
+      *    COPYDD SUP-R-TAB.SUP-E-TAB00(PROD),1,D
+      *                             EQUIVALENTE AL REGISTRO TAB
+           02  SUP-E-TAB00.
+      *                             REGISTRO GENERICO DE TABLAS
+               03  TAB.
+      *                             FILLER COMPATIBILIDAD VSAM/MVS
+                   04  TAB-GLS-FLAG PICTURE X(1).
+      *                             CLAVE PRIMARIA REGISTRO
+                   04  TAB-KEY-IREG.
+      *                             KEY     TIPO + CODIGO ( LLAVE PRIMAR
+                       05  TAB-COD-TABL.
+      *                             CODIGO TIPO TABLA
+                       06  TAB-COD-TTAB
+                                    PICTURE X(3).
+      *                             CODIGO TABLA
+                       06  TAB-COD-CTAB
+                                    PICTURE X(12).
+      *                             TIME STAMP TRANSACCION
+                       05  TAB-STP-ITRN.
+      *                             FECHA TRANSACCION
+                       06  TAB-FEC-FTRN.
+                       07  TAB-NUM-STRN
+                                    PICTURE 9(2).
+                       07  TAB-NUM-ATRN
+                                    PICTURE 9(2).
+                       07  TAB-NUM-MTRN
+                                    PICTURE 9(2).
+                       07  TAB-NUM-DTRN
+                                    PICTURE 9(2).
+      *                             HORA TRANSACCION
+                       06  TAB-HRA-HRTR.
+                       07  TAB-NUM-HHTR
+                                    PICTURE 9(2).
+                       07  TAB-NUM-MMTR
+                                    PICTURE 9(2).
+                       07  TAB-NUM-SSTR
+                                    PICTURE 9(2).
+      *                             INDICADOR TIPO ACCION
+                   04  TAB-MSC-TACC PICTURE X(1).
+      *                             INDICADOR STATUS
+                   04  TAB-MSC-STAT PICTURE X(1).
+      *                             INDICADOR VIGENCIA
+                   04  TAB-IND-VIGE
+                             REDEFINES TAB-MSC-STAT
+                                    PICTURE X(1).
+      *                             CODIGO ORIGEN TRANSACCION
+                   04  TAB-COD-OTRN.
+      *                             INDICADOR TIPO ORIGEN
+                       05  TAB-MSC-TTRN
+                                    PICTURE X(1).
+      *                             CODIGO TIPO ORIGEN
+                       05  TAB-COD-TTRN
+                                    PICTURE X(3).
+      *                             AUTOR TRANSACCION
+                   04  TAB-COD-ATRN PICTURE X(12).
+      *                             KEY TIPO + CODIGO ( INTERNO COMPUTAC
+                   04  TAB-CIC-TABL.
+      *                             CODIGO TIPO TABLA
+                       05  TAB-CIC-TTAB
+                                    PICTURE X(3).
+      *                             CODIGO TABLA
+                       05  TAB-CIC-CTAB
+                                    PICTURE X(12).
+      *                             CODIGO EXTERNO
+                   04  TAB-EXT-TABL.
+      *                             CODIGO TIPO TABLA
+                       05  TAB-EXT-TTAB
+                                    PICTURE X(3).
+      *                             CODIGO TABLA
+                       05  TAB-EXT-CTAB
+                                    PICTURE X(5).
+      *                             DESCRIPCION CORTA
+                   04  TAB-GLS-DCOR PICTURE X(12).
+      *                             ABREVIACION DESCRIPCION
+                   04  TAB-GLS-ABRV PICTURE X(5).
+      *                             DESCRIPCION DEL CODIGO
+                   04  TAB-GLS-DESC PICTURE X(40).
+      *                             DATOS ANEXOS
+                   04  TAB-GLS-DATA PICTURE X(60).
+      *                             CLAVE SOUNDEX
+                   04  TAB-SNX-TABL.
+                       05  TAB-SNX-TTAB
+                                    PICTURE X(3).
+                       05  TAB-SNX-CTAB
+                                    PICTURE X(3).
+       EJECT
+      *------------------------------------------------------------*
+      *    REGISTRO DE "TABLA DE SEMILLAS OPERACIONES"             *
+      *------------------------------------------------------------*
+       01  WA-CIC.
+      *    COPYDD GEN-R-CIC.GEN-E-CIC00(PROD),1,D
+      *                             EQUIVALENTE AL REGISTRO CIC
+           02  GEN-E-CIC00.
+      *                             CODIGO INTERNO COMPUTACIONAL
+               03  CIC.
+      *                             FILLER COMPATIBILIDAD VSAM/MVS
+                   04  CIC-GLS-FLAG PICTURE X(1).
+      *                             KEY CLAVE PRIMARIA REGISTRO
+                   04  CIC-KEY-IREG.
+      *                             IDENTIFICACION ENTIDAD
+                       05  CIC-KEY-ICIC.
+      *                             CODIGO INTERNO COMPUTACIONAL
+                       06  CIC-CIC-ICIC.
+      *                             CENTRO ASIGNACION IDENTIFICACION
+                       07  CIC-CAI-ICIC.
+                       08  CIC-COD-TCIC
+                                    PICTURE X(1).
+                       08  CIC-COD-CCIC
+                                    PICTURE X(3).
+      *                             IDENTIFICACION INTERNA COMPUTACIONAL
+                       07  CIC-NUM-ICIC
+                                    PICTURE 9(8).
+                       07  CIC-IIC-ICIC
+                             REDEFINES CIC-NUM-ICIC.
+                       08  CIC-COD-OCIC.
+                       09  CIC-COD-SCIC
+                                    PICTURE X(2).
+                       09  CIC-IND-SCIC
+                                    PICTURE X(1).
+                       08  CIC-GLS-NCIC
+                                    PICTURE X(5).
+      *                             TIME STAMP TRANSACCION
+                       05  CIC-STP-ITRN.
+      *                             FECHA TRANSACCION
+                       06  CIC-FEC-FTRN.
+                       07  CIC-NUM-STRN
+                                    PICTURE 9(2).
+                       07  CIC-NUM-ATRN
+                                    PICTURE 9(2).
+                       07  CIC-NUM-MTRN
+                                    PICTURE 9(2).
+                       07  CIC-NUM-DTRN
+                                    PICTURE 9(2).
+      *                             HORA TRANSACCION
+                       06  CIC-HRA-HRTR.
+                       07  CIC-NUM-HHTR
+                                    PICTURE 9(2).
+                       07  CIC-NUM-MMTR
+                                    PICTURE 9(2).
+                       07  CIC-NUM-SSTR
+                                    PICTURE 9(2).
+      *                             INDICADOR TIPO ACCION
+                   04  CIC-MSC-TACC PICTURE X(1).
+      *                             INDICADOR STATUS
+                   04  CIC-MSC-STAT PICTURE X(1).
+      *                             INDICADOR DE VIGENCIA CENTRO ASIGNAC
+                   04  CIC-IND-VIGE
+                             REDEFINES CIC-MSC-STAT
+                                    PICTURE X(1).
+      *                             CODIGO ORIGEN TRANSACCION
+                   04  CIC-COD-OTRN.
+      *                             INDICADOR TIPO ORIGEN
+                       05  CIC-MSC-TTRN
+                                    PICTURE X(1).
+      *                             CODIGO TIPO ORIGEN
+                       05  CIC-COD-TTRN
+                                    PICTURE X(3).
+      *                             AUTOR TRANSACCION
+                   04  CIC-COD-ATRN PICTURE X(12).
+      *                             DISPONIBLE
+                   04  CIC-GLS-DISP PICTURE X(3).
+       EJECT
+      *------------------------------------------------------------*
+      *                     ELEMENT LIST                           *
+      *------------------------------------------------------------*
+       01  ELEM-LIST-DBC.
+           05    ELEM-1                PIC X(5) VALUE 'DBC00'.
+           05    ELEM-SEC              PIC X(1).
+           05    FILLER                PIC X(5) VALUE SPACES.
+
+       01  ELEM-LIST-VAR.
+           05    ELEM-1                PIC X(5) VALUE 'VAR01'.
+           05    ELEM-SEC              PIC X(1).
+           05    FILLER                PIC X(5) VALUE SPACES.
+
+       01  ELEM-LIST-RCO.
+           05    ELEM-1                PIC X(5) VALUE 'RCO00'.
+           05    ELEM-SEC              PIC X(1).
+           05    FILLER                PIC X(5) VALUE SPACES.
+
+       01  ELEM-LIST-OPE.
+           05    ELEM-1                PIC X(5) VALUE 'OPE00'.
+           05    ELEM-SEC              PIC X(1).
+           05    FILLER                PIC X(5) VALUE SPACES.
+
+       01  ELEM-LIST-ACB.
+           05    ELEM-1                PIC X(5) VALUE 'ACB00'.
+           05    ELEM-SEC              PIC X(1).
+           05    FILLER                PIC X(5) VALUE SPACES.
+
+       01  ELEM-LIST-TAB.
+           05    ELEM-1                PIC X(5) VALUE 'TAB00'.
+           05    ELEM-SEC              PIC X(1).
+           05    FILLER                PIC X(5) VALUE SPACES.
+
+       01  ELEM-LIST-CIC.
+           05    ELEM-1                PIC X(5) VALUE 'CIC00'.
+           05    ELEM-SEC              PIC X(1).
+           05    FILLER                PIC X(5) VALUE SPACES.
+       77  TIME-OF-DAY                 PIC X(6).
+       EJECT
+      *------------------------------------------------------------*
+      *                     PROGRAMA PRINCIPAL                     *
+      *------------------------------------------------------------*
+       PROCEDURE DIVISION.
+      *-------------------
+           ENTRY 'DBMSCBL'.
+       A-CONTROL SECTION.
+           PERFORM B-INICIAR.
+           PERFORM C-PROCESAR.
+           PERFORM D-TERMINAR.
+       AZ-FIN-PROG.
+           STOP RUN.
+
+       EJECT
+       B-INICIAR SECTION.
+       BA-ABRIR-ARCH.
+      *
+           OPEN INPUT BANCRED TABCAM
+                I-O   MOVRCO MOVOPE MOVVAR.
+           IF ESTADOS NOT = ZEROS
+              DISPLAY '**************************************'
+              DISPLAY 'SGCPGES7. ERROR EN APERTURA DE ARCHIVOS'
+              DISPLAY 'SGCPGES7. FILE STATUS:'
+              DISPLAY '         BANCRED ...: ' FS-BANCRED
+              DISPLAY '         MOVRCO ....: ' FS-MOVRCO
+              DISPLAY '         MOVOPE ....: ' FS-MOVOPE
+              DISPLAY '         MOVVAR ....: ' FS-MOVVAR
+              DISPLAY '         TABCAM ....: ' FS-TABCAM
+              DISPLAY 'SGCPGES7. PROGRAMA CANCELADO'
+              DISPLAY '**************************************'
+              MOVE 100 TO RETURN-CODE
+              GO TO AZ-FIN-PROG.
+
+       BB-LEER-BANCRED.
+           READ BANCRED NEXT RECORD.
+           IF FS-BANCRED = '00'
+              ADD 1 TO W-CONT-BANCRED
+           ELSE
+              IF FS-BANCRED NOT = '10'
+                 DISPLAY '*****************************************'
+                 DISPLAY 'SGCPGES7. ERROR AL LEER BANCRED, STATUS= '
+                          FS-BANCRED
+                 DISPLAY 'SGCPGES7. PROGRAMA CANCELADO'
+                 DISPLAY '*****************************************'
+                 PERFORM D-TERMINAR
+                 MOVE 100 TO RETURN-CODE
+                 GO TO AZ-FIN-PROG.
+
+       BC-OBTENER-FECHA-HORA.
+           ACCEPT WP-PARAMETRO.
+           ACCEPT WP-PARAMETRO-1.
+           MOVE 'CARGAR'     TO CALEAREA-FUNCION.
+           MOVE ALL '0'      TO CALEAREA-FECHA-1.
+           CALL 'RTNUCALE' USING RTNWCALE.
+           IF CALEAREA-FUNCION = 'CANCEL'
+                 DISPLAY '*****************************************'
+                 DISPLAY 'SGCPGES7. ERROR EN CARGA RUTINA FECHA    '
+                 DISPLAY 'SGCPGES7. PROGRAMA CANCELADO'
+                 DISPLAY '*****************************************'
+                 PERFORM D-TERMINAR
+                 MOVE 100 TO RETURN-CODE
+                 GO TO AZ-FIN-PROG
+           ELSE
+              MOVE 'INFO'    TO CALEAREA-FUNCION
+              MOVE WP-FECHA-PRO  TO CALEAREA-FECHA-1
+              CALL 'RTNUCALE' USING RTNWCALE
+              IF CALEAREA-COD-RET = 0
+                 IF CALEAREA-TIP-DIA = 'F'
+                    DISPLAY '*****************************************'
+                    DISPLAY 'SGCPGES7. ERROR DIA FESTIVO '
+                    DISPLAY 'SGCPGES7. PROGRAMA CANCELADO'
+                    DISPLAY '*****************************************'
+                    PERFORM D-TERMINAR
+                    MOVE 100 TO RETURN-CODE
+                    GO TO AZ-FIN-PROG
+                 ELSE
+                    DISPLAY '** OK. DIA HABIL **'
+              ELSE
+                    DISPLAY '*****************************************'
+                    DISPLAY 'SGCPGES7. ERROR EN CHEQUEO FECHA'
+                    DISPLAY 'SGCPGES7. FECHA = ' WP-FECHA-PRO
+                    DISPLAY 'SGCPGES7. PROGRAMA CANCELADO'
+                    DISPLAY '*****************************************'
+                    PERFORM D-TERMINAR
+                    MOVE 100 TO RETURN-CODE
+                    GO TO AZ-FIN-PROG.
+
+           MOVE WP-SIG-PRO    TO WS-FEC-SS.
+           MOVE WP-ANO-PRO    TO WS-FEC-AA WS-FAA.
+           MOVE WP-MES-PRO    TO WS-FEC-MM WS-FMM.
+           MOVE WP-DIA-PRO    TO WS-FEC-DD WS-FDD.
+
+           MOVE 'BPDHM'       TO CALEAREA-FUNCION.
+           MOVE WP-FECHA-PRO  TO CALEAREA-FECHA-1.
+           CALL 'RTNUCALE' USING RTNWCALE.
+           IF CALEAREA-COD-RET = 0
+              IF CALEAREA-FECHA-1 = CALEAREA-FECHA-2
+                 MOVE 'SI'   TO WS-PRIM-DHAB
+                 MOVE WP-ANO-PRO    TO WS-FAA2
+                 MOVE WP-MES-PRO    TO WS-FMM2
+                 MOVE 01            TO WS-FDD2
+              ELSE
+                 MOVE 'NO'   TO WS-PRIM-DHAB
+                 MOVE 0             TO WS-FAA2
+                 MOVE 0             TO WS-FMM2
+                 MOVE 0             TO WS-FDD2
+           ELSE
+              DISPLAY '**********************************************'
+              DISPLAY 'SGCPGES7. ERROR EN CHEQUEO FECHA PRIM.DIA HAB.'
+              DISPLAY 'SGCPGES7. FECHA = ' WP-FECHA-PRO
+              DISPLAY 'SGCPGES7. PROGRAMA CANCELADO'
+              DISPLAY '**********************************************'
+              PERFORM D-TERMINAR
+              MOVE 100 TO RETURN-CODE
+              GO TO AZ-FIN-PROG.
+
+       BD-CARGAR-MONEDAS.
+           PERFORM BE-LEER-MON.
+           MOVE 0          TO NTAB.
+           PERFORM BF-CARGAR UNTIL FS-TABCAM = '10'.
+           GO TO BZ-FIN-SECCION.
+
+       BE-LEER-MON.
+           READ TABCAM.
+
+       BF-CARGAR.
+           ADD 1           TO NTAB.
+           SET IND         TO NTAB.
+           MOVE MONEDA     TO TAB-MONEDA (IND).
+           MOVE CODMON     TO TAB-CODMON (IND).
+           PERFORM BE-LEER-MON.
+
+       BZ-FIN-SECCION.
+           EXIT.
+
+       EJECT
+       C-PROCESAR SECTION.
+
+           SORT FSORT ASCENDING KEY
+                      SD-CIC-IOPE
+               INPUT  PROCEDURE C-PROC-PRINC-INPUT
+               OUTPUT PROCEDURE C-PROC-PRINC-OUTPUT.
+
+       CZ-FIN-SECCION-PROCESAR.
+           EXIT.
+
+       EJECT
+       C-PROC-PRINC-INPUT SECTION.
+       CA-LOOP-PRINC.
+           PERFORM CB-GENERAR-MOV UNTIL FS-BANCRED = '10'.
+           GO TO CZ-FIN-SECCION-INPUT.
+
+       CB-GENERAR-MOV.
+           IF W-IND-MATERIALIZACION = '1'
+              IF WS-FDDMMAA = W-FEC-MOV OR
+                 (W-FEC-MOV NOT > WS-FDDMMAA AND WS-PRIM-DHAB = 'SI')
+                 OR (CARGA-INIC = 'S')
+                 PERFORM CBA-PROCESO.
+           PERFORM CH-LEER-BANCRED.
+
+       CBA-PROCESO.
+           MOVE 0          TO WS-STATUS-ACB.
+           IF W-RUT-FON-TIT > 99999999
+              MOVE W-RUT-FON-TIT TO WK-RUT-9
+              MOVE W-DV-FON-TIT  TO WK-DIG-VER
+              MOVE 0             TO WK-TIT
+              PERFORM CF-RUT-MAY-100MILL
+           ELSE
+              MOVE W-RUT-FON-TIT TO WK-RUT-TIT-8
+              MOVE W-DV-FON-TIT  TO WK-VRT-TIT-8.
+           IF W-RUT-FON-SEC > 99999999
+              MOVE W-RUT-FON-SEC TO WK-RUT-9
+              MOVE W-DV-FON-SEC  TO WK-DIG-VER
+              MOVE 1             TO WK-TIT
+              PERFORM CF-RUT-MAY-100MILL
+           ELSE
+              MOVE W-RUT-FON-TIT TO WK-RUT-SEC-8
+              MOVE W-DV-FON-SEC  TO WK-VRT-SEC-8.
+           IF WK-RUT-TIT-8 > 0
+              MOVE WK-RUT-TIT-8  TO WK-RUT-TRB
+              MOVE WK-VRT-TIT-8  TO WK-DIG-VER
+              IF W-MOV-CUOTA IS NOT NUMERIC
+                 ADD 1           TO WA-IGN-BANCRED
+              ELSE
+                 IF W-MOV-CUOTA = ZEROS
+                    ADD 1        TO WA-IGN-BANCRED
+                 ELSE
+                    PERFORM CG-PROCESAR-RUT-TRB.
+
+       CC-PROCESO-ACB.
+           PERFORM CC-LEER-ACB.
+           IF ACB-RET-COD NOT = SPACES
+              PERFORM CD-RECUP-SEMILLA
+              PERFORM CE-GRABAR-ACB
+           ELSE
+              ADD 1        TO W-CONT-ACB-L
+              MOVE OBC-COP TO WK-CIC-OPE.
+
+       CC-LEER-ACB.
+           MOVE W-RUT-FON-TIT TO WS-RUT-TIT-1.
+           MOVE W-RUT-FON-SEC TO WS-RUT-TIT-2.
+           MOVE W-NUM-FON     TO WS-TIP-FON.
+           MOVE W-NUM-CTA     TO WS-NUM-CTA.
+           MOVE WS-CLAVE-ACB  TO ACB-CLV-ACB.
+           MOVE 'REDKY'       TO ACB-COMMAND.
+           CALL 'DBNTRY' USING UIB
+                               REQ-AREA-ACB
+                               WA-ACB
+                               ELEM-LIST-ACB.
+
+       CD-RECUP-SEMILLA.
+      *
+      *  RECUPERAR SEMILLA PARA CENTRO DE ASIGNACION '1300' BANCREDITO
+      *
+           MOVE SPACES         TO CIC-COD-OCC.
+
+           MOVE 'LOCKY'        TO CIC-COMMAND.
+           CALL 'DBNTRY' USING UIB
+                               REQ-AREA-CIC
+                               WA-CIC
+                               ELEM-LIST-CIC.
+
+           IF CIC-RET-COD NOT = SPACES
+                 DISPLAY '******************************************'
+                 DISPLAY 'SGCPGES7. ERROR AL POSESIONAR CIC, STATUS= '
+                         CIC-RET-COD
+                 DISPLAY 'SGCPGES7. PROGRAMA CANCELADO'
+                 DISPLAY '******************************************'
+                 PERFORM D-TERMINAR
+                 MOVE 100 TO RETURN-CODE
+                 GO TO AZ-FIN-PROG.
+
+           MOVE 'RDULE'        TO CIC-COMMAND.
+           CALL 'DBNTRY' USING UIB
+                               REQ-AREA-CIC
+                               WA-CIC
+                               ELEM-LIST-CIC.
+
+           IF CIC-RET-COD NOT = SPACES OR
+              CIC-CAI-ICIC NOT = '1300'
+                 DISPLAY '******************************************'
+                 DISPLAY 'SGCPGES7. ERROR AL LEER TABLA CIC, STATUS ='
+                         CIC-RET-COD
+                 DISPLAY 'SGCPGES7. PROGRAMA CANCELADO'
+                 DISPLAY '******************************************'
+                 PERFORM D-TERMINAR
+                 MOVE 100 TO RETURN-CODE
+                 GO TO AZ-FIN-PROG.
+
+      *
+      * SE RECUPERO LA SEMILLA Y SE REGRABA LA TABLA CIC CON
+      * EL NUEVO VALOR.
+      *
+           ADD 1               TO CIC-NUM-ICIC.
+           MOVE '1300'         TO WK-CAI-ASG.
+           MOVE CIC-NUM-ICIC   TO WK-COD-CRR.
+           MOVE 'UPDAT'        TO CIC-COMMAND.
+           CALL 'DBNTRY' USING UIB
+                               REQ-AREA-CIC
+                               WA-CIC
+                               ELEM-LIST-CIC.
+
+           IF CIC-RET-COD NOT = SPACES
+                 DISPLAY '******************************************'
+                 DISPLAY 'SGCPGES7. ERROR AL REGR.TABLA CIC, STATUS ='
+                         CIC-RET-COD
+                 DISPLAY 'SGCPGES7. PROGRAMA CANCELADO'
+                 DISPLAY '******************************************'
+                 PERFORM D-TERMINAR
+                 MOVE 100 TO RETURN-CODE
+                 GO TO AZ-FIN-PROG.
+
+       CE-GRABAR-ACB.
+           MOVE W-RUT-FON-TIT TO OBC-RUT-TIT-1.
+           MOVE W-RUT-FON-SEC TO OBC-RUT-TIT-2.
+           MOVE W-NUM-FON     TO OBC-TIP-FON.
+           MOVE W-NUM-CTA     TO OBC-NUM-CTA.
+           MOVE W-DV-FON-TIT  TO OBC-VRT-TIT-1.
+           MOVE W-DV-FON-SEC  TO OBC-VRT-TIT-2.
+           MOVE '1300'        TO OBC-NUM-SIS.
+           MOVE WK-COD-CRR    TO OBC-COD-CRR.
+           MOVE WS-FECHA      TO ACB-FEC-ING.
+           MOVE 'ADDIT'       TO ACB-COMMAND.
+           CALL 'DBNTRY' USING UIB
+                               REQ-AREA-ACB
+                               WA-ACB
+                               ELEM-LIST-ACB.
+
+           IF ACB-RET-COD NOT = SPACES
+                 DISPLAY '******************************************'
+                 DISPLAY 'SGCPGES7. ERROR AL GRABAR TABLA ACB,STATUS= '
+                          ACB-RET-COD
+                 DISPLAY 'SGCPGES7. PROGRAMA CANCELADO'
+                 DISPLAY '******************************************'
+                 PERFORM D-TERMINAR
+                 MOVE 100 TO RETURN-CODE
+                 GO TO AZ-FIN-PROG.
+           ADD 1 TO W-CONT-ACB-C.
+
+       CF-RUT-MAY-100MILL.
+
+           MOVE WK-RUT-9       TO TAB-RUT-CTB.
+           MOVE WK-DIG-VER     TO TAB-VRT-CTB.
+           MOVE 'REDKY'        TO TAB-COMMAND.
+           CALL 'DBNTRY' USING UIB
+                               REQ-AREA-TAB
+                               WA-TAB
+                               ELEM-LIST-TAB.
+
+           IF TAB-RET-COD NOT = SPACES
+              IF WK-TIT = 0
+                 MOVE 0         TO WK-RUT-TIT-8
+              ELSE
+                 MOVE 0         TO WK-RUT-SEC-8
+              MOVE TAB-GLS-DATA TO WK-SEP-RUT-8
+              IF WK-TIT = 0
+                 MOVE WK-SEP-8  TO WK-RUT-TIT-8
+                 MOVE WK-SEP-1  TO WK-VRT-TIT-8
+              ELSE
+                 MOVE WK-SEP-8  TO WK-RUT-SEC-8
+                 MOVE WK-SEP-1  TO WK-VRT-SEC-8.
+
+       CG-PROCESAR-RUT-TRB.
+
+           PERFORM CI-LEER-DBC.
+           IF DBC-RET-COD = SPACES AND DBC-VRF-ICLI = WK-DIG-VER
+              ADD 1 TO W-CONT-DBC
+              PERFORM CC-PROCESO-ACB
+              PERFORM CJ-GENERA-SORT.
+
+       CH-LEER-BANCRED.
+           READ BANCRED NEXT RECORD.
+           IF FS-BANCRED = '00'
+              ADD 1 TO W-CONT-BANCRED
+           ELSE
+              IF FS-BANCRED NOT = '10'
+                 DISPLAY '*****************************************'
+                 DISPLAY 'SGCPGES7. ERROR AL LEER BANCRED, STATUS= '
+                          FS-BANCRED
+                 DISPLAY 'SGCPGES7. PROGRAMA CANCELADO'
+                 DISPLAY '*****************************************'
+                 PERFORM D-TERMINAR
+                 MOVE 100 TO RETURN-CODE
+                 GO TO AZ-FIN-PROG.
+
+       CI-LEER-DBC.
+           MOVE WK-RUT-TRB     TO DBC-RUT.
+           MOVE SPACES         TO DBC-IND DBC-GLS.
+
+           MOVE 'REDKY'        TO DBC-COMMAND.
+           CALL 'DBNTRY' USING UIB
+                               REQ-AREA-DBC
+                               WA-DBC
+                               ELEM-LIST-DBC.
+
+        CJ-GENERA-SORT.
+           MOVE DBC-CIC-ICLI     TO SD-CIC-ICLI.
+           MOVE WK-CIC-OPE       TO SD-CIC-IOPE.
+           MOVE DBC-NUM-DCOR     TO SD-NUM-DIRE.
+           MOVE W-NUM-FON        TO WS-COD-AOPR.
+           MOVE WS-COD-AOPR      TO SD-COD-AOPR.
+           MOVE W-MOV-CUOTA      TO SD-MONTO.
+           MOVE W-TIPO-OPERACION TO SD-OPERACION.
+           MOVE SPACES           TO SD-CIC-ICLI-2
+           MOVE ZEROES           TO SD-NUM-DIRE-2.
+
+           IF WK-RUT-SEC-8 > 0 AND WK-RUT-SEC-8 NOT = WK-RUT-TIT-8
+              MOVE WK-RUT-SEC-8    TO WK-RUT-TRB
+              MOVE WK-VRT-SEC-8    TO WK-DIG-VER
+              PERFORM CI-LEER-DBC
+              IF DBC-RET-COD = SPACES AND DBC-VRF-ICLI = WK-DIG-VER
+                 IF SD-CIC-ICLI NOT = DBC-CIC-ICLI
+                    ADD 1 TO W-CONT-DBC
+                    MOVE DBC-CIC-ICLI TO SD-CIC-ICLI-2
+                    MOVE DBC-NUM-DCOR TO SD-NUM-DIRE-2.
+
+           RELEASE REG-FSORT.
+           ADD  1                TO W-CONT-SORT-GRABAD.
+
+       CZ-FIN-SECCION-INPUT.
+           EXIT.
+       EJECT
+       C-PROC-PRINC-OUTPUT SECTION.
+       C-START-OPE.
+           MOVE '130000000000'            TO OPE-CIC-OPE.
+
+           MOVE 'GSETL'                   TO OPE-COMMAND.
+           CALL 'DBNTRY'  USING UIB
+                                REQ-AREA-OPE
+                                WA-OPE
+                                ELEM-LIST-OPE.
+
+           IF OPE-RET-COD NOT = SPACES
+                 DISPLAY '******************************************'
+                 DISPLAY 'SGCPGES7. ERROR AL POSESIONAR OPE, STATUS= '
+                         OPE-RET-COD
+                 DISPLAY 'SGCPGES7. PROGRAMA CANCELADO'
+                 DISPLAY '******************************************'
+                 PERFORM D-TERMINAR
+                 MOVE 100 TO RETURN-CODE
+                 GO TO AZ-FIN-PROG.
+
+           PERFORM CK-LEER-OPE.
+           PERFORM CL-LEER-SORT.
+           PERFORM CM-LOOP-PRINC UNTIL FIN-SD = 1 OR
+                   OPE-CAI-IOPE IN WA-OPE NOT = '1300' OR
+                   OPE-RET-COD NOT = SPACES.
+           IF FIN-SD = 0 AND (OPE-RET-COD NOT = SPACES OR
+                              OPE-CAI-IOPE IN WA-OPE NOT = '1300')
+              PERFORM CQ-GRABAR-CREAC-MOVTO UNTIL FIN-SD = 1
+           ELSE
+              IF FIN-SD = 1 AND (OPE-RET-COD = SPACES AND
+                              OPE-CAI-IOPE IN WA-OPE = '1300') AND
+                              CARGA-INIC = 'S'
+              PERFORM CP-GRABAR-DESAC-MOVTO UNTIL
+                              OPE-CAI-IOPE IN WA-OPE NOT = '1300' OR
+                              OPE-RET-COD NOT = SPACES.
+
+           GO TO CZ-FIN-SECCION-OUTPUT.
+
+       CK-LEER-OPE.
+           MOVE 'GETIT'                   TO OPE-COMMAND.
+           CALL 'DBNTRY'  USING UIB
+                                REQ-AREA-OPE
+                                WA-OPE
+                                ELEM-LIST-OPE.
+           IF OPE-RET-COD = SPACES
+              ADD 1 TO W-CONT-OPE.
+
+       CL-LEER-SORT.
+           RETURN FSORT AT END MOVE 1 TO FIN-SD.
+           IF FIN-SD = 0
+              ADD 1 TO W-CONT-SORT-LEIDOS.
+
+       CM-LOOP-PRINC.
+           IF SD-CIC-IOPE < OPE-CIC-IOPE IN WA-OPE
+              PERFORM CN-GRABAR-CREACIONES
+              PERFORM CL-LEER-SORT
+           ELSE
+              IF SD-CIC-IOPE = OPE-CIC-IOPE IN WA-OPE
+                 PERFORM CO-MODIFIC-ACTIV
+                 MOVE SD-CIC-IOPE TO WK-OPE-SD-ANT
+                 PERFORM CL-LEER-SORT
+                 IF SD-CIC-IOPE NOT = WK-OPE-SD-ANT
+                    PERFORM CK-LEER-OPE
+                 ELSE
+                    NEXT SENTENCE
+              ELSE
+                 IF CARGA-INIC = 'S'
+                    PERFORM CP-GRABAR-DESAC-MOVTO
+                 ELSE
+                    PERFORM CK-LEER-OPE.
+
+       CN-GRABAR-CREACIONES.
+           PERFORM CN1-GRABAR-CREAC-RCO.
+           PERFORM CN2-GRABAR-CREAC-OPE.
+           PERFORM CN3-GRABAR-CREAC-VAR.
+           IF SD-CIC-ICLI-2 > SPACES
+              PERFORM CN4-GRABAR-CREAC-RCO
+              PERFORM CN5-GRABAR-MODIF-OPE.
+
+       CN1-GRABAR-CREAC-RCO.
+           MOVE SPACES                    TO GESRMRC.
+           MOVE 'C'                       TO MRC-COD-OPER.
+           MOVE SD-CIC-ICLI               TO MRC-CIC-ICLI.
+           MOVE SD-CIC-IOPE               TO MRC-CIC-IOPE.
+           MOVE WS-FECHA                  TO MRC-FEC-FTRN.
+           ACCEPT TIME-OF-DAY FROM TIME
+           MOVE TIME-OF-DAY               TO MRC-HRA-HTRN.
+           MOVE 'I'                       TO MRC-MSC-TACC
+           MOVE 'A'                       TO MRC-MSC-STAT.
+           MOVE 'B'                       TO MRC-MSC-TTRN.
+           MOVE SPACES                    TO MRC-COD-TTRN.
+           MOVE 'SGCPGES7'                TO MRC-COD-ATRN.
+           MOVE 'VIG'                     TO MRC-COD-STAT.
+           MOVE 'TIT'                     TO MRC-COD-RCOP.
+           MOVE SD-NUM-DIRE               TO MRC-NUM-DIRE.
+           MOVE 100                       TO MRC-VAL-PRCO.
+           MOVE 'BCD'                     TO MRC-COD-TOPR.
+           MOVE SD-COD-AOPR               TO MRC-COD-AOPR.
+           MOVE SPACES                    TO MRC-COD-EST-ACT.
+           MOVE 0 TO WS-STATUS.
+           WRITE GESRMRC INVALID KEY
+                 MOVE 1 TO WS-STATUS.
+
+           IF WS-STATUS = 0
+              ADD  1                      TO W-CONT-MOVRCO.
+
+       CN2-GRABAR-CREAC-OPE.
+           MOVE SPACES                    TO GESRMOP.
+           MOVE 'C'                       TO MOP-COD-OPER.
+           MOVE SD-CIC-IOPE               TO MOP-CIC-IOPE.
+           MOVE WS-FECHA                  TO MOP-FEC-FTRN.
+           ACCEPT TIME-OF-DAY FROM TIME
+           MOVE TIME-OF-DAY               TO MOP-HRA-HRTR.
+           MOVE 'I'                       TO MOP-MSC-TACC.
+           MOVE 'A'                       TO MOP-MSC-STAT.
+           MOVE 'B'                       TO MOP-MSC-TTRN.
+           MOVE SPACES                    TO MOP-COD-TTRN.
+           MOVE 'SGCPGES7'                TO MOP-COD-ATRN.
+           MOVE 'VIG'                     TO MOP-COD-STAT.
+           SET IND                        TO 1.
+           SEARCH TAB-MON
+                  AT END MOVE SPACES      TO MOP-COD-VCOP
+                  WHEN SD-COD-AOPR = TAB-MONEDA (IND)
+                  MOVE TAB-CODMON (IND)   TO MOP-COD-VCOP.
+           MOVE 'BCD'                     TO MOP-COD-TOPR.
+           MOVE SD-COD-AOPR               TO MOP-COD-AOPR.
+           MOVE 'E01'                     TO MOP-COD-OFOP.
+           MOVE 'BANCRED'                 TO MOP-COD-EJOP.
+           MOVE WS-FECHA                  TO MOP-FEC-FIOP.
+           MOVE ZEROES                    TO MOP-FEC-FTOP.
+           MOVE ZEROES                    TO MOP-FEC-FROP.
+           MOVE SPACES                    TO MOP-IND-MCLI
+                                             MOP-COD-MOTT
+                                             MOP-COD-PDT
+                                             MOP-COD-FCN
+                                             MOP-COD-PZO
+                                             MOP-COD-AGE-1
+                                             MOP-NUM-SIS-1
+                                             MOP-COD-CRR-1
+                                             MOP-NUM-SIS-2
+                                             MOP-COD-CRR-2
+                                             MOP-TIP-TAS.
+           MOVE ZEROES                    TO MOP-TAS.
+           MOVE SPACES                    TO MOP-COD-1
+                                             MOP-COD-2
+                                             MOP-COD-3
+                                             MOP-IND-1.
+           MOVE SPACES                    TO MOP-COD-EJE-1.
+           MOVE ZEROES                    TO MOP-FEC-1
+                                             MOP-VAL-1.
+           MOVE SPACES                    TO MOP-COD-EST-ACT.
+           MOVE 0                         TO WS-STATUS.
+           WRITE GESRMOP INVALID KEY
+                MOVE 1                 TO WS-STATUS.
+
+           IF WS-STATUS = 0
+              ADD  1                      TO W-CONT-MOVOPE.
+
+       CN3-GRABAR-CREAC-VAR.
+           MOVE SPACES                    TO GESRMVA.
+           MOVE 'C'                       TO MVA-COD-OPER.
+           MOVE SD-CIC-IOPE               TO MVA-CIC-IOPE.
+           MOVE WS-FECHA                  TO MVA-FEC-VIG.
+           MOVE '0'                       TO MVA-NUM-SEC.
+           MOVE WS-FECHA                  TO MVA-FEC-ULT-MOV.
+           IF SD-OPERACION = 'IN' OR 'TD' OR 'SI'
+              COMPUTE MVA-VAL-VAR-1 ROUNDED = SD-MONTO.
+           IF SD-OPERACION = 'RE' OR 'TO'
+              COMPUTE MVA-VAL-VAR-1 ROUNDED = SD-MONTO * -1.
+           MOVE ZEROES                    TO MVA-VAL-VAR-2
+                                             MVA-VAL-VAR-3
+                                             MVA-VAL-VAR-4
+                                             MVA-VAL-VAR-5
+                                             MVA-VAL-VAR-6
+                                             MVA-TAS-VAR-1
+                                             MVA-TAS-VAR-2
+                                             MVA-CTD-VAR-1
+                                             MVA-CTD-VAR-2
+                                             MVA-CTD-VAR-3
+                                             MVA-CTD-VAR-4.
+           MOVE SPACES                    TO MVA-COD-VAR-1
+                                             MVA-COD-VAR-2.
+           MOVE ZEROES                    TO MVA-FEC-VAR-1
+                                             MVA-FEC-VAR-2.
+           MOVE WS-FECHA                  TO MVA-FEC-ULT-ACT.
+           MOVE 'V'                       TO MVA-COD-EST.
+           MOVE SPACES                    TO MVA-COD-EST-ACT.
+           MOVE 0                         TO WS-STATUS.
+           WRITE GESRMVA INVALID KEY
+              PERFORM CN3A-REGRABAR-VAR.
+
+           IF WS-STATUS = 0
+              ADD  1                      TO W-CONT-MOVVAR.
+
+       CN3A-REGRABAR-VAR.
+           MOVE 1 TO WS-STATUS.
+           IF FS-MOVVAR = '22'
+              MOVE 'C' TO MVA-COD-OPER
+              PERFORM CR-REGRABAR-VAR
+           ELSE
+              DISPLAY '******************************************'
+              DISPLAY 'SGCPGES7. ERROR AL GRABAR MOVVAR, STATUS= '
+                      FS-MOVVAR ' EN CREACION'
+              DISPLAY 'SGCPGES7. CLAVE = ' MVA-CLAVE
+              DISPLAY 'SGCPGES7. REGISTRO NO CONSIDERADO'
+              DISPLAY '******************************************'.
+
+       CN4-GRABAR-CREAC-RCO.
+           MOVE SPACES                    TO GESRMRC.
+           MOVE 'C'                       TO MRC-COD-OPER.
+           MOVE SD-CIC-ICLI-2             TO MRC-CIC-ICLI.
+           MOVE SD-CIC-IOPE               TO MRC-CIC-IOPE.
+           MOVE WS-FECHA                  TO MRC-FEC-FTRN.
+           ACCEPT TIME-OF-DAY FROM TIME
+           MOVE TIME-OF-DAY               TO MRC-HRA-HTRN.
+           MOVE 'I'                       TO MRC-MSC-TACC
+           MOVE 'A'                       TO MRC-MSC-STAT.
+           MOVE 'B'                       TO MRC-MSC-TTRN.
+           MOVE SPACES                    TO MRC-COD-TTRN.
+           MOVE 'SGCPGES7'                TO MRC-COD-ATRN.
+           MOVE 'VIG'                     TO MRC-COD-STAT.
+           MOVE 'TIT'                     TO MRC-COD-RCOP.
+           MOVE SD-NUM-DIRE-2             TO MRC-NUM-DIRE.
+           MOVE 100                       TO MRC-VAL-PRCO.
+           MOVE 'BCD'                     TO MRC-COD-TOPR.
+           MOVE SD-COD-AOPR               TO MRC-COD-AOPR.
+           MOVE SPACES                    TO MRC-COD-EST-ACT.
+           MOVE 0 TO WS-STATUS.
+           WRITE GESRMRC INVALID KEY
+                 MOVE 1 TO WS-STATUS.
+
+           IF WS-STATUS = 0
+              ADD  1                      TO W-CONT-MOVRCO.
+
+       CN5-GRABAR-MODIF-OPE.
+           MOVE SPACES                    TO GESRMOP.
+           MOVE 'M'                       TO MOP-COD-OPER.
+           MOVE SD-CIC-IOPE               TO MOP-CIC-IOPE.
+           MOVE WS-FECHA                  TO MOP-FEC-FTRN.
+           ACCEPT TIME-OF-DAY FROM TIME
+           MOVE TIME-OF-DAY               TO MOP-HRA-HRTR.
+           MOVE 'M'                       TO MOP-MSC-TACC.
+           MOVE 'A'                       TO MOP-MSC-STAT.
+           MOVE 'B'                       TO MOP-MSC-TTRN.
+           MOVE SPACES                    TO MOP-COD-TTRN.
+           MOVE 'SGCPGES7'                TO MOP-COD-ATRN.
+           MOVE 'VIG'                     TO MOP-COD-STAT.
+           SET IND                        TO 1.
+           SEARCH TAB-MON
+                  AT END MOVE SPACES      TO MOP-COD-VCOP
+                  WHEN SD-COD-AOPR = TAB-MONEDA (IND)
+                  MOVE TAB-CODMON (IND)   TO MOP-COD-VCOP.
+           MOVE 'BCD'                     TO MOP-COD-TOPR.
+           MOVE SD-COD-AOPR               TO MOP-COD-AOPR.
+           MOVE 'E01'                     TO MOP-COD-OFOP.
+           MOVE 'BANCRED'                 TO MOP-COD-EJOP.
+           MOVE WS-FECHA                  TO MOP-FEC-FIOP.
+           MOVE ZEROES                    TO MOP-FEC-FTOP.
+           MOVE ZEROES                    TO MOP-FEC-FROP.
+           MOVE 'MC'                      TO MOP-IND-MCLI.
+           MOVE SPACES                    TO MOP-COD-MOTT
+                                             MOP-COD-PDT
+                                             MOP-COD-FCN
+                                             MOP-COD-PZO
+                                             MOP-COD-AGE-1
+                                             MOP-NUM-SIS-1
+                                             MOP-COD-CRR-1
+                                             MOP-NUM-SIS-2
+                                             MOP-COD-CRR-2
+                                             MOP-TIP-TAS.
+           MOVE ZEROES                    TO MOP-TAS.
+           MOVE SPACES                    TO MOP-COD-1
+                                             MOP-COD-2
+                                             MOP-COD-3
+                                             MOP-IND-1.
+           MOVE SPACES                    TO MOP-COD-EJE-1.
+           MOVE ZEROES                    TO MOP-FEC-1
+                                             MOP-VAL-1.
+           MOVE SPACES                    TO MOP-COD-EST-ACT.
+           MOVE 0                         TO WS-STATUS.
+           WRITE GESRMOP INVALID KEY
+                MOVE 1                 TO WS-STATUS.
+
+           IF WS-STATUS = 0
+              ADD  1                      TO W-CONT-MOVOPE.
+
+       CO-MODIFIC-ACTIV.
+           PERFORM CP0-LEER-RCO.
+           PERFORM CO-MODIF-ACTIV-RCO UNTIL RCO-RET-COD NOT = SPACES
+                   OR OPE-KEY-IOPE NOT = RCO-KEY-IOPE.
+           PERFORM CO-MODIF-ACTIV-OPE.
+           PERFORM CO-MODIF-ACTIV-VAR.
+
+       CO-MODIF-ACTIV-RCO.
+           MOVE SPACES                    TO GESRMRC.
+           IF RCO-COD-STAT = 'DES'
+              MOVE 'A'                    TO MRC-COD-OPER
+           ELSE
+              MOVE 'M'                    TO MRC-COD-OPER.
+           MOVE RCO-CIC-ICLI              TO MRC-CIC-ICLI.
+           MOVE OPE-CIC-IOPE              TO MRC-CIC-IOPE.
+           MOVE WS-FECHA                  TO MRC-FEC-FTRN.
+           ACCEPT TIME-OF-DAY FROM TIME
+           MOVE TIME-OF-DAY               TO MRC-HRA-HTRN.
+           MOVE 'I'                       TO MRC-MSC-TACC
+           MOVE 'A'                       TO MRC-MSC-STAT.
+           MOVE 'B'                       TO MRC-MSC-TTRN.
+           MOVE SPACES                    TO MRC-COD-TTRN.
+           MOVE 'SGCPGES7'                TO MRC-COD-ATRN.
+           MOVE 'VIG'                     TO MRC-COD-STAT.
+           MOVE 'TIT'                     TO MRC-COD-RCOP.
+           MOVE RCO-NUM-DIRE              TO MRC-NUM-DIRE.
+           MOVE 100                       TO MRC-VAL-PRCO.
+           MOVE 'BCD'                     TO MRC-COD-TOPR.
+           MOVE RCO-COD-AOPR              TO MRC-COD-AOPR.
+           MOVE 0                         TO WS-STATUS.
+
+           WRITE GESRMRC.
+           IF FS-MOVRCO = '00'
+              NEXT SENTENCE
+           ELSE
+              IF FS-MOVRCO = '22'
+                 PERFORM CO-REGRABAR-RCO
+              ELSE
+                DISPLAY '******************************************'
+                DISPLAY 'CO-MODIFIC-ACTIV.'
+                DISPLAY 'SGCPGES7. ERROR AL GRABAR MOVRCO, STATUS= '
+                         FS-MOVRCO
+                DISPLAY 'SGCPGES7. CLAVE = ' MRC-CLAVE
+                DISPLAY 'SGCPGES7. REGISTRO NO CONSIDERADO'
+                DISPLAY 'SGCPGES7. PROCESO CANCELADO'
+                DISPLAY '******************************************'
+                GO TO AZ-FIN-PROG.
+
+           IF WS-STATUS = 0
+              ADD  1                      TO W-CONT-MOVRCO.
+
+           PERFORM CP0-LEER-SGTE-RCO.
+
+       CO-REGRABAR-RCO.
+           IF RCO-COD-STAT = 'DES'
+              MOVE 'A'                    TO MRC-COD-OPER
+           ELSE
+              MOVE 'M'                    TO MRC-COD-OPER.
+           MOVE RCO-CIC-ICLI              TO MRC-CIC-ICLI.
+           MOVE OPE-CIC-IOPE              TO MRC-CIC-IOPE.
+           MOVE WS-FECHA                  TO MRC-FEC-FTRN.
+           READ MOVRCO INVALID KEY
+                DISPLAY 'CO-REGRABAR-RCO.'
+                DISPLAY '******************************************'
+                DISPLAY 'SGCPGES7. ERROR AL LEER MOVRCO, STATUS= '
+                        FS-MOVRCO
+                DISPLAY 'SGCPGES7. CLAVE = ' MRC-CLAVE
+                DISPLAY 'SGCPGES7. REGISTRO NO CONSIDERADO'
+                DISPLAY 'SGCPGES7. PROCESO CANCELADO'
+                DISPLAY '******************************************'
+                GO TO AZ-FIN-PROG.
+
+           MOVE RCO-NUM-DIRE              TO MRC-NUM-DIRE.
+           REWRITE GESRMRC INVALID KEY
+                   MOVE 1                 TO WS-STATUS.
+
+       CO-MODIF-ACTIV-OPE.
+           MOVE SPACES                    TO GESRMOP.
+           IF OPE-COD-STAT = 'DES'
+              MOVE 'A'                    TO MOP-COD-OPER
+           ELSE
+              MOVE 'M'                    TO MOP-COD-OPER.
+           MOVE OPE-CIC-IOPE              TO MOP-CIC-IOPE.
+           MOVE WS-FECHA                  TO MOP-FEC-FTRN.
+           ACCEPT TIME-OF-DAY FROM TIME
+           MOVE TIME-OF-DAY               TO MOP-HRA-HRTR.
+           MOVE 'I'                       TO MOP-MSC-TACC.
+           MOVE 'A'                       TO MOP-MSC-STAT.
+           MOVE 'B'                       TO MOP-MSC-TTRN.
+           MOVE SPACES                    TO MOP-COD-TTRN.
+           MOVE 'SGCPGES7'                TO MOP-COD-ATRN.
+           MOVE 'VIG'                     TO MOP-COD-STAT.
+           SET IND                        TO 1.
+           SEARCH TAB-MON
+                  AT END MOVE SPACES      TO MOP-COD-VCOP
+                  WHEN OPE-COD-AOPR = TAB-MONEDA (IND)
+                  MOVE TAB-CODMON (IND)   TO MOP-COD-VCOP.
+           MOVE 'BCD'                     TO MOP-COD-TOPR.
+           MOVE OPE-COD-AOPR              TO MOP-COD-AOPR.
+           MOVE 'E01'                     TO MOP-COD-OFOP.
+           MOVE 'BANCRED'                 TO MOP-COD-EJOP.
+           MOVE OPE-FEC-FIOP              TO MOP-FEC-FIOP.
+           MOVE WS-FECHA                  TO MOP-FEC-FTOP.
+           MOVE ZEROES                    TO MOP-FEC-FROP.
+           MOVE SPACES                    TO MOP-COD-MOTT
+                                             MOP-COD-PDT
+                                             MOP-COD-FCN
+                                             MOP-COD-PZO
+                                             MOP-COD-AGE-1
+                                             MOP-NUM-SIS-1
+                                             MOP-COD-CRR-1
+                                             MOP-NUM-SIS-2
+                                             MOP-COD-CRR-2
+                                             MOP-TIP-TAS.
+           MOVE ZEROES                    TO MOP-TAS.
+           MOVE SPACES                    TO MOP-COD-1
+                                             MOP-COD-2
+                                             MOP-COD-3
+                                             MOP-IND-1.
+           MOVE SPACES                    TO MOP-COD-EJE-1.
+           MOVE ZEROES                    TO MOP-FEC-1
+                                             MOP-VAL-1.
+           MOVE SPACES                    TO MOP-COD-EST-ACT.
+           MOVE 0                         TO WS-STATUS.
+
+           WRITE GESRMOP.
+           IF FS-MOVOPE = '00'
+              NEXT SENTENCE
+           ELSE
+              IF FS-MOVOPE = '22'
+                 PERFORM CO-REGRABAR-OPE
+              ELSE
+                 DISPLAY 'CO-MODIF-ACTIV-OPE.'
+                 DISPLAY '******************************************'
+                 DISPLAY 'SGCPGES7. ERROR AL GRABAR MOVOPE, STATUS= '
+                          FS-MOVOPE
+                 DISPLAY 'SGCPGES7. CLAVE = ' MOP-CLAVE
+                 DISPLAY 'SGCPGES7. REGISTRO NO CONSIDERADO'
+                 DISPLAY 'SGCPGES7. PROCESO CANCELADO'
+                 DISPLAY '******************************************'
+                 GO TO AZ-FIN-PROG.
+
+           IF WS-STATUS = 0
+              ADD  1                      TO W-CONT-MOVOPE.
+
+       CO-REGRABAR-OPE.
+           IF OPE-COD-STAT = 'DES'
+              MOVE 'A'                    TO MOP-COD-OPER
+           ELSE
+              MOVE 'M'                    TO MOP-COD-OPER.
+           MOVE OPE-CIC-IOPE              TO MOP-CIC-IOPE.
+           READ MOVOPE INVALID KEY
+                DISPLAY 'CO-REGRABAR-OPE.'
+                DISPLAY '******************************************'
+                DISPLAY 'SGCPGES7. ERROR AL LEER MOVOPE, STATUS= '
+                         FS-MOVOPE
+                DISPLAY 'SGCPGES7. CLAVE = ' MOP-CLAVE
+                DISPLAY 'SGCPGES7. REGISTRO NO CONSIDERADO'
+                DISPLAY 'SGCPGES7. PROCESO CANCELADO'
+                DISPLAY '******************************************'
+                GO TO AZ-FIN-PROG.
+
+           REWRITE GESRMOP INVALID KEY
+                MOVE 1                    TO WS-STATUS.
+
+       CO-MODIF-ACTIV-VAR.
+           MOVE SPACES                    TO OPE-CLV-VAR-1 IN VAR.
+           MOVE SD-CIC-IOPE               TO OPE-COP IN VAR.
+           MOVE WS-FECHA                  TO OPE-FEC-VIG.
+           MOVE '00'                      TO OPE-FD-VIG.
+           MOVE '0'                       TO OPE-NUM-SEC.
+           MOVE OPE-CLV-VAR-1 IN VAR      TO VAR-CLV-VAR.
+           MOVE 'REDKY'                   TO VAR-COMMAND.
+           CALL 'DBNTRY'  USING UIB
+                                REQ-AREA-VAR
+                                WA-VAR
+                                ELEM-LIST-VAR.
+
+           IF VAR-RET-COD = SPACES
+              PERFORM CO-CHEQUEA-STATUS
+              MOVE SD-CIC-IOPE            TO MVA-CIC-IOPE
+              MOVE WS-FECHA               TO MVA-FEC-VIG
+              MOVE '0'                    TO MVA-NUM-SEC
+              MOVE WS-FECHA               TO MVA-FEC-ULT-MOV
+              PERFORM CO1-CALCULO-VALOR
+              MOVE ZEROES                 TO MVA-VAL-VAR-2
+                                             MVA-VAL-VAR-3
+                                             MVA-VAL-VAR-4
+                                             MVA-VAL-VAR-5
+                                             MVA-VAL-VAR-6
+                                             MVA-TAS-VAR-1
+                                             MVA-TAS-VAR-2
+                                             MVA-CTD-VAR-1
+                                             MVA-CTD-VAR-2
+                                             MVA-CTD-VAR-3
+                                             MVA-CTD-VAR-4
+              MOVE SPACES                 TO MVA-COD-VAR-1
+                                             MVA-COD-VAR-2
+              MOVE ZEROES                 TO MVA-FEC-VAR-1
+                                             MVA-FEC-VAR-2
+              MOVE WS-FECHA               TO MVA-FEC-ULT-ACT
+              MOVE 'V'                    TO MVA-COD-EST
+              MOVE SPACES                 TO MVA-COD-EST-ACT
+              MOVE 0                      TO WS-STATUS
+              WRITE GESRMVA INVALID KEY
+                 PERFORM COA-REGRABAR-VAR
+           ELSE
+              PERFORM CN3-GRABAR-CREAC-VAR.
+
+           IF WS-STATUS = 0
+              ADD  1                      TO W-CONT-MOVVAR.
+
+       COA-REGRABAR-VAR.
+           MOVE 1 TO WS-STATUS.
+           IF FS-MOVVAR = '22'
+              PERFORM CO-CHEQUEA-STATUS
+              PERFORM CR-REGRABAR-VAR
+           ELSE
+              DISPLAY '******************************************'
+              DISPLAY 'SGCPGES7. ERROR AL GRABAR MOVVAR, STATUS= '
+                       FS-MOVVAR ' EN MODIFIC.'
+              DISPLAY 'SGCPGES7. CLAVE = ' MVA-CLAVE
+              DISPLAY 'SGCPGES7. REGISTRO NO CONSIDERADO'
+              DISPLAY '******************************************'.
+
+       CO1-CALCULO-VALOR.
+           IF CARGA-INIC = 'S'
+              MOVE ZEROES TO OPE-VAL-VAR-1.
+           IF SD-OPERACION = 'IN' OR 'TD' OR 'SI'
+              COMPUTE MVA-VAL-VAR-1 ROUNDED = OPE-VAL-VAR-1 + SD-MONTO.
+           IF SD-OPERACION = 'RE' OR 'TO'
+              COMPUTE MVA-VAL-VAR-1 ROUNDED = OPE-VAL-VAR-1 - SD-MONTO.
+
+       CO-CHEQUEA-STATUS.
+           IF OPE-COD-STAT = 'DES'
+              MOVE 'A'                    TO MVA-COD-OPER
+           ELSE
+              MOVE 'M'                    TO MVA-COD-OPER.
+
+       CP-GRABAR-DESAC-MOVTO.
+           PERFORM CP-GRABAR-DESACTIVACIONES.
+           PERFORM CK-LEER-OPE.
+
+       CP-GRABAR-DESACTIVACIONES.
+           PERFORM CP0-LEER-RCO.
+           PERFORM CP1-GRABAR-DESAC-RCO UNTIL RCO-RET-COD NOT = SPACES
+                   OR RCO-KEY-IOPE NOT = OPE-KEY-IOPE.
+           PERFORM CP2-GRABAR-DESAC-OPE.
+           PERFORM CP3-GRABAR-DESAC-VAR.
+
+       CP0-LEER-RCO.
+           MOVE OPE-KEY-IOPE   TO RCO-VALUE.
+           MOVE 'REDKY'        TO RCO-COMMAND.
+           CALL 'DBNTRY' USING UIB
+                               REQ-AREA-RCO
+                               WA-RCO
+                               ELEM-LIST-RCO.
+
+       CP0-LEER-SGTE-RCO.
+           MOVE 'REDNX'        TO RCO-COMMAND.
+           CALL 'DBNTRY' USING UIB
+                               REQ-AREA-RCO
+                               WA-RCO
+                               ELEM-LIST-RCO.
+
+       CP1-GRABAR-DESAC-RCO.
+           MOVE SPACES                    TO GESRMRC.
+           MOVE 'D'                       TO MRC-COD-OPER.
+           MOVE RCO-CIC-ICLI              TO MRC-CIC-ICLI.
+           MOVE OPE-CIC-IOPE              TO MRC-CIC-IOPE.
+           MOVE WS-FECHA                  TO MRC-FEC-FTRN.
+           ACCEPT TIME-OF-DAY FROM TIME
+           MOVE TIME-OF-DAY               TO MRC-HRA-HTRN.
+           MOVE 'D'                       TO MRC-MSC-TACC
+           MOVE 'E'                       TO MRC-MSC-STAT.
+           MOVE 'B'                       TO MRC-MSC-TTRN.
+           MOVE SPACES                    TO MRC-COD-TTRN.
+           MOVE 'SGCPGES7'                TO MRC-COD-ATRN.
+           MOVE 'DES'                     TO MRC-COD-STAT.
+           MOVE 'TIT'                     TO MRC-COD-RCOP.
+           MOVE RCO-NUM-DIRE              TO MRC-NUM-DIRE.
+           MOVE 100                       TO MRC-VAL-PRCO.
+           MOVE 'BCD'                     TO MRC-COD-TOPR.
+           MOVE RCO-COD-AOPR              TO MRC-COD-AOPR.
+           MOVE 0 TO WS-STATUS.
+           IF RCO-COD-STAT IN WA-RCO NOT = 'VIG'
+              MOVE 1                      TO WS-STATUS
+           ELSE
+              WRITE GESRMRC INVALID KEY
+                    MOVE 1                TO WS-STATUS.
+
+           IF WS-STATUS = 0
+              ADD  1                      TO W-CONT-MOVRCO.
+
+           PERFORM CP0-LEER-SGTE-RCO.
+
+       CP2-GRABAR-DESAC-OPE.
+           MOVE SPACES                    TO GESRMOP.
+           MOVE 'D'                       TO MOP-COD-OPER.
+           MOVE OPE-CIC-IOPE              TO MOP-CIC-IOPE.
+           MOVE WS-FECHA                  TO MOP-FEC-FTRN.
+           ACCEPT TIME-OF-DAY FROM TIME
+           MOVE TIME-OF-DAY               TO MOP-HRA-HRTR.
+           MOVE 'D'                       TO MOP-MSC-TACC.
+           MOVE 'E'                       TO MOP-MSC-STAT.
+           MOVE 'B'                       TO MOP-MSC-TTRN.
+           MOVE SPACES                    TO MOP-COD-TTRN.
+           MOVE 'SGCPGES7'                TO MOP-COD-ATRN.
+           MOVE 'DES'                     TO MOP-COD-STAT.
+           SET IND                        TO 1.
+           SEARCH TAB-MON
+                  AT END MOVE SPACES      TO MOP-COD-VCOP
+                  WHEN OPE-COD-AOPR = TAB-MONEDA (IND)
+                  MOVE TAB-CODMON (IND)   TO MOP-COD-VCOP.
+           MOVE 'BCD'                     TO MOP-COD-TOPR.
+           MOVE OPE-COD-AOPR              TO MOP-COD-AOPR.
+           MOVE 'E01'                     TO MOP-COD-OFOP.
+           MOVE 'BANCRED'                 TO MOP-COD-EJOP.
+           MOVE OPE-FEC-FIOP              TO MOP-FEC-FIOP.
+           MOVE WS-FECHA                  TO MOP-FEC-FTOP.
+           MOVE ZEROES                    TO MOP-FEC-FROP.
+           MOVE SPACES                    TO MOP-COD-MOTT
+                                             MOP-COD-PDT
+                                             MOP-COD-FCN
+                                             MOP-COD-PZO
+                                             MOP-COD-AGE-1
+                                             MOP-NUM-SIS-1
+                                             MOP-COD-CRR-1
+                                             MOP-NUM-SIS-2
+                                             MOP-COD-CRR-2
+                                             MOP-TIP-TAS.
+           MOVE ZEROES                    TO MOP-TAS.
+           MOVE SPACES                    TO MOP-COD-1
+                                             MOP-COD-2
+                                             MOP-COD-3
+                                             MOP-IND-1.
+           MOVE SPACES                    TO MOP-COD-EJE-1.
+           MOVE ZEROES                    TO MOP-FEC-1
+                                             MOP-VAL-1.
+           MOVE SPACES                    TO MOP-COD-EST-ACT.
+           MOVE 0                         TO WS-STATUS.
+           IF OPE-COD-STAT IN WA-OPE NOT = 'VIG'
+              MOVE 1                      TO WS-STATUS
+           ELSE
+              WRITE GESRMOP INVALID KEY
+                   MOVE 1                 TO WS-STATUS.
+
+           IF WS-STATUS = 0
+              ADD  1                      TO W-CONT-MOVOPE.
+
+       CP3-GRABAR-DESAC-VAR.
+           MOVE 'D'                       TO MVA-COD-OPER.
+           MOVE OPE-CIC-IOPE              TO MVA-CIC-IOPE.
+           MOVE WS-FECHA                  TO MVA-FEC-VIG.
+           MOVE '0'                       TO MVA-NUM-SEC.
+           MOVE WS-FECHA                  TO MVA-FEC-ULT-MOV.
+           MOVE ZEROES                    TO MVA-VAL-VAR-1
+                                             MVA-VAL-VAR-2
+                                             MVA-VAL-VAR-3
+                                             MVA-VAL-VAR-4
+                                             MVA-VAL-VAR-5
+                                             MVA-VAL-VAR-6
+                                             MVA-TAS-VAR-1
+                                             MVA-TAS-VAR-2
+                                             MVA-CTD-VAR-1
+                                             MVA-CTD-VAR-2
+                                             MVA-CTD-VAR-3
+                                             MVA-CTD-VAR-4.
+           MOVE SPACES                    TO MVA-COD-VAR-1
+                                             MVA-COD-VAR-2.
+           MOVE ZEROES                    TO MVA-FEC-VAR-1
+                                             MVA-FEC-VAR-2.
+           MOVE WS-FECHA                  TO MVA-FEC-ULT-ACT.
+           MOVE 'E'                       TO MVA-COD-EST.
+           MOVE SPACES                    TO MVA-COD-EST-ACT.
+      *
+           MOVE SPACES                    TO OPE-CLV-VAR-1 IN VAR.
+           MOVE OPE-CIC-IOPE              TO OPE-COP IN VAR.
+           MOVE WS-FECHA                  TO OPE-FEC-VIG.
+           MOVE '00'                      TO OPE-FD-VIG.
+           MOVE '0'                       TO OPE-NUM-SEC.
+           MOVE OPE-CLV-VAR-1 IN VAR      TO VAR-CLV-VAR.
+           MOVE 'REDKY'                   TO VAR-COMMAND.
+           CALL 'DBNTRY'  USING UIB
+                                REQ-AREA-VAR
+                                WA-VAR
+                                ELEM-LIST-VAR.
+
+           MOVE 1                         TO WS-STATUS.
+           IF VAR-RET-COD = SPACES
+              IF VAR-COD-EST = 'V'
+      *
+                 MOVE 0                   TO WS-STATUS
+                 WRITE GESRMVA INVALID KEY
+                       MOVE 1             TO WS-STATUS.
+
+           IF WS-STATUS = 0
+              ADD  1                      TO W-CONT-MOVVAR.
+
+       CQ-GRABAR-CREAC-MOVTO.
+           PERFORM CN1-GRABAR-CREAC-RCO.
+           PERFORM CN2-GRABAR-CREAC-OPE.
+           PERFORM CN3-GRABAR-CREAC-VAR.
+           IF SD-CIC-ICLI-2 > SPACES
+              PERFORM CN4-GRABAR-CREAC-RCO
+              PERFORM CN5-GRABAR-MODIF-OPE.
+           PERFORM CL-LEER-SORT.
+
+       CR-REGRABAR-VAR.
+           MOVE SD-CIC-IOPE               TO MVA-CIC-IOPE.
+           MOVE WS-FECHA                  TO MVA-FEC-VIG.
+           MOVE '0'                       TO MVA-NUM-SEC.
+           READ MOVVAR INVALID KEY
+                DISPLAY '******************************************'
+                DISPLAY 'SGCPGES7. ERROR AL LEER MOVVAR, STATUS= '
+                        FS-MOVVAR ' EN REGRABACION'
+                DISPLAY 'SGCPGES7. CLAVE = ' MVA-CLAVE
+                DISPLAY 'SGCPGES7. REGISTRO NO CONSIDERADO'
+                DISPLAY '******************************************'
+                GO TO AZ-FIN-PROG.
+
+           IF SD-OPERACION = 'IN' OR 'TD' OR 'SI'
+              COMPUTE MVA-VAL-VAR-1 ROUNDED = MVA-VAL-VAR-1 + SD-MONTO.
+           IF SD-OPERACION = 'RE' OR 'TO'
+              COMPUTE MVA-VAL-VAR-1 ROUNDED = MVA-VAL-VAR-1 - SD-MONTO.
+      *    IF SD-OPERACION = 'SI'
+      *       COMPUTE MVA-VAL-VAR-1 ROUNDED = SD-MONTO.
+
+           REWRITE GESRMVA INVALID KEY
+                 DISPLAY '********************************************'
+                 DISPLAY 'SGCPGES7. ERROR AL REGRABAR MOVVAR, STATUS= '
+                         FS-MOVVAR ' EN OPERACION : ' MVA-COD-OPER
+                 DISPLAY 'SGCPGES7. CLAVE = ' MVA-CLAVE
+                 DISPLAY 'SGCPGES7. REGISTRO NO CONSIDERADO'
+                 DISPLAY '********************************************'
+                 MOVE 1 TO WS-STATUS.
+
+       CZ-FIN-SECCION-OUTPUT.
+           EXIT.
+       EJECT
+       D-TERMINAR SECTION.
+       DA-ESTADISTICAS.
+           DISPLAY '***********************************************'.
+           DISPLAY 'FECHA DE PROCESO = ' WP-FECHA-PRO.
+           DISPLAY ' '.
+           DISPLAY 'REG. MAESTRO BANCRED LEIDOS : ' W-CONT-BANCRED.
+           DISPLAY 'REG. BANCRED IGNORADOS      : ' WA-IGN-BANCRED.
+           DISPLAY ' '.
+           DISPLAY 'REG. TABLA CLAVES LEIDAS    : ' W-CONT-ACB-L.
+           DISPLAY 'REG. TABLA CLAVES CREADAS   : ' W-CONT-ACB-C.
+           DISPLAY ' '.
+           DISPLAY 'REG. TABLA DBC LEIDOS       : ' W-CONT-DBC.
+           DISPLAY 'REG. TABLA OPE LEIDOS       : ' W-CONT-OPE.
+           DISPLAY ' '.
+           DISPLAY 'REG. SORT GRABADOS          : ' W-CONT-SORT-GRABAD.
+           DISPLAY 'REG. SORT LEIDOS            : ' W-CONT-SORT-LEIDOS.
+           DISPLAY ' '.
+           DISPLAY 'REG. MOVTOS. RCO GRABADOS   : ' W-CONT-MOVRCO.
+           DISPLAY 'REG. MOVTOS. OPE GRABADOS   : ' W-CONT-MOVOPE.
+           DISPLAY 'REG. MOVTOS. VAR GRABADOS   : ' W-CONT-MOVVAR.
+           DISPLAY ' '.
+           DISPLAY '***********************************************'.
+
+       DB-CIERRA-ARCHS.
+           CLOSE BANCRED TABCAM MOVRCO MOVOPE MOVVAR.
+
+       DZ-FIN-SECCION.
+           EXIT.

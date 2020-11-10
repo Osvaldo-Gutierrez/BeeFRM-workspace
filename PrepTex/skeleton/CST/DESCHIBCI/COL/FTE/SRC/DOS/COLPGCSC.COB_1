@@ -1,0 +1,697 @@
+       IDENTIFICATION DIVISION.
+      *=======================
+       PROGRAM-ID.      COLPGCSC.
+       AUTHOR.          BEE-TEAM (RVM).
+       DATE-WRITTEN.    12-JUN-1997.
+
+      * PGM. GENERA DATOS PARA REPORTE 'CLIENTES SIN CLASIFICAR'
+      * OPTIMIZAR(JGM)
+       ENVIRONMENT DIVISION.
+      *====================
+       CONFIGURATION SECTION.
+      *---------------------
+       SPECIAL-NAMES.
+            DECIMAL-POINT IS COMMA.
+       DATA DIVISION.
+      *=============
+       WORKING-STORAGE SECTION.
+      *-----------------------
+       COPY GNSWGSYS.
+       COPY GNSWCFIO.
+       COPY GNSWVFIO.
+       COPY GNSBRTAB.
+       COPY GNSBRMSG.
+       COPY GNSWGCPT.
+       COPY COLBRCSC.
+
+       COPY COLBROPC REPLACING ==OPC== BY ==OPS==.
+       COPY COLBRRDC.
+       COPY COLBRDLC.
+       COPY TABBRCAM.
+
+       COPY GNSBRMSC.
+
+       COPY GNSWGRQA.
+       COPY GNSWGUIB.
+       COPY GNSWGELS.
+       COPY GNSWVIDD.
+       COPY GNSWGHOY.
+       COPY GNSWGFEC.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-CAM-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-TAB-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-MSG-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-OPC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-RDC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-DLC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-MSC-REQA==.
+
+      *
+       01  WSS-VARI.
+           03  WSS-COD-PESO                          PIC X(06).
+           03  WSS-COD-UF                            PIC X(06).
+           03  WSS-VAL-UF                            PIC 9(11)V9(04).
+           03  WSS-COD-DOLA                          PIC X(06).
+           03  WSS-VAL-DOLA                          PIC 9(11)V9(04).
+           03  WSS-COD-DOLO                          PIC X(06).
+           03  WSS-VAL-DOLO                          PIC 9(11)V9(04).
+           03  WSS-ALF-SELE      VALUE SPACES        PIC X(11).
+           03  WSS-VAL-SELE      VALUE ZEROES        PIC 9(11).
+           03  WSS-IND-SCTB                          PIC X(03).
+           03  WSS-IND-MNAC      VALUE ZEROES        PIC 9(01).
+           03  WSS-VAL-MNAC      VALUE ZEROES        PIC 9(11).
+           03  WSS-COD-VCOC                          PIC X(06).
+           03  WSS-COD-TOOC                          PIC X(03).
+      *
+           03 WSS-NUM-CSCL         VALUE ZEROES        PIC 9(08).
+           03 WSS-NUM-CSCG         VALUE ZEROES        PIC 9(08).
+           03 WSS-NUM-CRIL         VALUE ZEROES        PIC 9(08).
+           03 WSS-NUM-OPSL         VALUE ZEROES        PIC 9(08).
+           03 WSS-NUM-RDCL         VALUE ZEROES        PIC 9(08).
+           03 WSS-NUM-DBCL         VALUE ZEROES        PIC 9(08).
+           03 WSS-CIC-CTAB.
+              05 WSS-GLS-CTAB                          PIC X(03).
+              05 WSS-FIL-CTAB                          PIC X(09).
+      *FECHA PARAMETRO (MMSSAA)
+           03 WSS-FEC-FPAR.
+              05 WSS-NUM-MPAR                          PIC 9(02).
+              05 WSS-NUM-SPAR                          PIC 9(02).
+              05 WSS-NUM-APAR                          PIC 9(02).
+      *FECHA PARAMETRO (SSAAMM)
+           03 WSS-FEC-FPRO.
+              05 WSS-NUM-SPRO                          PIC 9(02).
+              05 WSS-NUM-APRO                          PIC 9(02).
+              05 WSS-NUM-MPRO                          PIC 9(02).
+      *FECHA AUXILIAR PARA HACER COMPARACION CON FPRO (SSAAMM)
+           03 WSS-FEC-FAUX.
+              05 WSS-NUM-SAUX                          PIC 9(02).
+              05 WSS-NUM-AAUX                          PIC 9(02).
+              05 WSS-NUM-MAUX                          PIC 9(02).
+
+      *PARA MANEJO DE COLAUX EN MEMORIA
+      ******************************************************************
+       01  CTA-VARI.
+           03 CTA-INDI                                 PIC 9(03).
+           03 CTA-MAXI                                 PIC 9(03).
+           03 CTA-OCUR        VALUE 1000               PIC 9(04).
+           03 CTA-COOC                                 PIC X(06).
+           03 CTA-TCIC                                 PIC X(06).
+           03 CTA-VIGE                                 PIC X(06).
+           03 CTA-CMSG                                 PIC X(12).
+           03 CTA-MEN2                                 PIC X(20).
+           03 CTA-TABL.
+              05 CTA-VECT     OCCURS 1000 INDEXED BY  CTA-NUME.
+                 07 CTA-COOC-V                         PIC X(06).
+                 07 CTA-TCIC-V                         PIC X(06).
+                 07 CTA-VIGE-V                         PIC X(01).
+      ******************************************************************
+      *
+       PROCEDURE DIVISION.
+      *===================
+       MAIN SECTION.
+       INI-MAIN.
+      *
+       COPY GNSBGEDB.
+      *
+           MOVE 'COLPGCSC' TO FIO-PROG.
+           PERFORM GNS-BUS-IDD.
+
+           PERFORM ABRE-ARCHIVOS.
+           IF NOT FIO-STAT-OKS
+               PERFORM GNS-PRO-ABT.
+
+      *OBTIENE FECHA Y HORA DE PROCESO
+           PERFORM GET-FHOY.
+      *
+           DISPLAY ' '.
+           DISPLAY 'INGRESE MES Y AGNO DE PROCESO ( MMSSAA) : '.
+           MOVE ZEROES TO WSS-FEC-FPAR IN WSS-VARI.
+           ACCEPT  WSS-FEC-FPAR IN WSS-VARI.
+           DISPLAY 'FIN INGRESO'.
+           DISPLAY WSS-FEC-FPAR IN WSS-VARI.
+      *
+           MOVE WSS-NUM-MPAR IN WSS-VARI TO WSS-NUM-MPRO IN WSS-VARI.
+           MOVE WSS-NUM-SPAR IN WSS-VARI TO WSS-NUM-SPRO IN WSS-VARI.
+           MOVE WSS-NUM-APAR IN WSS-VARI TO WSS-NUM-APRO IN WSS-VARI.
+
+      *VALIDA QUE FECHA SEA VALIDA
+           MOVE 01                       TO FEC-ITM1.
+           MOVE WSS-NUM-MPAR IN WSS-VARI TO FEC-ITM2.
+           MOVE WSS-NUM-SPAR IN WSS-VARI TO FEC-ITM3.
+           MOVE WSS-NUM-APAR IN WSS-VARI TO FEC-ITM4.
+           MOVE FEC-FORM-FEC TO FEC-FORM.
+           MOVE FEC-FBLK-N   TO FEC-FBLK.
+           MOVE FEC-CHOY-N   TO FEC-CHOY.
+           MOVE FEC-VHBL-N   TO FEC-VHBL.
+           MOVE FEC-VAL-FEC  TO FEC-CMND.
+           PERFORM PRO-FEC.
+           IF NOT FEC-STAT-OKS
+               DISPLAY 'ERROR AL VALIDAR FECHA PROCESO'
+               DISPLAY 'PROCESO CANCELADO...'
+               MOVE '23' TO FIO-STAT
+               GO TO FIN-MAIN.
+
+      *VALIDA QUE FECHA NO SEA MAYOR A HOY
+           MOVE HOY-MHOY IN HOY-VARI TO WSS-NUM-MAUX IN WSS-VARI.
+           MOVE HOY-SHOY IN HOY-VARI TO WSS-NUM-SAUX IN WSS-VARI.
+           MOVE HOY-AHOY IN HOY-VARI TO WSS-NUM-AAUX IN WSS-VARI.
+           IF (WSS-FEC-FPRO IN WSS-VARI > WSS-FEC-FAUX IN WSS-VARI)
+                DISPLAY 'ERROR: FECHA INVALIDA, NO DEBE SER MAYOR A HOY'
+                DISPLAY 'PROCESO CANCELADO...'
+                DISPLAY ' '
+                MOVE '23' TO FIO-STAT
+                GO TO FIN-MAIN.
+
+      * PROCESO PARA CARGAR LA TABLA COLAUX EN MEMORIA
+           PERFORM COL-CRG-AUX.
+           IF CTA-CMSG IN CTA-VARI > SPACES
+               DISPLAY CTA-CMSG IN CTA-VARI
+               DISPLAY 'ERROR: AL CARGAR TABLA COLAUX EN MEMORIA '
+                         CTA-MEN2 IN CTA-VARI
+               DISPLAY 'PROCESO CANCELADO...'
+               DISPLAY ' '
+               MOVE '23' TO FIO-STAT
+               GO TO FIN-MAIN.
+      *PESOS
+      *******************************************************
+      * Obtiene Codigo Valor de Cambio Mediante CIC de Moneda
+           MOVE 'TAB'          TO FIO-SIST.
+           MOVE 'VLR'          TO TAB-CIC-TTAB IN TAB.
+           MOVE '0999  '       TO TAB-CIC-CTAB IN TAB.
+           MOVE 'TAB-CIC-TABL' TO FIO-AKEY.
+           MOVE FIO-GET-KEY    TO FIO-CMND.
+           PERFORM GNS-FIO-TAB.
+           IF NOT FIO-STAT-OKS
+               MOVE 'TAB'          TO MSG-COD-SIST
+               MOVE 'CIC0999  NEX' TO MSG-COD-MENS
+               PERFORM GET-MSG
+               DISPLAY MSG-GLS-DESC   TAB-CIC-CTAB
+               PERFORM GNS-PRO-ABT.
+           MOVE TAB-COD-CTAB IN TAB TO WSS-COD-PESO IN WSS-VARI.
+
+      *DOLAR
+      *******************************************************
+      * Obtiene Codigo de Moneda Dolar Mediante CIC '1013'
+           MOVE 'TAB'          TO FIO-SIST.
+           MOVE 'VLR'          TO TAB-CIC-TTAB IN TAB.
+           MOVE '101301'       TO TAB-CIC-CTAB IN TAB.
+           MOVE 'TAB-CIC-TABL' TO FIO-AKEY.
+           MOVE FIO-GET-KEY    TO FIO-CMND.
+           PERFORM GNS-FIO-TAB.
+           IF NOT FIO-STAT-OKS
+               MOVE 'TAB'          TO MSG-COD-SIST
+               MOVE 'CIC101301NEX' TO MSG-COD-MENS
+               PERFORM GET-MSG
+               DISPLAY MSG-GLS-DESC   TAB-CIC-CTAB
+               PERFORM GNS-PRO-ABT.
+           MOVE TAB-COD-CTAB IN TAB TO WSS-COD-DOLA IN WSS-VARI.
+
+
+      *UF
+      *******************************************************
+      * Obtiene Codigo de Moneda U.F.Mediante CIC '0998'
+           MOVE 'TAB'          TO FIO-SIST.
+           MOVE 'VLR'          TO TAB-CIC-TTAB IN TAB.
+           MOVE '0998  '       TO TAB-CIC-CTAB IN TAB.
+           MOVE 'TAB-CIC-TABL' TO FIO-AKEY.
+           MOVE FIO-GET-KEY    TO FIO-CMND.
+           PERFORM GNS-FIO-TAB.
+           IF NOT FIO-STAT-OKS
+               MOVE 'TAB'          TO MSG-COD-SIST
+               MOVE 'CIC0998  NEX' TO MSG-COD-MENS
+               PERFORM GET-MSG
+               DISPLAY MSG-GLS-DESC   TAB-CIC-CTAB
+               PERFORM GNS-PRO-ABT.
+           MOVE TAB-COD-CTAB IN TAB TO WSS-COD-UF IN WSS-VARI.
+
+      *BUSCA VALOR DE CAMBIO DE DOLARES USA A PESOS
+           MOVE HOY-FHOY     IN HOY-VARI TO CAM-FEC-FCAM IN CAM(1).
+           MOVE HOY-FHOY     IN HOY-VARI TO CAM-FEC-FCAM IN CAM(2).
+           MOVE WSS-COD-DOLA IN WSS-VARI TO CAM-COD-VCAM IN CAM(1).
+           MOVE WSS-COD-PESO IN WSS-VARI TO CAM-COD-VCAM IN CAM(2).
+           MOVE FIO-GET-KEY  TO FIO-CMND.
+           PERFORM TAB-FIO-CAM.
+           IF NOT FIO-STAT-OKS
+               DISPLAY 'NO EXISTE VALOR DE CAMBIO : '
+                  CAM-KEY-CAMB IN CAM
+               PERFORM GNS-PRO-ABT
+           ELSE
+               IF CAM-IND-VIGE NOT = 'S'
+                   DISPLAY 'IND. VIGENCIA NO VALIDO EN CAM : '
+                           CAM-KEY-CAMB IN CAM
+                   PERFORM GNS-PRO-ABT
+               ELSE
+                   MOVE CAM-SGV-VCAM IN CAM TO WSS-VAL-DOLA IN WSS-VARI
+                   DISPLAY 'VALOR DE CAMBIO  : '
+                           CAM-KEY-CAMB IN CAM  '   ES DE    : '
+                           WSS-VAL-DOLA IN WSS-VARI.
+
+
+      *BUSCA VALOR DE CAMBIO DE UF A PESOS
+           MOVE HOY-FHOY     IN HOY-VARI TO CAM-FEC-FCAM IN CAM(1).
+           MOVE HOY-FHOY     IN HOY-VARI TO CAM-FEC-FCAM IN CAM(2).
+           MOVE WSS-COD-UF   IN WSS-VARI TO CAM-COD-VCAM IN CAM(1).
+           MOVE WSS-COD-PESO IN WSS-VARI TO CAM-COD-VCAM IN CAM(2).
+           MOVE FIO-GET-KEY  TO FIO-CMND.
+           PERFORM TAB-FIO-CAM.
+           IF NOT FIO-STAT-OKS
+               DISPLAY 'NO EXISTE VALOR DE CAMBIO : '
+                  CAM-KEY-CAMB IN CAM
+               PERFORM GNS-PRO-ABT
+           ELSE
+               IF CAM-IND-VIGE NOT = 'S'
+                   DISPLAY 'IND. VIGENCIA NO VALIDO EN CAM : '
+                           CAM-KEY-CAMB IN CAM
+                   PERFORM GNS-PRO-ABT
+               ELSE
+                   MOVE CAM-SGV-VCAM IN CAM TO WSS-VAL-UF IN WSS-VARI
+                   DISPLAY 'VALOR DE CAMBIO  : '
+                           CAM-KEY-CAMB IN CAM  '   ES DE    : '
+                           WSS-VAL-UF IN WSS-VARI.
+
+      * Obtiene Ind. con CIC Situacion Contable Vencida en Tabla MSC
+           MOVE 'COL'          TO MSC-COD-SIST.
+           MOVE 'SCTB'         TO MSC-CIC-TMSC IN MSC.
+           MOVE 'VCD'          TO MSC-CIC-CMSC IN MSC.
+           MOVE 'MSC-CIC-TABL' TO FIO-AKEY.
+           PERFORM BUS-MSC.
+           IF MSG-COD-MENS > SPACES
+               DISPLAY MSG-GLS-DESC  MSC-CIC-TABL IN MSC
+               PERFORM GNS-PRO-ABT.
+           MOVE MSC-COD-CMSC IN MSC TO WSS-IND-SCTB IN WSS-VARI.
+      *
+           PERFORM PROCESO-OPS.
+      *
+       FIN-MAIN.
+           DISPLAY 'ESTADISTICAS COLPGCSC'.
+           DISPLAY '---------------------'.
+           DISPLAY 'REG OPS LEIDOS.......' WSS-NUM-OPSL IN WSS-VARI.
+           DISPLAY 'REG RDC LEIDOS.......' WSS-NUM-RDCL IN WSS-VARI.
+           DISPLAY 'REG CSC GRABADOS.....' WSS-NUM-CSCG IN WSS-VARI.
+           DISPLAY ' '.
+
+           IF NOT FIO-STAT-OKS
+               PERFORM CIERRA-ARCHIVOS
+               PERFORM GNS-PRO-ABT
+           ELSE
+               PERFORM CIERRA-ARCHIVOS
+               PERFORM GNS-PRO-END.
+
+       EXT-MAIN.
+           EXIT.
+
+       PROCESO-OPS SECTION.
+       INI-PROCESO-OPS.
+      *EFECTUO LECTURA DE TODOS LOS REGISTROS COLCSC
+           MOVE FIO-GET-FST TO FIO-CMND.
+           PERFORM COL-FIO-OPS.
+           IF NOT FIO-STAT-OKS
+               DISPLAY 'ERROR: NO EXISTEN REGISTROS EN COLOPS : '
+                       FIO-STAT
+               GO TO FIN-PROCESO-OPS.
+
+       LUP-PROCESO-OPS.
+           IF NOT FIO-STAT-OKS
+               IF FIO-CMND = FIO-GET-NXT
+                   MOVE '00' TO FIO-STAT
+                   GO TO FIN-PROCESO-OPS
+               ELSE
+                   GO TO FIN-PROCESO-OPS.
+
+           ADD 1 TO WSS-NUM-OPSL IN WSS-VARI.
+      *****************************************************************
+      *VALIDA QUE OPC SEA DEL MES DE PROCESO
+      * LA 'D' SIGNIFICA DE COLOCACIONES, EN CASO CONTRARIO EL RESTO
+      * DE OPERACIONES.
+           IF ( OPC-MSC-STAT IN OPS NOT = 'A' OR
+                OPC-VAL-SCRE IN OPS NOT > ZEROES )
+                GO TO NXT-PROCESO-OPS.
+
+      *EXCLUYO OPERACIONES CUYO TIO SEA 'HIP' O 'PAP'
+      * (HIPOTECARIO, PERSONAL)
+           IF OPC-COD-TOOC IN OPS = 'HIP' OR
+              OPC-COD-TOOC IN OPS = 'PAP'
+               GO TO NXT-PROCESO-OPS.
+
+           IF OPC-COD-TOPC IN OPS = 'D'
+               MOVE OPC-NUM-SINP IN OPS TO WSS-NUM-SAUX IN WSS-VARI
+               MOVE OPC-NUM-AINP IN OPS TO WSS-NUM-AAUX IN WSS-VARI
+               MOVE OPC-NUM-MINP IN OPS TO WSS-NUM-MAUX IN WSS-VARI
+           ELSE
+               MOVE OPC-NUM-SCOL IN OPS TO WSS-NUM-SAUX IN WSS-VARI
+               MOVE OPC-NUM-ACOL IN OPS TO WSS-NUM-AAUX IN WSS-VARI
+               MOVE OPC-NUM-MCOL IN OPS TO WSS-NUM-MAUX IN WSS-VARI.
+
+           IF WSS-FEC-FAUX IN WSS-VARI > WSS-FEC-FPRO IN WSS-VARI
+               GO TO NXT-PROCESO-OPS.
+
+      *****************************************************************
+
+
+      *SE EXCLUYEN LOS SIGUIENTES CREDITOS
+      * - PRESTAMOS DE CONSUMO TANTO VIGENTES COMO EN CARTERA VENCIDA
+      * - PRESTAMOS CASTIGADOS
+      * - HIPOTECARIOS
+      * - DEUDA POR TARJETA VISA
+      *BUSCA CODIGO COLAUX EN MEMORIA
+      *EXCLUYO OPERACIONES CON CIC = 'CON'
+
+           MOVE OPC-COD-COOC IN OPS TO CTA-COOC IN CTA-VARI.
+           PERFORM COL-BUS-AUX.
+           IF CTA-CMSG IN CTA-VARI NOT > SPACES
+               MOVE CTA-TCIC IN CTA-VARI TO WSS-CIC-CTAB IN WSS-VARI
+               IF WSS-GLS-CTAB IN WSS-VARI = 'CON'
+                   GO TO NXT-PROCESO-OPS
+               ELSE
+                   GO TO SKP1-PROCESO-OPS.
+
+
+           MOVE OPC-COD-COOC IN OPS TO CTA-COOC IN CTA-VARI.
+           PERFORM COL-BUS-AUX.
+           IF CTA-CMSG IN CTA-VARI NOT > SPACES
+               MOVE CTA-TCIC IN CTA-VARI TO WSS-CIC-CTAB IN WSS-VARI
+               IF WSS-GLS-CTAB IN WSS-VARI = 'CON'
+                   GO TO NXT-PROCESO-OPS.
+
+       SKP1-PROCESO-OPS.
+      *VERIFICO SI TIENE CLASIFICACION DE RIESGO
+           MOVE 'RDC-KEY-IDLC' TO FIO-AKEY.
+           MOVE OPC-CAI-IOPC IN OPS TO RDC-CAI-IOPC IN RDC.
+           MOVE OPC-IIC-IOPC IN OPS TO RDC-IIC-IOPC IN RDC.
+           MOVE ZEROES              TO RDC-NUM-IDLC IN RDC.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM COL-FIO-RDC.
+           IF NOT ( FIO-STAT-OKS AND
+                    RDC-CAI-IOPC IN RDC = OPC-CAI-IOPC IN OPS AND
+                    RDC-IIC-IOPC IN RDC = OPC-IIC-IOPC IN OPS AND
+                    RDC-NUM-IDLC IN RDC = ZEROES )
+
+               DISPLAY 'ERROR: NO EXISTE COLRDC PARA OPC : '
+                    OPC-CIC-IOPC IN OPS '  STATUS : ' FIO-STAT
+               GO TO NXT-PROCESO-OPS.
+
+           ADD 1 TO WSS-NUM-RDCL IN WSS-VARI.
+
+      *Excluyo operaciones cuya situacion contable de la DLC sea CAS.
+           MOVE OPC-CIC-IOPC IN OPS TO DLC-CIC-IOPC IN DLC.
+           MOVE ZEROES              TO DLC-NUM-IDLC IN DLC.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+       LUP-LEE-DLC.
+           PERFORM COL-FIO-DLC.
+           IF NOT (FIO-STAT-OKS AND
+               OPC-CIC-IOPC IN OPS = DLC-CIC-IOPC IN DLC)
+               DISPLAY 'ERROR: NO SE ENCUENTRA COLDLC PARA OPC : '
+                        OPC-CIC-IOPC IN OPS
+               GO TO NXT-PROCESO-OPS.
+
+            IF DLC-IND-SCTB IN DLC = 'CAS'
+               GO TO NXT-PROCESO-OPS.
+
+      *
+       PUT-PROCESO-OPS.
+           PERFORM GRABAR-CSC.
+      *
+       NXT-PROCESO-OPS.
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM COL-FIO-OPS.
+           GO TO LUP-PROCESO-OPS.
+
+       FIN-PROCESO-OPS.
+      *GRABA REGISTRO EN BLANCO PARA QUE NO SE CAIGA COLPLCSC CUANDO
+      *COLCSC QUEDA VACIO
+           IF WSS-NUM-CSCG IN WSS-VARI NOT > ZEROES
+               MOVE SPACES TO CSC
+               MOVE ZEROES TO CSC-VAL-VIGE IN CSC
+               MOVE ZEROES TO CSC-VAL-VCDA IN CSC
+               MOVE FIO-PUT TO FIO-CMND
+               PERFORM COL-FIO-CSC
+               IF NOT FIO-STAT-OKS
+                   DISPLAY 'ERROR: AL GRABAR REGISTRO '
+                           'EN BLANCO EN ARCHIVO COLCSC'.
+       EXT-PROCESO-OPS.
+           EXIT.
+
+       GRABAR-CSC SECTION.
+       INI-GRABAR-CSC.
+           MOVE ZEROES TO CSC.
+           MOVE DLC-IND-SCTB IN DLC TO CSC-IND-SCTB IN CSC.
+           MOVE OPC-CIC-IOPC IN OPS TO CSC-CIC-IOPC IN CSC.
+           MOVE OPC-COD-VCOC IN OPS TO CSC-COD-VCOC IN CSC.
+           MOVE OPC-COD-COOC IN OPS TO CSC-COD-COOC IN CSC.
+           MOVE RDC-CIC-ICLI IN RDC TO CSC-CIC-ICLI IN CSC.
+           MOVE ZEROES              TO CSC-GLS-DISP IN CSC.
+      *
+           PERFORM SUM-VAL-DEU.
+           MOVE WSS-VAL-MNAC IN WSS-VARI TO
+                                CSC-VAL-TOTA IN CSC.
+      *
+           IF CSC-IND-SCTB IN CSC = 'VCD'
+              MOVE  WSS-VAL-MNAC IN WSS-VARI TO
+                    CSC-VAL-VCDA IN CSC
+           ELSE
+              MOVE  WSS-VAL-MNAC IN WSS-VARI TO
+                    CSC-VAL-VIGE IN CSC.
+           MOVE FIO-PUT TO FIO-CMND.
+           PERFORM COL-FIO-CSC.
+           IF FIO-STAT-OKS
+               ADD 1 TO WSS-NUM-CSCG IN WSS-VARI
+           ELSE
+               DISPLAY 'ERROR: AL GRABAR REGISTROS EN COLCSC : '
+                       FIO-STAT.
+       FIN-GRABAR-CSC.
+           EXIT.
+
+       SUM-VAL-DEU SECTION.
+       INI-SUM-VAL-DEU.
+           MOVE 0      TO WSS-IND-MNAC IN WSS-VARI.
+           MOVE ZEROES TO WSS-VAL-MNAC IN WSS-VARI.
+
+      *OPC ES U.F.
+           IF WSS-COD-UF IN WSS-VARI = CSC-COD-VCOC IN CSC
+               MULTIPLY   OPC-VAL-SCRE IN OPS BY
+                          WSS-VAL-UF IN WSS-VARI
+                 GIVING   WSS-VAL-MNAC IN WSS-VARI ROUNDED
+               GO TO FIN-SUM-VAL-DEU.
+
+      *OPC ES DOLAR U.S.A,
+           IF WSS-COD-DOLA IN WSS-VARI = CSC-COD-VCOC IN CSC
+               MULTIPLY  OPC-VAL-SCRE IN OPS BY
+                         WSS-VAL-DOLA IN WSS-VARI
+                 GIVING  WSS-VAL-MNAC IN WSS-VARI ROUNDED
+               GO TO FIN-SUM-VAL-DEU.
+
+
+           IF WSS-COD-PESO IN WSS-VARI NOT = CSC-COD-VCOC IN CSC
+               PERFORM BUS-VAL-CAM.
+
+           IF WSS-IND-MNAC IN WSS-VARI = 1
+               MULTIPLY  OPC-VAL-SCRE IN OPS BY
+                         CAM-SGV-VCAM IN CAM
+                 GIVING  WSS-VAL-MNAC IN WSS-VARI ROUNDED
+           ELSE
+               MOVE OPC-VAL-SCRE IN OPS TO WSS-VAL-MNAC IN WSS-VARI.
+       FIN-SUM-VAL-DEU.
+           EXIT.
+       BUS-VAL-CAM SECTION.
+       INI-BUS-VAL-CAM.
+           MOVE HOY-FHOY IN HOY-VARI     TO CAM-FEC-FCAM IN CAM(1).
+           MOVE HOY-FHOY IN HOY-VARI     TO CAM-FEC-FCAM IN CAM(2).
+           MOVE CSC-COD-VCOC IN CSC      TO CAM-COD-VCAM IN CAM(1).
+           MOVE WSS-COD-PESO IN WSS-VARI TO CAM-COD-VCAM IN CAM(2).
+           MOVE FIO-GET-KEY  TO FIO-CMND.
+           PERFORM TAB-FIO-CAM.
+           IF NOT FIO-STAT-OKS
+               DISPLAY 'NO EXISTE VALOR DE CAMBIO : '
+                  CAM-KEY-CAMB IN CAM
+               '    PARA OPC : ' CSC-CIC-IOPC IN CSC
+               PERFORM GNS-PRO-ABT
+           ELSE
+               IF CAM-IND-VIGE NOT = 'S'
+                   DISPLAY 'IND. VIGENCIA NO VALIDO EN CAM : '
+                           CAM-KEY-CAMB IN CAM
+                   PERFORM GNS-PRO-ABT
+               ELSE
+                   MOVE  1  TO WSS-IND-MNAC IN WSS-VARI.
+       FIN-BUS-VAL-CAM.
+           EXIT.
+      ******************************************************************
+      *    PROCESO PARA CARGAR COLAUX  EN MEMORIA
+      ******************************************************************
+       COL-CRG-AUX SECTION.
+       INI-COL-CRG-AUX.
+      * INICIO CARGA DE LA TABLA TAB/TIO EN MEMORIA
+           MOVE SPACES TO CTA-TABL IN CTA-VARI
+                          CTA-CMSG IN CTA-VARI
+                          CTA-MEN2 IN CTA-VARI.
+           MOVE ZEROES TO CTA-INDI.
+
+       NLS-COL-CRG-AUX.
+           MOVE 'COL'       TO TAB-COD-SIST FIO-SIST.
+           MOVE 'AUX'       TO TAB-COD-TTAB IN TAB.
+           MOVE SPACES      TO TAB-COD-CTAB IN TAB.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM GNS-FIO-TAB.
+           IF NOT FIO-STAT-OKS OR
+                  TAB-COD-TTAB IN TAB NOT = 'AUX'
+
+               MOVE 'COLAUX NOHAY' TO CTA-CMSG IN CTA-VARI
+               MOVE SPACES         TO CTA-MEN2 IN CTA-VARI
+               GO TO FIN-COL-CRG-AUX.
+
+       LUP-COL-CRG-AUX.
+           ADD  1  TO CTA-INDI IN CTA-VARI.
+
+           MOVE TAB-COD-CTAB IN TAB TO CTA-COOC-V(CTA-INDI).
+           MOVE TAB-CIC-CTAB IN TAB TO CTA-TCIC-V(CTA-INDI).
+           MOVE TAB-IND-VIGE IN TAB TO CTA-VIGE-V(CTA-INDI).
+
+           IF CTA-INDI IN CTA-VARI > CTA-OCUR IN CTA-VARI
+               MOVE 'TAB    CHICA'         TO CTA-CMSG IN CTA-VARI
+               MOVE 'SUBTIPO DE OPERACION' TO CTA-MEN2 IN CTA-VARI
+               GO TO FIN-COL-CRG-AUX.
+
+       NXT-COL-CRG-AUX.
+           MOVE 'COL'  TO TAB-COD-SIST FIO-SIST.
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM GNS-FIO-TAB.
+           IF FIO-STAT-OKS AND
+              TAB-COD-TTAB IN TAB = 'AUX'
+              GO TO LUP-COL-CRG-AUX.
+
+           MOVE CTA-INDI IN CTA-VARI TO CTA-MAXI IN CTA-VARI.
+
+       FIN-COL-CRG-AUX.
+       NLS-COL-CRG-TIO.
+           MOVE 'TAB'       TO FIO-SIST.
+           MOVE 'TIO'       TO TAB-COD-TTAB IN TAB.
+           MOVE SPACES      TO TAB-COD-CTAB IN TAB.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM GNS-FIO-TAB.
+           IF NOT FIO-STAT-OKS OR
+                  TAB-COD-TTAB IN TAB NOT = 'TIO'
+               MOVE 'TABTIO NOHAY' TO CTA-CMSG IN CTA-VARI
+               MOVE SPACES         TO CTA-MEN2 IN CTA-VARI
+               GO TO FIN-COL-CRG-TAB.
+
+       LUP-COL-CRG-TAB.
+           ADD  1  TO CTA-INDI IN CTA-VARI.
+
+           MOVE TAB-COD-CTAB IN TAB TO CTA-COOC-V(CTA-INDI).
+           MOVE TAB-CIC-CTAB IN TAB TO CTA-TCIC-V(CTA-INDI).
+           MOVE TAB-IND-VIGE IN TAB TO CTA-VIGE-V(CTA-INDI).
+
+           IF CTA-INDI IN CTA-VARI > CTA-OCUR IN CTA-VARI
+               MOVE 'TAB    CHICA'         TO CTA-CMSG IN CTA-VARI
+               MOVE 'SUBTIPO DE OPERACION' TO CTA-MEN2 IN CTA-VARI
+               GO TO FIN-COL-CRG-TAB.
+
+       NXT-COL-CRG-TAB.
+           MOVE 'TAB'       TO TAB-COD-SIST FIO-SIST.
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM GNS-FIO-TAB.
+           IF FIO-STAT-OKS AND
+              TAB-COD-TTAB IN TAB = 'TAB'
+              GO TO LUP-COL-CRG-TAB.
+
+           MOVE CTA-INDI IN CTA-VARI TO CTA-MAXI IN CTA-VARI.
+       FIN-COL-CRG-TAB.
+           EXIT.
+
+      ******************************************************************
+      *    PROCESO PARA BUSCAR COLAUX  EN MEMORIA
+      ******************************************************************
+       COL-BUS-AUX SECTION.
+       INI-COL-BUS-AUX.
+           MOVE SPACES TO CTA-CMSG IN CTA-VARI
+                          CTA-MEN2 IN CTA-VARI.
+           SET CTA-NUME TO 1.
+           SEARCH CTA-VECT VARYING CTA-NUME
+                  WHEN CTA-COOC-V(CTA-NUME) = CTA-COOC IN CTA-VARI
+                       GO TO FND-COL-BUS-AUX.
+           MOVE 'AUXCOD NOFND'         TO CTA-CMSG IN CTA-VARI.
+           MOVE 'SUBTIPO DE OPERACION' TO CTA-MEN2 IN CTA-VARI.
+           GO TO FIN-COL-BUS-AUX.
+       FND-COL-BUS-AUX.
+      *    MOVE CTA-COOC-V(CTA-NUME) TO CTA-COOC IN CTA-VARI.
+           MOVE CTA-TCIC-V(CTA-NUME) TO CTA-TCIC IN CTA-VARI.
+           MOVE CTA-VIGE-V(CTA-NUME) TO CTA-VIGE IN CTA-VARI.
+       FIN-COL-BUS-AUX.
+           EXIT.
+      ******************************************************************
+
+       ABRE-ARCHIVOS SECTION.
+       INI-ABRE-ARCHIVOS.
+           MOVE 'GNS'   TO FIO-SIST.
+           MOVE FIO-INP TO FIO-CMND.
+           PERFORM GNS-FIO-TAB.
+           DISPLAY 'STATUS DE APERTURA FIO-INP GNSTAB : ' FIO-STAT.
+
+           MOVE 'COL'   TO FIO-SIST.
+           MOVE FIO-INP TO FIO-CMND.
+           PERFORM GNS-FIO-TAB.
+           DISPLAY 'STATUS DE APERTURA FIO-INP COLTAB : ' FIO-STAT.
+
+           MOVE 'TAB'   TO FIO-SIST.
+           MOVE FIO-INP TO FIO-CMND.
+           PERFORM GNS-FIO-TAB.
+           DISPLAY 'STATUS DE APERTURA FIO-INP TABTAB : ' FIO-STAT.
+
+           MOVE FIO-OUT TO FIO-CMND.
+           PERFORM COL-FIO-CSC.
+           DISPLAY 'STATUS DE APERTURA FIO-OUT COLCSC : ' FIO-STAT.
+
+           MOVE FIO-INP TO FIO-CMND.
+           PERFORM COL-FIO-OPS.
+           DISPLAY 'STATUS DE APERTURA FIO-INP COLOPS : ' FIO-STAT.
+
+           PERFORM COL-FIO-RDC.
+           DISPLAY 'STATUS DE APERTURA FIO-INP COLRDC : ' FIO-STAT.
+
+           PERFORM COL-FIO-DLC.
+           DISPLAY 'STATUS DE APERTURA FIO-INP COLDLC : ' FIO-STAT.
+       FIN-ABRE-ARCHIVOS.
+           EXIT.
+
+       CIERRA-ARCHIVOS SECTION.
+       INI-CIERRA-ARCHIVOS.
+           MOVE 'GNS'   TO FIO-SIST.
+           MOVE FIO-CLO TO FIO-CMND.
+           PERFORM GNS-FIO-TAB.
+
+           MOVE 'COL'   TO FIO-SIST.
+           MOVE FIO-CLO TO FIO-CMND.
+           PERFORM GNS-FIO-TAB.
+
+           MOVE 'TAB'   TO FIO-SIST.
+           MOVE FIO-CLO TO FIO-CMND.
+           PERFORM GNS-FIO-TAB.
+
+           MOVE FIO-CLO TO FIO-CMND.
+           PERFORM COL-FIO-CSC.
+           PERFORM COL-FIO-OPS.
+           PERFORM COL-FIO-RDC.
+           PERFORM COL-FIO-DLC.
+       FIN-CIERRA-ARCHIVOS.
+           EXIT.
+
+      *DTC
+       COPY GNSBGDTC.
+       COPY GNSBGIDD.
+       COPY GNSBTABT.
+      *
+       COPY GNSBFMSC.
+       COPY GNSBBMSC.
+       COPY GNSBBSYS.
+       COPY GNSBFTAB.
+       COPY GNSBFMSG.
+       COPY GNSBBMSG.
+       COPY GNSBGCPT.
+       COPY GNSBGEND.
+       COPY GNSBGABT.
+       COPY GNSBGHOY.
+       COPY GNSBGFEC.
+       COPY COLBFCSC.
+       COPY COLBFOPS.
+       COPY COLBFRDC.
+       COPY COLBFDLC.
+       COPY TABBFCAM.
+

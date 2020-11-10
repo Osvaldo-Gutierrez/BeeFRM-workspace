@@ -1,0 +1,603 @@
+$RESET DEBUG
+ BEGIN
+$SET OMIT = NOT DEBUG
+  EBCDIC ARRAY BUG_ARRAY [0:500];
+  ARRAY ABUG[0:0];
+  INTEGER IBUG;
+  HEX ARRAY HBUG[0] = ABUG;
+$POP OMIT
+      
+  DEFINE  DEBUGER(MSG) =
+$SET OMIT = NOT DEBUG
+%         WRITE(MYSELF.TASKFILE,(LENGTH(MSG)+5) DIV 6,MSG !! "     ");
+          REPLACE BUG_ARRAY BY " " FOR SIZE(BUG_ARRAY);
+          REPLACE BUG_ARRAY
+               BY TIME(7).[23:06] FOR 2 DIGITS,":",
+                  TIME(7).[17:06] FOR 2 DIGITS,":",
+                  TIME(7).[11:06] FOR 2 DIGITS," ",
+                  MSG;
+          WRITE(MYSELF.TASKFILE, 22, BUG_ARRAY);
+$POP OMIT
+        #;
+  DEFINE B_BUG(MSG, B) =
+$SET OMIT = NOT DEBUG
+          ABUG[0] := B;
+          REPLACE BUG_ARRAY BY " " FOR SIZE(BUG_ARRAY);
+          REPLACE BUG_ARRAY
+               BY TIME(7).[23:06] FOR 2 DIGITS,":",
+                  TIME(7).[17:06] FOR 2 DIGITS,":",
+                  TIME(7).[11:06] FOR 2 DIGITS," ",
+                  MSG, ":", HBUG FOR 12 WITH HEXTOEBCDIC;
+          WRITE(MYSELF.TASKFILE, 22, BUG_ARRAY);
+$POP OMIT
+        #;
+ DEFINE A_BUG(MSG) =
+$SET OMIT = NOT DEBUG
+          IBUG := 0;
+          WHILE (IBUG < SIZE(MSG) - 1) DO
+            BEGIN
+            REPLACE BUG_ARRAY BY " " FOR SIZE(BUG_ARRAY);
+            REPLACE BUG_ARRAY BY MSG[IBUG] FOR MIN(80,SIZE(MSG)-IBUG);
+            IBUG :=* + 80;
+            WRITE(MYSELF.TASKFILE, 22, BUG_ARRAY);
+            END;
+$POP OMIT
+        #;
+ LIBRARY COMSSUPPORT(LIBACCESS=BYFUNCTION,FUNCTIONNAME="COMSSUPPORT");
+      
+ REAL PROCEDURE DCIWAITENTRYPOINT(WAIT_PROC);
+    REAL PROCEDURE WAIT_PROC(COMS_INPUT_EVENT,
+                             COMS_TASK_EVENT);
+    EVENT COMS_INPUT_EVENT,
+          COMS_TASK_EVENT;
+    FORMAL;
+    LIBRARY COMSSUPPORT;
+      
+ INTEGER PROCEDURE GET_DESIGNATOR_USING_NAME
+         (ENTY_NAME,ENTY_TYPE,ENTY_DESIGNATOR);
+    VALUE ENTY_TYPE;
+    EBCDIC ARRAY ENTY_NAME [0];
+    INTEGER ENTY_TYPE;
+    REAL ENTY_DESIGNATOR;
+    LIBRARY COMSSUPPORT;
+      
+ DEFINE  AGENDA_NEMONIC = 3#,
+         PROGRAM_NEMONIC = 4#;
+%DEFINE  LARGO_CMMA_BEE  = 607 #;
+ DEFINE  LARGO_CMMA_BEE  = 700 #;
+ EBCDIC  ARRAY MSG [0:2999],PGM_NAME [0:17];
+ EBCDIC  ARRAY COM[0:4], CONVERSATION_AREA[0:2006];
+ EBCDIC  ARRAY E[0:2999];
+ HEX     ARRAY H[0] = E;
+ REAL    P_DESIG;
+ REAL    UYS_DESIG;
+%        AGE_DESIG;
+ INTEGER ARRAY C_MSG[0:10];
+ INTEGER I, TIMEOUT, MAX_SUBFILES;
+      
+ FILE PORTFILE(KIND=PORT,
+               MYUSE=IO,
+               MAXRECSIZE=3000,
+               FRAMESIZE=8,
+               SERVICE=BASICSERVICE,
+               MAXSUBFILES=10,
+               SECURITYTYPE=PUBLIC
+              );
+      
+ PROCEDURE LOAD_INI;
+   BEGIN
+   EBCDIC  ARRAY LINEA[0:89];
+   FILE    INI (KIND=DISK, MYUSE=IN, FILETYPE=7);
+   POINTER P, Q;
+   INTEGER INX, N;
+   TRUTHSET DELIMITA(" .");
+      
+   REPLACE LINEA
+        BY MYSELF.NAME;
+   SCAN P:LINEA FOR N:72 UNTIL = ")";
+   IF N = 0 THEN P := LINEA;
+   Q := P+1;
+   N :=* - 1;
+   IF Q = "OBJECT/" THEN
+     BEGIN
+     N :=* - 7;
+     Q :=* + 7;
+     END;
+   P := Q;
+   SCAN P:P FOR N:N UNTIL IN DELIMITA;
+   REPLACE E BY Q FOR DELTA(Q,P),"/INI.", 48"00";
+   DISPLAY (E);
+   REPLACE INI.TITLE BY E;
+   OPEN(INI);
+   WHILE NOT READ(INI,INI.MAXRECSIZE,LINEA) DO
+     BEGIN
+     SCAN P:LINEA FOR N:72 WHILE = " ";
+     IF N NEQ 0 THEN
+       BEGIN
+       IF P = "[" THEN
+         INX :=* + 1
+       ELSE
+       IF P = "YOURNAME" OR P = "CLIENTE" THEN
+         BEGIN
+         P :=* + 8;
+         N :=* - 8;
+         SCAN P:P FOR N:N WHILE = " ";
+         IF N NEQ 0 THEN
+           BEGIN
+           IF P = "=" THEN
+             BEGIN
+             P:=*+1;
+             N:=*-1;
+             END;
+           SCAN Q:P FOR N:N UNTIL = " ";
+           REPLACE E BY " " FOR SIZE(E);
+           REPLACE E BY P FOR MIN(10,DELTA(P,Q)),".",48"00";
+           DISPLAY(E);
+           REPLACE PORTFILE(INX).YOURNAME BY E;
+           END;
+         END;
+       END;
+     END;
+   END OF LOAD_INI;
+      
+  DEFINE
+    DUMP_E      =
+    BEGIN
+       EBCDIC ARRAY ME[0:131];
+      
+       REPLACE ME BY H[0] FOR 132 WITH HEXTOEBCDIC;
+       WRITE(MYSELF.TASKFILE,22,ME);
+    END #;
+      
+  DEFINE
+    GL_MSG_ISPEC             = E[0]   #
+   ,GL_MSG_ISPEC_L           = 5   #
+   ,GL_MSG_TYPE              = H[10]   #
+   ,GL_MSG_TYPE_L            = 2   #
+   ,GL_SOURCE_HOST           = E[6]   #
+   ,GL_SOURCE_HOST_L         = 17   #
+   ,GL_SOURCE_DBNAME         = E[23]   #
+   ,GL_SOURCE_DBNAME_L       = 10   #
+   ,GL_SOURCE_IP_PIVOT       = H[66]   #
+   ,GL_SOURCE_IP_PIVOT_L     = 10   #
+   ,GL_PARENT_HOST           = E[38]   #
+   ,GL_PARENT_HOST_L         = 17   #
+   ,GL_PARENT_DBNAME         = E[55]   #
+   ,GL_PARENT_DBNAME_L       = 10   #
+   ,GL_PARENT_REQUESTOR      = H[130]   #
+   ,GL_PARENT_REQUESTOR_L    = 6   #
+   ,GL_PARENT_IP_PIVOT       = H[136]   #
+   ,GL_PARENT_IP_PIVOT_L     = 10   #
+   ,GL_PARENT_AUTO_CNT       = H[146]   #
+   ,GL_PARENT_AUTO_CNT_L     = 6   #
+   ,GL_MSG_SUBSYS            = H[152]   #
+   ,GL_MSG_SUBSYS_L          = 2   #
+   ,GL_MSG_LENGTH            = H[154]   #
+   ,GL_MSG_LENGTH_L          = 4   #
+   ,GL_MSG_STNNAME           = E[79]   #
+%  ,GL_MSG_STNNAME_O         = 79      #
+   ,GL_MSG_STNNAME_L         = 17   #
+   ,GL_MSG_REQUESTOR         = H[192]   #
+   ,GL_MSG_REQUESTOR_L       = 4   #
+   ,GL_MSG_REPLY_TYPE        = H[196]   #
+   ,GL_MSG_REPLY_TYPE_L      = 1   #
+   ,GL_MSG_ERROR_IND         = H[197]   #
+   ,GL_MSG_ERROR_IND_L       = 1   #
+   ,GL_MSG_RECOVERY_IND      = H[198]   #
+   ,GL_MSG_RECOVERY_IND_L    = 1   #
+   ,GL_MSG_STNTYPE           = H[199]   #
+   ,GL_MSG_STNTYPE_L         = 1   #
+   ,GL_MSG_PIVOT             = H[200]   #
+   ,GL_MSG_PIVOT_L           = 10   #
+   ,GL_MSG_READS             = H[210]   #
+   ,GL_MSG_READS_L           = 6   #
+   ,GL_MSG_WRITES            = H[216]   #
+   ,GL_MSG_WRITES_L          = 6   #
+   ,GL_MSG_DATE              = H[222]   #
+   ,GL_MSG_DATE_L            = 6   #
+   ,GL_MSG_TIME              = H[228]   #
+   ,GL_MSG_TIME_L            = 8   #
+   ,GL_MSG_UNIQUE            = H[236]   #
+   ,GL_MSG_UNIQUE_L          = 12   #
+   ,GL_MSG_LANG              = H[248]   #
+   ,GL_MSG_LANG_L            = 2   #
+   ,GL_MSG_NEW_LANG          = H[250]   #
+   ,GL_MSG_NEW_LANG_L        = 2   #
+   ,GL_MSG_TAG               = E[126]   #
+   ,GL_MSG_TAG_L             = 6   #
+   ,GL_MSG_NOF_DESG          = E[132]   #
+   ,GL_MSG_NOF_DESG_L        = 6   #
+   ,GL_MSG_NOF_USERS         = E[138]   #
+   ,GL_MSG_NOF_USERS_O       = 138 #
+   ,GL_MSG_NOF_USERS_L       = 6   #
+   ,GL_PARENT_REQ_VALID      = E[144]   #
+   ,GL_PARENT_REQ_VALID_L    = 1   #
+   ,GL_SET_USERCODE          = E[145]   #
+   ,GL_SET_USERCODE_L        = 1   #
+   ,GL_SET_ASCPRT            = E[146]   #
+   ,GL_SET_ASCPRT_L          = 1   #
+   ,GL_FILLER                = E[147]   #
+   ,GL_FILLER_L              = 5   #
+   ,GL_MSG_TEXT              = E[152]   #
+   ,GL_MSG_TEXT_L            = 1928   #
+  ;
+      
+ REAL PROCEDURE MY_WAIT(COMS_INPUT_EVENT,
+                        COMS_TASK_EVENT);
+   EVENT COMS_INPUT_EVENT,
+         COMS_TASK_EVENT;
+ BEGIN
+   MY_WAIT:= WAIT((TIMEOUT),
+                  COMS_TASK_EVENT,
+                  COMS_INPUT_EVENT,
+                  PORTFILE.CHANGEEVENT,
+                  PORTFILE.INPUTEVENT,
+                  MYSELF.EXCEPTIONEVENT);
+ END MY_WAIT;
+      
+ TYPE INPUTHEADER
+      COMS_IN_TYPE (ARRAY IN_CMMA[0:300]);
+ TYPE OUTPUTHEADER
+      COMS_OUT_TYPE(ARRAY OUT_CMMA[0:300]);
+      
+ COMS_IN_TYPE COMSIN;
+ COMS_OUT_TYPE COMSOUT;
+      
+ PROCEDURE HANDLE_TIMEOUT;
+ BEGIN
+      DEBUGER("HANDLE_TIMEOUT INIT");
+ END OF HANDLE_TIMEOUT;
+      
+ REAL PROCEDURE GET_DESIG;
+ BEGIN
+    REPLACE PGM_NAME BY MSG[5] FOR 17;
+    GET_DESIGNATOR_USING_NAME(PGM_NAME,PROGRAM_NEMONIC,UYS_DESIG);
+    GET_DESIG := UYS_DESIG;
+ END OF PROCEDURE GET_DESIG;
+      
+ PROCEDURE HANDLE_PORT_FILE_INPUT;
+ BEGIN
+    POINTER P;
+    LABEL   EXIT;
+    INTEGER INX;
+    DEFINE
+      TIPO_CON =
+          BEGIN
+          REPLACE CONVERSATION_AREA
+%               123456789*123456789*123456789*123456789*123456789*
+            BY "SUBF", INX FOR 2 DIGITS, C_MSG[INX] FOR 3 DIGITS,
+                        "                                        G",
+               "KY   GNSPPMDPCONACCC<ENTER> O <PF3>               ",
+               "                                                  ",
+               "                          CGIDD                   ",
+               "                                     SIS          ";
+          END         #,
+      TIPO_NEX =
+          BEGIN
+          REPLACE CONVERSATION_AREA
+%               123456789*123456789*123456789*123456789*123456789*
+            BY "SUBF", INX FOR 2 DIGITS, C_MSG[INX] FOR 3 DIGITS,
+                        "                                       CG",
+               "AB   GNSPPPORCONACCC<ENTER> O <PF3>               ",
+               "                                                  ",
+               "                          PGIDD                   ",
+               "                                     SIS          ",
+               "N  N                                              ",
+               "                                                  ",
+               "                                                  ",
+               "                                                  ",
+               "                                                  ",
+               "                                                  ",
+               "                                 P01              ",
+               "       ";
+          END         #,
+      TIPO_P (PAG) =
+          BEGIN
+          REPLACE CONVERSATION_AREA
+%               123456789*123456789*123456789*123456789*123456789*
+            BY "SUBF", INX FOR 2 DIGITS, C_MSG[INX] FOR 3 DIGITS,
+                        "                                       CG",
+               "AB   GNSPPPORCONACCC<ENTER> O <PF3>               ",
+               "                                                  ",
+               "                          PGIDD                   ",
+               "                                     SIS          ",
+               "N  N                                              ",
+               "                                                  ",
+               "                                                  ",
+               "                                                  ",
+               "                                                  ",
+               "                                                  ",
+               "                                 ",
+               MSG[22] FOR 3;
+           END       #,
+      TIPO_MOD =
+          BEGIN
+          REPLACE CONVERSATION_AREA
+%               123456789*123456789*123456789*123456789*123456789*
+            BY "SUBF", INX FOR 2 DIGITS, C_MSG[INX] FOR 3 DIGITS,
+                        "                                       MG",
+               "FL   GNSPPPORMODMODMMODIFIQUE LO DESEADO          ",
+               "                                                  ",
+               "                          PGIDD                   ",
+               "                                     SIS          ",
+               "N  N";
+          END         #,
+      TIPO_ING =
+          BEGIN
+          REPLACE CONVERSATION_AREA
+%               123456789*123456789*123456789*123456789*123456789*
+            BY "SUBF", INX FOR 2 DIGITS, C_MSG[INX] FOR 3 DIGITS,
+                        "                                       MG",
+               "FL   GNSPPPORINGINGMDIGITE LO DESEADO             ",
+               "                                                  ",
+               "                          PGIDD                   ",
+               "                                     SIS          ",
+               "N  N";
+          END         #,
+      MENSAJE_A_PROGRAMA_BEE =
+          BEGIN
+          REPLACE CONVERSATION_AREA
+               BY " " FOR SIZE(CONVERSATION_AREA);
+          P := MSG[22];
+          IF P = "CON" FOR 3 THEN TIPO_CON
+          ELSE IF P = "NEX" FOR 3 THEN TIPO_NEX
+          ELSE IF P = "MOD" FOR 3 THEN TIPO_MOD
+          ELSE IF P = "ING" FOR 3 THEN TIPO_ING
+          ELSE IF P = "P"   FOR 1 THEN TIPO_P(INTEGER(P+1,2))
+          ELSE BEGIN
+               DISPLAY ("Comando erroneo a BEE "!!STRING(P,3));
+               DISPLAY (STRING(P,25));
+               END;
+          P := MSG[25];
+          REPLACE E
+               BY LARGO_CMMA_BEE FOR 4 DIGITS,
+                  CONVERSATION_AREA FOR LARGO_CMMA_BEE,
+                  P FOR 1952;
+          DEBUGER("MENSAJE A PROGRAMA BEE:" !! STRING(E,100));
+          SEND(COMSOUT,(1952+LARGO_CMMA_BEE),E);
+          END         #,
+      MENSAJE_A_PROGRAMA_LINC16 =
+          BEGIN
+          DEBUGER("MSG a LINC16");
+          REPLACE E BY 48"00" FOR SIZE(E);
+          REPLACE GL_MSG_ISPEC BY " " FOR GL_MSG_ISPEC_L;
+          REPLACE GL_SOURCE_HOST BY " " FOR GL_SOURCE_HOST_L;
+          REPLACE GL_SOURCE_DBNAME BY " " FOR GL_SOURCE_DBNAME_L;
+          REPLACE GL_PARENT_HOST BY " " FOR GL_PARENT_HOST_L;
+          REPLACE GL_PARENT_DBNAME BY " " FOR GL_PARENT_DBNAME_L;
+          REPLACE GL_MSG_STNNAME BY " " FOR GL_MSG_STNNAME_L;
+          REPLACE GL_MSG_TAG BY " " FOR GL_MSG_TAG_L;
+          REPLACE GL_MSG_NOF_DESG BY " " FOR GL_MSG_NOF_DESG_L;
+          REPLACE GL_MSG_NOF_USERS BY " " FOR GL_MSG_NOF_USERS_L;
+          REPLACE GL_PARENT_REQ_VALID BY" " FOR GL_PARENT_REQ_VALID_L;
+          REPLACE GL_SET_USERCODE BY " " FOR GL_SET_USERCODE_L;
+          REPLACE GL_SET_ASCPRT BY " " FOR GL_SET_ASCPRT_L;
+          REPLACE GL_FILLER BY " " FOR GL_FILLER_L;
+          REPLACE GL_MSG_STNNAME BY " " FOR GL_MSG_STNNAME_L;
+          REPLACE GL_MSG_STNNAME BY PORTFILE(INX).YOURNAME;
+          DEBUGER("GL_MSG_STNNAME: " !!
+                   STRING(GL_MSG_STNNAME,GL_MSG_STNNAME_L));
+          REPLACE GL_MSG_NOF_USERS BY "SUBF",INX FOR 2 DIGITS,
+                        C_MSG[INX] FOR 3 DIGITS;
+          DEBUGER("GL_MSG_NOF_USERS: " !!
+                   STRING(GL_MSG_NOF_USERS,GL_MSG_NOF_USERS_L));
+          REPLACE GL_MSG_ISPEC BY MSG[22] FOR 5;
+          REPLACE GL_MSG_TYPE BY 4"01";
+          REPLACE GL_MSG_LENGTH BY 4"1800";
+          REPLACE GL_MSG_STNTYPE BY 4"9";
+          REPLACE GL_PARENT_HOST BY "BEETEAM";
+          REPLACE GL_SOURCE_HOST BY "BEETEAM";
+          REPLACE GL_MSG_LANG BY 4"01";
+          REPLACE GL_MSG_NEW_LANG BY 4"01";
+          P := MSG[22];
+          REPLACE GL_MSG_TEXT
+               BY P FOR MIN(SIZE(MSG)-22,SIZE(E)-152);
+          SEND(COMSOUT,1952,E);
+          END         #,
+      MENSAJE_A_PROGRAMA_DESCONOCIDO =
+          BEGIN
+          DISPLAY("Mensaje desconocido :" CAT STRING(P,5));
+          DEBUGER("MENSAJE DESCONOCIDO :" CAT STRING(P,5));
+          MYSELF.STATUS := -1;
+          END         #;
+      
+    DEBUGER("HANDLE_PORT_FILE_INPUT INIT");
+    IF NOT (PORTFILE.CENSUS > 0) THEN
+       GO TO EXIT;
+    READ (PORTFILE[SUBFILE 0],PORTFILE.MAXRECSIZE,MSG);
+    INX := PORTFILE.LASTSUBFILE;
+    IF (SIZE(C_MSG) < INX + 1) THEN
+       RESIZE(C_MSG, INX + 20, RETAIN);
+    C_MSG[INX] := (C_MSG[INX] + 1) MOD 1000;
+    COMSOUT.DESTINATIONDESG := GET_DESIG;
+    COMSOUT.AGENDA          := 0;
+    DEBUGER ("SUBFILE: "!!STRING(INX,*)!!" MSG: " !! STRING(MSG,100));
+    P := MSG[04];
+    IF P = "B" FOR 1      THEN MENSAJE_A_PROGRAMA_BEE
+    ELSE IF P = "6" FOR 1 THEN MENSAJE_A_PROGRAMA_LINC16
+    ELSE                       MENSAJE_A_PROGRAMA_DESCONOCIDO;
+ EXIT:
+ END OF HANDLE_PORT_FILE_INPUT;
+      
+ PROCEDURE HANDLE_PORT_FILE_CHANGE(INX);
+   VALUE INX;
+   INTEGER INX;
+ BEGIN
+    DEBUGER("back port: HANDLE_PORT_FILE_CHANGE");
+    CASE PORTFILE(INX).FILESTATE OF BEGIN
+      VALUE(AWAITINGOFFER):
+      VALUE(AWAITINGHOST):
+      VALUE(BLOCKED):
+      VALUE(CLOSEPENDING):
+      VALUE(DEACTIVATIONPENDING):
+        ;
+      VALUE(OPENED):
+        MAX_SUBFILES :=* - 1;
+        IF MAX_SUBFILES <= 3 THEN
+          BEGIN
+          PORTFILE.MAXSUBFILES := PORTFILE.MAXSUBFILES + 3;
+          MAX_SUBFILES :=* + 3;
+          END;
+      VALUE(SHUTTINGDOWN):
+        CLOSE(PORTFILE[SUBFILE INX]);
+      VALUE(CLOSED):
+        REPLACE PORTFILE(INX).YOURNAME BY ".";
+        REPLACE PORTFILE(INX).YOURHOST BY ".";
+        AWAITOPEN(PORTFILE[SUBFILE INX],DONTWAIT);
+        MAX_SUBFILES :=* + 1;
+      VALUE(DEACTIVATED):
+        CLOSE(PORTFILE[SUBFILE INX]);
+        REPLACE PORTFILE(INX).YOURNAME BY ".";
+        REPLACE PORTFILE(INX).YOURHOST BY ".";
+        AWAITOPEN(PORTFILE[SUBFILE INX],DONTWAIT);
+        MAX_SUBFILES :=* + 1;
+      ELSE:
+       ;
+    END;
+ END OF HANDLE_PORT_FILE_CHANGE;
+      
+ PROCEDURE HANDLE_EXCEPTIONEVENT_CAUSED;
+ BEGIN
+     DEBUGER("back port: HANDLE_EXCEPTIONEVENT_CAUSED");
+ END OF HANDLE_EXCEPTIONEVENT_CAUSED;
+      
+ PROCEDURE HANDLE_ERROR;
+ BEGIN
+      DEBUGER("back port: HANDLE_ERROR");
+ END OF HANDLE_ERROR;
+      
+ PROCEDURE HANDLE_COMSIN;
+ BEGIN
+    LABEL EXIT;
+    INTEGER INX;
+    BOOLEAN RESULT;
+    REAL    RRESULT = RESULT;
+      
+    DEBUGER("HANDLE_COMSIN INIT");
+    RECEIVE(COMSIN [DONTWAIT], E);
+    IF COMSIN.STATUSVALUE = 99 THEN
+       BEGIN
+       DEBUGER("FIN DE DIALOGO CON COMS (STATUSVALUE=99)");
+       GO TO EXIT;
+       END;
+    DEBUGER ("RESPUESTA: " !! STRING(E,80));
+    DEBUGER ("GL_MSG_STNNAME: " !!
+             STRING(GL_MSG_STNNAME,GL_MSG_STNNAME_L));
+    IF GL_MSG_NOF_USERS = "SUBF" THEN
+      BEGIN
+      DEBUGER("GL_MSG_NOF_USERS = SUBF");
+      IF STRING(GL_MSG_TEXT,6) = "&&&&&&" THEN
+        BEGIN
+        DEBUGER("MENSAJE NO VALIDO, &&&&&&")
+        END
+      ELSE
+        BEGIN
+        INX := INTEGER(E[GL_MSG_NOF_USERS_O+4], 2);
+        IF (C_MSG[INX] NEQ INTEGER(E[GL_MSG_NOF_USERS_O+6], 3)) THEN
+          BEGIN
+          DEBUGER("MENSAJE YA DIO TIMEOUT, ESTAMOS EN MSG NRO.: "!!
+                  STRING(C_MSG[INX],*)!!" Y LLEGO MSG NRO.: "!!
+                  STRING(E[GL_MSG_NOF_USERS_O+6],3));
+          END
+        ELSE
+          BEGIN
+          REPLACE MSG BY 48"00" FOR SIZE(MSG);
+          REPLACE MSG
+             BY "0000",GL_MSG_TEXT FOR MIN(SIZE(E)-152,SIZE(MSG)-4);
+          DEBUGER("RESPUESTA A SUBFILE: "!!STRING(INX,*));
+          A_BUG(MSG);
+          IF RESULT := WRITE (PORTFILE[SUBFILE INX],
+                              PORTFILE.MAXRECSIZE,MSG) THEN
+            BEGIN
+            DISPLAY("ERROR DE ESCRITURA EN SUBFILE: " !! STRING(INX,*));
+            DEBUGER("ERROR DE ESCRITURA EN SUBFILE: " !! STRING(INX,*)
+               !! ", STATE.[26:10]="!!STRING(PORTFILE.STATE.[26:10],*));
+            B_BUG("RESULT", RRESULT);
+            END;
+          END;
+        END;
+      END
+    ELSE
+    IF E[4] = "SUBF" THEN
+      BEGIN
+      DEBUGER("E[4] = SUBF");
+      INX := INTEGER(E[8], 2);
+      IF (C_MSG[INX] NEQ INTEGER(E[10], 3)) THEN
+        BEGIN
+        DEBUGER("MENSAJE YA DIO TIMEOUT, MENSAJE ACTUAL: "!!
+                STRING(INX,*)!!" Y LLEGO MSG. NRO.:" !!
+                STRING(E[10],3));
+        END
+      ELSE
+        BEGIN
+        % Respuesta desde programa BEE
+      
+        DEFINE SCR_ICER =266#;
+      
+        REPLACE MSG BY 48"00" FOR SIZE(MSG);
+        REPLACE MSG
+             BY "0000",
+                E[SCR_ICER] FOR 3,
+                E[LARGO_CMMA_BEE+4]
+                FOR MIN(SIZE(E)-(LARGO_CMMA_BEE+4),SIZE(MSG)-07);
+        DEBUGER("RESPONDIENDO A SUBFILE:" !! STRING(INX,*) !! " MSG: "!!
+                STRING(MSG,100));
+        IF RESULT := WRITE (PORTFILE[SUBFILE INX],
+                  PORTFILE.MAXRECSIZE,MSG) THEN
+          BEGIN
+          DISPLAY("ERROR DE ESCRITURA EN SUBFILE: " !! STRING(INX,4));
+          DEBUGER("ERROR DE ESCRITURA EN SUBFILE: " !! STRING(INX,4) !!
+                  ", STATE.[26:10]="!!STRING(PORTFILE.STATE.[26:10],*));
+          B_BUG("RESULT", RRESULT);
+          END;
+        END;
+      END
+    ELSE
+      BEGIN
+      DISPLAY("MENSAJE DESCONOCIDO: " !!
+              STRING(GL_MSG_STNNAME, GL_MSG_STNNAME_L));
+      DEBUGER("MENSAJE DESCONOCIDO: " !!
+              STRING(GL_MSG_STNNAME, GL_MSG_STNNAME_L));
+      END;
+ EXIT:
+ END OF HANDLE_COMSIN;
+      
+ REPLACE MSG BY " " FOR SIZE(MSG);
+ REPLACE MSG BY MYSELF.HOSTNAME;
+ REPLACE PORTFILE.MYNAME BY MSG;
+ REPLACE PORTFILE(0).YOURHOST BY ".";
+ LOAD_INI;
+ REPLACE MSG
+      BY "Back Port Online: Myname:",PORTFILE.MYNAME,
+         ", Yourname:",PORTFILE(1).YOURNAME,48"00";
+ DISPLAY(MSG);
+ DEBUGER(STRING(MSG,100));
+ AWAITOPEN(PORTFILE[SUBFILE 0],DONTWAIT);
+ MAX_SUBFILES := PORTFILE.MAXSUBFILES;
+ TIMEOUT := 600;
+      
+ ENABLE (COMSIN,"ONLINE");
+      
+ REPLACE MSG BY 48"00" FOR SIZE(MSG);
+%REPLACE MSG BY "ADCAGCMMA OF CSTMDP";
+%I:= get_designator_using_name(msg,agenda_nemonic,AGE_desig);
+%IF I NEQ 0 THEN DISPLAY ("ERROR DESIGNATOR AGENDA..." CAT
+%                STRING(I,*));
+ REPLACE MSG BY 48"00" FOR SIZE(MSG);
+      
+ WHILE COMSIN.STATUSVALUE NEQ 99 DO
+   BEGIN
+   DEBUGER(">");
+   CASE DCIWAITENTRYPOINT(MY_WAIT) OF
+      BEGIN
+      1:HANDLE_TIMEOUT;
+      2:HANDLE_COMSIN;
+      3:HANDLE_COMSIN;
+      4:HANDLE_PORT_FILE_CHANGE(PORTFILE.CHANGEDSUBFILE);
+      5:HANDLE_PORT_FILE_INPUT;
+      6:HANDLE_EXCEPTIONEVENT_CAUSED;
+      ELSE:HANDLE_ERROR;
+      END CASE;
+   END;
+      
+ END.

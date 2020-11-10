@@ -1,0 +1,296 @@
+      *$ASCII
+       IDENTIFICATION DIVISION.
+      *=======================
+       PROGRAM-ID.     GNSPPPFL.
+       AUTHOR.          CONSIST.
+      *                
+      * Subrutina de Obtencion de Perfil de Usuario
+      *
+       ENVIRONMENT DIVISION.
+      *=====================
+       CONFIGURATION SECTION.
+      *----------------------
+       SPECIAL-NAMES.
+               DECIMAL-POINT IS COMMA.
+
+       DATA DIVISION.
+      *==============
+       WORKING-STORAGE SECTION.
+      *-----------------------
+       COPY GNSWVSCR.
+       COPY GNSWVIDD.
+       COPY GNSWGSYS.
+       COPY GNSWGFRM.
+*% IF PGM_DTC
+      *
+       COPY GNSWGRQA.
+       COPY GNSWGUIB.
+       COPY GNSWGELS.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-PDP-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-RUG-REQA==.
+      *
+*% END
+       COPY GNSWGQUE.
+       COPY GNSWGTPU.
+      *
+       01  WSS-VARI.
+           03 WSS-ESTA-EN-RUG        VALUE 'N'            PIC X(01).
+           03 WSS-CERRAR-RUG         VALUE 'N'            PIC X(01).
+           03 WSS-CERRAR-PDP         VALUE 'N'            PIC X(01).
+           03 WSS-COD-TCON                                PIC X(03).
+           03 WSS-I                  VALUE ZEROES         PIC 9(04).
+           03 WSS-STAT-AST           VALUE SPACES         PIC X(03).
+           03 WSS-STAT-RUG           VALUE SPACES         PIC X(03).
+           03 WSS-STAT-PDP           VALUE SPACES         PIC X(03).
+      *
+       COPY GNSWGUYP.
+       COPY GNSLGUYP.
+       COPY GNSWVFIO.
+       COPY GNSWCFIO.
+       COPY GNSBRPDP.       
+       COPY GNSBRRUG.       
+
+       LINKAGE SECTION.
+      *---------------
+       01  DFHCOMMAREA.
+           02 FILLER                        PIC X(47).
+       COPY GNSLGFIO.
+       
+       PROCEDURE DIVISION.
+      *===================
+       
+       MAIN SECTION.
+      *------------
+       INI-MAIN.
+
+           MOVE DFHCOMMAREA      TO UYP-VARI.
+           PERFORM INI.
+*% IF PGM_DTC
+           MOVE 'GNSPPPFL' TO IDD-PROG.
+           EXEC CICS LINK
+                  PROGRAM ('GNSPPIDD')
+                  COMMAREA(IDD-VARI)
+                  LENGTH(+507)
+           END-EXEC.
+*% END
+           PERFORM CRG-WSS-PDP.
+           IF  WSS-STAT-AST = 'OKS' AND WSS-STAT-RUG = 'OKS' AND
+               WSS-STAT-PDP = 'OKS'
+      *  Respuesta Normal; existe Grupo '*' y usuario vigente en RUG
+                 MOVE '0'        TO UYP-COD-STAT
+           ELSE
+           IF  WSS-STAT-AST = 'OKS' AND WSS-STAT-RUG = 'OKS' AND
+               WSS-STAT-PDP = 'NEX'
+      *  Warning; existe Grupo '*', usuario vigente en RUG, pero
+      *  Grupo sin Privilegios en PDP
+                 MOVE '1'        TO UYP-COD-STAT
+           ELSE
+           IF  WSS-STAT-AST = 'OKS' AND WSS-STAT-RUG = 'NVG'
+      *  Warning; existe Grupo '*', pero usuario no
+      *  esta vigente en la RUG
+                 MOVE '2'        TO UYP-COD-STAT
+           ELSE
+           IF  WSS-STAT-AST = 'OKS' AND WSS-STAT-RUG = 'NEX'
+      *  Warning; existe Grupo '*', pero usuario no
+      *  existe en la RUG
+                 MOVE '3'        TO UYP-COD-STAT
+           ELSE
+           IF  WSS-STAT-AST = 'NEX' AND WSS-STAT-RUG = 'OKS' AND
+               WSS-STAT-PDP = 'OKS'
+      *  Informacion; no existe Grupo '*', pero usuario esta
+      *  vigente en la RUG
+                 MOVE '4'        TO UYP-COD-STAT
+           ELSE
+           IF  WSS-STAT-AST = 'NEX' AND WSS-STAT-RUG = 'OKS' AND
+               WSS-STAT-PDP = 'NEX'
+      *  Warning; no existe Grupo '*', usuario esta vigente en
+      *  la RUG, pero no hay Privilegios en la PDP
+                 MOVE '5'        TO UYP-COD-STAT
+           ELSE
+           IF  WSS-STAT-AST = 'NEX' AND WSS-STAT-RUG = 'NVG'
+      *  Error; no existe Grupo '*', y usuario no esta
+      *  vigente en la RUG
+                 MOVE '6'        TO UYP-COD-STAT
+           ELSE
+           IF  WSS-STAT-AST = 'NEX' AND WSS-STAT-RUG = 'NEX'
+      *  Error; no existe Grupo '*' y usuario no existe en RUG
+                 MOVE '7'        TO UYP-COD-STAT.
+
+      *  Si encontro privilegios para el usuario, intentara
+      *  grabar la cola Temporary Storage 'PRV '
+           IF  UYP-COD-STAT = '0' OR '1' OR '2' OR '3' OR '4'
+                 PERFORM GNS-ERR-QUE
+                 MOVE EIBTRMID          TO QUE-TERM
+                 MOVE 'PRV '            TO QUE-TYPE
+                 MOVE 1                 TO QUE-NITM
+                 MOVE +3007             TO QUE-LITM
+                 MOVE UYP-COD-USER      TO WSS-SCR-USER
+                 MOVE WSS-I             TO WSS-TOT-PDP
+                 MOVE WSS-QUE-VARI      TO QUE-ITEM
+                 MOVE QUE-PUT           TO QUE-CMND
+                 PERFORM GNS-PRO-QUE
+                 IF  QUE-STAT NOT = QUE-STAT-OKS
+      *  Si no pudo grabar, cambia estado a '8' (COLA MAL GRABADA)
+                       MOVE '8'         TO UYP-COD-STAT.
+
+           MOVE UYP-VARI        TO DFHCOMMAREA.
+       FIN-MAIN.
+           EXEC CICS RETURN END-EXEC.
+      *
+      *  Busqueda de Privilegios en PDP y de usuario en RUG
+      *
+       INI SECTION.
+       INI-INI.
+       COPY GNSBGEDB.
+*% IF PGM_VSI
+           PERFORM GNS-HDL-VSM.
+*% END
+           PERFORM GNS-HDL-SYS.
+       FIN-INI.
+           EXIT.
+
+       CRG-WSS-PDP SECTION.
+       INI-CRG-WSS-PDP.
+           MOVE 'NEX'           TO WSS-STAT-RUG.
+           MOVE ZEROES                   TO WSS-I.
+           PERFORM GET-PDP-ALL.
+	
+           MOVE LOW-VALUES               TO RUG-KEY-IRUG IN RUG.
+           MOVE UYP-COD-USER IN UYP-VARI TO RUG-COD-USER IN RUG.
+           MOVE FIO-GET-NLS              TO FIO-CMND.
+
+       CIC-CRG-WSS-PDP.
+           MOVE 'RUG-COD-USER'  TO FIO-AKEY.
+           PERFORM GNS-FIO-RUG.
+           IF  NOT FIO-STAT-OKS
+                 GO TO END-CRG-WSS-PDP.
+
+           MOVE 'S'             TO WSS-CERRAR-RUG.
+	
+           IF  UYP-COD-USER IN UYP-VARI NOT =
+               RUG-COD-USER IN RUG
+                 GO TO END-CRG-WSS-PDP.
+
+           IF  RUG-IND-VIGE IN RUG NOT = 'S'
+                 MOVE 'NVG'       TO WSS-STAT-RUG
+                 GO TO END-CRG-WSS-PDP.
+
+           MOVE 'OKS'           TO WSS-STAT-RUG.
+           PERFORM GET-PDP.
+
+      *  24-MAR-1994 16:15:14 
+      *  UN USUARIO PERTENECE SOLO A UN GRUPO
+      *     MOVE FIO-GET-NXT     TO FIO-CMND.
+      *     GO TO CIC-CRG-WSS-PDP.
+
+       END-CRG-WSS-PDP.
+           IF  WSS-CERRAR-RUG = 'S'
+                 MOVE 'RUG-COD-USER'    TO FIO-AKEY
+                 MOVE 'N'               TO WSS-CERRAR-RUG 
+                 MOVE FIO-END-BRW       TO FIO-CMND
+                 PERFORM GNS-FIO-RUG.
+       FIN-CRG-WSS-PDP.
+           EXIT.
+      *
+      *  Busca el Grupo al que se encuentre adscrito el usuario
+      *  y obtiene los Privilegios asociados a ese grupo.
+      *
+       GET-PDP SECTION.
+       INI-GET-PDP.
+           MOVE 'NEX'               TO WSS-STAT-PDP.
+           MOVE LOW-VALUES          TO PDP-KEY-IPDP IN PDP.
+           MOVE RUG-COD-GRPO IN RUG TO PDP-COD-GRPO IN PDP.
+           MOVE FIO-GET-NLS         TO FIO-CMND.
+       CIC-GET-PDP-2.
+           PERFORM GNS-FIO-PDP.
+           IF  NOT FIO-STAT-OKS
+                 GO TO END-GET-PDP.
+
+           MOVE 'S'     TO WSS-CERRAR-PDP.
+           IF  RUG-COD-GRPO IN RUG NOT =
+               PDP-COD-GRPO IN PDP
+                 GO TO END-GET-PDP.
+
+           MOVE 'OKS'   TO WSS-STAT-PDP.
+           ADD  1       TO WSS-I.
+      *
+           MOVE PDP-COD-SIST IN PDP      TO
+                        WSS-PDP-COD-SIST IN WSS-PDP(WSS-I).
+           MOVE PDP-COD-NEMO IN PDP      TO
+                        WSS-PDP-COD-NEMO IN WSS-PDP(WSS-I).
+           MOVE PDP-COD-CMND IN PDP      TO
+                        WSS-PDP-COD-CMND IN WSS-PDP(WSS-I).
+           MOVE PDP-COD-PROC IN PDP      TO
+                        WSS-PDP-COD-PROC IN WSS-PDP(WSS-I).
+           MOVE PDP-IND-RESP IN PDP      TO
+                        WSS-PDP-IND-RESP IN WSS-PDP(WSS-I).
+
+           MOVE FIO-GET-NXT              TO FIO-CMND.
+           GO TO CIC-GET-PDP-2.
+
+       END-GET-PDP.
+           IF  WSS-CERRAR-PDP = 'S'
+                 MOVE 'N'         TO WSS-CERRAR-PDP
+                 MOVE FIO-END-BRW TO FIO-CMND
+                 PERFORM GNS-FIO-PDP.
+       FIN-GET-PDP.
+           EXIT.
+      *
+      *  Obtiene Privilegios del Grupo '*' (si existe)
+      *
+       GET-PDP-ALL SECTION.
+       INI-GET-PDP-ALL.
+           MOVE 'NEX'               TO WSS-STAT-AST.
+           MOVE LOW-VALUES          TO PDP-KEY-IPDP IN PDP.
+           MOVE '*'                 TO PDP-COD-GRPO IN PDP.
+           MOVE FIO-GET-NLS         TO FIO-CMND.
+       CIC-GET-PDP-ALL-1.
+           PERFORM GNS-FIO-PDP.
+           IF  NOT FIO-STAT-OKS
+                 GO TO FIN-GET-PDP-ALL-1.
+
+           MOVE 'S'     TO WSS-CERRAR-PDP.
+           IF  PDP-COD-GRPO IN PDP NOT = '*'
+                 GO TO FIN-GET-PDP-ALL-1.
+
+           ADD  1                        TO WSS-I.
+           MOVE 'OKS'                    TO WSS-STAT-AST.
+      *
+           MOVE PDP-COD-SIST IN PDP      TO
+                        WSS-PDP-COD-SIST IN WSS-PDP(WSS-I).
+           MOVE PDP-COD-NEMO IN PDP      TO
+                        WSS-PDP-COD-NEMO IN WSS-PDP(WSS-I).
+           MOVE PDP-COD-CMND IN PDP      TO
+                        WSS-PDP-COD-CMND IN WSS-PDP(WSS-I).
+           MOVE PDP-COD-PROC IN PDP      TO
+                        WSS-PDP-COD-PROC IN WSS-PDP(WSS-I).
+           MOVE PDP-IND-RESP IN PDP      TO
+                        WSS-PDP-IND-RESP IN WSS-PDP(WSS-I).
+
+           MOVE FIO-GET-NXT              TO FIO-CMND.
+           GO TO CIC-GET-PDP-ALL-1.
+
+       FIN-GET-PDP-ALL-1.
+
+           IF  WSS-CERRAR-PDP = 'S'
+                 MOVE 'N'         TO WSS-CERRAR-PDP
+                 MOVE FIO-END-BRW TO FIO-CMND
+                 PERFORM GNS-FIO-PDP.
+              
+       FIN-GET-PDP-ALL.
+           EXIT.
+
+       COPY GNSBFPDP.
+       COPY GNSBFRUG.
+       COPY GNSBGQUE.
+       COPY GNSBHSYS.
+       COPY GNSBGSYS.
+*% IF PGM_VSI
+       COPY GNSBHVSM.
+       COPY GNSBGVSM.
+*% END
+
+       COPY GNSBIABT.
+*% IF PGM_DTC
+       COPY GNSBGDTC.
+*% END

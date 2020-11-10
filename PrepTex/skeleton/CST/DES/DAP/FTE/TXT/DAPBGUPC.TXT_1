@@ -1,0 +1,275 @@
+      * 'U'tilitario 'P'lazo 'C'ontable
+
+       SET-TAG-DAPBGUPC SECTION.
+       INI-SET-TAG-DAPBGUPC.
+           MOVE
+           '<IDNMOD NOM=$DAPBGUPC$ VSN=$13.08.10$ VGM=$3.0.1$
+      -    'GEN=$20-Aug-13 04:26 PM$ FNC=$130810$/>'
+               TO WSS-CVT-ITEM.
+       FIN-SET-TAG-DAPBGUPC.
+           EXIT.
+
+       INIC-UPC SECTION.
+       INI-INIC-UPC.
+       
+      * Por default entiende que procesara modalidad nueva
+      * Si antes de invocar PRO-UPC esta variable es seteada
+      * respeta ese seteo
+           IF UPC-COD-MODA NOT > SPACES
+               MOVE UPC-CTE-MODALIDAD-NUEVA TO UPC-COD-MODA.
+
+           MOVE SPACES TO
+                  UPC-COD-STAT
+                  UPC-GLS-STAT
+                  UPC-COD-PLZO
+                  UPC-COD-BISI
+                  UPC-VEC-PLZO
+                  UPC-COD-TALG.
+
+           MOVE ZEROES TO
+                  UPC-NUM-DIAS
+                  UPC-FEC-FBIS
+                  UPC-IDX-I
+                  UPC-TOT-PLZO.
+
+           MOVE 'N' TO UPC-COD-BISI.
+       FIN-INIC-UPC.
+           EXIT.
+
+       PRO-UPC SECTION.
+       INI-PRO-UPC.
+       
+      * Inicializa variables para cada invocacion
+           PERFORM INIC-UPC.
+           
+      * Modalidad Antigua
+           IF UPC-PRO-MODALIDAD-ANTIGUA
+               GO TO LBL-PZO-OLD.
+
+      * 01) Tabla TPZ
+
+      * Si el periodo de la operacion ingresado existe
+      * en tabla TPZ usa ese periodo
+
+           MOVE 'DAP' TO TAB-COD-SIST.
+           MOVE 'DAP' TO FIO-SIST.
+           MOVE 'TPZ' TO TAB-COD-TTAB IN TAB.
+           MOVE UPC-COD-PVEN TO TAB-COD-CTAB IN TAB.
+           PERFORM GNS-FIO-TAB.
+           IF FIO-STAT-OKS AND
+              TAB-MSC-STAT = UPC-CTE-S
+                MOVE TAB-GLS-DATA TO UPC-COD-PLZO
+                MOVE UPC-CTE-TALG-TPZ TO UPC-COD-TALG
+                GO TO FIN-PRO-UPC.
+
+      * 02) Tabla CFB
+
+      * Usara tabla CFB solo si
+      * la fecha de vencimiento Cubre Febrero del
+      * agno ( actual o siguiente ) y este es bisiesto
+      *
+      * Para esto
+      *
+      * Si el mes de la fecha de captacion
+      *           es mayor a
+      * 'Febrero' ( 03,04,05,06,07,08,09,10,11 o 12 )
+      *      entonces
+      * Verifica si fecha de vencimiento es mayor a
+      * 28/02/ss( agno + 1 de captacion ) y este es bisiesto
+      *
+      * Si el mes de la fecha de captacion
+      *           es menor o igual a
+      * 'Febrero' ( 01 o 02 )
+      *      entonces
+      * Verifica si fecha de vencimiento es mayor a
+      * 28/02/ss( agno actual de captacion ) y este es bisiesto
+
+      * Obtiene fecha candidata a bisiesto para comparar
+      * y determinar si esta es cubierta por fecha de vencimiento
+           MOVE UPC-CTE-DIA-28 TO UPC-NUM-DBIS.
+           MOVE UPC-CTE-MES-02 TO UPC-NUM-MBIS.
+           MOVE UPC-NUM-SREA   TO UPC-NUM-SBIS.
+
+           IF UPC-NUM-MREA > UPC-CTE-MES-FEB
+                ADD 1 TO UPC-NUM-AREA GIVING UPC-NUM-ABIS
+           ELSE
+                MOVE     UPC-NUM-AREA TO     UPC-NUM-ABIS.
+
+      * Si la fecha candidata como bisiesta UPC-FEC-FBIS > Fecha
+      * vencimiento significa que fecha de vencimiento no cubre
+      * febrero candidato a bisiesto
+
+           IF UPC-FEC-FBIS > UPC-FEC-FTER
+               GO TO LBL-PZO-OLD.
+
+      * Valida si fecha candidata es bisiesto
+
+           MOVE UPC-CTE-DIA-29 TO FEC-ITM1.
+           MOVE UPC-NUM-MBIS   TO FEC-ITM2.
+           MOVE UPC-NUM-SBIS   TO FEC-ITM3.
+           MOVE UPC-NUM-ABIS   TO FEC-ITM4.
+
+           MOVE FEC-FORM-FEC TO FEC-FORM.
+           MOVE FEC-FBLK-S   TO FEC-FBLK.
+           MOVE FEC-CHOY-N   TO FEC-CHOY.
+           MOVE FEC-VHBL-N   TO FEC-VHBL.
+           MOVE FEC-VAL-FEC  TO FEC-CMND.
+           PERFORM PRO-FEC.
+
+           IF NOT FEC-STAT-OKS
+               GO TO LBL-PZO-OLD.
+
+           MOVE FEC-ITM1 TO UPC-NUM-DBIS.
+           MOVE FEC-ITM2 TO UPC-NUM-MBIS.
+           MOVE FEC-ITM3 TO UPC-NUM-SBIS.
+           MOVE FEC-ITM4 TO UPC-NUM-ABIS.
+
+           IF UPC-FEC-FTER > UPC-FEC-FBIS 
+               MOVE 'S' TO UPC-COD-BISI.
+
+           MOVE 'DAP' TO TAB-COD-SIST.
+           MOVE 'DAP' TO FIO-SIST.
+           MOVE 'CFB'        TO TAB-COD-TTAB IN TAB.
+           MOVE UPC-COD-PVEN TO TAB-COD-CTAB IN TAB.
+           PERFORM GNS-FIO-TAB.
+           IF FIO-STAT-OKS AND
+              TAB-MSC-STAT = UPC-CTE-S
+                MOVE TAB-GLS-DATA TO UPC-COD-PLZO
+                MOVE UPC-CTE-TALG-CFB TO UPC-COD-TALG
+                GO TO FIN-PRO-UPC.
+
+       LBL-PZO-OLD.
+
+           PERFORM GET-PLZO.
+           IF UPC-COD-STAT > SPACES
+                MOVE 'DAP' TO MSG-COD-SIST
+                MOVE UPC-COD-STAT TO MSG-COD-MENS
+                PERFORM GET-MSG
+                MOVE MSG-GLS-DESC TO UPC-GLS-DESC
+                MOVE MSG-GLS-DATA TO UPC-GLS-DATA.
+                
+       FIN-PRO-UPC.
+           EXIT.
+
+      * INI-CODIGO PLAZO CONTABLE ANIGUO
+       GET-PLZO SECTION.
+       INI-GET-PLZO.
+           MOVE UPC-CTE-TALG-ADD TO UPC-COD-TALG.
+
+           MOVE ZEROES TO UPC-TOT-PLZO.
+           MOVE 'TAB'  TO FIO-SIST.
+           MOVE 'PZO'  TO TAB-COD-TTAB.
+           MOVE SPACES TO TAB-COD-CTAB.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM GNS-FIO-TAB.
+           PERFORM BUS-PLZO UNTIL
+                 NOT ( FIO-STAT-OKS
+                           AND
+                       TAB-COD-TTAB IN TAB = 'PZO'  
+                           AND
+                       UPC-COD-STAT = SPACES ).
+                       
+           IF UPC-COD-STAT > SPACES
+               GO TO FIN-GET-PLZO.
+               
+           PERFORM PLZO-CTB.
+
+      *     IF OKS-PLZO-CTB = 'N'
+      *isp    MOVE 'N' TO OKS-IMP-OPD
+      *        MOVE FIO-ULK-REC TO FIO-CMND
+      *        PERFORM DAP-FIO-OPD
+      *        GO TO FIN-GET-PLZO.
+       FIN-GET-PLZO.
+           EXIT.
+
+       BUS-PLZO SECTION.
+       INI-BUS-PLZO.
+      * Dentro de TAB-PZO pertenecen a DAP solo
+      * aquellos codigos con 'S' en posicion 2 de
+      * datos anexos
+           MOVE TAB-GLS-DATA IN TAB TO UPC-ES-PLZO-DAP
+
+           IF NOT ( TAB-IND-VIGE IN TAB = 'S' AND
+                    UPC-ES-PLZO-DAP-YES = 'S' )
+                MOVE FIO-GET-NXT TO FIO-CMND
+                PERFORM GNS-FIO-TAB
+           ELSE
+                MOVE TAB-GLS-ABRV IN TAB TO NUM-NUME
+                MOVE NUM-ZERO-N TO NUM-ZERO
+                MOVE NUM-SGNO-N TO NUM-SGNO
+                MOVE 5 TO NUM-NENT
+                MOVE 0 TO NUM-NDCM
+                PERFORM VAL-NUM
+                IF NUM-STAT-OKS
+                    ADD 1 TO UPC-TOT-PLZO
+                    MOVE NUM-NN9N TO UPC-NUM-PLZO IN
+                                     UPC-VEC-PLZO(UPC-TOT-PLZO)
+                    MOVE TAB-COD-CTAB IN TAB TO
+                                     UPC-IND-PLZO IN
+                                     UPC-VEC-PLZO(UPC-TOT-PLZO)
+                    MOVE FIO-GET-NXT TO FIO-CMND
+                    PERFORM GNS-FIO-TAB
+              ELSE
+                    MOVE 'UPCPZONOMUN' TO UPC-COD-STAT
+                    GO TO FIN-BUS-PLZO.
+      *         ELSE
+      *             DISPLAY ' PARAMETRO DE PLAZO CONTABLE NO NUMERICO'
+      *             PERFORM GNS-PRO-ABT.
+
+       FIN-BUS-PLZO.
+           EXIT.
+
+       PLZO-CTB SECTION.
+       INI-PLZO-CTB.
+      *     MOVE 'S' TO OKS-PLZO-CTB.
+
+           MOVE UPC-NUM-DREA  TO FEC-DEC1.
+           MOVE UPC-NUM-MREA  TO FEC-MEC1.
+           MOVE UPC-NUM-SREA  TO FEC-SEC1.
+           MOVE UPC-NUM-AREA  TO FEC-AEC1.
+
+           MOVE UPC-NUM-DTER  TO FEC-DEC2.
+           MOVE UPC-NUM-MTER  TO FEC-MEC2.
+           MOVE UPC-NUM-STER  TO FEC-SEC2.
+           MOVE UPC-NUM-ATER  TO FEC-AEC2.
+
+           MOVE FEC-FORM-FEC TO FEC-FORM.
+           MOVE FEC-DIF-DIA  TO FEC-CMND.
+           PERFORM CAL-FEC.
+           IF NOT FEC-STAT-OKS
+      *         DISPLAY ' '
+      *         DISPLAY ' PROCESO CANCELADO '
+      *         DISPLAY ' ERROR EN DIFERENCIA DIAS PERIODO'
+      *         DISPLAY ' CALCULO PLAZO CONTABLE'
+      *                   FEC-STAT ' : ' FEC-MENS
+               MOVE SPACES TO UPC-COD-PLZO
+               MOVE 'UPCDIFFECERR' TO UPC-COD-STAT
+               GO TO FIN-PLZO-CTB
+           ELSE
+               PERFORM PLZO-VEC VARYING UPC-IDX-I FROM 1 BY 1 UNTIL
+                     UPC-IDX-I > UPC-TOT-PLZO OR
+                     FEC-NDIA NOT > UPC-NUM-PLZO(UPC-IDX-I).
+
+           IF FEC-STAT-OKS
+               IF UPC-IDX-I > UPC-TOT-PLZO
+      *             DISPLAY ' '
+      *             DISPLAY ' PROCESO CANCELADO '
+      *             DISPLAY OPD-CIC-IOPD IN OPD
+      *             DISPLAY ' OPERACION FUERA DE RANGO DE '
+      *                     'PLAZOS CONTABLES'
+      *             PERFORM GNS-PRO-ABT
+                    MOVE 'UPCPZOERRRNG' TO UPC-COD-STAT
+                    MOVE SPACES TO UPC-COD-PLZO
+                    GO TO FIN-PLZO-CTB
+               ELSE
+                   MOVE UPC-IND-PLZO IN UPC-VEC-PLZO(UPC-IDX-I) TO
+                        UPC-COD-PLZO.
+       FIN-PLZO-CTB.
+           EXIT.
+
+       PLZO-VEC SECTION.
+       INI-PLZO-VEC.
+       FIN-PLZO-VEC.
+           EXIT.
+
+      * FIN-CODIGO PLAZO CONTABLE ANIGUO

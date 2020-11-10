@@ -1,0 +1,314 @@
+       IDENTIFICATION DIVISION.
+      *=======================
+       PROGRAM-ID.      COLPGER1.
+       AUTHOR.          CONSIST.
+       DATE-WRITTEN.    08-NOV-1991 03:49 PM.
+
+      * Programa Busca OPC con varias EVC para detectar problema en 1er.
+      * con cuotas concurrentes.
+
+       ENVIRONMENT DIVISION.
+      *====================
+
+       DATA DIVISION.
+      *=============
+       WORKING-STORAGE SECTION.
+      *-----------------------
+      *<<<< WSS_DTC
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-MSG-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-TAB-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-OPC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-EVC-REQA==.
+      *<<<< WSS
+       COPY GNSWGRQA.
+       COPY GNSWGUIB.
+       COPY GNSWGELS.
+       COPY GNSWVIDD.
+       COPY GNSWCFIO.
+       COPY GNSWVFIO.
+       COPY GNSWGSYS.
+       COPY GNSWGFEC.
+       COPY GNSWGHOY.
+       COPY GNSBRMSG.
+       COPY GNSBRTAB.
+       COPY COLBROPC.
+       COPY COLBREVC.
+
+       01  WSS-VARI.
+           03 WSS-IND                             PIC 9(03).
+           03 WSS-MAX                             PIC 9(03).
+           03 WSS-IND-REVC           VALUE 0      PIC 9(05).
+           03 WSS-IND-ROPC           VALUE 0      PIC 9(05).
+           03 WSS-IND-RFER           VALUE 0      PIC 9(05).
+           03 WSS-IND-RBAD           VALUE 0      PIC 9(05).
+           03 WSS-IND-AFER                        PIC 9(01).
+           03 WSS-IND-TOPE                        PIC 9(01).
+           03 WSS-FEC-FCMP.
+              05 WSS-NUM-SCMP                     PIC 9(02).
+              05 WSS-NUM-ACMP                     PIC 9(02).
+              05 WSS-NUM-MCMP                     PIC 9(02).
+              05 WSS-NUM-DCMP                     PIC 9(02).
+           03 WSS-TAB-EVC.
+              05 WSS-CIC-IOPC                     PIC X(12).
+              05 WSS-IND-VCAN                     PIC X(01).
+              05 WSS-TBL-FPVC   OCCURS 100.
+                 07 WSS-NUM-IEVC                  PIC 9(03).
+                 07 WSS-FEC-FSAF.
+                    09 WSS-NUM-SSAF               PIC 9(02).
+                    09 WSS-NUM-ASAF               PIC 9(02).
+                    09 WSS-NUM-MSAF               PIC 9(02).
+                    09 WSS-NUM-DSAF               PIC 9(02).
+                 07 WSS-FEC-FPVC.
+                    09 WSS-NUM-SPVC               PIC 9(02).
+                    09 WSS-NUM-APVC               PIC 9(02).
+                    09 WSS-NUM-MPVC               PIC 9(02).
+                    09 WSS-NUM-DPVC               PIC 9(02).
+                 07 WSS-IND-FERI                  PIC 9(01).
+
+
+       PROCEDURE DIVISION.
+      *==================
+       MAIN SECTION.
+      *------------
+       INI-MAIN.
+           COPY GNSBGEDB.
+           MOVE 'COLPGER1' TO FIO-PROG.
+           PERFORM GNS-BUS-IDD.
+           PERFORM OPEN-FILE.
+           PERFORM LEE-EVC.
+           PERFORM CLOSE-FILE.
+       FIN-MAIN.
+           PERFORM GNS-PRO-END.
+           COPY GNSBPFEC.
+           COPY GNSBFMSG.
+           COPY GNSBFTAB.
+           COPY COLBFOPC.
+           COPY COLBFEVC.
+           COPY GNSBBMSG.
+           COPY GNSBGFEC.
+           COPY GNSBGHOY.
+           COPY GNSBGEND.
+           COPY GNSBGDTC.
+           COPY GNSBGIDD.
+           COPY GNSBTABT.
+           COPY GNSBBSYS.
+      ******************************************************************
+       OPEN-FILE SECTION.
+      *-----------------
+       INI-OPEN-FILE.
+           MOVE FIO-INP TO FIO-CMND.
+           PERFORM COL-FIO-OPC.
+           PERFORM COL-FIO-EVC.
+       FIN-OPEN-FILE.
+           EXIT.
+      ******************************************************************
+      ******************************************************************
+       LEE-EVC SECTION.
+      *---------------
+      * Busca las Estructuras de Vencimiento de las Operacion de Credito
+       INI-LEE-EVC.
+      * Inicio de Ciclo para Registro EVC
+           MOVE SPACES TO EVC-KEY-IEVC IN EVC.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM COL-FIO-EVC.
+           IF NOT FIO-STAT-OKS
+               DISPLAY 'NO HAY REGISTROS EVC : ERROR ??'
+               GO TO FIN-LEE-EVC.
+       ODR-LEE-EVC.
+      * Otro Ciclo para Registro EVC
+           MOVE 0                   TO WSS-IND      IN WSS-VARI.
+           MOVE ZEROES              TO WSS-TAB-EVC  IN WSS-VARI.
+           MOVE 'N'                 TO WSS-IND-VCAN IN WSS-VARI.
+           MOVE EVC-CIC-IOPC IN EVC TO WSS-CIC-IOPC IN WSS-VARI.
+       LUP-LEE-EVC.
+      * Busca las Estructuras de Vencimiento de las Operacion de Credito
+           ADD 1 TO WSS-IND-REVC IN WSS-VARI.
+           ADD 1 TO WSS-IND IN WSS-VARI.
+           MOVE EVC-NUM-IEVC IN EVC TO WSS-NUM-IEVC IN WSS-VARI(WSS-IND)
+
+      * Para Estructura sin cancelaciones (OPC) se guarda Fecha 1er Venc
+           IF EVC-NUM-VCAN IN EVC NOT > ZEROES
+               MOVE EVC-FEC-FPVC IN EVC TO
+                                    WSS-FEC-FSAF IN WSS-VARI(WSS-IND)
+                                    WSS-FEC-FPVC IN WSS-VARI(WSS-IND)
+               GO TO NXT-LEE-EVC.
+
+      * Para Estructura con cancelaciones (CAN) se calcula Fecha 1er Ven
+           MOVE 'S' TO WSS-IND-VCAN IN WSS-VARI.
+           IF EVC-IND-UTSV IN EVC = 'D'
+               MOVE FEC-RST-DIA TO FEC-CMND
+               MULTIPLY EVC-NUM-VCAN IN EVC BY EVC-NUM-SEVE IN EVC
+                                        GIVING FEC-NDIA
+           ELSE
+           IF EVC-IND-UTSV IN EVC = 'M'
+               MOVE FEC-RST-MES TO FEC-CMND
+               MULTIPLY EVC-NUM-VCAN IN EVC BY EVC-NUM-SEVE IN EVC
+                                        GIVING FEC-NMES
+           ELSE
+           IF EVC-IND-UTSV IN EVC = 'A'
+               MOVE FEC-RST-ANO TO FEC-CMND
+               MULTIPLY EVC-NUM-VCAN IN EVC BY EVC-NUM-SEVE IN EVC
+                                        GIVING FEC-NANO
+           ELSE
+      * No posee separacion entre venctos.(estructura con 1 Vencto.)
+           IF EVC-IND-UTSV IN EVC = SPACES
+               MOVE EVC-FEC-FPVC IN EVC TO
+                                    WSS-FEC-FSAF IN WSS-VARI(WSS-IND)
+                                    WSS-FEC-FPVC IN WSS-VARI(WSS-IND)
+               GO TO NXT-LEE-EVC.
+
+      * Obtiene Fecha de Vencimiento segun desfase
+           MOVE EVC-NUM-DPVC IN EVC TO FEC-ITM1.
+           MOVE EVC-NUM-MPVC IN EVC TO FEC-ITM2.
+           MOVE EVC-NUM-SPVC IN EVC TO FEC-ITM3.
+           MOVE EVC-NUM-APVC IN EVC TO FEC-ITM4.
+           MOVE FEC-FORM-FEC TO FEC-FORM.
+      *    PERFORM PRO-FEC.
+           PERFORM CAL-FEC.
+           IF NOT FEC-STAT-OKS
+               DISPLAY FEC-MENS ' : ' FEC-FECH
+               GO TO NXT-LEE-EVC.
+           MOVE FEC-ITM1 TO WSS-NUM-DPVC IN WSS-VARI(WSS-IND)
+                            WSS-NUM-DSAF IN WSS-VARI(WSS-IND).
+           MOVE FEC-ITM2 TO WSS-NUM-MPVC IN WSS-VARI(WSS-IND)
+                            WSS-NUM-MSAF IN WSS-VARI(WSS-IND).
+           MOVE FEC-ITM3 TO WSS-NUM-SPVC IN WSS-VARI(WSS-IND)
+                            WSS-NUM-SSAF IN WSS-VARI(WSS-IND).
+           MOVE FEC-ITM4 TO WSS-NUM-APVC IN WSS-VARI(WSS-IND)
+                            WSS-NUM-ASAF IN WSS-VARI(WSS-IND).
+       NXT-LEE-EVC.
+      * Siguiente Registro EVC para Ciclo
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM COL-FIO-EVC.
+           IF NOT FIO-STAT-OKS
+               PERFORM PRO-EVC-OPC
+               GO TO FIN-LEE-EVC.
+
+      * Detecta cambio de credito para Registro EVC leido
+           IF EVC-CIC-IOPC IN EVC NOT = WSS-CIC-IOPC IN WSS-VARI
+               IF WSS-IND IN WSS-VARI = 1
+                   GO TO ODR-LEE-EVC
+               ELSE
+                   PERFORM PRO-EVC-OPC
+                   GO TO ODR-LEE-EVC
+           ELSE
+           IF WSS-IND IN WSS-VARI = 100
+               DISPLAY 'CREDITO TIENE MAS DE 100 ESTRUCTURAS : ABORTO '
+                        EVC-CIC-IOPC IN EVC
+               GO TO FIN-LEE-EVC.
+
+           GO TO LUP-LEE-EVC.
+       FIN-LEE-EVC.
+           EXIT.
+      ******************************************************************
+      * Procesa OPC segun EVC leidos para detectar Creditos con problema
+       PRO-EVC-OPC SECTION.
+       INI-PRO-EVC-OPC.
+           MOVE  WSS-IND IN WSS-VARI TO WSS-MAX IN WSS-VARI.
+
+      * Busca la Operacion de Credito Determinada segun EVC
+           MOVE WSS-CIC-IOPC IN WSS-VARI TO OPC-CIC-IOPC IN OPC.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM COL-FIO-OPC.
+           IF NOT FIO-STAT-OKS
+               DISPLAY 'ESTRUCTURA NO TIENE CREDITO :ERROR ?? '
+                        WSS-CIC-IOPC IN WSS-VARI
+               GO TO FIN-PRO-EVC-OPC.
+           ADD 1 TO WSS-IND-ROPC IN WSS-VARI.
+
+      * Procesa OPC con analisis de feriado y Venctos en dias no habiles
+           IF OPC-IND-AFER IN OPC = 'S'
+               ADD  1 TO WSS-IND-RFER IN WSS-VARI
+               MOVE 0 TO WSS-IND-AFER IN WSS-VARI
+               PERFORM DET-FEC-HBL VARYING WSS-IND FROM 1 BY 1 UNTIL
+                                           WSS-IND > WSS-MAX
+               IF WSS-IND-AFER IN WSS-VARI = 0
+                   GO TO FIN-PRO-EVC-OPC
+               ELSE
+                   MOVE '99999999' TO WSS-FEC-FCMP IN WSS-VARI
+                   PERFORM ANL-FEC-VEN VARYING WSS-IND FROM 1 BY 1 UNTIL
+                                               WSS-IND > WSS-MAX
+                   IF WSS-IND-TOPE IN WSS-VARI = 1 AND
+                      WSS-IND-AFER IN WSS-VARI = 1
+                       ADD 1 TO WSS-IND-RBAD IN WSS-VARI
+                       DISPLAY 'CREDITO C/ANALISIS DE FERIADO Y TOPE '
+                               'DE ESTRUCTURA EN FECHA C/ANALISIS '
+                               'DE FERIADO : ERROR ??? '
+                       DISPLAY 'OPER.CREDITO / ESTADO / CAN / '
+                               'ESTRUCTURA / S/ANALISIS / C/ANALISIS '
+                       PERFORM DSP-FEC-EVC VARYING WSS-IND FROM 1 BY 1
+                                           UNTIL WSS-IND > WSS-MAX.
+       FIN-PRO-EVC-OPC.
+           EXIT.
+      *-----------------------------------------------------------------
+      * Determina dias no habiles para Vencimientos
+       DET-FEC-HBL SECTION.
+       INI-DET-FEC-HBL.
+           MOVE 0 TO WSS-IND-FERI IN WSS-VARI(WSS-IND).
+           MOVE WSS-NUM-DPVC IN WSS-VARI(WSS-IND) TO FEC-ITM1.
+           MOVE WSS-NUM-MPVC IN WSS-VARI(WSS-IND) TO FEC-ITM2.
+           MOVE WSS-NUM-SPVC IN WSS-VARI(WSS-IND) TO FEC-ITM3.
+           MOVE WSS-NUM-APVC IN WSS-VARI(WSS-IND) TO FEC-ITM4.
+           MOVE FEC-FORM-FEC TO FEC-FORM.
+           MOVE FEC-FBLK-N   TO FEC-FBLK.
+           MOVE FEC-CHOY-N   TO FEC-CHOY.
+           MOVE FEC-VHBL-S   TO FEC-VHBL.
+           MOVE FEC-VAL-FEC  TO FEC-CMND.
+           PERFORM PRO-FEC.
+           IF FEC-STAT-FER
+               MOVE 1 TO WSS-IND-AFER IN WSS-VARI
+               MOVE 1 TO WSS-IND-FERI IN WSS-VARI(WSS-IND)
+               MOVE FEC-SIG-HBL TO FEC-CMND
+      *        PERFORM PRO-FEC
+               PERFORM CAL-FEC
+               MOVE FEC-ITM1 TO WSS-NUM-DPVC IN WSS-VARI(WSS-IND)
+               MOVE FEC-ITM2 TO WSS-NUM-MPVC IN WSS-VARI(WSS-IND)
+               MOVE FEC-ITM3 TO WSS-NUM-SPVC IN WSS-VARI(WSS-IND)
+               MOVE FEC-ITM4 TO WSS-NUM-APVC IN WSS-VARI(WSS-IND).
+       FIN-DET-FEC-HBL.
+           EXIT.
+      *-----------------------------------------------------------------
+      * Determina Venctos en dias no habiles con Choques en 1er Vencto.
+       ANL-FEC-VEN SECTION.
+       INI-ANL-FEC-VEN.
+           IF WSS-FEC-FPVC IN WSS-VARI(WSS-IND) < WSS-FEC-FCMP
+                                                          IN WSS-VARI
+               MOVE 0 TO WSS-IND-TOPE IN WSS-VARI
+               MOVE WSS-FEC-FPVC IN WSS-VARI(WSS-IND) TO
+                    WSS-FEC-FCMP IN WSS-VARI
+               MOVE WSS-IND-FERI IN WSS-VARI(WSS-IND) TO
+                    WSS-IND-AFER IN WSS-VARI
+           ELSE
+           IF WSS-FEC-FPVC IN WSS-VARI(WSS-IND) = WSS-FEC-FCMP
+                                                          IN WSS-VARI
+               MOVE 1 TO WSS-IND-TOPE IN WSS-VARI
+               IF WSS-IND-FERI IN WSS-VARI(WSS-IND) = 1
+                   MOVE WSS-IND-FERI IN WSS-VARI(WSS-IND) TO
+                        WSS-IND-AFER IN WSS-VARI.
+       FIN-ANL-FEC-VEN.
+           EXIT.
+      *-----------------------------------------------------------------
+       DSP-FEC-EVC SECTION.
+       INI-DSP-FEC-EVC.
+           DISPLAY OPC-CIC-IOPC IN OPC ' /   ' OPC-MSC-STAT IN OPC
+                   '    /  ' WSS-IND-VCAN IN WSS-VARI '  /    '
+                   WSS-NUM-IEVC IN WSS-VARI(WSS-IND) '    /  '
+                   WSS-FEC-FSAF IN WSS-VARI(WSS-IND) '  /  '
+                   WSS-FEC-FPVC IN WSS-VARI(WSS-IND).
+       FIN-DSP-FEC-EVC.
+           EXIT.
+      ******************************************************************
+      ******************************************************************
+       CLOSE-FILE SECTION.
+      *------------------
+       INI-CLOSE-FILE.
+           DISPLAY 'REGISTROS EVC LEIDOS   : ' WSS-IND-REVC IN WSS-VARI.
+           DISPLAY 'OPC CON MULTIPLES EVC  : ' WSS-IND-ROPC IN WSS-VARI.
+           DISPLAY 'OPC CON ANAL. FERIADO  : ' WSS-IND-RFER IN WSS-VARI.
+           DISPLAY 'CREDITOS CON ERROR ??  : ' WSS-IND-RBAD IN WSS-VARI.
+           MOVE FIO-CLO TO FIO-CMND.
+           PERFORM COL-FIO-OPC.
+           PERFORM COL-FIO-EVC.
+       FIN-CLOSE-FILE.
+           EXIT.
+      ******************************************************************

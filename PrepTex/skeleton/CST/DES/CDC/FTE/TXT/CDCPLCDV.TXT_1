@@ -1,0 +1,201 @@
+*%! Codigo adicional para archivo
+*% IF WSS
+      *<<<< WSS
+       COPY GNSWGFEC.
+       COPY GNSWGHOY.
+       01  WSS-VARI.
+           03 WSS-IND-ESTA                        PIC X(01). 
+           03 WSS-FEC-FING.
+              05 WSS-NUM-DING                     PIC 9(02).
+              05 WSS-NUM-MING                     PIC 9(02).
+              05 WSS-NUM-SING                     PIC 9(02).
+              05 WSS-NUM-AING                     PIC 9(02).
+
+           03 WSS-FEC-FCMP.
+              05 WSS-NUM-SCMP                     PIC 9(02).
+              05 WSS-NUM-ACMP                     PIC 9(02).
+              05 WSS-NUM-MCMP                     PIC 9(02).
+              05 WSS-NUM-DCMP                     PIC 9(02).
+
+           03 WSS-IND-NEXT                        PIC 9(01).
+           03 WSS-GLS-GVEN                        PIC X(18)
+                          VALUE 'CON VENCIMIENTO EL'.
+           03 WSS-GLS-GDIS                        PIC X(18)
+                          VALUE 'DISPONIBLES     AL'.
+       COPY TABBRUSR.
+      * COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-USR-REQA==.
+      *>>>>
+*% END
+*% IF INI_INP
+      *<<<< INI_INP
+
+*% IF PGM_VMS
+      * INI SOLO VAX
+
+           MOVE 'CDC'        TO FIO-SIST.
+           MOVE FIO-ACC      TO FIO-CMND.
+           MOVE FIO-ACCS-UPD TO FIO-ACCS.
+           PERFORM GNS-FIO-TAB.
+           MOVE 'CDC'        TO FIO-SIST.
+           MOVE FIO-INP      TO FIO-CMND.
+           PERFORM GNS-FIO-TAB.
+
+      * FIN SOLO VAX
+*% END
+      *Captura de Estado de Cintas
+           DISPLAY 'ESTADO DE CINTAS ( D:DISPONIBLES,A:ASIGNADAS ) : '.
+           ACCEPT  WSS-IND-ESTA IN WSS-VARI.
+
+           IF WSS-IND-ESTA IN WSS-VARI NOT = 'D' AND NOT = 'A'
+               DISPLAY 'OPCION SELECCIONADA ' WSS-IND-ESTA IN WSS-VARI
+                       ' NO ES VALIDA'
+               COPY GNSBGGBK.
+      *Captura fecha de proceso
+           DISPLAY 'FECHA DE PROCESO ( DDMMSSAA ) '.
+           ACCEPT  WSS-FEC-FING IN WSS-VARI.
+           IF WSS-FEC-FING NOT > SPACES
+               PERFORM GET-FHOY
+               MOVE HOY-SHOY TO WSS-NUM-SING
+               MOVE HOY-AHOY TO WSS-NUM-AING
+               MOVE HOY-MHOY TO WSS-NUM-MING
+               MOVE HOY-DHOY TO WSS-NUM-DING.
+
+      *VAL-FEC Validar Fecha
+           MOVE WSS-FEC-FING TO FEC-FECH.
+           MOVE FEC-FORM-FEC TO FEC-FORM.
+           MOVE FEC-FBLK-S  TO FEC-FBLK.
+           MOVE FEC-CHOY-GE TO FEC-CHOY.
+           MOVE FEC-VHBL-N TO FEC-VHBL.
+           MOVE FEC-VAL-FEC TO FEC-CMND.
+           PERFORM PRO-FEC.
+           IF FEC-STAT-OKS
+               MOVE FEC-FECH TO WSS-FEC-FING
+           ELSE
+               DISPLAY 'FECHA DE PROCESO INVALIDA '
+               DISPLAY 'ABORTO'
+               COPY GNSBGGBK.
+
+           MOVE WSS-NUM-SING TO WSS-NUM-SPRO.
+           MOVE WSS-NUM-AING TO WSS-NUM-APRO.
+           MOVE WSS-NUM-MING TO WSS-NUM-MPRO.
+           MOVE WSS-NUM-DING TO WSS-NUM-DPRO.
+
+           MOVE WSS-NUM-SING TO WSS-NUM-SCMP.
+           MOVE WSS-NUM-AING TO WSS-NUM-ACMP.
+           MOVE WSS-NUM-MING TO WSS-NUM-MCMP.
+           MOVE WSS-NUM-DING TO WSS-NUM-DCMP.
+
+
+      *>>>>
+*% END
+*% IF LUP_INP
+      *<<<< LUP_INP
+      * Proceso de Seleccion y Clasificacion a Partir del Registro CIN
+           PERFORM SEL-REG-PRO.
+           IF WSS-IND-NEXT IN WSS-VARI = 1
+               GO TO NXT-INP-SRT.
+      *BUS-USR busca usuario en tablas
+           MOVE SPACES TO USR-GLS-DCOR IN USR.
+           IF CIN-COD-IUSR IN CIN > SPACES
+               MOVE 'CDC'               TO TAB-COD-SIST
+               MOVE 'USR'               TO TAB-COD-TTAB IN TAB
+               MOVE CIN-COD-IUSR IN CIN TO TAB-COD-CTAB IN TAB
+               PERFORM BUS-TAB
+               MOVE TAB-GLS-DCOR IN TAB TO USR-GLS-DCOR IN USR.
+           PERFORM BUS-SRT-REG.
+      *>>>>
+*% END
+*% IF FST_OUT
+      *<<<< FST_OUT
+           IF WSS-IND-ESTA IN WSS-VARI = 'A'
+               MOVE WSS-GLS-GVEN TO WSS-GLS-GLO1 IN WSS-CDV
+               MOVE WSS-GLS-GVEN TO WSS-GLS-GLO2 IN WSS-CDV
+           ELSE
+               MOVE WSS-GLS-GDIS TO WSS-GLS-GLO1 IN WSS-CDV
+               MOVE WSS-GLS-GDIS TO WSS-GLS-GLO2 IN WSS-CDV.
+      *>>>>
+*% END
+*% IF LUP_OUT
+      *<<<< LUP_OUT
+           PERFORM GEN-LIN-OUT.
+      *>>>>
+*% END
+*% IF EOF
+      *<<<< EOF
+      **************************************************************************
+      * Seleccion del Registro para Proceso Mediante Fecha Vencimiento
+       SEL-REG-PRO SECTION.
+       INI-SEL-REG-PRO.
+           MOVE  1  TO WSS-IND-NEXT IN WSS-VARI.
+
+           IF WSS-IND-ESTA IN WSS-VARI = 'D' AND
+              CIN-FEC-FVAS IN CIN NOT < WSS-FEC-FCMP
+               GO TO FIN-SEL-REG-PRO
+           ELSE
+               IF WSS-IND-ESTA IN WSS-VARI = 'A' AND
+                  CIN-FEC-FVAS IN CIN NOT = WSS-FEC-FCMP
+                   GO TO FIN-SEL-REG-PRO.
+
+           MOVE  0  TO WSS-IND-NEXT IN WSS-VARI.
+       FIN-SEL-REG-PRO.
+           EXIT.
+      **************************************************************************
+      * Formacion y Generacion del Registro SRT al Procesar Registros
+       BUS-SRT-REG SECTION.
+       INI-BUS-SRT-REG.
+      * Complementa Formacion del Registro SRT
+           MOVE  1  TO SRT-NUM-TCSI IN SRT.
+           IF WSS-IND-ESTA IN WSS-VARI = 'D'
+               MOVE SPACES TO CIN-FEC-FVAS IN CIN.
+
+      * Completa Llenado de Campos y Genera el Registro SRT
+      *     COPY COLRMCDV.
+      *     RELEASE SRT.
+       FIN-BUS-SRT-REG.
+           EXIT.
+      **************************************************************************
+      * Genera Lineas de Detalle a Partir de Registro SRT Ordenado
+       GEN-LIN-OUT SECTION.
+       INI-GEN-LIN-OUT.
+      * Mediante BUS-TAB Busca Glosa de Codigo en Tabla SIA
+           IF CIN-COD-SISA IN SRT > SPACES
+               MOVE 'CDC'               TO TAB-COD-SIST
+               MOVE 'SIS'               TO TAB-COD-TTAB IN TAB
+               MOVE CIN-COD-SISA IN SRT TO TAB-COD-CTAB IN TAB
+               PERFORM BUS-TAB
+               MOVE TAB-GLS-DCOR IN TAB TO WSS-GLS-SISA IN WSS-CDV
+           ELSE
+               MOVE SPACES TO WSS-GLS-SISA IN WSS-CDV.
+
+      * Mediante BUS-TAB Busca Glosa de Codigo en Tabla UBF
+           IF CIN-COD-UBIF IN SRT > SPACES
+               MOVE 'CDC'               TO TAB-COD-SIST
+               MOVE 'UBF'               TO TAB-COD-TTAB IN TAB
+               MOVE CIN-COD-UBIF IN SRT TO TAB-COD-CTAB IN TAB
+               PERFORM BUS-TAB
+               MOVE TAB-GLS-DCOR IN TAB TO WSS-GLS-UBIF IN WSS-CDV
+           ELSE
+               MOVE SPACES TO WSS-GLS-UBIF IN WSS-CDV.
+
+      * Mediante BUS-TAB Busca Glosa de Codigo en Tabla USR
+      *     IF CIN-COD-IUSR IN SRT > SPACES
+      *         MOVE 'CDC'               TO TAB-COD-SIST
+      *         MOVE 'USR'               TO TAB-COD-TTAB IN TAB
+      *         MOVE CIN-COD-IUSR IN SRT TO TAB-COD-CTAB IN TAB
+      *         PERFORM BUS-TAB
+      *         MOVE TAB-GLS-DESC IN TAB TO WSS-GLS-IUSR IN WSS-CDV
+      *     ELSE
+      *         MOVE SPACES TO WSS-GLS-IUSR IN WSS-CDV.
+       FIN-GEN-LIN-OUT.
+           EXIT.
+      **************************************************************************
+
+       COPY GNSBGFEC.
+       COPY GNSBBMSG.
+       COPY GNSBBTAB.
+       COPY GNSBGHOY.
+      *COPY TABBBUSR.
+      *COPY TABBVUSR.
+      *COPY TABBFUSR.
+      *>>>>
+*% END

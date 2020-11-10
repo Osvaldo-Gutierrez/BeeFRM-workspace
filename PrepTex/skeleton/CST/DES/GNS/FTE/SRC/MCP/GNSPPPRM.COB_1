@@ -1,0 +1,752 @@
+%23456789 123456789 123456789 123456789 123456789 123456789 123456789 1
+$SET SHARING = SHAREDBYALL
+$RESET DEBUG
+BEGIN
+% Objetivo: Satisfacer los llamados para la verificacion de los
+%           accesos permitidos para un determinado usuario.
+%
+  DATABASE BDCST:GNSRUG,
+                 GNSPDP;
+  DEFINE  DEBUGER(MSG) =
+$SET OMIT = NOT DEBUG
+          WRITE(MYSELF.TASKFILE,(LENGTH(MSG)+5) DIV 6,MSG !! "     ");
+$POP OMIT
+          #;
+  EBCDIC  ARRAY REG_RUG[0:78];
+  EBCDIC  ARRAY REG_PDP[0:102];
+  EBCDIC  ARRAY KEYRUG00[0:23];
+  ARRAY   TAB_GRUPO[0:0],
+          TAB_GRUPO2[0:0],
+          TAB_USUARIO[0:0],
+          TAB_USUARIO2[0:0],
+          TAB_USUARIO3[0:0],
+          TAB_SISTEMA[0:0],
+          TAB_NEMO[0:0],
+          TAB_NEMO2[0:0],
+          TAB_CMND[0:0],
+          TAB_PDP[0:0];
+  REAL    INX_TOP_GRUPO,
+          INX_TOP_USUARIO,
+          INX_TOP_SISTEMA,
+          INX_TOP_NEMO,
+          INX_TOP_CMND,
+          INX_TOP_PDP,
+          DMSTATUS;
+      
+      
+  DEFINE
+    RUG_GLS_FLAG               = 00 #
+   ,RUG_COD_GRPO               = 01 #
+   ,RUG_COD_USER               = 13 #
+   ,RUG_NUM_STRN               = 25 #
+   ,RUG_NUM_ATRN               = 27 #
+   ,RUG_NUM_MTRN               = 29 #
+   ,RUG_NUM_DTRN               = 31 #
+   ,RUG_NUM_HHTR               = 33 #
+   ,RUG_NUM_MMTR               = 35 #
+   ,RUG_NUM_SSTR               = 37 #
+   ,RUG_MSC_TACC               = 39 #
+   ,RUG_MSC_STAT               = 40 #
+   ,RUG_MSC_TTRN               = 41 #
+   ,RUG_COD_TTRN               = 42 #
+   ,RUG_COD_ATRN               = 45 #
+   ,RUG_IND_VIGE               = 57 #
+   ,RUG_GLS_DISP               = 58 #
+   ;
+      
+      
+% Declaracion de DEFINE para acceder al arreglo REG_PDP.
+      
+  DEFINE
+    PDP_GLS_FLAG               = 00 #
+   ,PDP_COD_GRPO               = 01 #
+   ,PDP_COD_TDPU               = 13 #
+   ,PDP_NUM_SECU               = 15 #
+   ,PDP_NUM_STRN               = 19 #
+   ,PDP_NUM_ATRN               = 21 #
+   ,PDP_NUM_MTRN               = 23 #
+   ,PDP_NUM_DTRN               = 25 #
+   ,PDP_NUM_HHTR               = 27 #
+   ,PDP_NUM_MMTR               = 29 #
+   ,PDP_NUM_SSTR               = 31 #
+   ,PDP_MSC_TACC               = 32 #
+   ,PDP_MSC_STAT               = 33 #
+   ,PDP_MSC_TTRN               = 34 #
+   ,PDP_COD_TTRN               = 35 #
+   ,PDP_COD_ATRN               = 38 #
+   ,PDP_COD_SIST               = 51 #  %%%
+   ,PDP_COD_NEMO               = 54 #  %%%
+   ,PDP_COD_CMND               = 66 #  %%%
+   ,PDP_COD_PROC               = 69 #  %%%
+   ,PDP_COD_PLIB               = 50 #
+   ,PDP_IND_RESP               = 81 #  %%%
+   ,PDP_GLS_DISP               = 82 #  %%%
+   ;
+      
+  DEFINE
+    CHECK(DMSTATUS) =
+      IF BOOLEAN(DMSTATUS) THEN
+        IF DMSTATUS.DMERROR NEQ NOTFOUND THEN
+          BEGIN
+          DMS_DSP;
+          DMTERMINATE(DMSTATUS);
+          END #
+    ,GET_GNSRUG = GET GNSRUG ( REG_RUG[0] := GNSRUG-REG ) #
+    ,GET_FIRST_GNSRUG =
+       BEGIN
+       FIND FIRST GNSRUG00 OF GNSRUG : DMSTATUS;
+       IF BOOLEAN(DMSTATUS) THEN
+         CHECK(DMSTATUS);
+       GET_GNSRUG;
+       END#
+    ,GET_NEXT_GNSRUG =
+       BEGIN
+       FIND NEXT GNSRUG00 OF GNSRUG : DMSTATUS ;
+       CHECK(DMSTATUS);
+       GET_GNSRUG;
+       END #
+    ,GET_GNSPDP = GET GNSPDP ( REG_PDP[0] := GNSPDP-REG ) #
+    ,GET_FIRST_GNSPDP00 =
+       BEGIN
+       FIND FIRST GNSPDP00 OF GNSPDP : DMSTATUS;
+       IF BOOLEAN(DMSTATUS) THEN
+         CHECK(DMSTATUS);
+       GET_GNSPDP;
+       END#
+    ,GET_NEXT_GNSPDP00 =
+       BEGIN
+       FIND NEXT GNSPDP00 OF GNSPDP : DMSTATUS ;
+       CHECK(DMSTATUS);
+       GET_GNSPDP;
+       END #
+    ;
+      
+  PROCEDURE DMS_DSP;
+    BEGIN
+      
+    DISPLAY ("ABORTO EN PROGRAMA");
+    DISPLAY ("DMSTATUS(DMSTRUCTURE): " !!
+              STRING(DMSTATUS.DMSTRUCTURE,*));
+    DISPLAY ("DMSTATUS(DMERROR)    : " !!
+              STRING(DMSTATUS.DMERROR,*));
+    END OF DMS_DSP;
+      
+      
+  PROCEDURE LOAD_RUG;
+    BEGIN
+    INTEGER INX_GRUPO;
+    ARRAY   COD_GRUPO[0:1];
+    REAL    KEY_GRUPO;
+    EBCDIC  ARRAY ECOD_GRUPO[0] = COD_GRUPO;
+    BOOLEAN FOUNDED;
+      
+    INTEGER PROCEDURE FIND_GRUPO;
+      BEGIN
+      INTEGER I;
+      
+      DEBUGER("FIND_GRUPO:" !! STRING(REG_RUG[RUG_COD_GRPO],12));
+      REPLACE ECOD_GRUPO BY REG_RUG[RUG_COD_GRPO] FOR 12;
+      KEY_GRUPO := COD_GRUPO[0];
+      I := SIZE(TAB_GRUPO) - 1;
+      FOUNDED := FALSE;
+      WHILE NOT (FOUNDED) AND NOT (I < 0) DO
+        BEGIN
+        I := ARRAYSEARCH(KEY_GRUPO,4"FFFFFFFFFFFF",TAB_GRUPO[I]);
+        IF NOT (I < 0) THEN
+          IF COD_GRUPO[1] = TAB_GRUPO2[I] THEN
+            FOUNDED := TRUE
+          ELSE
+            I :=* - 1;
+        END OF WHILE;
+      IF NOT FOUNDED THEN
+        BEGIN
+        IF (SIZE(TAB_GRUPO) < INX_TOP_GRUPO + 1) THEN
+          BEGIN
+          RESIZE(TAB_GRUPO,INX_TOP_GRUPO + 20, RETAIN);
+          RESIZE(TAB_GRUPO2,INX_TOP_GRUPO + 20, RETAIN);
+          END;
+        TAB_GRUPO[INX_TOP_GRUPO] := KEY_GRUPO;
+        TAB_GRUPO2[INX_TOP_GRUPO] := COD_GRUPO[1];
+        I := INX_TOP_GRUPO;
+        INX_TOP_GRUPO :=* + 1;
+        END;
+      
+      FIND_GRUPO := I;
+      DEBUGER("FIND GRUPO EXIT (I:" !! STRING(I,*) !!")");
+      END OF FIND_GRUPO;
+      
+    PROCEDURE STORE_USUARIO(INX_GRUPO);
+      VALUE INX_GRUPO;
+      INTEGER INX_GRUPO;
+      BEGIN
+      
+      IF (SIZE(TAB_USUARIO) < INX_TOP_USUARIO + 1) THEN
+        BEGIN
+        RESIZE(TAB_USUARIO , INX_TOP_USUARIO + 200, RETAIN);
+        RESIZE(TAB_USUARIO2, INX_TOP_USUARIO + 200, RETAIN);
+        RESIZE(TAB_USUARIO3, INX_TOP_USUARIO + 200, RETAIN);
+        END;
+      % Tab_Usuario y Tab_usuario1 tiene el codigo de usuario
+      % Tab_Usuario2 tiene el indice al grupo al que pertenece el
+      % usuario.
+      REPLACE POINTER(TAB_USUARIO[INX_TOP_USUARIO])
+           BY REG_RUG[RUG_COD_USER] FOR 6;
+      REPLACE POINTER(TAB_USUARIO2[INX_TOP_USUARIO])
+           BY REG_RUG[RUG_COD_USER+6] FOR 6;
+      TAB_USUARIO3[INX_TOP_USUARIO] := INX_GRUPO;
+      INX_TOP_USUARIO :=* + 1;
+      END OF STORE_USUARIO;
+      
+    %%%%%%%%%%%%  INITIAL OF LOAD RUG %%%%%%%%%%%%%%
+      
+    GET_FIRST_GNSRUG;
+      
+    WHILE (DMSTATUS.DMERROR NEQ NOTFOUND) DO
+      BEGIN
+      
+      INX_GRUPO := FIND_GRUPO;
+      STORE_USUARIO(INX_GRUPO);
+      
+      GET_NEXT_GNSRUG;
+      END OF WHILE;
+      
+    END OF LOAD_RUG;
+      
+      
+  PROCEDURE LOAD_PDP;
+    BEGIN
+    INTEGER INX_SISTEMA
+           ,INX_NEMO
+           ,INX_CMND
+           ,INX_GRUPO
+           ;
+    ARRAY   DUMMY[0:1]
+           ,COD_GRUPO[0:1]
+           ;
+    REAL    KEY_SISTEMA
+           ,KEY_NEMO
+           ,KEY_CMND
+           ,KEY_GRUPO
+           ;
+    BOOLEAN FOUNDED
+           ;
+    EBCDIC ARRAY ECOD_GRUPO [0] = COD_GRUPO
+           ;
+      
+    INTEGER PROCEDURE FIND_GRUPO;
+      BEGIN
+      INTEGER I;
+      
+      DEBUGER("Find Grupo:"!!STRING(REG_PDP[RUG_COD_GRPO],12));
+      REPLACE ECOD_GRUPO BY REG_PDP[RUG_COD_GRPO] FOR 12;
+      KEY_GRUPO := COD_GRUPO[0];
+      I := SIZE(TAB_GRUPO) - 1;
+      FOUNDED := FALSE;
+      WHILE NOT (FOUNDED) AND NOT (I < 0) DO
+        BEGIN
+        I := ARRAYSEARCH(KEY_GRUPO,4"FFFFFFFFFFFF",TAB_GRUPO[I]);
+        IF NOT (I < 0) THEN
+          IF COD_GRUPO[1] = TAB_GRUPO2[I] THEN
+            FOUNDED := TRUE
+          ELSE
+            I :=* - 1;
+        END OF WHILE;
+      IF NOT FOUNDED THEN
+        FIND_GRUPO := -1
+      ELSE
+        FIND_GRUPO := I;
+      DEBUGER("Find Grupo Exit (I"!!STRING(I,*)!!")");
+      END OF FIND_GRUPO;
+      
+    INTEGER PROCEDURE ADD_SISTEMA;
+      BEGIN
+      INTEGER INX;
+      
+      DEBUGER("Add Sistema: "!!STRING(REG_PDP[PDP_COD_SIST],3));
+      REPLACE POINTER(DUMMY[0])+3 BY REG_PDP[PDP_COD_SIST] FOR 3;
+      KEY_SISTEMA := DUMMY[0];
+      INX := ARRAYSEARCH(KEY_SISTEMA, 4"000000FFFFFF", TAB_SISTEMA);
+      IF INX < 0 THEN
+        BEGIN
+        IF (SIZE(TAB_SISTEMA) < INX_TOP_SISTEMA + 1) THEN
+          RESIZE(TAB_SISTEMA, INX_TOP_SISTEMA + 20, RETAIN);
+        INX := INX_TOP_SISTEMA;
+        TAB_SISTEMA[INX] := DUMMY[0];
+        INX_TOP_SISTEMA :=* + 1;
+        END;
+      ADD_SISTEMA := INX;
+      DEBUGER("Add Sistema Exit (INX:"!!STRING(INX,*)!!")");
+      END OF ADD_SISTEMA;
+      
+    INTEGER PROCEDURE ADD_NEMO;
+      BEGIN
+      INTEGER INX;
+      
+      DEBUGER("Add Nemo: "!!STRING(REG_PDP[PDP_COD_NEMO],12));
+      REPLACE POINTER(DUMMY[0]) BY REG_PDP[PDP_COD_NEMO] FOR 12;
+      KEY_NEMO := DUMMY[0];
+      FOUNDED := FALSE;
+      INX := SIZE(TAB_NEMO) - 1;
+      WHILE NOT FOUNDED AND NOT (INX < 0) DO
+        BEGIN
+        INX := ARRAYSEARCH(KEY_NEMO, 4"FFFFFFFFFFFF", TAB_NEMO[INX]);
+        IF NOT (INX < 0) THEN
+          IF DUMMY[1] = TAB_NEMO2[INX] THEN
+            FOUNDED := TRUE
+          ELSE
+            INX :=* - 1;
+        END OF WHILE;
+      IF INX < 0 THEN
+        BEGIN
+        IF (SIZE(TAB_NEMO) < INX_TOP_NEMO + 1) THEN
+          BEGIN
+          RESIZE(TAB_NEMO, INX_TOP_NEMO + 20, RETAIN);
+          RESIZE(TAB_NEMO2,SIZE(TAB_NEMO), RETAIN);
+          END;
+        INX := INX_TOP_NEMO;
+        TAB_NEMO[INX] := DUMMY[0];
+        TAB_NEMO2[INX]:= DUMMY[1];
+        INX_TOP_NEMO :=* + 1;
+        END;
+      ADD_NEMO := INX;
+      DEBUGER("Add Nemo Exit (INX:"!!STRING(INX,*)!!")");
+      END OF ADD_NEMO;
+      
+    INTEGER PROCEDURE ADD_CMND;
+      BEGIN
+      INTEGER INX;
+      
+      DEBUGER("Add Cmnd: "!!STRING(REG_PDP[PDP_COD_CMND],3));
+      REPLACE POINTER(DUMMY[0])+3 BY REG_PDP[PDP_COD_CMND] FOR 3;
+      KEY_CMND := DUMMY[0];
+      INX := ARRAYSEARCH(KEY_CMND, 4"000000FFFFFF", TAB_CMND);
+      IF INX < 0 THEN
+        BEGIN
+        IF (SIZE(TAB_CMND) < INX_TOP_CMND + 1) THEN
+          RESIZE(TAB_CMND, INX_TOP_CMND + 20, RETAIN);
+        INX := INX_TOP_CMND;
+        TAB_CMND[INX] := DUMMY[0];
+        INX_TOP_CMND :=* + 1;
+        END;
+      ADD_CMND := INX;
+      DEBUGER("Add Cmnd Exit (INX:"!!STRING(INX,*)!!")");
+      END OF ADD_CMND;
+      
+    PROCEDURE STORE_GRUPO;
+      BEGIN
+      
+      DEBUGER("Store Grupo");
+      INX_GRUPO   := FIND_GRUPO;
+      INX_SISTEMA := ADD_SISTEMA;
+      INX_NEMO    := ADD_NEMO;
+      INX_CMND    := ADD_CMND;
+      IF (SIZE(TAB_PDP) < INX_TOP_PDP + 1) THEN
+        RESIZE(TAB_PDP, INX_TOP_PDP + 100, RETAIN);
+      TAB_PDP[INX_TOP_PDP].[47:12] := INX_GRUPO DIV 1;
+      TAB_PDP[INX_TOP_PDP].[35:12] := INX_SISTEMA DIV 1;
+      TAB_PDP[INX_TOP_PDP].[23:12] := INX_NEMO DIV 1;
+      TAB_PDP[INX_TOP_PDP].[11:11] := INX_CMND DIV 1;
+      TAB_PDP[INX_TOP_PDP].[00:01] := IF (REG_PDP[PDP_IND_RESP] = "S")
+                                      THEN 1 DIV 1
+                                      ELSE 0;
+      INX_TOP_PDP :=* + 1;
+      DEBUGER("Store Grupo Exit");
+      END OF STORE_GRUPO;
+      
+    PROCEDURE INVIERTE_PDP;
+      BEGIN
+      ARRAY
+        DUMMY[0:0]
+       ;
+      REAL
+        I, J
+       ;
+      
+      RESIZE(TAB_PDP, INX_TOP_PDP, RETAIN);
+      RESIZE(DUMMY,SIZE(TAB_PDP),DISCARD);
+      REPLACE POINTER(DUMMY)
+           BY POINTER(TAB_PDP) FOR SIZE(TAB_PDP)*6;
+      J := SIZE(DUMMY) - 1;
+      I := -1;
+      WHILE (I:=*+1 <= J) DO
+        TAB_PDP[I] := DUMMY[J-I];
+      END OF INVIERTE_PDPD;
+      
+      
+    %%%%%%%%%%%%  INITIAL OF LOAD PDP %%%%%%%%%%%%%%
+      
+    GET_FIRST_GNSPDP00;
+      
+    WHILE (DMSTATUS.DMERROR NEQ NOTFOUND) DO
+      BEGIN
+      
+      STORE_GRUPO;
+      
+      GET_NEXT_GNSPDP00;
+      END OF WHILE;
+    INVIERTE_PDP;
+    END OF LOAD_PDP;
+      
+  DEFINE
+    USER_CODE         = PARAM[12]     #
+   ,SISTEMA           = PARAM[24]     #
+   ,NEMONICO          = PARAM[27]     #
+   ,COMANDO           = PARAM[39]     #
+   ;
+      
+    INTEGER PROCEDURE FIND_GRUPO(PARAM);
+      EBCDIC ARRAY PARAM[0];
+      BEGIN
+      REAL ARRAY DUMMY[0] = PARAM;
+      REAL I, KEY;
+      BOOLEAN FOUNDED;
+      
+      DEBUGER("FIND GRUPO INICIO");
+      REPLACE PARAM BY USER_CODE FOR 12;
+      KEY := DUMMY[0];
+      I := INX_TOP_USUARIO - 1;
+      FOUNDED := FALSE;
+      WHILE NOT (FOUNDED) AND NOT (I < 0) DO
+        BEGIN
+        I := ARRAYSEARCH(KEY,48"FFFFFFFFFFFF",TAB_USUARIO[I]);
+        IF NOT (I < 0) THEN
+          IF DUMMY[1] = TAB_USUARIO2[I] THEN
+            FOUNDED := TRUE
+          ELSE
+            I :=* - 1;
+        END OF WHILE;
+      IF NOT (I < 0) THEN
+        FIND_GRUPO := TAB_USUARIO3[I]
+      ELSE
+        FIND_GRUPO := -1;
+      DEBUGER("FIND GRUPO EXIT");
+      END OF FIND_GRUPO;
+      
+    INTEGER PROCEDURE FIND_SISTEMA(PARAM);
+      EBCDIC ARRAY PARAM[0];
+      BEGIN
+      ARRAY DUMMY[0] = PARAM;
+      REAL I, KEY;
+      
+      DEBUGER("FIND SISTEMA INICIO");
+      REPLACE PARAM[0] BY " " FOR 12;
+      REPLACE PARAM[3] BY SISTEMA FOR 3;
+      KEY := DUMMY[0];
+      I := ARRAYSEARCH(KEY,48"000000FFFFFF",TAB_SISTEMA);
+      IF (I < 0) THEN
+        BEGIN
+        REPLACE PARAM[3] BY "*  " FOR 3;
+        KEY := DUMMY[0];
+        I := ARRAYSEARCH(KEY, 48"000000FFFFFF", TAB_SISTEMA);
+        END;
+      FIND_SISTEMA := I;
+      DEBUGER("FIND_SIST EXIT:" !! STRING(I,*));
+      END OF FIND_SISTEMA;
+      
+    INTEGER PROCEDURE FIND_NEMO(PARAM);
+      EBCDIC ARRAY PARAM[0];
+      BEGIN
+      ARRAY DUMMY[0] = PARAM;
+      REAL KEY, I;
+      BOOLEAN FOUNDED;
+      
+      DEBUGER("FIND NEMO INICIO");
+      REPLACE PARAM[0] BY " " FOR 12;
+      REPLACE PARAM[0] BY NEMONICO FOR 12;
+      KEY := DUMMY[0];
+      FOUNDED := FALSE;
+      I := SIZE(TAB_NEMO) - 1;
+      WHILE NOT FOUNDED AND NOT (I < 0) DO
+        BEGIN
+        I := ARRAYSEARCH(KEY,48"FFFFFFFFFFFF", TAB_NEMO[I]);
+        IF NOT (I < 0) THEN
+          IF DUMMY[1] = TAB_NEMO2[I] THEN
+            FOUNDED := TRUE
+          ELSE
+            I :=* - 1;
+        END OF WHILE;
+      IF (I < 0) THEN
+        BEGIN
+        REPLACE PARAM[0] BY "*      " FOR 6;
+        KEY := DUMMY[0];
+        I := ARRAYSEARCH(KEY,48"FFFFFFFFFFFF", TAB_NEMO);
+        END;
+      FIND_NEMO := I;
+      DEBUGER("FIND_NEMO EXIT:" !! STRING(I,*));
+    END OF FIND_NEMO;
+      
+    INTEGER PROCEDURE FIND_CMND(PARAM);
+      EBCDIC ARRAY PARAM[0];
+      BEGIN
+      ARRAY DUMMY[0] = PARAM;
+      REAL KEY, I;
+      
+      DEBUGER("FIND_CMND INICIO");
+      REPLACE PARAM[0] BY " " FOR 12;
+      REPLACE PARAM[3] BY COMANDO FOR 3;
+      KEY := DUMMY[0];
+      I := ARRAYSEARCH(KEY, 48"000000FFFFFF", TAB_CMND);
+      IF (I < 0) THEN
+        BEGIN
+        REPLACE PARAM[3] BY "*  " FOR 3;
+        KEY := DUMMY[0];
+        I := ARRAYSEARCH(KEY, 48"000000FFFFFF", TAB_CMND);
+        END;
+      FIND_CMND := I;
+      DEBUGER("FIND_CMND EXIT:" !! STRING(I,*));
+      END OF FIND_CMND;
+      
+    BOOLEAN PROCEDURE FIND(RSLT,PARAM);
+      REAL
+        RSLT
+       ;
+      EBCDIC ARRAY PARAM[0];
+      BEGIN
+      INTEGER
+        I
+       ;
+      LABEL
+        EXIT
+       ;
+      
+      DEBUGER("FIND INICIO");
+      I := FIND_GRUPO(PARAM);
+      IF (I < 0 ) THEN
+        BEGIN
+        FIND := FALSE;
+        GO TO EXIT;
+        END;
+      RSLT := 0;
+      RSLT.[47:12] := I DIV 1;
+      
+      I := FIND_SISTEMA(PARAM);
+      IF (I < 0) THEN
+        RSLT.[35:12] := 4"FFF" DIV 1
+      ELSE
+        RSLT.[35:12] := I DIV 1;
+      
+      I := FIND_NEMO(PARAM);
+      IF (I < 0) THEN
+        RSLT.[23:12] := 4"FFF" DIV 1
+      ELSE
+        RSLT.[23:12] := I DIV 1;
+      
+      I := FIND_CMND(PARAM);
+      IF (I < 0) THEN
+        RSLT.[11:11] := 4"FFE" DIV 1
+      ELSE
+        RSLT.[11:11] := I DIV 1;
+      
+      FIND := TRUE;
+      EXIT:
+      DEBUGER("FIND EXIT");
+      END OF FIND;
+      
+      
+  INTEGER PROCEDURE PRM_CMND(PARAM);
+    EBCDIC ARRAY PARAM[0];
+    % 01  PARAM.
+    %     05  FILLER            PIC X(12).
+    %     05  USERCODE          PIC X(12).
+    %     05  SISTEMA           PIC X(03).
+    %     05  NEMONICO          PIC X(12).
+    %     05  COMANDO           PIC X(03).
+    BEGIN
+    REAL
+      R, I
+     ;
+      
+    DEBUGER("Begin of Check_Comando:" !! STRING(PARAM[0],SIZE(PARAM)));
+    DEBUGER("Check_Comando: User="!!STRING(USER_CODE,12)!!" "!!
+                           "Sist="!!STRING(SISTEMA,3)!!" "!!
+                           "Nemo="!!STRING(NEMONICO,12)!!" "!!
+                           "Cmnd="!!STRING(COMANDO,3));
+    IF FIND(R,PARAM) THEN
+      BEGIN
+      DEBUGER("Check_Comando: Grup="!!STRING(R.[47:12],*)!!" "!!
+                             "Sist="!!STRING(R.[35:12],*)!!" "!!
+                             "Nemo="!!STRING(R.[23:12],*)!!" "!!
+                             "Cmnd="!!STRING(R.[11:11],*))
+      I := ARRAYSEARCH(R, 48"FFFFFFFFFFFE", TAB_PDP);
+      IF I < 0 THEN
+        BEGIN
+        REPLACE COMANDO BY "*  " FOR 3;
+        FIND(R, PARAM);
+        I := ARRAYSEARCH(R, 48"FFFFFFFFFFFE", TAB_PDP);
+        IF (I < 0) THEN
+          BEGIN
+          REPLACE NEMONICO BY "*"," " FOR 11;
+          FIND(R,PARAM);
+          I := ARRAYSEARCH(R, 48"FFFFFFFFFFFE", TAB_PDP);
+          IF (I < 0) THEN
+            BEGIN
+            REPLACE SISTEMA BY "*  " FOR 3;
+            FIND(R, PARAM);
+            I := ARRAYSEARCH(R, 48"FFFFFFFFFFFE", TAB_PDP);
+            IF (I < 0) THEN
+              BEGIN
+              DEBUGER("Check_Comando:0");
+              PRM_CMND := 0
+              END;
+            END
+          ELSE
+            BEGIN
+            PRM_CMND := TAB_PDP[I].[0:1] DIV 1;
+            END;
+          END
+        ELSE
+          BEGIN
+          PRM_CMND := TAB_PDP[I].[0:1] DIV 1;
+          END;
+        END
+      ELSE
+        BEGIN
+        DEBUGER("Check_Comando:"!!STRING(TAB_PDP[I].[0:1],1));
+        PRM_CMND := TAB_PDP[I].[0:1] DIV 1;
+        END;
+      END
+    ELSE
+      DEBUGER("Check_Comando exit (grupo NO encontrado)");
+      
+    END OF PRM_CMND;
+      
+  EXPORT PRM_CMND;
+      
+      
+  INTEGER PROCEDURE PRM_NEMO(PARAM);
+    EBCDIC ARRAY PARAM[0];
+    BEGIN
+    REAL R, I;
+    BOOLEAN FOUNDED;
+      
+    DEBUGER("Check_Nemonico");
+    IF FIND(R,PARAM) THEN
+      BEGIN
+      I := SIZE(TAB_PDP) - 1;
+      WHILE NOT (I < 0) DO
+        BEGIN
+        I := ARRAYSEARCH(R, 48"FFFFFFFFF000", TAB_PDP[I]);
+        IF NOT (I < 0) THEN
+          BEGIN
+          FOUNDED :=* OR BOOLEAN(TAB_PDP[I].[0:1]);
+          I :=* - 1;
+          END;
+        END
+      END;
+    PRM_NEMO := REAL(FOUNDED);
+    END OF PRM_NEMO;
+      
+  EXPORT PRM_NEMO;
+      
+      
+  INTEGER PROCEDURE PRM_SIST(PARAM);
+    EBCDIC ARRAY PARAM[0];
+    BEGIN
+    REAL R, I;
+    BOOLEAN FOUNDED;
+      
+    DEBUGER("Check_Sistema");
+    REPLACE COMANDO BY 48"FFFFFF" FOR 3;
+    REPLACE NEMONICO BY 48"FFFFFFFFFFFF",48"FFFFFFFFFFFF";
+    IF FIND(R,PARAM) THEN
+      BEGIN
+      DEBUGER("Check_Sistema: Grup="!!STRING(R.[47:12],*)!!" "!!
+                             "Sist="!!STRING(R.[35:12],*)!!" "!!
+                             "Nemo="!!STRING(R.[23:12],*)!!" "!!
+                             "Cmnd="!!STRING(R.[11:11],*))
+      I := SIZE(TAB_PDP) - 1;
+      WHILE NOT (I < 0) DO
+        BEGIN
+        I := ARRAYSEARCH(R, 4"FFFFFF000000", TAB_PDP[I]);
+        IF NOT (I < 0) THEN
+          BEGIN
+          FOUNDED :=* OR BOOLEAN(TAB_PDP[I].[0:1]);
+          I :=* - 1;
+          END;
+        END;
+      END;
+    PRM_SIST := REAL(FOUNDED);
+    END OF PRM_SIST;
+      
+  EXPORT PRM_SIST;
+      
+      
+  PROCEDURE DUMP_ALL;
+    BEGIN
+    INTEGER I;
+      
+    I := 0;
+    WHILE (I < INX_TOP_USUARIO) DO
+      BEGIN
+      DEBUGER("Usuario: " !! STRING(POINTER(TAB_USUARIO[I]),6) !!
+                             STRING(POINTER(TAB_USUARIO2[I]),6) !!
+              " inx Grupo: " !! STRING(TAB_USUARIO3[I],*) !! "     ");
+      I :=* + 1;
+      END;
+      
+    I := 0;
+    WHILE (I < INX_TOP_GRUPO) DO
+      BEGIN
+      DEBUGER("Grupo: " !! STRING(I,3) !! "  " !!
+                           STRING(POINTER(TAB_GRUPO [I]),6) !!
+                           STRING(POINTER(TAB_GRUPO2[I]),6) !! "     ");
+      I :=* + 1;
+      END;
+      
+    I := 0;
+    WHILE (I < INX_TOP_SISTEMA) DO
+      BEGIN
+      DEBUGER("Sistema: " !! STRING(I,3) !! "  " !!
+                 STRING(POINTER(TAB_SISTEMA[I])+3,3)!!"     ");
+      I :=* + 1;
+      END;
+      
+    I := 0;
+    WHILE (I < INX_TOP_NEMO) DO
+      BEGIN
+      DEBUGER("Nemo: " !! STRING(I,3) !! "  " !!
+                          STRING(POINTER(TAB_NEMO[I]),6)!!"     ");
+      I :=* + 1;
+      END;
+      
+    I := 0;
+    WHILE (I < INX_TOP_CMND) DO
+      BEGIN
+      DEBUGER("Cmnd: " !! STRING(I,3) !! "  " !!
+                          STRING(POINTER(TAB_CMND[I])+3,3)!!"     ");
+      I :=* + 1;
+      END;
+      
+    I := 0;
+    WHILE (I < INX_TOP_PDP) DO
+      BEGIN
+      DEBUGER("PDP: " !! STRING(I,3) !! "  " !!
+                         ",Grup: " !! STRING(TAB_PDP[I].[47:12],*) !!
+                         ",Sist: " !! STRING(TAB_PDP[I].[35:12],*) !!
+                         ",Nemo: " !! STRING(TAB_PDP[I].[23:12],*) !!
+                         ",Cmnd: " !! STRING(TAB_PDP[I].[11:11],*) !!
+                         " = " !! STRING(TAB_PDP[I].[00:01],1));
+      I :=* + 1;
+      END;
+    END OF DUMP_ALL;
+      
+%%%%%%%%%%%%%%%%%%%% O U T H E R    B L O C K %%%%%%%%%%%%%%%%%%%%%%%%%
+      
+      
+  OPEN INQUIRY BDCST : DMSTATUS;
+  CHECK(DMSTATUS);
+      
+  LOAD_RUG;
+  LOAD_PDP;
+      
+  CLOSE BDCST : DMSTATUS;
+  CHECK(DMSTATUS);
+      
+$SET OMIT = NOT DEBUG
+  DUMP_ALL;
+$POP OMIT
+      
+  FREEZE(TEMPORARY);
+      
+END OF PROGRAM.
+

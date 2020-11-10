@@ -1,0 +1,270 @@
+*%! Codigo adicional para archivo GRDPQQGA
+*% IF SETTAG
+*% FNCPQ = "COBRJUDICIAL"
+*% VSNPQ = "05.11.22.1"
+*% END
+*% LARGO_MI_COMMAREA = 20
+*% PGM_PTC = TRUE
+*% IF MI_COMMAREA
+      *<<<< MI_COMMAREA
+           03 CMA-VARI.
+              05 SCR-IMAX      COMP                   PIC S9(04).
+              05 SCR-I         COMP                   PIC S9(04).
+      *>>>>
+*% END
+*% IF WSS
+      *<<<< WSS
+       COPY GRDWGQGA.
+       COPY GNSBRMSC.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-MSC-REQA==.
+       COPY GNSWGPES.
+       COPY TABBRCAM.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-CAM-REQA==.
+    
+       01  WSS-VARI.
+           03  WSS-I                              PIC 9(02).
+      *>>>>
+*% END
+*% IF INI_FIO
+      *<<<< INI_FIO                                                     
+           IF SCR-OFRM-SRV                                              
+              MOVE TSK-TERM-ALF TO QGA-COD-TERM                         
+              MOVE TSK-TERM-ALF TO QGA-COD-TERM-MAS                     
+                                                                        
+           ELSE                                                         
+              MOVE EIBTRMID     TO QGA-COD-TERM                         
+              MOVE EIBTRMID     TO QGA-COD-TERM-MAS.                    
+      *>>>>                                                             
+*% END
+*% IF PFS_SCR_ACC
+      *<<<< PFS_SCR_ACC
+           IF FRM-FFLD = FRM-FFLD-PF6
+                    OR   FRM-FFLD-PF5
+               PERFORM VAL-NUM-KEY-QGA
+               PERFORM VAL-NUM-FLD-QGA
+               PERFORM RST-STAT
+               PERFORM FND-SCR-KEY THRU FIN-SCR-KEY
+               IF SCR-STAT NOT = SCR-STAT-ABT
+                   PERFORM SCR-TRL
+               ELSE
+                   PERFORM DESSCRTRL
+                   GO TO FIN-SCR-ACC.
+      *>>>>
+*% END
+*% IF INI_FND_KEY
+      *<<<< INI_FND_KEY
+           MOVE SPACES TO FRM-MEN1.
+           IF FRM-FFLD = FRM-FFLD-PF5
+               MOVE PGM-SNUL TO PGM-STAT-ASI
+               SUBTRACT 1 FROM SCR-I GIVING QGA-I
+               IF QGA-I NOT > ZEROES
+                   MOVE 'QGA ASIPRV' TO MSG-COD-MENS
+                   GO TO ERR-FND-KEY
+               ELSE
+                   GO TO CARGA-QGA
+           ELSE
+           IF FRM-FFLD = FRM-FFLD-PF6
+               MOVE PGM-SNUL TO PGM-STAT-ASI
+               ADD 1 SCR-I GIVING QGA-I
+               IF QGA-I > SCR-IMAX
+                   MOVE 'QGA ASINXT' TO MSG-COD-MENS
+                   GO TO ERR-FND-KEY
+               ELSE
+                   GO TO CARGA-QGA.
+           GO TO CON-FND-KEY.
+
+      *>>>>
+*% END
+*% IF FIN_FND_KEY
+      *<<<< FIN_FND_KEY
+           IF NOT FIO-STAT-OKS
+               GO TO FIN-FND-KEY.
+       CON-FND-KEY.
+      *
+           MOVE ZEROES TO SCR-IMAX.
+           MOVE 1 TO SCR-I.
+           MOVE '00' TO FIO-STAT.
+           PERFORM OBT-DAT-TS.
+           MOVE 1 TO SCR-I.
+           MOVE SCR-I TO QGA-I.
+       CARGA-QGA.
+           MOVE SPACES TO MSG-COD-MENS.
+           IF NOT SCR-OFRM-SRV
+           PERFORM PUT-TAB-QGA.
+           MOVE '00' TO FIO-STAT.
+           GO TO FIN-FND-KEY.
+      *
+       ERR-FND-KEY.
+           MOVE SCR-STAT-CON TO SCR-STAT.
+     
+           MOVE 'GRD' TO MSG-COD-SIST.
+           PERFORM GET-MSG.
+           MOVE MSG-GLS-DESC TO FRM-MEN1.
+           MOVE '00' TO FIO-STAT.
+           GO TO FIN-FND-KEY.
+      *>>>>
+*% END
+*% IF PFS_GET_CON OR PFS_GET_ACC
+      *<<<< PFS_GET_CON OR PFS_GET_ACC
+           IF NOT (FRM-FFLD = FRM-FFLD-PF6
+                         OR   FRM-FFLD-PF5)
+      *>>>>
+*% END
+*% IF EOF
+      *<<<< EOF
+       COPY GNSBFMSC.
+       COPY GNSBGPES.
+       COPY TABBFCAM.
+
+       CAR-MOV-QGA SECTION.
+       INI-CAR-MOV-QGA.
+       FIN-CAR-MOV-QGA.
+           EXIT.
+
+   
+       OBT-DAT-TS SECTION.
+       INI-OBT-DAT-TS.
+           EXEC CICS HANDLE CONDITION QIDERR(CON-OBT-DAT-TS)
+                                     ITEMERR(CON-OBT-DAT-TS)
+           END-EXEC.
+
+      *     EXEC CICS DELETEQ TS QUEUE(QGA-NAME-QUE)
+      *     END-EXEC.
+      *<<<<
+           MOVE QGA-NOM-TSQGA     TO QUE-COLA.
+           MOVE QUE-DEL           TO QUE-CMND.
+           PERFORM GNS-PRO-QUE.
+      *>>>>
+       CON-OBT-DAT-TS.
+           MOVE QGA-SI-IMP TO QGA-IMP.
+           PERFORM CLR-VEC-TS VARYING QGA-I FROM 1 BY 1 UNTIL
+                   QGA-I > QGA-IMAX-MTX.
+           MOVE 1 TO QGA-I.
+           PERFORM CAR-MOV-QGA.
+      
+       NXT-OBT-DAT-TS.
+           IF QGA-IMP = QGA-SI-IMP
+               PERFORM WRT-TS.
+       FIN-OBT-DAT-TS.
+           EXIT.
+
+       PUT-TAB-QGA SECTION.
+       INI-PUT-TAB-QGA.
+           PERFORM RED-TS.
+           PERFORM LLE-DAT-PNT VARYING QGA-I FROM 1 BY 1
+                   UNTIL QGA-I > QGA-IMAX.
+       FIN-PUT-TAB-QGA.
+           EXIT.
+
+       LLE-DAT-PNT SECTION.
+       INI-LLE-DAT-PNT.
+            MOVE QGA-IDC-ICLI(QGA-I) TO FRM-IDC-ICLI IN QGA-FLD(QGA-I).
+            MOVE QGA-VRF-ICLI(QGA-I) TO FRM-VRF-ICLI IN QGA-FLD(QGA-I).
+            MOVE QGA-CIC-IREC(QGA-I) TO FRM-CIC-IREC IN QGA-FLD(QGA-I).
+            MOVE QGA-FEC-FINI(QGA-I) TO FRM-FEC-FINI IN QGA-FLD(QGA-I).
+            MOVE QGA-HRA-HINI(QGA-I) TO FRM-HRA-HINI IN QGA-FLD(QGA-I).
+            MOVE QGA-FEC-FFIN(QGA-I) TO FRM-FEC-FFIN IN QGA-FLD(QGA-I).
+            MOVE QGA-HRA-HFIN(QGA-I) TO FRM-HRA-HFIN IN QGA-FLD(QGA-I).
+            MOVE QGA-COD-ESTA(QGA-I) TO FRM-COD-ESTA IN QGA-FLD(QGA-I).
+            MOVE QGA-COD-USRR(QGA-I) TO FRM-COD-USRR IN QGA-FLD(QGA-I).
+            MOVE QGA-COD-COMU(QGA-I) TO FRM-COD-COMU IN QGA-FLD(QGA-I).
+            MOVE QGA-COD-TARE(QGA-I) TO FRM-COD-TARE IN QGA-FLD(QGA-I).
+            MOVE QGA-FEC-FTER(QGA-I) TO FRM-FEC-FTER IN QGA-FLD(QGA-I).
+            MOVE QGA-SGV-MORA(QGA-I) TO FRM-SGV-MORA IN QGA-FLD(QGA-I).
+            MOVE QGA-GLS-NOMB(QGA-I) TO FRM-GLS-NOMB IN QGA-FLD(QGA-I).
+            MOVE QGA-COD-ETAP(QGA-I) TO FRM-COD-ETAP IN QGA-FLD(QGA-I).
+            MOVE QGA-NUM-CANT(QGA-I) TO FRM-NUM-CANT IN QGA-FLD(QGA-I).
+            MOVE QGA-GLS-DIRE(QGA-I) TO FRM-GLS-DIRE IN QGA-FLD(QGA-I).
+       FIN-LLE-DAT-PNT.
+           EXIT.
+
+       INC-REG-TS SECTION.
+       INI-INC-REG-TS.
+            MOVE QGA-SI-IMP TO QGA-IMP.
+            IF SCR-OFRM-SRV
+               MOVE QGA-SGV-MORA(QGA-I) TO QGA-SGV-MORA-EDT
+               MOVE QGA-SGV-MORA-EDT TO QGA-SGV-MORA-ALF(QGA-I).
+           ADD 1 TO QGA-I.
+           IF QGA-I > QGA-IMAX
+               PERFORM WRT-TS
+               PERFORM CLR-VEC-TS VARYING QGA-I FROM 1 BY 1
+                                     UNTIL QGA-I > QGA-IMAX
+               MOVE 1 TO QGA-I
+               MOVE QGA-NO-IMP TO QGA-IMP.
+       FIN-INC-REG-TS.
+           EXIT.
+
+      *<<<<
+      *>>>>
+
+       WRT-TS SECTION.
+       INI-WRT-TS.
+           ADD 1 TO SCR-IMAX.
+      *     EXEC CICS WRITEQ TS QUEUE(QGA-NAME-QUE)
+      *                         FROM(QGA-TS)
+      *                         LENGTH(QGA-LONG-TS)
+      *     END-EXEC.
+      *<<<<
+           MOVE QGA-NOM-TSQGA  TO QUE-COLA.
+           MOVE QGA-TS         TO QUE-ITEM.
+           MOVE QGA-LEN-TSQGA  TO QUE-LITM.
+           MOVE QUE-PUT        TO QUE-CMND.
+           PERFORM GNS-PRO-QUE.
+      *>>>>
+       FIN-WRT-TS.
+           EXIT.
+
+       RED-TS SECTION.
+       INI-RED-TS.
+           MOVE QGA-I TO SCR-I.
+           EXEC CICS HANDLE CONDITION QIDERR(FIN-RED-TS)
+                                     ITEMERR(FIN-RED-TS)
+           END-EXEC.
+      *     EXEC CICS READQ TS QUEUE(DEC-NAME-QUE)
+      *                         INTO(DEC-TS)
+      *                          LENGTH(DEC-LONG-TS)
+      *                         ITEM(DEC-I)
+      *     END-EXEC.
+      *<<<<
+           MOVE QGA-NOM-TSQGA      TO QUE-COLA.
+           MOVE QGA-TS             TO QUE-ITEM.
+           MOVE QGA-LEN-TSQGA      TO QUE-LITM.
+           MOVE QGA-I              TO QUE-NITM.
+           MOVE QUE-GET            TO QUE-CMND.
+           PERFORM GNS-PRO-QUE.
+           MOVE QUE-ITEM          TO QGA-TS.
+      *>>>>
+       FIN-RED-TS.
+           EXIT.
+
+       CLR-VEC-TS SECTION.
+       INI-CLR-VEC-TS.
+           MOVE ZEROES TO QGA-IDC-ICLI(QGA-I).
+           MOVE SPACES TO QGA-VRF-ICLI(QGA-I).
+           MOVE SPACES TO QGA-CIC-IREC(QGA-I).
+           MOVE ZEROES TO QGA-FEC-FINI(QGA-I).
+           MOVE ZEROES TO QGA-HRA-HINI(QGA-I).
+           MOVE SPACES TO QGA-FEC-FFIN(QGA-I).
+           MOVE ZEROES TO QGA-HRA-HFIN(QGA-I).
+           MOVE SPACES TO QGA-COD-ESTA(QGA-I).
+           MOVE SPACES TO QGA-COD-USRR(QGA-I).
+           MOVE SPACES TO QGA-COD-COMU(QGA-I).
+           MOVE SPACES TO QGA-COD-TARE(QGA-I).
+           MOVE ZEROES TO QGA-FEC-FTER(QGA-I).
+           MOVE ZEROES TO QGA-SGV-MORA(QGA-I).
+           MOVE SPACES TO QGA-GLS-NOMB(QGA-I).
+           MOVE SPACES TO QGA-COD-ETAP(QGA-I).
+           MOVE SPACES TO QGA-NUM-CANT(QGA-I).
+           MOVE SPACES TO QGA-GLS-DIRE(QGA-I).
+       FIN-CLR-VEC-TS.
+           EXIT.
+
+       RST-STAT SECTION.
+       INI-RST-STAT.
+           MOVE SCR-STPP     TO SCR-STAT.
+           MOVE SCR-MFLD-NOT TO SCR-MFLD.
+       FIN-RST-STAT.
+           EXIT.
+
+      *>>>>
+*% END

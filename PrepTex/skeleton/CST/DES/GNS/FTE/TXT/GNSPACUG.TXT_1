@@ -1,0 +1,272 @@
+*% IF SETTAG
+*% FNCPQ = "1710_05"
+*% VSNPQ = "01-00"
+*% FNCPU = "1710_05"
+*% VSNPU = "01-00"
+*% END
+*% PGM_PTC = TRUE
+*% NO_HDR_CST = TRUE
+*% INCLUDE 'GNSSRC:MANEJO_VSI.SRC'
+*% LARGO_MI_COMMAREA = 24
+*% IF WSS
+      *<<<< WSS
+       COPY TABBRUSR.
+       01  WSS-VARI.
+           03  WSS-I                       PIC 9(04).
+           03  WSS-J                       PIC 9(04).
+           03  WSS-LIMI   VALUE 90         PIC 9(04).
+           03  WSS-LIMI-1 VALUE 89         PIC 9(04).
+           03  WSS-MSG.
+               05 WSS-MSG-GLS-DESC         PIC X(40).
+               05 WSS-MSG-GLS-DATA         PIC X(39).
+
+      *VARIABLES PARA SEARCH DE USUARIOS NO VIGENTES
+           03  WSS-TOT-NVIG  VALUE ZEROES  PIC 9(04).
+           03  WSS-USR-TABL.
+               05  WSS-USR-VECT  OCCURS 90   INDEXED BY  WSS-IDX-NVIG.
+                   07 WSS-USR-USER                           PIC X(12).
+                   07 WSS-USR-BRIG                           PIC X(01).
+      *>>>> WSS
+*% END
+*% IF WSS_DTC
+      *<<<< WSS_DTC
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-USR-REQA==.
+      *>>>> WSS_DTC
+*% END
+*% IF FIN_SCR_VARI
+      *<<<< FIN_SCR_VARI
+           03  SCR-FRST                PIC X(12).
+           03  SCR-LAST                PIC X(12).
+      *>>>> FIN_SCR_VARI
+*% END
+*% IF INI_FIO_VAX
+      *<<<< INI_FIO_VAX
+           MOVE FIO-ACC      TO FIO-CMND.
+           MOVE FIO-ACCS-UPD TO FIO-ACCS.
+           PERFORM TAB-FIO-USR.
+           MOVE FIO-INP TO FIO-CMND.
+           PERFORM TAB-FIO-USR.
+      *>>>> INI_FIO_VAX
+*% END
+*% IF PGM_MCP
+*% IF INI_FIO
+      *<<<< INI_FIO
+           MOVE 12 TO WSS-LIMI.
+           MOVE 11 TO WSS-LIMI-1.
+      *>>>> INI_FIO
+*% END
+*% END
+*% IF FND_KEY
+      *<<<< FND_KEY
+           IF SCR-CCPP = 'ING'
+               MOVE '23' TO FIO-STAT
+               GO TO FIN-FND-KEY.
+
+           MOVE ZEROES TO FRM-IFLD.
+           MOVE FRM-COD-FST IN CUG-FLD TO RUG-COD-USER IN RUG.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+       CIC-FND-KEY.
+           PERFORM GNS-FIO-RUG.
+           IF NOT FIO-STAT-OKS
+               GO TO END-FND-KEY.
+           IF RUG-COD-GRPO IN CUG-FLD NOT =
+              RUG-COD-GRPO IN RUG
+               GO TO END-FND-KEY.
+
+           ADD 1 TO FRM-IFLD.
+           IF FRM-IFLD = 1
+                MOVE RUG-COD-USER IN RUG TO SCR-FRST.
+           IF FRM-IFLD > WSS-LIMI
+                GO TO FIN-FND-KEY.
+      *         MOVE 'GNS' TO MSG-COD-SIST
+      *         MOVE 'RUG    >LIMI' TO MSG-COD-MENS
+      *         PERFORM GET-MSG
+      *         MOVE MSG-GLS-DESC TO FRM-MENS
+      *         MOVE FIO-STAT-NEX TO FIO-STAT
+      *         GO TO FIN-FND-KEY.
+           MOVE RUG-COD-USER IN RUG TO
+                FRM-COD-USER IN CUG-FLD(FRM-IFLD).
+           MOVE RUG-COD-USER IN RUG TO SCR-LAST.
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           GO TO CIC-FND-KEY.
+       END-FND-KEY.
+           IF FRM-IFLD > ZEROES
+               MOVE '00' TO FIO-STAT
+           ELSE
+               MOVE '23' TO FIO-STAT.
+           GO TO FIN-FND-KEY.
+      *>>>> FND_KEY
+*% END
+*% IF FIN_HBL_FLD
+      *<<<< FIN_HBL_FLD
+           PERFORM UNP-AND-BRT VARYING FRM-IFLD FROM 1 BY 1
+             UNTIL FRM-IFLD > WSS-LIMI.
+      *>>>> END
+*% END
+*% IF INI_CMN_MOD
+      *<<<< INI_CMN_MOD
+           MOVE RUG-COD-GRPO IN CUG-FLD TO RUG-COD-GRPO IN RUG.
+           MOVE SCR-FRST TO RUG-COD-USER IN RUG.
+       CIC-CMN-ELI-MOD.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM GNS-FIO-RUG.
+           IF NOT FIO-STAT-OKS
+               MOVE '00' TO FIO-STAT
+               GO TO CIC-CMN-MOD.
+
+           MOVE FIO-END-BRW TO FIO-CMND.
+           PERFORM GNS-FIO-RUG.
+           IF RUG-COD-GRPO IN CUG-FLD NOT =
+              RUG-COD-GRPO IN RUG
+               GO TO CIC-CMN-MOD.
+             
+           MOVE FIO-GET-KEY-UPD TO FIO-CMND.
+           PERFORM GNS-FIO-RUG.
+      *ISP: GUARDA TODOS AQUELLOS USUARIOS NO VIGENTES PARA
+      *     DESPUES GRABARLOS EN EL MISMO ESTADO
+           IF RUG-IND-VIGE IN RUG = 'N'
+               ADD 1 TO WSS-TOT-NVIG
+               MOVE RUG-COD-USER IN RUG TO WSS-USR-USER(WSS-TOT-NVIG).
+
+           MOVE FIO-DEL TO FIO-CMND.
+           PERFORM GNS-FIO-RUG.
+           PERFORM DEL-CATE-USR.
+
+           IF RUG-COD-USER IN RUG = SCR-LAST
+               GO TO CIC-CMN-MOD.
+
+           IF FIO-STAT-OKS
+               GO TO CIC-CMN-ELI-MOD.
+       CIC-CMN-MOD.
+           PERFORM CMN-ING.
+           MOVE 'GNS' TO MSG-COD-SIST.
+           MOVE 'MODYES    ' TO MSG-COD-MENS.
+           PERFORM GET-MSG.
+           MOVE MSG-GLS-DESC TO FRM-MENS.
+           GO TO FIN-CMN-MOD.
+      *>>>> INI_CMN_MOD
+*% END
+*% IF INI_CMN_ELI
+      *<<<< INI_CMN_ELI
+           GO TO CIC-CMN-ELI.
+      *>>>> INI_CMN_ELI
+*% END
+*% IF CMN_ELI
+      *<<<< CMN_ELI
+
+       CIC-CMN-ELI.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           MOVE LOW-VALUES TO RUG.
+           MOVE RUG-COD-GRPO IN CUG-FLD TO RUG-COD-GRPO IN RUG.
+           PERFORM GNS-FIO-RUG.
+           IF NOT FIO-STAT-OKS
+               MOVE '00' TO FIO-STAT
+               GO TO FIN-CMN-ELI.
+
+           IF RUG-COD-GRPO IN CUG-FLD NOT =
+              RUG-COD-GRPO IN RUG
+               GO TO FIN-CMN-ELI.
+
+           MOVE FIO-GET-KEY-UPD TO FIO-CMND.
+           PERFORM GNS-FIO-RUG.
+           MOVE FIO-DEL TO FIO-CMND.
+           PERFORM GNS-FIO-RUG.
+           PERFORM DEL-CATE-USR.
+           IF FIO-STAT-OKS
+               GO TO CIC-CMN-ELI
+           ELSE
+               GO TO FIN-CMN-ELI.
+      *>>>> CMN_ELI
+*% END
+*% IF INI_CMN_ING
+      *<<<< INI_CMN_ING
+           MOVE '00' TO FIO-STAT.
+           MOVE ZEROES TO FRM-IFLD.
+      *>>>> INI_CMN_ING
+*% END
+*% IF CMN_ING
+      *<<<< CMN_ING
+       CIC-CMN-ING.
+           ADD 1 TO FRM-IFLD.
+           IF FRM-IFLD > WSS-LIMI
+               GO TO FIN-CMN-ING.
+           IF FRM-COD-USER IN CUG-FLD(FRM-IFLD) NOT > SPACES
+              GO TO CIC-CMN-ING.
+           MOVE FRM-COD-USER IN CUG-FLD(FRM-IFLD) TO
+                RUG-COD-USER IN RUG.
+           MOVE 'S' TO RUG-IND-VIGE IN RUG.
+           IF WSS-TOT-NVIG > ZEROES
+               SET WSS-IDX-NVIG TO 1
+               SEARCH WSS-USR-VECT VARYING WSS-IDX-NVIG
+                    WHEN WSS-USR-USER(WSS-IDX-NVIG) = 
+                       RUG-COD-USER IN RUG 
+                       GO TO FND-SEA-USER.
+           GO TO FIN-SEA-USER.
+       FND-SEA-USER.
+           MOVE 'N' TO RUG-IND-VIGE IN RUG.
+       FIN-SEA-USER.
+
+      *>>>> CMN_ING
+*% END
+*% IF FIN_CMN_ING
+      *<<<< FIN_CMN_ING
+           IF NOT FIO-STAT-OKS
+               GO TO FIN-CMN-ING.
+           
+           PERFORM MOD-CATE-USR.
+           GO TO CIC-CMN-ING.
+      *>>>> FIN_CMN_ING
+*% END
+*% IF EOF
+      *<<<< EOF
+       MOD-CATE-USR SECTION.
+       INI-MOD-CATE-USR.
+      *     MOVE FRM-COD-USER IN CUG-FLD(FRM-IFLD) TO
+      *          USR-COD-USER IN USR.
+      *     MOVE 'USR-COD-USER' TO FIO-AKEY.
+      *     MOVE FIO-GET-KEY-UPD TO FIO-CMND.
+      *     PERFORM TAB-FIO-USR.
+      *     IF FIO-STAT-OKS
+      *         MOVE RUG-COD-GRPO IN CUG-FLD TO
+      *              USR-COD-CUSR IN USR
+      *         MOVE FIO-MOD TO FIO-CMND
+      *         MOVE 'USR-COD-USER' TO FIO-AKEY
+      *         PERFORM TAB-FIO-USR.
+       FIN-MOD-CATE-USR.
+           EXIT.
+
+       DEL-CATE-USR SECTION.
+       INI-DEL-CATE-USR.
+      *     MOVE RUG-COD-USER IN RUG TO USR-COD-USER IN USR.
+      *     MOVE 'USR-COD-USER' TO FIO-AKEY.
+      *     MOVE FIO-GET-KEY-UPD TO FIO-CMND.
+      *     PERFORM TAB-FIO-USR.
+      *     IF FIO-STAT-OKS
+      *         MOVE SPACES TO USR-COD-CUSR IN USR
+      *         MOVE FIO-MOD TO FIO-CMND
+      *         MOVE 'USR-COD-USER' TO FIO-AKEY
+      *         PERFORM TAB-FIO-USR.
+       FIN-DEL-CATE-USR.
+           EXIT.
+
+       UNP-AND-BRT SECTION.
+       INI-UNP-AND-BRT.
+           MOVE 'A' TO FRM-COD-USER-ATR IN CUG-FLD(FRM-IFLD).
+           IF FRM-COD-USER IN CUG-FLD(FRM-IFLD) > SPACES
+                MOVE FRM-COD-USER IN CUG-FLD(FRM-IFLD) TO
+                     RUG-COD-USER IN RUG
+                MOVE FIO-GET-KEY TO FIO-CMND
+                MOVE 'RUG-COD-USER' TO FIO-AKEY
+                PERFORM GNS-FIO-RUG
+                IF FIO-STAT-OKS AND
+                   RUG-IND-VIGE IN RUG = 'S'
+                     MOVE FRM-CPIM-UBY TO
+                          FRM-COD-USER-ATR IN CUG-FLD(FRM-IFLD).
+       FIN-UNP-AND-BRT.
+           EXIT.
+
+       COPY TABBBUSR.
+       COPY TABBVUSR.
+       COPY TABBFUSR.
+      *>>>> EOF
+*% END

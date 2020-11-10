@@ -1,0 +1,125 @@
+       GAR-PRO-VCR SECTION.
+       INI-GAR-PRO-VCR.
+      * VALORIZA CREDITOS GARANTIZADOS EN FORMA ESPECIFICA
+           PERFORM GAR-LNK-VCR.
+      *RVM-CST-INI 04.08.1995
+           IF NOT SYS-STAT = SYS-STAT-OKS
+               MOVE 'BGL'         TO VCR-COD-SIST IN VCR-VARI
+               MOVE 'RUTNEXPSVCR' TO VCR-COD-MENS IN VCR-VARI.
+      *RVM-CST-INI 04.08.1995
+
+           MOVE VCR-COD-SIST IN VCR-VARI TO MSG-COD-SIST.
+           MOVE VCR-COD-MENS IN VCR-VARI TO MSG-COD-MENS.
+           IF MSG-COD-MENS > SPACES
+               GO TO ERR-GAR-PRO-VCR.
+
+      * ELIMINA DECIMALES DEL MONTO DE LOS CREDITOS GARANTIZADOS
+           MOVE CLI-VAL-DEUD IN VCR-VARI TO PES-SGV-DECI IN PES-VARI.
+           PERFORM PES-SCTV.
+           MOVE PES-SGV-ENTE IN PES-VARI TO CLI-VAL-DEUD IN VCR-VARI.
+
+      * VALORIZA LA TASACION EN PESOS A LA FECHA DE REVALORIZACION
+           IF VCR-COD-VCAM IN VCR-VARI NOT = VCR-COD-PESO IN VCR-VARI
+               MOVE GVT-FEC-FRVL IN GVT      TO CAM-FEC-FCAM IN CAM(1)
+               MOVE CAM-FEC-FCAM IN CAM(1)   TO CAM-FEC-FCAM IN CAM(2)
+               MOVE VCR-COD-VCAM IN VCR-VARI TO CAM-COD-VCAM IN CAM(1)
+               MOVE VCR-COD-PESO IN VCR-VARI TO CAM-COD-VCAM IN CAM(2)
+               MOVE FIO-GET-KEY TO FIO-CMND
+               PERFORM TAB-FIO-CAM
+               IF NOT (
+                  FIO-STAT-OKS AND CAM-IND-VIGE IN CAM = 'S'
+                     )
+                   MOVE 'TAB'        TO MSG-COD-SIST
+                   MOVE 'CAM    NEX' TO MSG-COD-MENS
+                   GO TO ERR-GAR-PRO-VCR
+               ELSE
+                   COMPUTE VCR-SGV-VCTS IN VCR-VARI ROUNDED =
+                           GVT-SGV-VCTS IN GVT *
+                           CAM-SGV-VCAM IN CAM
+                   MOVE VCR-SGV-VCTS IN VCR-VARI TO
+                        PES-SGV-DECI IN PES-VARI
+                   PERFORM PES-SCTV
+                   MOVE PES-SGV-ENTE IN PES-VARI TO
+                        VCR-SGV-VCTS IN VCR-VARI
+           ELSE
+               MOVE GVT-SGV-VCTS IN GVT TO
+                    VCR-SGV-VCTS IN VCR-VARI.
+
+      * COMPARA TOTAL VALORIZADO DE CREDITOS CONTRA MONTO DE LA GARANTIA
+           IF CLI-VAL-DEUD IN VCR-VARI NOT > VCR-SGV-VCTS IN VCR-VARI
+
+      *        CALCULA RAZON  VALOR LIQUIDACION / VALOR TASACION
+               COMPUTE VCR-SGV-LTSN IN VCR-VARI ROUNDED =
+                       GVT-SGV-LTSN IN GVT /
+                       GVT-SGV-VCTS IN GVT
+
+               PERFORM OBT-DEUD-MON
+               IF MSG-COD-MENS > SPACES
+                   GO TO ERR-GAR-PRO-VCR
+               ELSE
+
+               MOVE CLI-VAL-DEUD-MON IN VCR-VARI TO
+                    GVT-SGV-VCTS  IN GVT
+               MOVE CLI-VAL-DEUD     IN VCR-VARI TO
+                    VCR-SGV-VCTS  IN VCR-VARI
+
+      *        CALCULA VALOR LIQUIDACION
+               MULTIPLY VCR-SGV-LTSN     IN VCR-VARI BY
+                        GVT-SGV-VCTS IN GVT GIVING
+                        GVT-SGV-LTSN IN GVT ROUNDED
+
+      *        CALCULA VALOR PONDERADO
+               COMPUTE GVT-SGV-VPND IN GVT ROUNDED =
+                       GVT-SGV-LTSN IN GVT *
+                       GVT-SGV-PPCT IN GVT / 100
+
+               IF VCR-COD-VCAM IN VCR-VARI = VCR-COD-PESO IN VCR-VARI
+                  MOVE GVT-SGV-LTSN IN GVT TO
+                       PES-SGV-DECI    IN PES-VARI
+                  PERFORM PES-SCTV
+                  MOVE PES-SGV-ENTE    IN PES-VARI TO
+                      GVT-SGV-LTSN  IN GVT
+
+                  MOVE GVT-SGV-VPND IN GVT TO PES-SGV-DECI IN PES-VARI
+                  PERFORM PES-SCTV
+                  MOVE PES-SGV-ENTE IN PES-VARI TO GVT-SGV-VPND IN GVT.
+
+           GO TO FIN-GAR-PRO-VCR.
+       ERR-GAR-PRO-VCR.
+           MOVE 'BGL' TO MSG-COD-SIST.
+           PERFORM GET-MSG.
+           MOVE MSG-GLS-DESC TO FRM-MENS.
+           MOVE SCR-STAT-CON TO SCR-STAT.
+       FIN-GAR-PRO-VCR.
+           EXIT.
+
+       OBT-DEUD-MON SECTION.
+       INI-OBT-DEUD-MON.
+           IF VCR-COD-VCAM IN VCR-VARI = VCR-COD-PESO IN VCR-VARI
+               MOVE CLI-VAL-DEUD IN VCR-VARI TO CLI-VAL-DEUD-MON
+                                                 IN VCR-VARI
+               GO TO FIN-OBT-DEUD-MON.
+
+           PERFORM GET-FHOY.
+           MOVE HOY-SHOY                 TO CAM-NUM-SCAM IN CAM(1).
+           MOVE HOY-AHOY                 TO CAM-NUM-ACAM IN CAM(1).
+           MOVE HOY-MHOY                 TO CAM-NUM-MCAM IN CAM(1).
+           MOVE HOY-DHOY                 TO CAM-NUM-DCAM IN CAM(1).
+           MOVE CAM-FEC-FCAM IN CAM(1)   TO CAM-FEC-FCAM IN CAM(2).
+           MOVE VCR-COD-VCAM IN VCR-VARI TO CAM-COD-VCAM IN CAM(1).
+           MOVE VCR-COD-PESO IN VCR-VARI TO CAM-COD-VCAM IN CAM(2).
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM TAB-FIO-CAM.
+           IF NOT (
+              FIO-STAT-OKS AND CAM-IND-VIGE IN CAM = 'S'
+                  )
+               MOVE 'TAB'        TO MSG-COD-SIST
+               MOVE 'CAM    NEX' TO MSG-COD-MENS
+           ELSE
+               COMPUTE CLI-VAL-DEUD-MON IN VCR-VARI ROUNDED =
+                       CLI-VAL-DEUD IN VCR-VARI /
+                       CAM-SGV-VCAM IN CAM.
+       FIN-OBT-DEUD-MON.
+           EXIT.
+
+

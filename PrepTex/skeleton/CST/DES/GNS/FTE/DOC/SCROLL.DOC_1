@@ -1,0 +1,248 @@
+		ESPECIFICACION PROGRAMAS CON SCROLL
+		-----------------------------------
+
+Para la especificacion de programas con SCROLL se supone una pantalla de las
+siguiente caracteristicas :
+
+
++-------------------------------------------------------------------------+
+|									  |
+|  { entidad padre como llave } 	<--- por ejemplo un RUT		  |
+|									  |
+|  [dato 1] [dato 2] [dato 3] ....................... [dato n]  linea 1   |
+|  [dato 1] [dato 2] [dato 3] ....................... [dato n]  linea 2   |
+|  [dato 1] [dato 2] [dato 3] ....................... [dato n]  linea 3   |
+|									  |
+|									  |
+|									  |
+|									  |
+|									  |
+|  [dato 1] [dato 2] [dato 3] ....................... [dato n]  linea m   !
+|									  |
++-------------------------------------------------------------------------+
+
+Se supone se hara SCROLL en las 'm' lineas con las teclas PF7 y PF8, para esto
+se considerara un numero 'maximo de pantallas' que se pueden recorrer, luego
+se deben guardar por cada 'pantalla' los valores de las llaves ubicadas en la
+linea 1 ( 'llave superior' ) y en la ultima linea ( 'llave inferior' ) y llevar
+un indice de cual es la 'pantalla actualmente desplegada'.
+
+Cuando se digita la PF8 se debe tomar el valor de la 'llave inferior' de la
+'pantalla desplegada' y leer los 'm' siguientes registros llenando cada linea
+de la pantalla, aumentar en 1 el indice de la 'pantalla desplegada' y cargar
+los valores de 'llave superior' y 'llave inferior' de dicha pantalla.
+
+Cuando se digita la PF7 se debe tomar el valor de la 'llave superior' corres-
+pondiente a la [ 'pantalla desplegada' - 1 ], leer ese registro y leer los
+'m-1' siguientes registros llenando cada linea de la pantalla, disminuir en 1 el
+indice de la 'pantalla desplegada' y cargar los valores de 'llave superior' y
+'llave inferior' de dicha pantalla.
+
+A continuacion se presenta el codigo adicional necesario para poder realizar
+dicha funcion.
+
+*%! Codigo adicional para programas con SCROLL
+*% FRM = "[ nombre del formulario ( 3 caracteres ) ]"
+*% NRA = [ numero de pantallas maximas ]
+*% TBL = "[ nombre dado por el usuario a la tabla ]"
+*% TCA = 0
+*% IF TCA = 0
+*%     TCA = 1110
+*%     FOR I = 1 TO {nra}
+*%         TCA = TCA + [ largo de llave ] + [ largo de llave ]
+*%     NEXT I
+*% END
+*% IF FIN_SCR_VARI
+      *<<<< FIN_SCR_VARI
+      *Indice que indica el numero de la 'pantalla' desplegada
+           03 WSS-NUM-IKEY         VALUE 0 PIC 9(02).
+      *Tabla que contiene el par de llaves 'superior' e 'inferior' para la
+      *pantalla que indica WSS-NUM-IKEY
+           03 WSS-TAB-VKEY OCCURS {nra}.
+              05 WSS-GLS-VKSP              PIC X( [ largo de llave ] ).
+              05 WSS-GLS-VKIN              PIC X( [ largo de llave ] ).
+      *>>>>
+*% END
+*% CMA_USR = TRUE
+*% IF CMA
+      *<<<< CMA
+           02 FILLER                      PIC X({tca}).
+      *>>>>
+*% END
+*% IF INI_FIO
+      *<<<< INI_FIO
+           MOVE +{tca} TO SCR-TCMA.
+           IF SCR-DESDE-CMN
+               PERFORM GNS-CLR-RQA.
+      *>>>>
+*% END
+*% IF PFS_GET_CON
+      *<<<< PFS_GET_CON
+           IF NOT ( FRM-FFLD = FRM-FFLD-PF7 OR FRM-FFLD-PF8 )
+      *>>>>
+*% END
+*% IF PFS_SCR_ACC
+      *<<<< PFS_SCR_ACC
+           IF FRM-FFLD = FRM-FFLD-PF7 OR FRM-FFLD-PF8
+               PERFORM VAL-NUM-KEY-{frm}
+               PERFORM VAL-NUM-FLD-{frm}
+               PERFORM SCRL-TAB-{tbl}
+               PERFORM SCR-TRL
+           ELSE
+               PERFORM GNS-CLR-RQA.
+      *>>>>
+*% END
+*% IF EOF
+      *<<<< EOF
+       RST-STAT SECTION.
+       INI-RST-STAT.
+           MOVE SCR-STPP     TO SCR-STAT.
+           MOVE SCR-MFLD-NOT TO SCR-MFLD.
+       FIN-RST-STAT.
+           EXIT.
+
+       GNS-CLR-RQA SECTION.
+       INI-GNS-CLR-RQA.
+*% FOR I = 1 TO {nra}
+           MOVE SPACES TO WSS-TAB-VKEY( {i} ).
+*% NEXT I
+       FIN-GNS-CLR-RQA.
+           EXIT.
+      *>>>>
+*% END
+*% IF EOF
+      *<<<< EOF
+       SCRL-TAB-{tbl} SECTION.
+       INI-SCRL-TABL-{tbl}.
+           MOVE SPACES TO MSG-COD-MENS.
+           IF FRM-FFLD = FRM-FFLD-PF8
+               SI la ultima linea de la pantalla no esta vacia
+      *            llama parrafo que hace SCROLL hacia 'adelante'
+                   PERFORM PUT-TAB-ASC
+               ELSE
+      *            No existen mas hacia 'adelante'
+                   MOVE [codigo mensaje] TO MSG-COD-MENS
+           ELSE
+               SI la primera linea de la pantalla no esta vacia
+      *            llama parrafo que hace SCROLL hacia 'atras'
+                   PERFORM PUT-TAB-DSC
+               ELSE
+      *            No existen mas hacia 'atras'
+                   MOVE [codigo mensaje] TO MSG-COD-MENS.
+
+           IF MSG-COD-MENS > SPACES
+               MOVE '[sistema]' TO MSG-COD-SIST
+               PERFORM GET-MSG
+               MOVE MSG-GLS-DESC TO FRM-MEN2.
+       FIN-SCRL-TABL-{tbl}.
+           EXIT.
+
+      *Realiza SCROLL hacia 'adelante'
+       PUT-TAB-ASC SECTION.
+       INI-PUT-TAB-ASC.
+           IF WSS-NUM-IKEY = [ maximo de pantallas ]
+      *        No se puede desplegar mas pantallas
+               MOVE [codigo de mensaje] TO MSG-COD-MENS
+               GO TO FIN-PUT-TAB-ASC.
+
+      *Indice para llenar lineas en la pantalla
+           MOVE 1 TO FRM-IFLD.
+
+      *Se mueve el valor de la llave inferior de la pantalla 'actual'
+      *a la llave del registro
+           MOVE WSS-GLS-VKIN( WSS-NUM-IKEY ) TO [llave del registro].
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM [sistema]-FIO-[registro].
+
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM [sistema]-FIO-[registro].
+           IF FIO-STAT-OKS
+               ADD 1 TO WSS-NUM-IKEY
+           ELSE
+      *        No existen mas registros 'hacia adelante'
+               MOVE [codigo mensaje] TO MSG-COD-MENS
+               GO TO FIN-PUT-TAB-ASC.
+
+      *Se mueve la llave del primer registro que va a quedar en 'la tabla'
+      *a la 'llave superior' de la pantalla 'actual'
+           MOVE [llave del registro] TO WSS-GLS-VKSP( WSS-NUM-IKEY ).
+
+           PERFORM PUT-TAB-IFLD.
+       FIN-PUT-TAB-ASC.
+           EXIT.
+
+      *Realiza SCROLL hacia 'atras'
+       PUT-TAB-DSC SECTION.
+       INI-PUT-TAB-DSC.
+           IF WSS-NUM-IKEY = 1
+      *        No existen pantallas anteriores
+               MOVE [codigo de mensaje] TO MSG-COD-MENS
+               GO TO FIN-PUT-TAB-DSC.
+
+      *Indice para llenar lineas en la pantalla
+           MOVE 1 TO FRM-IFLD.
+
+      *Se resta 1 para dejar apuntado el indice WSS-NUM-IKEY a la
+      *pantalla anterior
+           SUBTRACT 1 FROM WSS-NUM-IKEY.
+
+      *Se mueve el valor de la llave superior de la pantalla 'anterior'
+      *a la llave del registro
+           MOVE WSS-GLS-VKSP( WSS-NUM-IKEY ) TO [llave del registro].
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM [sistema]-FIO-[registro].
+
+           IF NOT FIO-STAT-OKS
+      *        No existen mas registros 'hacia adelante'
+               MOVE [codigo mensaje] TO MSG-COD-MENS
+               GO TO FIN-PUT-TAB-DSC.
+
+           MOVE [llave del registro] TO WSS-GLS-VKSP( WSS-NUM-IKEY ).
+
+           PERFORM PUT-TAB-IFLD.
+       FIN-PUT-TAB-DSC.
+           EXIT.
+
+      *Aqui se debe cargar la linea FRM-IFLD de la pantalla con los
+      *datos que corresponda
+       PUT-TAB-IFLD SECTION.
+       INI-PUT-TAB-IFLD.
+           MOVE SPACES TO MSG-COD-MENS.
+
+           [ cargar la tabla con indice ( FRM-IFLD ) ].
+
+      *Se mueve la llave de cada registro de 'la tabla' a la
+      *'llave inferior' de la pantalla 'actual'
+           MOVE [llave del registro] TO WSS-GLS-VKIN( WSS-NUM-IKEY ).
+
+      *Se incrementa en 1 el indice que indica la linea de la pantalla
+      *que se debe cargar
+           ADD 1 TO FRM-IFLD
+           IF FRM-IFLD > [maximo de tabla]
+               GO TO FIN-PUT-TAB-IFLD.
+
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM [sistema]-FIO-[registro].
+           IF FIO-STAT-OKS
+               GO TO INI-PUT-TAB-IFLD.
+
+           limpiar tabla de la posicion FRM-IFLD hasta el [maximo de tabla].
+
+       FIN-PUT-TAB-IFLD.
+           EXIT.
+      *>>>>
+*% END
+
+
+NOTAS : Los valores entre [ ] se supone deben ser reemplazados por los
+	literales correspondientes.
+
+	Se supone ademas que la primera vez que se carga la 'tabla' ( esto
+	debe hacerse en el parrfo FND-KEY ) se deben llenar los valores :
+
+	WSS-GLS-VKSP( 1 ) con el valor de la llave 'superior' en pantalla 1.
+	WSS-GLS-VKIN( 1 ) con el valor de la llave 'inferior' en pantalla 1.
+
+	y el valor :
+
+			WSS-NUM-IKEY con valor 1

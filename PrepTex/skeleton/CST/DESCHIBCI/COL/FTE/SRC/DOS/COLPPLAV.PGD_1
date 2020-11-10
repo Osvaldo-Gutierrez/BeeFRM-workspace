@@ -1,0 +1,796 @@
+       IDENTIFICATION DIVISION.
+      *========================
+       PROGRAM-ID.    COLPPLAV.
+       AUTHOR.        CONSIST(DAD).
+       DATE-WRITTEN.  10-AGO-1992      ( Ultima Modificacion).
+
+      * Chequea que Operaciones de Creditos ingresadas con Linea de Avan
+      * sean validas de procesar.
+
+       ENVIRONMENT DIVISION.
+      *=====================
+       CONFIGURATION SECTION.
+      *----------------------
+       SPECIAL-NAMES.
+               DECIMAL-POINT IS COMMA.
+
+       DATA DIVISION.
+      *==============
+       WORKING-STORAGE SECTION.
+      *------------------------
+       COPY GNSWCSCR.
+       COPY GNSWVSCR.
+       COPY GNSWGRQA.
+       COPY GNSWGUIB.
+       COPY GNSWGELS.
+       COPY GNSWCFIO.
+       COPY GNSWVFIO.
+       COPY GNSWVIDD.
+       COPY GNSWGFRM.
+       COPY GNSWGSYS.
+       COPY GNSWGFEC.
+       COPY GNSWGHOY.
+
+       COPY GNSBRMSG.
+       COPY GNSBRTAB.
+       COPY GNSBRMSC.
+       COPY TABBRCAM.
+       COPY COLBROPC.
+       COPY COLBRDLC.
+       COPY COLBRRDC.
+       COPY COLBRLDA.
+       COPY COLBRRLO.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-MSG-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-TAB-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-MSC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-CAM-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-OPC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-DLC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-RDC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-LDA-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-RLO-REQA==.
+       COPY COLWGLAV.
+
+       01  WSS-VARI.
+           03 WSS-I                                    PIC 9(03).
+           03 WSS-J                                    PIC 9(03).
+           03 WSS-K                                    PIC 9(03).
+           03 WSS-IMAX                                 PIC 9(03).
+           03 WSS-JMAX                                 PIC 9(03).
+           03 WSS-KMAX                                 PIC 9(03).
+           03 WSS-VECT             VALUE 10            PIC 9(03).
+           03 WSS-TABL             VALUE 99            PIC 9(03).
+           03 WSS-MENS.
+              05 WSS-GLS1                              PIC X(15).
+              05 WSS-GLS2.
+                 07 FILLER                             PIC X(15).
+                 07 WSS-GLS3                           PIC X(10).
+           03 WSS-FPRO.
+              05 WSS-SPRO                              PIC  9(02).
+              05 WSS-APRO                              PIC  9(02).
+              05 WSS-MPRO                              PIC  9(02).
+              05 WSS-DPRO                              PIC  9(02).
+           03 WSS-TOPC.
+              05 WSS-IOPC          OCCURS 99           PIC X(12).
+              05 WSS-ILDC          OCCURS 99           PIC X(12).
+              05 WSS-SCRE          OCCURS 99  COMP-3   PIC 9(11)V9999.
+              05 WSS-VCOC          OCCURS 99           PIC X(06).
+              05 WSS-MARK          OCCURS 99           PIC X(01).
+           03 WSS-TLDA.
+              05 WSS-ILDA          OCCURS 10           PIC X(12).
+              05 WSS-MLDA          OCCURS 10           PIC X(06).
+              05 WSS-AUTO          OCCURS 10  COMP-3   PIC 9(11)V9999.
+              05 WSS-SALD          OCCURS 10  COMP-3   PIC 9(13)V9999.
+           03 WSS-CUPO             VALUE +0   COMP-3   PIC S9(13)V9(04).
+           03 WSS-CPES                                 PIC X(06).
+           03 WSS-VPES                                 PIC S9(13)V9999.
+           03 WSS-VDSP                  PIC --.---.---.---.--9,9999.
+           03 WSS-CICO.
+              05 WSS-CAIO                              PIC X(04).
+              05 WSS-IICO                              PIC 9(08).
+
+       LINKAGE SECTION.
+      *----------------
+       01  DFHCOMMAREA.
+           03 FILLER                          PIC X(617).
+      *JSS 14-05-93
+       COPY GNSLGFIO.
+
+       PROCEDURE DIVISION.
+      *===================
+       MAIN SECTION.
+       INI-MAIN.
+       COPY GNSBGEDB.
+           MOVE 'COLPPLAV'  TO FIO-PROG.
+           MOVE DFHCOMMAREA(1:EIBCALEN) TO LAV-CMMA.
+           MOVE 'COL'       TO SCR-SIST.
+           MOVE LAV-VIDD    TO IDD-FSIS.
+           PERFORM PRO-LDA-INIC.
+           IF LAV-CMSG IN LAV-VARI > SPACES
+               GO TO END-MAIN.
+
+           IF LAV-CMND IN LAV-VARI = 'ING' OR 'MOD'
+               PERFORM PRO-LDA-CCTE
+           ELSE
+           IF LAV-CMND IN LAV-VARI = 'LIQ' OR 'ACA'
+               PERFORM PRO-LDA-CUPO
+           ELSE
+           IF LAV-CMND IN LAV-VARI = 'GRA'
+               PERFORM PRO-LDA-GRLO
+           ELSE
+           IF LAV-CMND IN LAV-VARI = 'PRO'
+               PERFORM PRO-LDA-PRLO.
+       END-MAIN.
+           MOVE LAV-CMMA IN LAV-VARI TO DFHCOMMAREA.
+       FIN-MAIN.
+      *DSP-JSS 14-05-93
+           EXEC CICS RETURN END-EXEC.
+
+      ******************************************************************
+       PRO-LDA-INIC SECTION.
+       INI-PRO-LDA-INIC.
+      * Inicializacion de Variables en CMMA
+           MOVE SPACES TO LAV-CMSG IN LAV-VARI
+                          LAV-MENS IN LAV-VARI
+                          LAV-CCTE IN LAV-VARI.
+
+      * Obtiene Codigo de la Moneda Pesos con el CIC de la Moneda '0999'
+           MOVE 'TAB'          TO FIO-SIST.
+           MOVE 'VLR'          TO TAB-CIC-TTAB IN TAB.
+           MOVE '0999  '       TO TAB-CIC-CTAB IN TAB.
+           MOVE 'TAB-CIC-TABL' TO FIO-AKEY.
+           MOVE FIO-GET-KEY    TO FIO-CMND.
+           PERFORM GNS-FIO-TAB.
+           IF NOT FIO-STAT-OKS
+               MOVE 'CIC0999  NEX'      TO LAV-CMSG IN LAV-VARI
+               MOVE TAB-CIC-TABL IN TAB TO LAV-MENS IN LAV-VARI
+               GO TO FIN-PRO-LDA-INIC.
+           MOVE TAB-COD-CTAB IN TAB TO WSS-CPES IN WSS-VARI.
+
+      * Obtiene Fecha de Proceso ( Hoy )
+           PERFORM GET-FHOY.
+           MOVE HOY-FHOY IN HOY-VARI TO WSS-FPRO IN WSS-VARI.
+
+      * Inicializa tabla de Todas las LDA utilizadas del Cliente con el
+      * ocupado de ellas
+           MOVE 1 TO WSS-I IN WSS-VARI.
+       LUP-PRO-LDA-INIC-CCTE.
+           MOVE SPACES TO WSS-ILDA(WSS-I)
+                          WSS-MLDA(WSS-I).
+           MOVE ZEROES TO WSS-AUTO(WSS-I)
+                          WSS-SALD(WSS-I).
+           ADD 1 TO WSS-I IN WSS-VARI.
+           IF WSS-I IN WSS-VARI NOT > WSS-VECT IN WSS-VARI
+               GO TO LUP-PRO-LDA-INIC-CCTE.
+
+      * Inicializa tabla de Todas las OPC del Cliente con Lineas de Cred
+           MOVE 1 TO WSS-I IN WSS-VARI.
+       LUP-PRO-LDA-INIC-TOPC.
+           MOVE SPACES TO WSS-IOPC(WSS-I)
+                          WSS-ILDC(WSS-I)
+                          WSS-VCOC(WSS-I)
+                          WSS-MARK(WSS-I).
+           MOVE ZEROES TO WSS-SCRE(WSS-I).
+           ADD 1 TO WSS-I IN WSS-VARI.
+           IF WSS-I IN WSS-VARI NOT > WSS-TABL IN WSS-VARI
+               GO TO LUP-PRO-LDA-INIC-TOPC.
+       FIN-PRO-LDA-INIC.
+           EXIT.
+      ******************************************************************
+      * Con Linea de Avance en tabla OPC's ingresadas IOPC(i), Lee y rea
+      * validaciones a la Linea de Avance.
+       PRO-LDA-CCTE SECTION.
+       INI-PRO-LDA-CCTE.
+      * Inicializacion de Variables
+           MOVE 1 TO WSS-I IN WSS-VARI.
+       LUP-PRO-LDA-CCTE.
+      * Lee Linea de Avance desde tabla OPC's ingresadas IOPC(i)
+           MOVE LAV-IOPC IN LAV-VARI(WSS-I) TO LDA-COP IN LDA.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM COL-FIO-LDA.
+           IF NOT FIO-STAT-OKS
+               MOVE 'LDA    NEX'   TO LAV-CMSG IN LAV-VARI
+               MOVE LDA-COP IN LDA TO LAV-MENS IN LAV-VARI
+               GO TO FIN-PRO-LDA-CCTE.
+
+      * Verifica que Linea de Avance leida este activada
+           IF LDA-COD-EST IN LDA NOT = 'ACA'
+               MOVE 'LDA    NOACA' TO LAV-CMSG IN LAV-VARI
+               MOVE LDA-COP IN LDA TO LAV-MENS IN LAV-VARI
+               GO TO FIN-PRO-LDA-CCTE.
+
+      * Verifica que Linea de Avance leida pertenesca al Cliente
+           IF CLI-CIC IN LDA NOT = LAV-ICLI IN LAV-VARI
+               MOVE 'LDA    NOCLI'       TO LAV-CMSG IN LAV-VARI
+               MOVE LDA-COP  IN LDA      TO WSS-GLS1 IN WSS-VARI
+               MOVE CLI-CIC  IN LDA      TO WSS-GLS2 IN WSS-VARI
+               MOVE WSS-MENS IN WSS-VARI TO LAV-MENS IN LAV-VARI
+               GO TO FIN-PRO-LDA-CCTE.
+
+      * Verifica que LDA-FCUR sea menor o igual a la FCOL
+           IF LDA-FEC-CUR-REA IN LDA > LAV-FCOL IN LAV-VARI
+               MOVE 'LDAFCUR>FCOL'              TO LAV-CMSG IN LAV-VARI
+               MOVE LDA-COP IN LDA              TO WSS-GLS1 IN WSS-VARI
+               MOVE LDA-FEC-CUR-REA IN LDA      TO WSS-GLS2 IN WSS-VARI
+               MOVE WSS-MENS        IN WSS-VARI TO LAV-MENS IN LAV-VARI
+               GO TO FIN-PRO-LDA-CCTE.
+
+      * Verifica que LDA-FVEN sea mayor o igual a la FHOY
+           IF LDA-FEC-VTO-LIN IN LDA < WSS-FPRO IN WSS-VARI
+               MOVE 'LDAFVEN<FHOY'              TO LAV-CMSG IN LAV-VARI
+               MOVE LDA-COP IN LDA              TO WSS-GLS1 IN WSS-VARI
+               MOVE LDA-FEC-VTO-LIN IN LDA      TO WSS-GLS2 IN WSS-VARI
+               MOVE WSS-MENS        IN WSS-VARI TO LAV-MENS IN LAV-VARI
+               GO TO FIN-PRO-LDA-CCTE.
+
+      * Verifica que Linea de Avance leida tenga Cta. Cte.
+           IF CCT-COP IN LDA NOT > SPACES
+               MOVE 'LDA    NOCCT' TO LAV-CMSG IN LAV-VARI
+               MOVE LDA-COP IN LDA TO LAV-MENS IN LAV-VARI
+               GO TO FIN-PRO-LDA-CCTE.
+
+      * Guarda la Cta. Cte. que tiene la Linea de Avance leida
+           MOVE CCT-COP IN LDA TO LAV-CCTE IN LAV-VARI.
+       FIN-PRO-LDA-CCTE.
+           EXIT.
+      ******************************************************************
+       PRO-LDA-CUPO SECTION.
+       INI-PRO-LDA-CUPO.
+      * Inicializacion de Variables
+           MOVE ZEROES TO WSS-I    IN WSS-VARI
+                          WSS-J    IN WSS-VARI
+                          WSS-K    IN WSS-VARI
+                          WSS-IMAX IN WSS-VARI
+                          WSS-JMAX IN WSS-VARI
+                          WSS-KMAX IN WSS-VARI.
+           MOVE SPACES TO WSS-CICO IN WSS-VARI.
+
+      * Inicializacion de Variables
+           MOVE  1  TO WSS-I IN WSS-VARI.
+       LUP-PRO-LDA-CUPO.
+      * Lee Operacion de Credito desde tabla OPC's ingresadas IOPC(i)
+           MOVE LAV-IOPC IN LAV-VARI(WSS-I) TO OPC-CIC-IOPC IN OPC.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM COL-FIO-OPC.
+           IF NOT FIO-STAT-OKS
+               MOVE 'OPC    NEX'        TO LAV-CMSG IN LAV-VARI
+               MOVE OPC-CIC-IOPC IN OPC TO LAV-MENS IN LAV-VARI
+               GO TO FIN-PRO-LDA-CUPO.
+
+      * Lee Linea de Avance de la OPC leida
+           MOVE OPC-CIC-ILDC IN OPC TO LDA-COP IN LDA.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM COL-FIO-LDA.
+           IF NOT FIO-STAT-OKS
+               MOVE 'LDA    NEX'        TO LAV-CMSG IN LAV-VARI
+               MOVE OPC-CIC-ILDC IN OPC TO LAV-MENS IN LAV-VARI
+               GO TO FIN-PRO-LDA-CUPO.
+
+      * Verifica que Linea de Avance de la OPC leida este activada
+           IF LDA-COD-EST IN LDA NOT = 'ACA'
+               MOVE 'LDA    NOACA'      TO LAV-CMSG IN LAV-VARI
+               MOVE OPC-CIC-ILDC IN OPC TO LAV-MENS IN LAV-VARI
+               GO TO FIN-PRO-LDA-CUPO.
+
+      * Verifica que Linea de Avance de la OPC leida pertenesca a Client
+           IF CLI-CIC IN LDA NOT = LAV-ICLI IN LAV-VARI
+               MOVE 'LDA    NOCLI'           TO LAV-CMSG IN LAV-VARI
+               MOVE OPC-CIC-ILDC IN OPC      TO WSS-GLS1 IN WSS-VARI
+               MOVE CLI-CIC      IN LDA      TO WSS-GLS2 IN WSS-VARI
+               MOVE WSS-MENS     IN WSS-VARI TO LAV-MENS IN LAV-VARI
+               GO TO FIN-PRO-LDA-CUPO.
+
+      * Lee Documento Legal de la OPC leida
+           MOVE OPC-CIC-IOPC IN OPC TO DLC-CIC-IOPC IN DLC.
+           MOVE ZEROES              TO DLC-NUM-IDLC IN DLC.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM COL-FIO-DLC.
+           IF NOT ( FIO-STAT-OKS AND
+                    DLC-CIC-IOPC IN DLC = OPC-CIC-IOPC IN OPC )
+               MOVE 'OPC    DLCNX'      TO LAV-CMSG IN LAV-VARI
+               MOVE OPC-CIC-IOPC IN OPC TO LAV-MENS IN LAV-VARI
+               GO TO FIN-PRO-LDA-CUPO.
+
+      * Verifica que DLC-FMAV sea menor o igual a la LDA-FVEN
+           IF LDA-FEC-VTO-LIN IN LDA < DLC-FEC-FMAV IN DLC
+               MOVE 'LDAFVEN<FMAV'              TO LAV-CMSG IN LAV-VARI
+               MOVE OPC-CIC-ILDC    IN OPC      TO WSS-GLS1 IN WSS-VARI
+               MOVE LDA-FEC-VTO-LIN IN LDA      TO WSS-GLS2 IN WSS-VARI
+               MOVE DLC-FEC-FMAV    IN DLC      TO WSS-GLS3 IN WSS-VARI
+               MOVE WSS-MENS        IN WSS-VARI TO LAV-MENS IN LAV-VARI
+               GO TO FIN-PRO-LDA-CUPO.
+
+      * Carga en Memoria en la tabla Lineas de Avance, aquellas Lineas d
+      * Avance distintas, que son utilizadas por las Operaciones de Cred
+      * leidas desde la tabla de OPC's ingresadas - IOPC(i)
+           MOVE  1  TO WSS-J IN WSS-VARI.
+       LUP-PRO-LDA-CUPO-CLDA.
+           IF OPC-CIC-ILDC IN OPC NOT = WSS-ILDA IN WSS-VARI(WSS-J)
+               IF WSS-J IN WSS-VARI > WSS-JMAX IN WSS-VARI
+                   MOVE OPC-CIC-ILDC IN OPC TO WSS-ILDA
+                                                     IN WSS-VARI(WSS-J)
+                   MOVE LDA-VCB      IN LDA TO WSS-MLDA
+                                                     IN WSS-VARI(WSS-J)
+                   MOVE LDA-VAL-AUT  IN LDA TO WSS-AUTO
+                                                     IN WSS-VARI(WSS-J)
+                   ADD  1  TO WSS-JMAX IN WSS-VARI
+               ELSE
+                   ADD  1  TO WSS-J IN WSS-VARI
+                   GO TO LUP-PRO-LDA-CUPO-CLDA.
+
+      * Marca cantidad de OPC's leidas desde tabla IOPC(i)
+           ADD 1 TO WSS-I    IN WSS-VARI
+                    WSS-IMAX IN WSS-VARI.
+
+      * Lee Operacion de Credito desde tabla OPC's ingresadas IOPC(i)
+           IF WSS-I IN WSS-VARI NOT > WSS-VECT IN WSS-VARI
+               MOVE LAV-IOPC IN LAV-VARI(WSS-I) TO WSS-CICO IN WSS-VARI
+               IF WSS-IICO IN WSS-VARI > ZEROES
+                   GO TO LUP-PRO-LDA-CUPO.
+       NXT-PRO-LDA-CUPO.
+      * Almacena en Memoria informacion de las OPC leidas SOLO Activadas
+      * con Saldo y Linea de Avance perteneciente a tabla Lineas de Avan
+      * cuando el Cliente es Deudor Directo de ellas
+           PERFORM PRO-LDA-CUPO-CRED.
+           IF LAV-CMSG IN LAV-VARI > SPACES
+               GO TO FIN-PRO-LDA-CUPO.
+
+      * Modifica el Saldo de la OPC en Memoria con el Saldo de la Operac
+      * de Credito leida desde la tabla de OPC's activadas - AOPC(i)
+           PERFORM PRO-LDA-CUPO-MODI.
+           IF LAV-CMSG IN LAV-VARI > SPACES
+               GO TO FIN-PRO-LDA-CUPO.
+
+      * Acumula por Linea de Avance en Memoria los Saldos de Creditos
+      * almacenados en memoria asociados a esa misma Linea de Avance
+           PERFORM PRO-LDA-CUPO-SALD.
+           IF LAV-CMSG IN LAV-VARI > SPACES
+               GO TO FIN-PRO-LDA-CUPO.
+
+      * Lee Operacion de Credito desde tabla OPC's ingresadas IOPC(i) y
+      * acumula el Saldo del Credito en la Linea de Avance en memoria,
+      * respectiva
+           MOVE  1  TO WSS-I IN WSS-VARI.
+       LUP-PRO-LDA-CUPO-IOPC.
+      * Lee Operacion de Credito desde tabla OPC's ingresadas IOPC(i)
+           MOVE LAV-IOPC IN LAV-VARI(WSS-I) TO OPC-CIC-IOPC IN OPC.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM COL-FIO-OPC.
+           IF NOT FIO-STAT-OKS
+               MOVE 'OPC    NEX'        TO LAV-CMSG IN LAV-VARI
+               MOVE OPC-CIC-IOPC IN OPC TO LAV-MENS IN LAV-VARI
+               GO TO FIN-PRO-LDA-CUPO.
+
+      * Busca en Tabla de Lineas de Avance el Monto utilizado para ella
+           MOVE  1  TO WSS-J IN WSS-VARI.
+       LUP-PRO-LDA-CUPO-CUPO.
+           IF OPC-CIC-ILDC IN OPC NOT = WSS-ILDA IN WSS-VARI(WSS-J)
+               ADD  1  TO WSS-J IN WSS-VARI
+               IF WSS-J IN WSS-VARI > WSS-JMAX IN WSS-VARI
+                   MOVE 'LDATABLNEX'        TO LAV-CMSG IN LAV-VARI
+                   MOVE OPC-CIC-ILDC IN OPC TO LAV-MENS IN LAV-VARI
+                   GO TO FIN-PRO-LDA-CUPO
+               ELSE
+                   GO TO LUP-PRO-LDA-CUPO-CUPO.
+
+      * Obtiene Valor de Cambio en Pesos a Fecha de Proceso y acumula el
+      * Saldos del Credito en Pesos a la Linea de Avance
+           IF OPC-COD-VCOC IN OPC NOT = WSS-CPES IN WSS-VARI
+               MOVE WSS-FPRO IN WSS-VARI TO CAM-FEC-FCAM IN CAM(1)
+               MOVE WSS-FPRO IN WSS-VARI TO CAM-FEC-FCAM IN CAM(2)
+               MOVE OPC-COD-VCOC IN OPC  TO CAM-COD-VCAM IN CAM(1)
+               MOVE WSS-CPES IN WSS-VARI TO CAM-COD-VCAM IN CAM(2)
+               MOVE FIO-GET-KEY TO FIO-CMND
+               PERFORM TAB-FIO-CAM
+               IF NOT FIO-STAT-OKS
+                   MOVE 'LDAVCAMNEX'        TO LAV-CMSG IN LAV-VARI
+                   MOVE OPC-COD-VCOC IN OPC TO LAV-MENS IN LAV-VARI
+                   GO TO FIN-PRO-LDA-CUPO
+               ELSE
+                   IF CAM-IND-VIGE NOT = 'S'
+                       MOVE 'LDAVCAMNVG'        TO LAV-CMSG IN LAV-VARI
+                       MOVE OPC-COD-VCOC IN OPC TO LAV-MENS IN LAV-VARI
+                       GO TO FIN-PRO-LDA-CUPO
+                   ELSE
+                       MULTIPLY OPC-VAL-SCRE IN OPC BY
+                                CAM-SGV-VCAM IN CAM GIVING
+                                WSS-VPES IN WSS-VARI ROUNDED
+                       ADD WSS-VPES IN WSS-VARI TO WSS-SALD
+                                                   IN WSS-VARI(WSS-J)
+           ELSE
+               ADD OPC-VAL-SCRE IN OPC TO WSS-SALD IN WSS-VARI(WSS-J).
+
+      * Obtiene Valor de Cambio en Pesos a Fecha de Proceso y calcula el
+      * Monto Autorizado de la Linea de Avance en Pesos
+           IF WSS-MLDA IN WSS-VARI(WSS-J) NOT = WSS-CPES IN WSS-VARI
+               MOVE WSS-FPRO IN WSS-VARI  TO CAM-FEC-FCAM IN CAM(1)
+               MOVE WSS-FPRO IN WSS-VARI  TO CAM-FEC-FCAM IN CAM(2)
+               MOVE WSS-MLDA IN WSS-VARI(WSS-J)
+                                          TO CAM-COD-VCAM IN CAM(1)
+               MOVE WSS-CPES IN WSS-VARI  TO CAM-COD-VCAM IN CAM(2)
+               MOVE FIO-GET-KEY TO FIO-CMND
+               PERFORM TAB-FIO-CAM
+               IF NOT FIO-STAT-OKS
+                   MOVE 'LDAVCAMNEX'                TO LAV-CMSG
+                   MOVE WSS-MLDA IN WSS-VARI(WSS-J) TO LAV-MENS
+                   GO TO FIN-PRO-LDA-CUPO
+               ELSE
+                   IF CAM-IND-VIGE NOT = 'S'
+                       MOVE 'LDAVCAMNVG'                TO LAV-CMSG
+                       MOVE WSS-MLDA IN WSS-VARI(WSS-J) TO LAV-MENS
+                       GO TO FIN-PRO-LDA-CUPO
+                   ELSE
+                       MULTIPLY WSS-AUTO IN WSS-VARI(WSS-J) BY
+                                CAM-SGV-VCAM IN CAM GIVING
+                                WSS-VPES IN WSS-VARI ROUNDED
+           ELSE
+               MOVE WSS-AUTO IN WSS-VARI(WSS-J) TO WSS-VPES IN WSS-VARI.
+
+      * Verifica que el Cupo Linea Credito sea menor o igual a LDA-AUTO
+           MOVE WSS-SALD IN WSS-VARI(WSS-J) TO WSS-CUPO IN WSS-VARI.
+           IF WSS-CUPO IN WSS-VARI > WSS-VPES IN WSS-VARI
+               MOVE 'LDAAUTO<CRED'           TO LAV-CMSG IN LAV-VARI
+               MOVE OPC-CIC-ILDC IN OPC      TO WSS-GLS1 IN WSS-VARI
+               SUBTRACT WSS-VPES IN WSS-VARI FROM WSS-CUPO IN WSS-VARI
+                                           GIVING WSS-VPES IN WSS-VARI
+               MOVE WSS-VPES     IN WSS-VARI TO WSS-VDSP IN WSS-VARI
+               MOVE WSS-VDSP     IN WSS-VARI TO WSS-GLS2 IN WSS-VARI
+               MOVE WSS-MENS     IN WSS-VARI TO LAV-MENS IN LAV-VARI
+               GO TO FIN-PRO-LDA-CUPO.
+
+      * Marca cantidad de OPC's leidas desde tabla IOPC(i)
+           ADD 1 TO WSS-I IN WSS-VARI.
+
+      * Lee siguiente Operacion de Credito de tabla OPC's ingresadas IOP
+           IF WSS-I IN WSS-VARI NOT > WSS-IMAX IN WSS-VARI
+               GO TO LUP-PRO-LDA-CUPO-IOPC.
+       FIN-PRO-LDA-CUPO.
+           EXIT.
+      ******************************************************************
+      * Almacena en Memoria informacion de las OPC leidas SOLO Activadas
+      * con Saldo y Linea de Avance perteneciente a tabla Lineas de Avan
+      * cuando el Cliente es Deudor Directo de ellas
+       PRO-LDA-CUPO-CRED SECTION.
+       INI-PRO-LDA-CUPO-CRED.
+      * Inicializacion de Variables
+           MOVE  1  TO WSS-K IN WSS-VARI.
+
+      * Lee las Relaciones del Cliente con Creditos
+           MOVE LAV-ICLI IN LAV-VARI TO RDC-CIC-ICLI IN RDC.
+           MOVE SPACES               TO RDC-CIC-IOPC IN RDC.
+           MOVE ZEROES               TO RDC-NUM-IDLC IN RDC.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM COL-FIO-RDC.
+           IF NOT ( FIO-STAT-OKS AND
+                    RDC-CIC-ICLI IN RDC = LAV-ICLI IN LAV-VARI )
+               MOVE 'RDC    NEX'         TO LAV-CMSG IN LAV-VARI
+               MOVE LAV-ICLI IN LAV-VARI TO LAV-MENS IN LAV-VARI
+               GO TO FIN-PRO-LDA-CUPO-CRED.
+       LUP-PRO-LDA-CUPO-CRED.
+      * Chequea que en la RDC leida del Cliente, el sea el Deudor Direct
+      * del Credito
+           IF RDC-NUM-IDLC IN RDC NOT = ZEROES
+               GO TO NXT-PRO-LDA-CUPO-CRED.
+
+      * Lee la Operacion de Credito asociadas al Cliente en RDC
+           MOVE RDC-CIC-IOPC IN RDC TO OPC-CIC-IOPC IN OPC.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM COL-FIO-OPC.
+           IF NOT FIO-STAT-OKS
+               MOVE 'RDC    NOOPC'      TO LAV-CMSG IN LAV-VARI
+               MOVE OPC-CIC-IOPC IN OPC TO LAV-MENS IN LAV-VARI
+               GO TO FIN-PRO-LDA-CUPO-CRED.
+
+      * Verifica que la OPC leida este Activada, tenga Saldo y Linea Ava
+           IF NOT (( OPC-MSC-STAT IN OPC = 'A' OR
+                     OPC-MSC-STAT IN OPC = 'B' ) AND
+                    OPC-VAL-SCRE IN OPC > ZEROES AND
+                    OPC-CIC-ILDC IN OPC > SPACES )
+               GO TO NXT-PRO-LDA-CUPO-CRED.
+
+      * Verifica que la Linea de Avance de la OPC leida pertenesca a la
+      * tabla Lineas de Avance en Memoria
+           MOVE  1  TO WSS-J IN WSS-VARI.
+       LUP-PRO-LDA-CUPO-CRED-ILDA.
+           IF OPC-CIC-ILDC IN OPC NOT = WSS-ILDA IN WSS-VARI(WSS-J)
+               IF WSS-J IN WSS-VARI NOT < WSS-JMAX IN WSS-VARI
+                   GO TO NXT-PRO-LDA-CUPO-CRED
+               ELSE
+                   ADD  1  TO WSS-J IN WSS-VARI
+                   GO TO LUP-PRO-LDA-CUPO-CRED-ILDA.
+
+      * Guarda informacion de la OPC leida Activada, con Saldo y Linea A
+           MOVE OPC-CIC-IOPC IN OPC TO WSS-IOPC IN WSS-VARI(WSS-K).
+           MOVE OPC-CIC-ILDC IN OPC TO WSS-ILDC IN WSS-VARI(WSS-K).
+           MOVE OPC-VAL-SCRE IN OPC TO WSS-SCRE IN WSS-VARI(WSS-K).
+           MOVE OPC-COD-VCOC IN OPC TO WSS-VCOC IN WSS-VARI(WSS-K).
+
+      * Marca la cantidad de Creditos del Cliente Procesados
+           ADD 1 TO WSS-K    IN WSS-VARI
+                    WSS-KMAX IN WSS-VARI.
+       NXT-PRO-LDA-CUPO-CRED.
+      * Lee las siguientes Relaciones del Cliente con Creditos
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM COL-FIO-RDC.
+           IF NOT ( FIO-STAT-OKS AND
+                    RDC-CIC-ICLI IN RDC = LAV-ICLI IN LAV-VARI )
+               GO TO FIN-PRO-LDA-CUPO-CRED.
+           GO TO LUP-PRO-LDA-CUPO-CRED.
+       FIN-PRO-LDA-CUPO-CRED.
+           EXIT.
+      ******************************************************************
+      * Modifica el Saldo de la OPC en Memoria con el Saldo de la Operac
+      * de Credito leida desde la tabla de OPC's activadas - AOPC(i)
+       PRO-LDA-CUPO-MODI SECTION.
+       INI-PRO-LDA-CUPO-MODI.
+      * Inicializacion de Variables
+           MOVE  1  TO WSS-I IN WSS-VARI.
+       LUP-PRO-LDA-CUPO-MODI.
+      * Chequea que en la tabla de OPC's activadas - AOPC(i) existan
+      * Operaciones de Credito
+           MOVE LAV-AOPC IN LAV-VARI(WSS-I) TO WSS-CICO IN WSS-VARI
+           IF WSS-IICO IN WSS-VARI NOT > ZEROES
+               GO TO FIN-PRO-LDA-CUPO-MODI.
+
+      * Lee Operacion de Credito desde tabla OPC's activadas AOPC(i)
+           MOVE LAV-AOPC IN LAV-VARI(WSS-I) TO OPC-CIC-IOPC IN OPC.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM COL-FIO-OPC.
+           IF NOT FIO-STAT-OKS
+               MOVE 'OPC    NEX'        TO LAV-CMSG IN LAV-VARI
+               MOVE OPC-CIC-IOPC IN OPC TO LAV-MENS IN LAV-VARI
+               GO TO FIN-PRO-LDA-CUPO-MODI.
+
+      * Verifica que la Operacion de Credito leida desde la tabla de OPC
+      * activadas - AOPC(i) exista en la tabla de OPC's en Memoria
+           MOVE  1  TO WSS-K IN WSS-VARI.
+       LUP-PRO-LDA-CUPO-MODI-IOPC.
+           IF OPC-CIC-IOPC IN OPC NOT = WSS-IOPC IN WSS-VARI(WSS-K)
+               IF WSS-K IN WSS-VARI NOT < WSS-KMAX IN WSS-VARI
+                   GO TO NXT-PRO-LDA-CUPO-MODI
+               ELSE
+                   ADD  1  TO WSS-K IN WSS-VARI
+                   GO TO LUP-PRO-LDA-CUPO-MODI-IOPC.
+
+      * Modifica el Saldo de la OPC en Memoria con la OPC Activada leida
+           MOVE LAV-SCRE IN LAV-VARI(WSS-I) TO
+                                            WSS-SCRE IN WSS-VARI(WSS-K).
+       NXT-PRO-LDA-CUPO-MODI.
+      * Marca cantidad de OPC's leidas desde tabla AOPC(i) y Chequea Max
+           ADD 1 TO WSS-I IN WSS-VARI.
+           IF WSS-I IN WSS-VARI NOT > WSS-VECT IN WSS-VARI
+               GO TO LUP-PRO-LDA-CUPO-MODI.
+       FIN-PRO-LDA-CUPO-MODI.
+           EXIT.
+      ******************************************************************
+      * Acumula por Linea de Avance en Memoria los Saldos de Creditos
+      * almacenados en memoria asociados a esa misma Linea de Avance
+       PRO-LDA-CUPO-SALD SECTION.
+       INI-PRO-LDA-CUPO-SALD.
+      * Inicializacion de Variables
+           MOVE  1  TO WSS-I IN WSS-VARI
+                       WSS-J IN WSS-VARI.
+       LUP-PRO-LDA-CUPO-SALD.
+      * Busca en Memoria las Lineas de Avance iguales para acumular SOLO
+      * aquellos Saldos de Creditos asociados a esa misma Linea de Avanc
+           IF WSS-ILDC IN WSS-VARI(WSS-I) = WSS-ILDA IN WSS-VARI(WSS-J)
+               PERFORM PRO-LDA-CUPO-SALD-ACUM
+               ADD  1  TO WSS-I IN WSS-VARI
+               IF WSS-I IN WSS-VARI > WSS-KMAX IN WSS-VARI OR
+                  LAV-CMSG IN LAV-VARI > SPACES
+                   GO TO FIN-PRO-LDA-CUPO-SALD
+               ELSE
+                   GO TO LUP-PRO-LDA-CUPO-SALD
+           ELSE
+      *    IF WSS-ILDC IN WSS-VARI(WSS-I) NOT = WSS-ILDA IN WSS-VARI(WSS
+               ADD  1  TO WSS-J IN WSS-VARI
+               IF WSS-J IN WSS-VARI NOT > WSS-JMAX IN WSS-VARI
+                   GO TO LUP-PRO-LDA-CUPO-SALD.
+       FIN-PRO-LDA-CUPO-SALD.
+           EXIT.
+      *-----------------------------------------------------------------
+      * Acumula en memoria los Saldos de Creditos en pesos para una Line
+      * de Avance especifica
+       PRO-LDA-CUPO-SALD-ACUM SECTION.
+       INI-PRO-LDA-CUPO-SALD-ACUM.
+      * Obtiene Valor de Cambio en Pesos a Fecha de Proceso y acumula lo
+      * saldos en Pesos
+           IF WSS-VCOC IN WSS-VARI(WSS-I) NOT = WSS-CPES IN WSS-VARI
+              MOVE WSS-FPRO IN WSS-VARI        TO CAM-FEC-FCAM IN CAM(1)
+              MOVE WSS-FPRO IN WSS-VARI        TO CAM-FEC-FCAM IN CAM(2)
+              MOVE WSS-VCOC IN WSS-VARI(WSS-I) TO CAM-COD-VCAM IN CAM(1)
+              MOVE WSS-CPES IN WSS-VARI        TO CAM-COD-VCAM IN CAM(2)
+              MOVE FIO-GET-KEY TO FIO-CMND
+              PERFORM TAB-FIO-CAM
+              IF NOT FIO-STAT-OKS
+                  MOVE 'LDAVCAMNEX'                TO LAV-CMSG
+                  MOVE WSS-VCOC IN WSS-VARI(WSS-I) TO LAV-MENS
+                  GO TO FIN-PRO-LDA-CUPO-SALD-ACUM
+              ELSE
+                  IF CAM-IND-VIGE NOT = 'S'
+                      MOVE 'LDAVCAMNVG'                TO LAV-CMSG
+                      MOVE WSS-VCOC IN WSS-VARI(WSS-I) TO LAV-MENS
+                      GO TO FIN-PRO-LDA-CUPO-SALD-ACUM
+                  ELSE
+                      MULTIPLY WSS-SCRE IN WSS-VARI(WSS-I) BY
+                               CAM-SGV-VCAM IN CAM GIVING
+                               WSS-VPES IN WSS-VARI ROUNDED
+                      ADD WSS-VPES IN WSS-VARI TO WSS-SALD
+                                                    IN WSS-VARI(WSS-J)
+           ELSE
+               ADD WSS-SCRE IN WSS-VARI(WSS-I) TO WSS-SALD
+                                                    IN WSS-VARI(WSS-J).
+       FIN-PRO-LDA-CUPO-SALD-ACUM.
+           EXIT.
+      ******************************************************************
+       PRO-LDA-GRLO SECTION.
+       INI-PRO-LDA-GRLO.
+      * Inicializacion de Variables
+           MOVE  1     TO WSS-I    IN WSS-VARI.
+           MOVE SPACES TO WSS-CICO IN WSS-VARI.
+       LUP-PRO-LDA-GRLO.
+      * Lee Operacion de Credito desde tabla OPC's ingresadas IOPC(i)
+           MOVE LAV-IOPC IN LAV-VARI(WSS-I) TO OPC-CIC-IOPC IN OPC.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM COL-FIO-OPC.
+           IF NOT FIO-STAT-OKS
+               MOVE 'OPC    NEX'        TO LAV-CMSG IN LAV-VARI
+               MOVE OPC-CIC-IOPC IN OPC TO LAV-MENS IN LAV-VARI
+               GO TO FIN-PRO-LDA-GRLO.
+
+      * Lee Linea de Avance de la OPC leida
+           MOVE OPC-CIC-ILDC IN OPC TO LDA-COP IN LDA.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM COL-FIO-LDA.
+           IF NOT FIO-STAT-OKS
+               MOVE 'LDA    NEX'        TO LAV-CMSG IN LAV-VARI
+               MOVE OPC-CIC-ILDC IN OPC TO LAV-MENS IN LAV-VARI
+               GO TO FIN-PRO-LDA-GRLO.
+
+           MOVE OPC-CIC-ILDC IN OPC TO LDA-COP IN RLO.
+           MOVE OPC-CIC-IOPC IN OPC TO COL-COP IN RLO.
+           MOVE SPACES              TO FILLER1 IN RLO.
+           MOVE FIO-PUT TO FIO-CMND.
+           PERFORM COL-FIO-RLO.
+           IF NOT FIO-STAT-OKS
+               MOVE 'RLO    NOPUT'       TO LAV-CMSG IN LAV-VARI
+               MOVE LDA-CLV-RLO-1 IN RLO TO LAV-MENS IN LAV-VARI
+               GO TO FIN-PRO-LDA-GRLO.
+
+      * Lee Operacion de Credito desde tabla OPC's ingresadas IOPC(i)
+           ADD  1  TO WSS-I IN WSS-VARI.
+           MOVE LAV-IOPC IN LAV-VARI(WSS-I) TO WSS-CICO IN WSS-VARI.
+           IF WSS-IICO IN WSS-VARI NOT > ZEROES
+               GO TO FIN-PRO-LDA-GRLO.
+           GO TO LUP-PRO-LDA-GRLO.
+       FIN-PRO-LDA-GRLO.
+           EXIT.
+      ******************************************************************
+       PRO-LDA-PRLO SECTION.
+       INI-PRO-LDA-PRLO.
+      * Inicializacion de Variables
+           MOVE  1  TO WSS-I IN WSS-VARI.
+       LUP-PRO-LDA-PRLO-NEW.
+      *    CICLO para Creditos CANCELADOS(Nro. Nuevo) despues de Prorrog
+           MOVE SPACES TO WSS-CAIO IN WSS-VARI.
+           MOVE ZEROES TO WSS-IICO IN WSS-VARI.
+
+      * Lee Operacion de Credito desde tabla OPC's activadas AOPC(i)
+           MOVE LAV-AOPC IN LAV-VARI(WSS-I) TO OPC-CIC-IOPC IN OPC.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM COL-FIO-OPC.
+           IF NOT FIO-STAT-OKS
+               MOVE 'OPC    NEX'        TO LAV-CMSG IN LAV-VARI
+               MOVE OPC-CIC-IOPC IN OPC TO LAV-MENS IN LAV-VARI
+               GO TO FIN-PRO-LDA-PRLO.
+
+      * Lee Linea de Avance de la OPC leida si tiene
+           IF OPC-IIC-ILDC IN OPC NOT > ZEROES
+               GO TO LUP-PRO-LDA-PRLO-OLD.
+           MOVE OPC-CIC-ILDC IN OPC TO LDA-COP IN LDA.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM COL-FIO-LDA.
+           IF NOT FIO-STAT-OKS
+               MOVE 'LDA    NEX'        TO LAV-CMSG IN LAV-VARI
+               MOVE OPC-CIC-ILDC IN OPC TO LAV-MENS IN LAV-VARI
+               GO TO FIN-PRO-LDA-PRLO.
+
+      * Guardo Linea de Avance de la OPC leida
+           MOVE OPC-CIC-ILDC IN OPC TO WSS-CICO IN WSS-VARI.
+
+      * Lee RLO con Linea de Avance de OPC leida y OPC, si no existe Cre
+           MOVE OPC-CIC-ILDC IN OPC TO LDA-COP IN RLO.
+           MOVE OPC-CIC-IOPC IN OPC TO COL-COP IN RLO.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM COL-FIO-RLO.
+           IF FIO-STAT-OKS
+      *        No deberia existir NUNCA registro RLO
+               GO TO LUP-PRO-LDA-PRLO-OLD
+           ELSE
+               MOVE SPACES TO FILLER1 IN RLO
+               MOVE FIO-PUT TO FIO-CMND
+               PERFORM COL-FIO-RLO
+               IF NOT FIO-STAT-OKS
+                   MOVE 'RLO    NOPUT'       TO LAV-CMSG IN LAV-VARI
+                   MOVE LDA-CLV-RLO-1 IN RLO TO LAV-MENS IN LAV-VARI
+                   GO TO FIN-PRO-LDA-PRLO.
+       LUP-PRO-LDA-PRLO-OLD.
+      *    CICLO para Creditos VIGENTES(Nro. Antiguo) despues de Prorrog
+      * Lee Operacion de Credito desde tabla OPC's ingresadas IOPC(i)
+           MOVE LAV-IOPC IN LAV-VARI(WSS-I) TO OPC-CIC-IOPC IN OPC.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM COL-FIO-OPC.
+           IF NOT FIO-STAT-OKS
+               MOVE 'OPC    NEX'        TO LAV-CMSG IN LAV-VARI
+               MOVE OPC-CIC-IOPC IN OPC TO LAV-MENS IN LAV-VARI
+               GO TO FIN-PRO-LDA-PRLO.
+
+      * Lee Linea de Avance de la OPC leida
+           MOVE OPC-CIC-ILDC IN OPC TO LDA-COP IN LDA.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM COL-FIO-LDA.
+           IF NOT FIO-STAT-OKS
+               MOVE 'LDA    NEX'        TO LAV-CMSG IN LAV-VARI
+               MOVE OPC-CIC-ILDC IN OPC TO LAV-MENS IN LAV-VARI
+               GO TO FIN-PRO-LDA-PRLO.
+
+      * Lee RLO con Linea de Avance de OPC CANCELADA y OPC leida, si exi
+      * se elimina RLO
+           MOVE WSS-CICO IN WSS-VARI TO LDA-COP IN RLO.
+           MOVE OPC-CIC-IOPC IN OPC  TO COL-COP IN RLO.
+           MOVE FIO-GET-KEY-UPD TO FIO-CMND.
+           PERFORM COL-FIO-RLO.
+           IF FIO-STAT-OKS
+               MOVE FIO-DEL TO FIO-CMND
+               PERFORM COL-FIO-RLO
+               IF NOT FIO-STAT-OKS
+                   MOVE 'RLO    NODEL'       TO LAV-CMSG IN LAV-VARI
+                   MOVE LDA-CLV-RLO-1 IN RLO TO LAV-MENS IN LAV-VARI
+                   GO TO FIN-PRO-LDA-PRLO.
+
+      * Lee RLO con Linea de Avance de OPC leida y OPC, si no existe Cre
+           MOVE OPC-CIC-ILDC IN OPC TO LDA-COP IN RLO.
+           MOVE OPC-CIC-IOPC IN OPC TO COL-COP IN RLO.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM COL-FIO-RLO.
+           IF NOT FIO-STAT-OKS
+               MOVE SPACES TO FILLER1 IN RLO
+               MOVE FIO-PUT TO FIO-CMND
+               PERFORM COL-FIO-RLO
+               IF NOT FIO-STAT-OKS
+                   MOVE 'RLO    NOPUT'       TO LAV-CMSG IN LAV-VARI
+                   MOVE LDA-CLV-RLO-1 IN RLO TO LAV-MENS IN LAV-VARI
+                   GO TO FIN-PRO-LDA-PRLO.
+
+      * Lee Operacion de Credito desde tabla OPC's ingresadas IOPC(i)
+           ADD  1  TO WSS-I IN WSS-VARI.
+           MOVE LAV-IOPC IN LAV-VARI(WSS-I) TO WSS-CICO IN WSS-VARI.
+           IF WSS-IICO IN WSS-VARI NOT > ZEROES
+               GO TO FIN-PRO-LDA-PRLO.
+           GO TO LUP-PRO-LDA-PRLO-NEW.
+       FIN-PRO-LDA-PRLO.
+           EXIT.
+      ******************************************************************
+
+       COPY GNSBGMSG.
+       COPY GNSBGFEC.
+       COPY GNSBGHOY.
+       COPY GNSBGDTC.
+       COPY GNSBIABT.
+       COPY GNSBGFRM.
+       COPY GNSBGSYS.
+
+       COPY GNSBFMSG.
+       COPY GNSBFTAB.
+       COPY GNSBFMSC.
+       COPY TABBFCAM.
+       COPY COLBFOPC.
+       COPY COLBFDLC.
+       COPY COLBFRDC.
+      * Para probar en CST bloquear Copy COLBFLDA y habilitar Copy COLBP
+       COPY COLBFLDA.
+      *COPY COLBPLDA.
+
+      * Para probar en CST bloquear Copy COLBFRLO y habilitar Copy COLBP
+       COPY COLBFRLO.
+      *COPY COLBPRLO.

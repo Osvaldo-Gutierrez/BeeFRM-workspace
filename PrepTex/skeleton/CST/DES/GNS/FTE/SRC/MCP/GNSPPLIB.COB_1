@@ -1,0 +1,656 @@
+      $ SHARING=PRIVATE
+      $ SET TEMPORARY   LINEINFO
+      $RESET MYDEBUG
+      $RESET MYTRACE
+       IDENTIFICATION DIVISION.
+       ENVIRONMENT DIVISION.
+       INPUT-OUTPUT SECTION.
+       FILE-CONTROL.
+           SELECT PORTFILE ASSIGN TO PORT;
+                           ACTUAL KEY IS WSS-SUBF
+                           FILE STATUS IS WSS-STAT.
+           SELECT INI      ASSIGN TO DISK.
+           SELECT LISTADO  ASSIGN TO PRINTER.
+       DATA DIVISION.
+       FILE SECTION.
+       FD  LISTADO.
+       01  REG-LISTADO          PIC X(80).
+       FD  PORTFILE.
+       01  REG-PORTFILE.
+           03 PORT-HEADER       PIC X(4).
+           03 PORT-PROG-TYPE    PIC X.
+           03 PORT-PROG-NAME    PIC X(17).
+           03 PORT-PROG-BODY    PIC X(1978).
+       FD  INI VALUE OF TITLE IS "GNS/EXE/GNSPPLIB/INI."
+                        FILETYPE IS 7.
+       01  REG-INI.
+           03 FILLER            PIC X(72).
+           03 SEQ               PIC X(8).
+           03 FILLER            PIC X(10).
+       WORKING-STORAGE SECTION.
+       77  WSS-SUBF             PIC 99.
+       77  WSS-MAX-SUBF         PIC S9(11) BINARY VALUE 4.
+       77  WSS-STAT             PIC XX.
+       77  WSS-EOF              PIC S9(11) BINARY.
+           88  EOF              VALUE 1.
+       77  SW-FIN-TOKEN         PIC S9(11) BINARY.
+           88 FIN-TOKEN         VALUE 1.
+       77  SW-FIN-BLANCOS       PIC S9(11) BINARY.
+           88 FIN-BLANCOS       VALUE 1.
+       77  SW-EXISTE-DIALOG     PIC S9(11) BINARY.
+           88 EXISTE-DIALOG     VALUE 1.
+       01  WSS-STRING           PIC X(255).
+       01  WSS-FILLER           PIC X(50).
+       77  WSS-MAXCENSUS        PIC 99.
+       77  FILE-STATE           PIC 9(6).
+       77  TAB-I                PIC S9(11) BINARY.
+       77  TAB-J                PIC S9(11) BINARY.
+       77  P                    PIC S9(11) BINARY.
+       77  L                    PIC S9(11) BINARY.
+       77  I                    PIC S9(11) BINARY.
+       77  J                    PIC S9(11) BINARY.
+       77  CAR                  PIC X.
+       01  TOKEN                PIC X(80).
+       01  TOKEN-GROUP.
+           03  NUM-TOKEN        PIC 9(23).
+           03  NUM-TOKEN-ALPHA  REDEFINES NUM-TOKEN PIC X(23).
+       77  TOKEN-LENGTH         PIC S9(11) BINARY.
+       77  SW-TOKEN-TYPE        PIC S9(11) BINARY.
+           88 TOK-ESPECIAL      VALUE 1.
+           88 TOK-ALFABETICO    VALUE 2.
+           88 TOK-EOL           VALUE 3.
+           88 TOK-NUMERICO      VALUE 4.
+       77  WSS-TIMEOUT          PIC S9(11) BINARY.
+       77  WSS-RESULT           PIC S9(11) BINARY.
+       77  WSS-PRIMERA-VEZ      PIC S9(11) BINARY.
+           88  PRIMERA-VEZ       VALUE 0.
+       77  WSS-TITLE            PIC X(80).
+       77  WSS-T                PIC S9(11) BINARY.
+       77  WSS-I                PIC S9(11) BINARY.
+       77  WSS-J                PIC S9(11) BINARY.
+       77  WSS-K                PIC S9(11) BINARY.
+       77  WSS-T-HOST           PIC S9(11) BINARY.
+       01  TAB-INI.
+           03 TAB-INI-DET OCCURS 30 TIMES.
+              05 TAB-INI-NAME   PIC X(17).
+              05 TAB-INI-TIPO   PIC X.
+              05 TAB-INI-PROG   PIC X(17).
+              05 TAB-INI-TRAN   PIC X(5).
+              05 TAB-INI-HOST   PIC X(17).
+              05 TAB-INI-MYNA   PIC X(10).
+              05 TAB-INI-USER   PIC X(17).
+              05 TAB-INI-TIME   PIC 9(4).
+              05 TAB-INI-SUBF   PIC 9(2).
+       01  TAB-HOST.
+           03 TAB-HOSTNAME      PIC X(17) OCCURS 5.
+           03 TAB-USERNAME      PIC X(17) OCCURS 5.
+           03 TAB-MYNAME        PIC X(17) OCCURS 5.
+       77  ERROR-TIMEOUT-REMOTO PIC 9(4) VALUE 9999.
+       77  ERROR-NO-PORTFILE    PIC 9(4) VALUE 9998.
+       77  ERROR-IDENT-NOEXISTE PIC 9(4) VALUE 9997.
+       77  ERROR-TIMEOUT-LOCAL  PIC 9(4) VALUE 9996.
+       77  WSS-LARGO            PIC 99.
+       01  WSS-DONDE            PIC X(20).
+       LINKAGE SECTION.
+       01  PARAMETRO.
+           03 ESTADO            PIC 9(04).
+           03 RESPUESTA.
+              05 DIALOG-TYPE    PIC X.
+              05 DIALOG-NAME    PIC X(17).
+              05 DIALOG-BODY    PIC X(1978).
+       PROCEDURE DIVISION USING PARAMETRO.
+       INI-MAIN.
+      $SET OMIT = NOT MYTRACE
+           IF PRIMERA-VEZ
+              OPEN OUTPUT LISTADO.
+           MOVE SPACES TO REG-LISTADO
+           STRING ">Inicio-->" DELIMITED BY SIZE,
+                  PARAMETRO FOR 100
+             INTO REG-LISTADO
+           WRITE REG-LISTADO.
+      $POP OMIT
+           IF PRIMERA-VEZ
+              CHANGE ATTRIBUTE MAXSUBFILES OF PORTFILE TO WSS-MAX-SUBF
+              PERFORM LEER-TAB-INI
+              MOVE 1 TO WSS-PRIMERA-VEZ.
+           IF ATTRIBUTE CENSUS OF PORTFILE > 0
+              READ PORTFILE.
+           MOVE 0 TO SW-EXISTE-DIALOG
+           PERFORM BUSCA-DIALOG
+             VARYING I FROM 1 BY 1
+             UNTIL (I > TAB-I) OR EXISTE-DIALOG.
+           IF EXISTE-DIALOG
+              SUBTRACT 1 FROM I
+              MOVE "0000" TO PORT-HEADER
+              MOVE TAB-INI-TIPO(I) TO PORT-PROG-TYPE
+              MOVE TAB-INI-PROG(I) TO PORT-PROG-NAME
+              MOVE DIALOG-BODY     TO PORT-PROG-BODY
+              MOVE TAB-INI-SUBF(I) TO WSS-SUBF
+              PERFORM ABRE-PORTFILE
+              IF ATTRIBUTE FILESTATE OF PORTFILE(WSS-SUBF)
+                 = VALUE(OPENED)
+                 WRITE REG-PORTFILE
+                 MOVE TAB-INI-TIME(I) TO WSS-TIMEOUT
+                 MOVE 0  TO ESTADO
+                 WAIT WSS-TIMEOUT,READ-OK ON PORTFILE GIVING WSS-RESULT
+                 IF WSS-RESULT = 1
+                    MOVE ERROR-TIMEOUT-LOCAL TO ESTADO
+                 ELSE
+                    READ PORTFILE
+                    MOVE REG-PORTFILE   TO PARAMETRO
+              ELSE
+                 PERFORM DESPLIEGA-PORTFILE
+                 MOVE ERROR-NO-PORTFILE TO ESTADO
+           ELSE
+              MOVE ERROR-IDENT-NOEXISTE TO ESTADO.
+           IF ESTADO NOT = 0
+              PERFORM DESPLIEGA-ESTADO.
+      $SET OMIT = NOT MYTRACE
+           MOVE SPACES TO REG-LISTADO
+           STRING "<Salida de LIB :" DELIMITED BY SIZE,
+                   PARAMETRO FOR 100
+             INTO REG-LISTADO
+           WRITE REG-LISTADO
+      $POP OMIT
+           EXIT PROGRAM.
+      
+       DESPLIEGA-PORTFILE.
+      *-------------------
+      $SET OMIT = NOT MYTRACE
+           MOVE "DESPLIEGA-PORTFILE" TO REG-LISTADO
+           WRITE REG-LISTADO.
+      $POP OMIT
+           MOVE SPACES TO WSS-STRING.
+           MOVE 1 TO P
+           STRING "PORT sin contacto, YOURNAME=" DELIMITED BY SIZE
+             INTO WSS-STRING WITH POINTER P
+           MOVE ATTRIBUTE YOURNAME OF PORTFILE(WSS-SUBF) TO WSS-FILLER
+           STRING WSS-FILLER DELIMITED BY SPACE,
+                  ", MYNAME=" DELIMITED BY SIZE
+                  INTO WSS-STRING WITH POINTER P
+           MOVE ATTRIBUTE MYNAME OF PORTFILE TO WSS-FILLER
+           STRING WSS-FILLER DELIMITED BY SPACE,
+                  ", YOURHOST=" DELIMITED BY SIZE
+                  INTO WSS-STRING WITH POINTER P
+           MOVE ATTRIBUTE YOURHOST OF PORTFILE(WSS-SUBF) TO WSS-FILLER
+           STRING WSS-FILLER DELIMITED BY SPACE,
+                  ", YOURUSERCODE=" DELIMITED BY SIZE
+                  INTO WSS-STRING WITH POINTER P
+           MOVE ATTRIBUTE YOURUSERCODE OF PORTFILE(WSS-SUBF)
+             TO WSS-FILLER
+           MOVE ATTRIBUTE FILESTATE OF PORTFILE(WSS-SUBF) TO FILE-STATE
+           STRING WSS-FILLER DELIMITED BY SPACES,
+                 ", FILESTATE=(" DELIMITED BY SIZE,
+                 FILE-STATE DELIMITED BY SIZE,
+                 ")" DELIMITED BY SIZE,
+                  @00@ DELIMITED BY SIZE INTO WSS-STRING WITH POINTER P
+           DISPLAY WSS-STRING.
+      
+       DESPLIEGA-ESTADO.
+      *-----------------
+      $SET OMIT = NOT MYTRACE
+           MOVE "DESPLIEGA-ESTADO" TO REG-LISTADO
+           WRITE REG-LISTADO.
+      $POP OMIT
+           MOVE SPACES TO WSS-STRING
+           MOVE 1 TO P.
+           MOVE ATTRIBUTE MAXCENSUS OF PORTFILE(WSS-SUBF) TO
+                WSS-MAXCENSUS.
+           STRING "ERROR: Estado (" DELIMITED BY SIZE,
+                  ESTADO DELIMITED BY SIZE,
+      *           ") MAXCENSUS:" DELIMITED BY SIZE,
+      *           WSS-MAXCENSUS DELIMITED BY SIZE
+                  ") " DELIMITED BY SIZE
+                  INTO WSS-STRING WITH POINTER P.
+           IF ESTADO = ERROR-TIMEOUT-LOCAL
+      *       STRING "Port con TIMEOUT (local) " DELIMITED BY SIZE
+      *              INTO WSS-STRING WITH POINTER P
+              MOVE ATTRIBUTE YOURNAME OF PORTFILE(WSS-SUBF)
+                TO WSS-FILLER
+              STRING "Programa GNSPPPOR en host: " DELIMITED BY SIZE,
+                     WSS-FILLER DELIMITED BY ".",
+                     " no contesta... Verificar" DELIMITED BY SIZE
+                INTO WSS-STRING WITH POINTER P
+           ELSE IF ESTADO = ERROR-TIMEOUT-REMOTO
+              STRING "Port con TIMEOUT (remoto) " DELIMITED BY SIZE
+                     INTO WSS-STRING WITH POINTER P
+           ELSE IF ESTADO = ERROR-NO-PORTFILE
+              MOVE ATTRIBUTE YOURNAME OF PORTFILE(WSS-SUBF) TO
+                   WSS-FILLER
+              STRING "Programa GNSPPPOR no esta activo en servidor "
+                      DELIMITED BY SIZE,
+      *              "filestatus=" DELIMITED BY SIZE,
+      *              FILE-STATE DELIMITED BY SIZE
+                     WSS-FILLER DELIMITED BY SPACE
+                     INTO WSS-STRING WITH POINTER P
+           ELSE IF ESTADO = ERROR-IDENT-NOEXISTE
+              STRING "Identificador: [" DELIMITED BY SIZE,
+                     DIALOG-NAME DELIMITED BY SPACES,
+                     "] no existe en archivo INI" DELIMITED BY SIZE
+                     INTO WSS-STRING WITH POINTER P
+           ELSE
+              STRING "Error desconocido" DELIMITED BY SIZE
+                     INTO WSS-STRING WITH POINTER P.
+           STRING @00@ DELIMITED BY SIZE INTO WSS-STRING
+                  WITH POINTER P.
+           DISPLAY WSS-STRING.
+      
+       BUSCA-DIALOG.
+      *-------------
+      $SET OMIT = NOT MYTRACE
+           MOVE "BUSCA-DIALOG" TO REG-LISTADO
+           WRITE REG-LISTADO
+      $POP OMIT
+           IF DIALOG-NAME = TAB-INI-NAME(I)
+              MOVE 1 TO SW-EXISTE-DIALOG.
+      
+       LEER-TAB-INI.
+      *-------------
+      $SET OMIT = NOT MYTRACE
+           MOVE "LEER-TAB-INI" TO REG-LISTADO
+           WRITE REG-LISTADO
+      $POP OMIT
+           OPEN INPUT INI.
+           PERFORM LEER-INI.
+           PERFORM CARGA-TAB UNTIL EOF.
+           CLOSE INI.
+           PERFORM AGREGA-SUBFILE-INDEX
+             VARYING TAB-J FROM 1 BY 1
+             UNTIL TAB-J > TAB-I.
+      $SET OMIT = NOT MYDEBUG
+           MOVE 1 TO TAB-J
+           PERFORM DESPLEGAR UNTIL TAB-J > TAB-I.
+      $POP OMIT
+      
+       DESPLEGAR.
+      *----------
+      $SET OMIT = NOT MYTRACE
+           MOVE "DESPLEGAR" TO REG-LISTADO
+           WRITE REG-LISTADO
+      $POP OMIT
+           MOVE SPACES TO WSS-STRING.
+           STRING "Nombre: " DELIMITED BY SIZE
+                  TAB-INI-NAME(TAB-J) DELIMITED BY SPACES
+                  ", Programa: " DELIMITED BY SIZE
+                  TAB-INI-PROG(TAB-J) DELIMITED BY SPACES
+                  ", Hostname: " DELIMITED BY SIZE
+                  TAB-INI-HOST(TAB-J) DELIMITED BY SPACES
+                  ", Subfile: " DELIMITED BY SIZE
+                  TAB-INI-SUBF(TAB-J) DELIMITED BY SIZE
+                  ", Usercode: " DELIMITED BY SIZE
+                  TAB-INI-USER(TAB-J) DELIMITED BY SPACES
+                  ", Tipo: " DELIMITED BY SIZE
+                  TAB-INI-TIPO(TAB-J) DELIMITED BY SPACES
+                  ", Timeout: " DELIMITED BY SIZE
+                  TAB-INI-TIME(TAB-J) DELIMITED BY SIZE
+                  @00@ DELIMITED BY SIZE
+             INTO WSS-STRING.
+           DISPLAY WSS-STRING.
+           ADD 1 TO TAB-J.
+      
+       LEER-INI.
+      *---------
+      $SET OMIT = NOT MYTRACE
+           MOVE "LEER-INI" TO REG-LISTADO
+           WRITE REG-LISTADO
+      $POP OMIT
+           READ INI AT END MOVE 1 TO WSS-EOF.
+      
+       CARGA-TAB.
+      *----------
+      $SET OMIT = NOT MYTRACE
+           MOVE "CARGA-TAB" TO REG-LISTADO
+           WRITE REG-LISTADO
+      $POP OMIT
+           MOVE 1  TO P
+           MOVE 72 TO L
+           PERFORM NEXT-TOKEN
+           IF (TOKEN = "%" OR ";") OR TOK-EOL
+              NEXT SENTENCE
+           ELSE IF TOKEN = "["
+              PERFORM NEXT-TOKEN
+              ADD 1 TO TAB-I
+              MOVE 17 TO WSS-LARGO
+              MOVE "Identificador" TO WSS-DONDE
+              PERFORM VALIDA-LARGO
+              MOVE TOKEN TO TAB-INI-NAME(TAB-I)
+              MOVE 120   TO TAB-INI-TIME(TAB-I)
+              MOVE "B"   TO TAB-INI-TIPO(TAB-I)
+              MOVE ATTRIBUTE HOSTNAME OF MYSELF TO TAB-INI-MYNA(TAB-I)
+           ELSE IF TOKEN = "Programa" OR "PROGRAMA"
+              PERFORM SIGNO-IGUAL
+              PERFORM NEXT-TOKEN
+              MOVE 17 TO WSS-LARGO
+              MOVE "Programa" TO WSS-DONDE
+              PERFORM VALIDA-LARGO
+              MOVE TOKEN TO TAB-INI-PROG(TAB-I)
+           ELSE IF TOKEN = "Hostname" OR "HOSTNAME" OR
+                           "Servidor" OR "SERVIDOR"
+              PERFORM SIGNO-IGUAL
+              PERFORM NEXT-TOKEN
+              ADD 1 TO TOKEN-LENGTH
+              STRING "." FOR 1 INTO TOKEN WITH POINTER TOKEN-LENGTH
+              SUBTRACT 1 FROM TOKEN-LENGTH
+              MOVE 17 TO WSS-LARGO
+              MOVE "HOSTNAME" TO WSS-DONDE
+              PERFORM VALIDA-LARGO
+              MOVE TOKEN TO TAB-INI-HOST(TAB-I)
+           ELSE IF TOKEN = "Myname" OR "MYNAME"
+              PERFORM SIGNO-IGUAL
+              PERFORM NEXT-TOKEN
+              DISPLAY "ERROR: No debe especificar MYNAME"
+      *       ADD 1 TO TOKEN-LENGTH
+      *       STRING "." FOR 1 INTO TOKEN WITH POINTER TOKEN-LENGTH
+      *       SUBTRACT 1 FROM TOKEN-LENGTH
+              MOVE ATTRIBUTE HOSTNAME OF MYSELF TO TAB-INI-MYNA(TAB-I)
+           ELSE IF TOKEN = "Usercode" OR "USERCODE"
+              PERFORM SIGNO-IGUAL
+              PERFORM NEXT-TOKEN
+              ADD 1 TO TOKEN-LENGTH
+              STRING "." FOR 1 INTO TOKEN WITH POINTER TOKEN-LENGTH
+              SUBTRACT 1 FROM TOKEN-LENGTH
+              MOVE 17 TO WSS-LARGO
+              MOVE "USERCODE" TO WSS-DONDE
+              PERFORM VALIDA-LARGO
+              MOVE TOKEN TO TAB-INI-USER(TAB-I)
+           ELSE IF TOKEN = "Trancode" OR "TRANCODE"
+              PERFORM SIGNO-IGUAL
+              PERFORM NEXT-TOKEN
+              MOVE 5 TO WSS-LARGO
+              MOVE "TRANCODE" TO WSS-DONDE
+              PERFORM VALIDA-LARGO
+              MOVE TOKEN TO TAB-INI-TRAN(TAB-I)
+           ELSE IF TOKEN = "Timeout" OR "TIMEOUT"
+              PERFORM SIGNO-IGUAL
+              PERFORM NEXT-TOKEN
+              IF TOK-NUMERICO
+                 MOVE NUM-TOKEN TO TAB-INI-TIME(TAB-I)
+              ELSE
+                 DISPLAY "Error: FALTA TOKEN NUMERICO"
+           ELSE IF TOKEN = "Tipo" OR "TIPO"
+              PERFORM SIGNO-IGUAL
+              PERFORM NEXT-TOKEN
+              IF TOKEN = "Linc16" OR "LINC16"
+                 MOVE "6" TO TAB-INI-TIPO(TAB-I)
+              ELSE IF TOKEN = "BeeTeam" OR "BEETEAM"
+                 MOVE "B" TO TAB-INI-TIPO(TAB-I)
+              ELSE
+                 MOVE SPACES TO WSS-STRING
+                 STRING "Error: Tipo (" DELIMITED BY SIZE
+                        TOKEN FOR TOKEN-LENGTH
+                        ", seq: " DELIMITED BY SIZE
+                        SEQ FOR 8
+                        ") no es LINC16 ni BEETEAM" DELIMITED BY SIZE
+                        @00@ DELIMITED BY SIZE
+                   INTO WSS-STRING
+                 DISPLAY WSS-STRING
+           ELSE
+              MOVE SPACES TO WSS-STRING
+              STRING "Error: Linea: " DELIMITED BY SIZE
+                     SEQ FOR 8
+                     ", no reconocida." DELIMITED BY SIZE
+                     @00@ DELIMITED BY SIZE
+                INTO WSS-STRING
+              DISPLAY WSS-STRING.
+           PERFORM LEER-INI.
+      
+       VALIDA-LARGO.
+      *-------------
+      $SET OMIT = NOT MYTRACE
+           MOVE "VALIDA-LARGO" TO REG-LISTADO
+           WRITE REG-LISTADO
+      $POP OMIT
+           IF TOKEN-LENGTH > WSS-LARGO
+              MOVE SPACES TO WSS-STRING
+              STRING "ERROR: Largo variable " DELIMITED BY SIZE,
+                     WSS-DONDE DELIMITED BY SPACES,
+                     ", excede largo maximo=" DELIMITED BY SIZE,
+                     WSS-LARGO DELIMITED BY SIZE,
+                     " (" DELIMITED BY SIZE,
+                     TOKEN DELIMITED BY SPACES,
+                     ")" DELIMITED BY SIZE
+                     @00@ DELIMITED BY SIZE INTO WSS-STRING
+              DISPLAY WSS-STRING.
+      
+       SIGNO-IGUAL.
+      *------------
+      $SET OMIT = NOT MYTRACE
+           MOVE "SIGNO-IGUAL" TO REG-LISTADO
+           WRITE REG-LISTADO
+      $POP OMIT
+           PERFORM NEXT-TOKEN.
+           IF NOT (TOKEN = "=" OR ":")
+              DISPLAY "Error: Falta signo = o :, en linea: " SEQ.
+      
+       NEXT-TOKEN.
+      *-----------
+      $SET OMIT = NOT MYTRACE
+           MOVE "NEXT-TOKEN" TO REG-LISTADO
+           WRITE REG-LISTADO
+      $POP OMIT
+           MOVE 0 TO SW-FIN-BLANCOS.
+           PERFORM SALTA-BLANCOS
+             UNTIL FIN-BLANCOS OR
+                   P > L.
+           MOVE SPACES TO TOKEN
+           MOVE 1 TO TOKEN-LENGTH
+           IF P < L
+              MOVE 0 TO SW-FIN-TOKEN
+              MOVE 4 TO SW-TOKEN-TYPE
+              MOVE 0 TO NUM-TOKEN
+              PERFORM MUEVE-CHAR
+                UNTIL FIN-TOKEN OR P > L
+              SUBTRACT 1 FROM TOKEN-LENGTH
+              IF TOK-NUMERICO
+                 IF TOKEN-LENGTH NOT > 23
+                    COMPUTE J = 24 - TOKEN-LENGTH
+                    MOVE 1 TO I
+                    PERFORM MUEVE-NUMERO
+                      UNTIL I > TOKEN-LENGTH
+                 ELSE
+                    DISPLAY "Error: Numero muy largo"
+              ELSE
+                 NEXT SENTENCE
+           ELSE
+              MOVE 0 TO TOKEN-LENGTH
+              MOVE 3 TO SW-TOKEN-TYPE.
+      $SET OMIT = NOT MYDEBUG
+           MOVE SPACES TO WSS-STRING
+           IF TOK-NUMERICO
+              STRING "T: " DELIMITED BY SIZE,
+                     TOKEN FOR TOKEN-LENGTH
+                     " (" DELIMITED BY SIZE,
+                     NUM-TOKEN DELIMITED BY SIZE
+                     ")" DELIMITED BY SIZE
+                     @00@ DELIMITED BY SIZE
+                INTO WSS-STRING
+           ELSE
+              STRING "T: " DELIMITED BY SIZE,
+                     TOKEN FOR TOKEN-LENGTH
+                     @00@ DELIMITED BY SIZE
+                INTO WSS-STRING.
+           DISPLAY WSS-STRING.
+      $POP OMIT
+      
+       MUEVE-NUMERO.
+      *-------------
+      $SET OMIT = NOT MYTRACE
+           MOVE "MUEVE-NUMERO" TO REG-LISTADO
+           WRITE REG-LISTADO
+      $POP OMIT
+           UNSTRING TOKEN INTO CAR FOR 1 WITH POINTER I.
+           STRING CAR FOR 1 INTO NUM-TOKEN-ALPHA WITH POINTER J.
+      
+       SALTA-BLANCOS.
+      *--------------
+      $SET OMIT = NOT MYTRACE
+      *    MOVE "SALTA-BLANCOS" TO REG-LISTADO
+      *    WRITE REG-LISTADO
+      $POP OMIT
+           UNSTRING REG-INI INTO CAR FOR 1 WITH POINTER P
+           IF CAR NOT = SPACES
+              SUBTRACT 1 FROM P
+              MOVE 1 TO SW-FIN-BLANCOS.
+      
+       MUEVE-CHAR.
+      *-----------
+      $SET OMIT = NOT MYTRACE
+      *    MOVE "MUEVE-CHAR" TO REG-LISTADO
+      *    WRITE REG-LISTADO
+      $POP OMIT
+           UNSTRING REG-INI INTO CAR FOR 1 WITH POINTER P
+           IF CAR = " " OR "=" OR "[" OR "]" OR "(" OR ")" OR
+                    "." OR ":" OR "," OR ";" OR "!" OR "#" OR
+                    "$" OR "%" OR "&" OR "/" OR "*" OR "+" OR
+                    "-" OR "_"
+              IF TOKEN-LENGTH = 1
+                 STRING CAR FOR 1 INTO TOKEN WITH POINTER TOKEN-LENGTH
+                 MOVE 1 TO SW-TOKEN-TYPE
+                 MOVE 1 TO SW-FIN-TOKEN
+              ELSE
+                 SUBTRACT 1 FROM P
+                 MOVE 1 TO SW-FIN-TOKEN
+           ELSE
+              IF NOT (CAR = "0" OR "1" OR "2" OR "3" OR "4" OR
+                            "5" OR "6" OR "7" OR "8" OR "9")
+                 MOVE 2 TO SW-TOKEN-TYPE
+                 STRING CAR FOR 1 INTO TOKEN WITH POINTER TOKEN-LENGTH
+              ELSE
+                 STRING CAR FOR 1 INTO TOKEN WITH POINTER TOKEN-LENGTH.
+      *
+       ABRE-PORTFILE.
+      *--------------
+      $SET OMIT = NOT MYTRACE
+           MOVE ATTRIBUTE FILESTATE OF PORTFILE(WSS-SUBF)
+             TO FILE-STATE
+           MOVE SPACES TO REG-LISTADO
+           STRING "ABRE-PORTFILE, FILESTATE=" DELIMITED BY SIZE,
+                  FILE-STATE DELIMITED BY SIZE
+             INTO REG-LISTADO
+           WRITE REG-LISTADO
+           MOVE SPACES TO REG-LISTADO
+           MOVE 1 TO P
+           MOVE VALUE(CLOSED) TO FILE-STATE
+           STRING "CLOSED=" DELIMITED BY SIZE,
+                  FILE-STATE DELIMITED BY SIZE
+             INTO REG-LISTADO WITH POINTER P
+           MOVE VALUE(OPEN) TO FILE-STATE
+           STRING ",OPEN=" DELIMITED BY SIZE,
+                  FILE-STATE DELIMITED BY SIZE
+             INTO REG-LISTADO WITH POINTER P
+           WRITE REG-LISTADO
+      $POP OMIT
+           IF ATTRIBUTE FILESTATE OF PORTFILE(WSS-SUBF) NOT =
+              VALUE(OPENED)
+              MOVE SPACES TO WSS-STRING
+      $SET OMIT = NOT MYDEBUG
+              STRING "Contacting PORT, YOURNAME=" DELIMITED BY SIZE,
+                     TAB-INI-HOST(I) DELIMITED BY ".",
+                     ", MYNAME=" DELIMITED BY SIZE,
+                     TAB-INI-MYNA(I) DELIMITED BY ".",
+                     ", YOURHOST=" DELIMITED BY SIZE,
+                     TAB-INI-HOST(I) DELIMITED BY ".",
+                     ", YOURUSERCODE=" DELIMITED BY SIZE,
+                     TAB-INI-USER(I) DELIMITED BY ".",
+                     @00@ DELIMITED BY SIZE INTO WSS-STRING
+      $POP OMIT
+      $SET OMIT = MYDEBUG
+              STRING "Contacting HOST: " DELIMITED BY SIZE,
+                     TAB-INI-HOST(I) DELIMITED BY ".",
+                     @00@ DELIMITED BY SIZE INTO WSS-STRING
+      $POP OMIT
+      $SET OMIT = NOT MYTRACE
+              WRITE REG-LISTADO FROM WSS-STRING
+      $POP OMIT
+              DISPLAY WSS-STRING
+              PERFORM CIERRA-PORT
+              CHANGE ATTRIBUTE YOURNAME OF PORTFILE(WSS-SUBF)
+                  TO TAB-INI-HOST(I)
+      *       CHANGE ATTRIBUTE MYNAME OF PORTFILE
+      *           TO TAB-INI-MYNA(I)
+              PERFORM PONE-MYNAME
+              CHANGE ATTRIBUTE YOURHOST OF PORTFILE(WSS-SUBF)
+                  TO TAB-INI-HOST(I)
+              CHANGE ATTRIBUTE YOURUSERCODE OF PORTFILE(WSS-SUBF)
+                  TO TAB-INI-USER(I)
+              CHANGE ATTRIBUTE AVAILABLEONLY OF PORTFILE(WSS-SUBF)
+                  TO VALUE FALSE
+      *       OPEN WAIT PORTFILE USING CONNECT-TIME-LIMIT OF 1
+              OPEN NO WAIT PORTFILE
+              WAIT((5)).
+      
+       PONE-MYNAME.
+      *------------
+      $SET OMIT = NOT MYTRACE
+           MOVE "PONE-MYNAME" TO REG-LISTADO
+           WRITE REG-LISTADO
+      $POP OMIT
+           IF ATTRIBUTE MYNAME OF PORTFILE NOT = TAB-INI-MYNA(I)
+              CHANGE ATTRIBUTE MYNAME OF PORTFILE
+                  TO TAB-INI-MYNA(I).
+      
+       CIERRA-PORT.
+      *------------
+      $SET OMIT = NOT MYTRACE
+           MOVE "CIERRA-PORT" TO REG-LISTADO
+           WRITE REG-LISTADO
+      $POP OMIT
+           IF ATTRIBUTE FILESTATE OF PORTFILE(WSS-SUBF) NOT =
+              VALUE(CLOSED)
+              CLOSE PORTFILE
+           ELSE
+              NEXT SENTENCE.
+           MOVE ATTRIBUTE FILESTATE OF PORTFILE(WSS-SUBF)
+             TO FILE-STATE.
+      
+       AGREGA-SUBFILE-INDEX.
+      *---------------------
+      $SET OMIT = NOT MYTRACE
+           MOVE "AGREGA-SUBFILE-INDEX" TO REG-LISTADO
+           WRITE REG-LISTADO
+      $POP OMIT
+           IF TAB-INI-HOST(TAB-J) = SPACES
+              DISPLAY "Falta Hostname para: " TAB-INI-HOST(TAB-J)
+              SET MYSELF(STATUS) TO VALUE(TERMINATED).
+           IF TAB-INI-PROG(TAB-J) = SPACES
+              DISPLAY "Falta Programa para: " TAB-INI-PROG(TAB-J)
+              SET MYSELF(STATUS) TO VALUE(TERMINATED).
+           IF TAB-INI-USER(TAB-J) = SPACES
+              DISPLAY "Falta Usercode para: " TAB-INI-USER(TAB-J)
+              SET MYSELF(STATUS) TO VALUE(TERMINATED).
+           PERFORM BUSCA-SUBFILE
+             VARYING WSS-K FROM 1 BY 1
+             UNTIL TAB-INI-HOST(TAB-J) = TAB-HOSTNAME(WSS-K) OR
+                   WSS-K > WSS-T-HOST.
+           IF WSS-K > WSS-T-HOST
+              PERFORM AGREGA-HOST.
+           MOVE WSS-K TO TAB-INI-SUBF(TAB-J).
+      
+       AGREGA-HOST.
+      *------------
+      $SET OMIT = NOT MYTRACE
+           MOVE SPACE TO REG-LISTADO
+           STRING "AGREGA-HOST, NAME:" DELIMITED BY SIZE,
+                  TAB-INI-HOST(TAB-J) DELIMITED BY SIZE
+             INTO REG-LISTADO
+           WRITE REG-LISTADO.
+      $POP OMIT
+           ADD 1 TO WSS-T-HOST
+           IF WSS-T-HOST > WSS-MAX-SUBF
+              DISPLAY "Se excedio la capacidad de la tabla TAB-HOST"
+              SET MYSELF(STATUS) TO VALUE(TERMINATED).
+           MOVE TAB-INI-HOST(TAB-J) TO TAB-HOSTNAME(WSS-T-HOST).
+           MOVE TAB-INI-USER(TAB-J) TO TAB-USERNAME(WSS-T-HOST).
+           MOVE TAB-INI-MYNA(TAB-J) TO TAB-MYNAME  (WSS-T-HOST).
+           MOVE WSS-T-HOST TO WSS-K.
+      
+       BUSCA-SUBFILE.
+      *--------------
+      $SET OMIT = NOT MYTRACE
+           MOVE "BUSCA-SUBFILE" TO REG-LISTADO
+           WRITE REG-LISTADO.
+      $POP OMIT
+      $SET OMIT = MYTRACE
+           EXIT.
+      $POP OMIT
+      

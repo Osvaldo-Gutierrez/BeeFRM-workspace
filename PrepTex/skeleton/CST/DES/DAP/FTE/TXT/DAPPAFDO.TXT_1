@@ -1,0 +1,283 @@
+*% IF INI_CMN_MOD
+      *<<<< INI_CMN_MOD                                                 
+           PERFORM PRO-FRAG-DAP.                                        
+           GO TO FIN-CMN-MOD.                                           
+      *>>>>                                                             
+*% END
+*% IF PUT_SCR
+   *<<<<PUT_SCR
+      *Busca cliente para desplegar en pantalla                         
+           MOVE OPD-CIC-IOPD IN OPD TO RCC-CIC-IOPD IN RCC.             
+           MOVE 'RCC-KEY-IOPD' TO FIO-AKEY.                             
+           MOVE FIO-GET-NLS    TO FIO-CMND.                             
+           PERFORM DAP-FIO-RCC.                                         
+           IF NOT ( FIO-STAT-OKS AND                                    
+                    RCC-CIC-IOPD IN RCC = OPD-CIC-IOPD IN OPD )         
+               MOVE 'FDORCC NEX' TO MSG-COD-MENS                        
+               GO TO MSG-PUT-SCR.                                       
+           MOVE RCC-CIC-ICLI IN RCC TO DBC-CIC-ICLI IN DBC.             
+           MOVE FIO-GET-KEY TO FIO-CMND.                                
+           PERFORM SGC-FIO-DBC.                                         
+           MOVE FIO-STAT TO PGM-STAT-DBC.                               
+           IF NOT FIO-STAT-OKS                                          
+               MOVE 'FDODBC NEX' TO MSG-COD-MENS                        
+               GO TO MSG-PUT-SCR.                                       
+            MOVE DBC-GLS-NOMC IN DBC TO CPT-STRN.                       
+            PERFORM CPT-BLKS.                                           
+            MOVE CPT-STRN TO DBC-GLS-NOMC IN DBC.                       
+      *Busca registro IMP asociado al DAP                               
+           MOVE OPD-CIC-IOPD IN OPD TO IMP-CIC-IOPD IN IMP.             
+           MOVE FIO-GET-KEY TO FIO-CMND.                                
+           PERFORM DAP-FIO-IMP.                                         
+           MOVE FIO-STAT TO PGM-STAT-IMP.                               
+           IF NOT FIO-STAT-OKS                                          
+               MOVE 'FDOIMP NEX' TO MSG-COD-MENS                        
+               GO TO MSG-PUT-SCR.                                       
+      *Busca registro CAD asociado al DAP                               
+           MOVE OPD-CIC-IOPD IN OPD TO CAD-CIC-IOPD IN CAD.             
+           MOVE ZEROES              TO CAD-NUM-ILIQ IN CAD.             
+           MOVE 1                   TO CAD-NUM-ICAD IN CAD.             
+           MOVE FIO-GET-KEY TO FIO-CMND.                                
+           PERFORM DAP-FIO-CAD.                                         
+           MOVE FIO-STAT TO PGM-STAT-CAD.                               
+           IF NOT FIO-STAT-OKS                                          
+               MOVE 'FDOCAD NEX' TO MSG-COD-MENS                        
+               GO TO MSG-PUT-SCR.                                       
+      *Valida que la oficina del usuario conectado sea de la misma      
+      *oficina a la que pertenece el DAP                                
+           COPY USPC143.                                                
+           IF USP-COD-OFICINA NOT = OPD-COD-OFIC IN OPD                 
+               MOVE 'FDOOFICINA<>' TO MSG-COD-MENS                      
+               MOVE USP-COD-OFICINA TO FRM-MEN2                         
+               GO TO MSG-PUT-SCR.                                       
+      *Valida que la fecha computacional del DAP sea hoy                
+           PERFORM GET-FHOY.                                            
+           IF HOY-FHOY NOT = OPD-FEC-FCMP IN OPD                        
+               MOVE 'FDOFCMPHOY<>' TO MSG-COD-MENS                      
+               GO TO MSG-PUT-SCR.                                       
+      *Valida que el DAP este en estado = 'A'                           
+           IF OPD-COD-STAT IN OPD NOT = 'A'                             
+      *ADA-INI 13-MAY-2003                                              
+      *salvo cuando el estado es 'G' y esta en custodia electronica     
+      *en esta caso si se puede fragmentar                              
+               IF NOT ( OPD-COD-STAT IN OPD = 'G' AND                   
+                        OPD-COD-CUST IN OPD = 'E' )                     
+      *ADA-FIN 13-MAY-2003                                              
+               MOVE 'FDOSTAT<>A' TO MSG-COD-MENS                        
+               GO TO MSG-PUT-SCR.                                       
+      *Valida que el DAP este en situacion contable = 'VIG'             
+           IF OPD-COD-SCTB IN OPD NOT = 'VIG'                           
+               MOVE 'FDOSCTB<>VIG' TO MSG-COD-MENS                      
+               GO TO MSG-PUT-SCR.                                       
+      *ADA-INI 13-MAY-2003                                              
+      **Valida que el DAP tenga custodia = 'N'                          
+      *     IF OPD-COD-CUST IN OPD NOT = 'N'                            
+      *         MOVE 'FDOCUST<>N' TO MSG-COD-MENS                       
+      *         GO TO MSG-PUT-SCR.                                      
+      *ADA-INI 13-MAY-2003                                              
+      *Valida que el DAP no tenga multiples clientes                    
+           IF OPD-IND-MCLI IN OPD NOT = 'N'                             
+               MOVE 'FDOMCLI<>N' TO MSG-COD-MENS                        
+               GO TO MSG-PUT-SCR.                                       
+      *Valida que el DAP tenga cargo CTBL                               
+           IF CAD-IND-TCAD IN CAD NOT = 'CTBL'                          
+               MOVE 'FDOCADCTBL<>' TO MSG-COD-MENS                      
+               GO TO MSG-PUT-SCR.                                       
+      *Valida que el DAP no haya sido impreso                           
+           IF IMP-COD-STAT IN IMP = 'W' OR 'G'                          
+      *ADA-INI 13-MAY-2003                                              
+      *(salvo que el estado de IMP sea 'G' y la custodia sea 'E')       
+               IF NOT ( IMP-COD-STAT IN IMP = 'G' AND                   
+                        OPD-COD-CUST IN OPD = 'E' )                     
+      *ADA-FIN 13-MAY-2003                                              
+               MOVE 'FDOOPD YAIMP' TO MSG-COD-MENS                      
+               GO TO MSG-PUT-SCR.                                       
+      *Valida que el DAP no este en garantia                            
+           IF OPD-COD-GARA IN OPD NOT = 'N'                             
+               MOVE 'FDOGARA <>N' TO MSG-COD-MENS                       
+               GO TO MSG-PUT-SCR.                                       
+      *Valida que el DAP no tenga orden de no PAGO                      
+           IF OPD-COD-IONP IN OPD NOT = 'N'                             
+               MOVE 'FDOIONP <>N' TO MSG-COD-MENS                       
+               GO TO MSG-PUT-SCR.                                       
+      *Valida que la modalidad de retiro sea sin retiros programados    
+           IF OPD-COD-MORE IN OPD NOT = 'N'                             
+               MOVE 'FDOMORE <>N' TO MSG-COD-MENS                       
+               GO TO MSG-PUT-SCR.                                       
+      *Valida que el DAP no sea producto de una fragmentacion anterior  
+           MOVE OPD-CIC-IOPD IN OPD TO RFC-CIC-IOPD IN RFC.             
+           MOVE 'RFC-KEY-IOPD' TO FIO-AKEY.                             
+           MOVE FIO-GET-KEY    TO FIO-CMND.                             
+           PERFORM DAP-FIO-RFC.                                         
+           IF FIO-STAT-OKS                                              
+               MOVE 'FDOOPD YAFRA' TO MSG-COD-MENS                      
+               GO TO MSG-PUT-SCR.                                       
+           GO TO CON-PUT-SCR.                                           
+       MSG-PUT-SCR.                                                     
+           MOVE 'DAP' TO MSG-COD-SIST.                                  
+           PERFORM GET-MSG.                                             
+           IF FRM-MEN2 > SPACES                                         
+               MOVE MSG-GLS-DESC TO FRM-MEN1                            
+           ELSE                                                         
+               MOVE MSG-GLS-DESC TO FRM-MENS.                           
+           MOVE SCR-STAT-CON TO SCR-STAT.                               
+       CON-PUT-SCR.                                                     
+      *>>>>                                                             
+*% END  
+*% IF WSS
+   *<<<<WSS
+       COPY SGCBRDBC.                                                   
+       COPY DAPBRRCC.                                                   
+       COPY DAPBRCAD.                                                   
+       COPY DAPBRODF.                                                   
+       COPY DAPBRRFC.                                                   
+       COPY DAPBROPD      
+       COPY DAPWGFDO
+       COPY DAPBRIMP.                                                   
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-MSC-REQA==.        
+       COPY GNSBRMSC.                                                   
+       COPY GNSWVNUM.                                                   
+       COPY GNSWCNUM.                                                   
+       COPY GNSWCVRF.                                                   
+       COPY GNSWVVRF.                                                   
+       COPY GNSWGIDC.                                                   
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-OFI-REQA==.        
+       COPY TABBROFI.                                                   
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-USR-REQA==.        
+       COPY TABBRUSR.                                                   
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-DBC-REQA==.        
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-RCC-REQA==.        
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-CAD-REQA==.        
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-ODF-REQA==.        
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-RFC-REQA==.        
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-IMP-REQA==.        
+           COPY USPC113.                                                
+       COPY GNSWGCPT.                                                   
+       COPY GNSWGHOY.                                                   
+       01  WSS-VARI.                                                    
+           03  WSS-OPDS.                                                
+               05 WSS-FIL1                 PIC X(01).                   
+               05 WSS-CAII                 PIC X(04).                   
+               05 WSS-FIL2                 PIC X(01).                   
+               05 WSS-IICI                 PIC X(08).                   
+               05 WSS-FIL3                 PIC X(03).                   
+               05 WSS-CAIT                 PIC X(04).                   
+               05 WSS-FIL4                 PIC X(01).                   
+               05 WSS-IICT                 PIC X(08).                   
+           03  WSS-NDAP-ALF                PIC X(05).                   
+           03  WSS-NDAP REDEFINES WSS-NDAP-ALF PIC 9(05).               
+*% END 	
+*% IF WSS_IBM
+           03 PGM-STAT.                                                 
+              05 PGM-STAT-OPD.                                          
+                 88 PGM-STAT-OPD-NUL    VALUE '  '.                     
+                 07 PGM-STT1-OPD        VALUE '2' PIC X(01).            
+                    88 PGM-STAT-OPD-OKS VALUE '0'.                      
+                 07 PGM-STT2-OPD        VALUE '3' PIC X(01).            
+              05 PGM-STAT-DBC.                                          
+                 88 PGM-STAT-DBC-NUL    VALUE '  '.                     
+                 07 PGM-STT1-DBC        VALUE '2' PIC X(01).            
+                    88 PGM-STAT-DBC-OKS VALUE '0'.                      
+                 07 PGM-STT2-DBC        VALUE '3' PIC X(01).            
+              05 PGM-STAT-IMP.                                          
+                 88 PGM-STAT-IMP-NUL    VALUE '  '.                     
+                 07 PGM-STT1-IMP        VALUE '2' PIC X(01).            
+                    88 PGM-STAT-IMP-OKS VALUE '0'.                      
+                 07 PGM-STT2-IMP        VALUE '3' PIC X(01).            
+              05 PGM-STAT-CAD.                                          
+                 88 PGM-STAT-CAD-NUL    VALUE '  '.                     
+                 07 PGM-STT1-CAD        VALUE '2' PIC X(01).            
+                    88 PGM-STAT-CAD-OKS VALUE '0'.                      
+                 07 PGM-STT2-CAD        VALUE '3' PIC X(01).            
+              05 PGM-STAT-ODF.                                          
+                 88 PGM-STAT-ODF-NUL    VALUE '  '.                     
+                 07 PGM-STT1-ODF        VALUE '2' PIC X(01).            
+                    88 PGM-STAT-ODF-OKS VALUE '0'.                      
+                 07 PGM-STT2-ODF        VALUE '3' PIC X(01).            
+*% END 
+*% IF EOF
+   *<<<<EOF
+       COPY DAPBFOPD.
+       COPY GNSBBMSC.
+       COPY GNSBEGLS
+       COPY SGCBFDBC.                                                   
+       COPY DAPBFRCC.                                                   
+       COPY DAPBFCAD.                                                   
+       COPY DAPBFODF.                                                   
+       COPY DAPBFRFC.                                                   
+       COPY DAPBFIMP.                                                   
+       COPY GNSBGCPT.                                                   
+       COPY GNSBGHOY.                                                   
+   *>>>>
+*% END
+*% IF EOF_PU
+       COPY GNSBVNUM.                                                   
+       COPY GNSBVIND.                                                   
+       COPY GNSBBMSC.                                                   
+       COPY GNSBVIND.                                                   
+       COPY GNSBVMSC.                                                   
+       COPY GNSBFMSC.                                                   
+       COPY GNSBVIDC.                                                   
+       COPY GNSBPVRF.                                                   
+       COPY GNSBEGLS.                                                   
+       COPY TABBBOFI.                                                   
+       COPY TABBFOFI.                                                   
+       COPY TABBBUSR.                                                   
+       COPY TABBFUSR.                                                   
+
+*% END 
+*% IF EOF_PQ
+   *<<<<EOF_PQ
+       COPY GNSBVNUM.                                                   
+       COPY GNSBVIND.                                                   
+       COPY GNSBVMSC.                                                   
+       COPY GNSBFMSC.                                                   
+       COPY GNSBVIDC.                                                   
+       COPY GNSBPVRF.                                                   
+       COPY TABBBOFI.                                                   
+       COPY TABBFOFI.                                                   
+       COPY TABBBUSR.                                                   
+       COPY TABBFUSR.                                                   
+       COPY GNSBBTAB.
+*% END                                                   
+*% IF EOF_PU  
+       PRO-FRAG-DAP SECTION.                                            
+       INI-PRO-FRAG-DAP.                                                
+      *Invoca a proceso genera cortes o DAP                             
+           MOVE 'FDOLINKERROR' TO FDO-CMSG.                             
+           MOVE OPD-CAI-IOPD IN FDO-FLD TO FDO-CAIO.                    
+           MOVE OPD-IIC-IOPD IN FDO-FLD TO FDO-IICO.                    
+           MOVE ODF-NUM-NDAP IN FDO-FLD TO FDO-NDAP.                    
+           MOVE SCR-OTRN                TO FDO-OTRN.                    
+           MOVE SCR-USER                TO FDO-ATRN.                    
+           MOVE 'DAPPPFDO' TO SYS-PROG.                                 
+           MOVE FDO-CMMA   TO SYS-CMMA.                                 
+           MOVE FDO-TCMA   TO SYS-TCMA.                                 
+           MOVE SYS-LINK   TO SYS-CMND.                                 
+           PERFORM GNS-PRO-SYS.                                         
+           MOVE SYS-CMMA   TO FDO-CMMA.                                 
+           IF FDO-CMSG > SPACES                                         
+               MOVE 'DAP'    TO MSG-COD-SIST                            
+               MOVE FDO-CMSG TO MSG-COD-MENS                            
+               PERFORM GET-MSG                                          
+               MOVE MSG-GLS-DESC TO FRM-MEN1                            
+               MOVE FDO-MENS     TO FRM-MEN2                            
+               MOVE FIO-BCK-OUT TO FIO-CMND                             
+               PERFORM DAP-FIO-OPD                                      
+               GO TO FIN-PRO-FRAG-DAP                                   
+           ELSE                                                         
+               MOVE SPACES   TO WSS-OPDS                                
+               MOVE FDO-CAII TO WSS-CAII                                
+               MOVE FDO-IICI TO WSS-IICI                                
+               MOVE ' / '    TO WSS-FIL3                                
+               MOVE FDO-CAIT TO WSS-CAIT                                
+               MOVE FDO-IICT TO WSS-IICT                                
+               MOVE 'DAP'        TO MSG-COD-SIST                        
+               MOVE 'FDO    OKS' TO MSG-COD-MENS                        
+               PERFORM GET-MSG                                          
+               MOVE MSG-GLS-DESC TO FRM-MEN1                            
+               MOVE WSS-OPDS     TO FRM-MEN2.                           
+       FIN-PRO-FRAG-DAP.                                                
+           EXIT.                                                        
+   *>>>>
+*% END 

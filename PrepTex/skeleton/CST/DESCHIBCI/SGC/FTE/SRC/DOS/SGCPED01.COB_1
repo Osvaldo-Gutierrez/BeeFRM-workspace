@@ -1,0 +1,844 @@
+       IDENTIFICATION DIVISION.
+      *========================
+       PROGRAM-ID. SGCPED01.
+       AUTHOR.     RDELACUADRA.
+      *REMARKS.
+      ******************************************************************
+      *  INTERSOFT                                                     *
+      *  MIGRACION A COBOL OS/390                                      *
+      *  FECHA: 15 DE ABRIL DE 1998                                    *
+      ******************************************************************
+      *****************************************************************
+      *                                                               *
+      *  OBJETIVO :                                                   *
+      *           - RECORRE TABLA DSF (DEUDA SISTEMA FINANCIERO)      *
+      *             Y SELECCIONA CLIENTES QUE TENGAN UNA DEUDA VGTE   *
+      *             MAYOR A 300.000.000.   Y NO TENGAN DEUDA VENCIDA  *
+      *             NI CASTIGADA NI MOROSA.                           *
+      *           - PARA CADA CLIENTE  SELECCIONADO, SE ACCESA TABLA  *
+      *             RBS (RELACION BANCO SUPER) PARA EXTRAER EL RUT    *
+      *             Y PODER ACCESAR ARCHIVO VSAM-KSDS                 *
+      *                                                               *
+      *  INPUT                                                        *
+      *             DSF 101 - DEUDA SISTEMA FINANCIERO                *
+      *             RBS 101 - RELACION BANCO SUPER                    *
+      *             CYDVD01 - VSAM KSDS DEUDORES                      *
+      *  OUTPUT   :                                                   *
+      *             LISTADO - LISTADO DE DEUDORES QUE NO EXISTEN      *
+      *                       EN CYDVD01, Y LOS QUE EXISTEN PERO NO   *
+      *                       TIENEN DEUDA DIRECTA VGTE, VCDA, MOROSA.*
+      *                                                               *
+      *  PARAMETROS :  SE INGRESAN 2 PARAMETROS QUE CORRESPONDEN      *
+      *                A UN RANGO DE DEUDAS A SELECCIONAR. EJEMPLO:   *
+      *                                                               *
+      *         //SYSIN DD *                                          *
+      *           000000300000    VALOR DEUDA DESDE  (LARGO 12)       *
+      *           000000400000    VALOR DEUDA HASTA  (LARGO 12)       *
+      *                           DEBE SER MAYOR QUE VALOR DESDE.     *
+      *                                                               *
+      *                                                               *
+      *                                                               *
+      *  FECHA    : SEP/07, 1995                                      *
+      *                                                               *
+      ******************************************************************
+      ******************************************************************
+      *      MANTENCIONES.
+      *      ==============
+      *
+      *      PROGRAMADOR : FORMAT 2000 INC.
+      *      FECHA       : 20.02.1998
+      *      CAMBIO      : SE APLICA TECNICA WINDOWING PARA CONVERSION
+      *                      2000 COMPLIANT.
+      ******************************************************************
+       ENVIRONMENT DIVISION.
+      *=====================
+           SKIP1
+       CONFIGURATION SECTION.
+      *----------------------
+       SPECIAL-NAMES.
+           C01 IS CANAL-1
+           DECIMAL-POINT IS COMMA.
+           SKIP1
+      *
+       INPUT-OUTPUT SECTION.
+      *=====================
+
+       FILE-CONTROL.
+           SELECT CYDVD01 ASSIGN TO CYDVD01
+                  ORGANIZATION IS INDEXED
+                  ACCESS MODE  IS RANDOM
+                  RECORD KEY   IS D01-CLAVE
+                  FILE STATUS  IS WR-FS-CYDVD01.
+           SELECT LISTADO       ASSIGN TO LISTADO.
+
+       DATA DIVISION.
+      *==============
+       FILE SECTION.
+      *=============
+
+       FD  CYDVD01.
+      ***       COPY CYDV001C.
+      ******************************************************************
+      *             DESCRIPCION DE REGISTRO (CYDV001)
+      *             ---------------------------------
+      *
+      *    ARCHIVO   : BCRO.CIRCU5.D01.KSDS
+      *    FD        : CYDV001
+      *    PREFIJO   : 'D01'
+      *    LARGO REG.: 695
+      *    ORGANIZAC.: VSAM-KSDS
+      *    BLOQUEO   : NO
+      *    LLAVE     : D01-CLAVE
+      *
+      ******************************************************************
+      *
+       01  D01-REGISTRO.
+
+           05  D01-CLAVE.
+      *
+               10  D01-TIPO-REG                PIC X(01).
+      *
+               10  D01-RUT-D.
+                   15 D01-RUT-D-NUM            PIC X(09).
+                   15 D01-RUT-D-VER            PIC X(01).
+           05  D01-RAZON-SOCIAL                PIC X(40).
+           05  D01-TIPO-DEUDOR                 PIC 9(02).
+           05  D01-CALIDAD-DEUDOR              PIC 9(02).
+           05  D01-RELAC-DEUDOR-IF             PIC 9(01).
+           05  D01-CATEGORIA-DEUDOR            PIC 9(01).
+           05  D01-SECTOR-ECONOM               PIC X(03).
+           05  D01-ACT-ECONOM                  PIC 9(02).
+           05  D01-ACT-ECONOM-VENDIDA          PIC 9(02).
+           05  D01-LOCALIDAD                   PIC 9(06).
+           05  D01-ESTADO-DEUDOR               PIC 9(01).
+           05  D01-CLASIF-COMERCIAL            PIC X(02).
+           05  D01-CLASIF-VENDIDA              PIC X(02).
+           05  D01-EXCEDIDO                    PIC X(01).
+           05  D01-DEUDA-DIR-VGTE-MN-IF        PIC 9(11)V99.
+           05  D01-DEUDA-DIR-VGTE-ME-IF        PIC 9(11)V99.
+           05  D01-DEUDA-DIR-MOR1-MN-IF        PIC 9(11)V99.
+           05  D01-DEUDA-DIR-MOR2-MN-IF        PIC 9(11)V99.
+           05  D01-DEUDA-DIR-MOR1-ME-IF        PIC 9(11)V99.
+           05  D01-DEUDA-DIR-MOR2-ME-IF        PIC 9(11)V99.
+           05  D01-DEUDA-DIR-VCDA-MN-IF        PIC 9(11)V99.
+           05  D01-DEUDA-DIR-VCDA-ME-IF        PIC 9(11)V99.
+           05  D01-DEUDA-IND-VGTE-MN           PIC 9(11)V99.
+           05  D01-DEUDA-IND-VGTE-ME           PIC 9(11)V99.
+           05  D01-DEUDA-IND-VCDA-MN           PIC 9(11)V99.
+           05  D01-DEUDA-IND-VCDA-ME           PIC 9(11)V99.
+           05  D01-DEUDA-DIR-VGTE-MN-VEN       PIC 9(11)V99.
+           05  D01-DEUDA-DIR-VGTE-ME-VEN       PIC 9(11)V99.
+           05  D01-DEUDA-DIR-VCDA-MN-VEN       PIC 9(11)V99.
+           05  D01-DEUDA-DIR-VCDA-ME-VEN       PIC 9(11)V99.
+           05  D01-DEUDA-DIR-VGTE-MN-INV       PIC 9(11)V99.
+           05  D01-DEUDA-DIR-VGTE-ME-INV       PIC 9(11)V99.
+           05  D01-DISPONIBLE-LIN-CRED         PIC 9(11)V99.
+           05  D01-FILLER1                     PIC 9(11)V99.
+           05  D01-INT-DEVENG-DIR-MN-IF        PIC 9(11)V99.
+           05  D01-INT-DEVENG-DIR-ME-IF        PIC 9(11)V99.
+           05  D01-DEUDA-CONTING-MN            PIC 9(11)V99.
+           05  D01-DEUDA-CONTING-ME            PIC 9(11)V99.
+           05  D01-DEUDA-COMERC-IF             PIC 9(11)V99.
+           05  D01-DEUDA-COMERC-VEN            PIC 9(11)V99.
+           05  D01-DEUDA-CONSUM-IF             PIC 9(11)V99.
+           05  D01-DEUDA-CONSUM-VEN            PIC 9(11)V99.
+           05  D01-DEUDA-LETVIV-IF             PIC 9(11)V99.
+           05  D01-DEUDA-LETVIV-VEN            PIC 9(11)V99.
+           05  D01-DEUDA-EXPORT                PIC 9(11)V99.
+           05  D01-OBLIG-AFECT-MARG            PIC 9(11)V99.
+           05  D01-OBLIG-AFECT-MARG-NO-GAR     PIC 9(11)V99.
+           05  D01-DEUDA-DIR-GAR-IF            PIC 9(11)V99.
+           05  D01-DEUDA-DIR-GAR-VEN           PIC 9(11)V99.
+           05  D01-SALDO-PRECIO-IF-LIQ         PIC 9(11)V99.
+           05  D01-SALDO-PRECIO-IF-OTRA        PIC 9(11)V99.
+           05  D01-MONTO-GAR-REALES            PIC 9(11)V99.
+           05  D01-MONTO-GAR-COMERC            PIC 9(11)V99.
+           05  D01-MONTO-GAR-PERSON            PIC 9(11)V99.
+           05  D01-DEUDA-COMPLEM               PIC 9(11)V99.
+           05  D01-DEUDA-PLURAL                PIC 9(11)V99.
+           05  D01-DEUDA-PLURAL-FRACCION       PIC 9(11)V99.
+           05  D01-NUM-CTAS-ATRAS-CON          PIC 9(03).
+           05  D01-NUM-CRED-CON                PIC 9(02).
+           05  D01-NUM-DIV-ATRAS-VIV           PIC 9(03).
+           05  D01-NUM-CRED-VIV                PIC 9(02).
+      *
+           05  D01-FECHA-CREAC-REGIS.
+               10  D01-FECHA-CREAC-REG-AA      PIC 9(02).
+               10  D01-FECHA-CREAC-REG-MM      PIC 9(02).
+               10  D01-FECHA-CREAC-REG-DD      PIC 9(02).
+           05  D01-AUTOR-CREC-REG              PIC X(12).
+           05  D01-AUTOR-ULT-MOD-REG           PIC X(12).
+           05  D01-FECHA-ULT-MOD-REG.
+               10  D01-FECHA-ULT-MOD-REG-AA    PIC 9(02).
+               10  D01-FECHA-ULT-MOD-REG-MM    PIC 9(02).
+               10  D01-FECHA-ULT-MOD-REG-DD    PIC 9(02).
+           05  D01-IND-RUT.
+               10  D01-IRT-RUT                 PIC X(01).
+               10  D01-EXT-RUT                 PIC X(03).
+           05  D01-IND-MAYOR-DEUDOR            PIC X(01).
+           05  D01-DEUDA-EXCLUIBLE             PIC S9(11)V99 COMP-3.
+           05  D01-FILLER                      PIC X(02).
+      ******************************************************************
+      *
+       FD  LISTADO
+           RECORDING MODE IS F
+           LABEL RECORD OMITTED.
+       01  REG-LISTADO.
+           02 FILLER               PIC X(132).
+
+       WORKING-STORAGE SECTION.
+      *========================
+
+       01  WS-CONTADORES.
+           03 WS-FIN               PIC X(01) VALUE 'N'.
+           03 WS-LIN               PIC 9(02) VALUE 80.
+           03 WS-PAG               PIC 9(02) VALUE ZEROS.
+           03 WS-CAN               PIC 9(06) VALUE ZEROS.
+           03 WS-LEI-DSF           PIC 9(07) VALUE ZEROS.
+           03 WS-LEI-RBS           PIC 9(07) VALUE ZEROS.
+           03 WS-LEI-D01           PIC 9(07) VALUE ZEROS.
+
+       01  WP-PARAMETROS.
+           03 WP-VALOR1  PIC 9(12).
+           03 WP-VALORX1 REDEFINES WP-VALOR1 PIC X(12).
+           03 WP-VALOR2  PIC 9(12).
+           03 WP-VALORX2 REDEFINES WP-VALOR2 PIC X(12).
+
+       01  RUT-W.
+           03 FILLER   PIC 9(01) VALUE 0.
+           03 NRUT-W   PIC 9(08) VALUE ZEROS.
+
+       01  WS-VARIABLES.
+           03 WR-FS-CYDVD01        PIC 99 VALUE ZEROS.
+           03 WS-OPE-IIC-IOPE      PIC 9(08) VALUE ZEROS.
+           03 WS-RETURN-CODE       PIC X(02) VALUE '  '.
+           03 WS-FEC-AMD.
+              05 WS-ANO-AMD        PIC X(02).
+              05 WS-MES-AMD        PIC X(02).
+              05 WS-DIA-AMD        PIC X(02).
+           03 WS-FEC-DMA.
+              05 WS-DIA-DMA        PIC X(02).
+              05 FILLER            PIC X(01) VALUE '/'.
+              05 WS-MES-DMA        PIC X(02).
+              05 FILLER            PIC X(01) VALUE '/'.
+              05 WS-ANO-DMA        PIC X(02).
+           03 WS-FEC-FDAT.
+      ********05 WS-NUM-SDAT       PIC 99 VALUE 19.
+              05 WS-NUM-SDAT       PIC 99.
+              05 WS-NUM-ADAT       PIC 99.
+              05 WS-NUM-MDAT       PIC 99.
+              05 WS-NUM-DDAT       PIC 99.
+           03 WS-HORA.
+              05 WS-HH             PIC 99.
+              05 FILLER            PIC X.
+              05 WS-MM             PIC 99.
+              05 FILLER            PIC X.
+              05 WS-SS             PIC 99.
+           03 WS-HORA2.
+              05 WS-HH2            PIC 99.
+              05 WS-MM2            PIC 99.
+              05 WS-SS2            PIC 99.
+
+       EJECT
+
+       01  L1.
+           02 FILLER               PIC X(15) VALUE
+              'B. C. I. '.
+           02 FILLER               PIC X(45) VALUE
+              'INFORME DE CLIENTES NO EXISTENTES O SIN DEUDA'.
+           02 FILLER               PIC X(08) VALUE SPACES.
+           02 L1-FEC               PIC X(08) VALUE SPACES.
+
+       01  L2.
+           02 FILLER               PIC X(15) VALUE SPACES.
+           02 FILLER               PIC X(45) VALUE ALL '='.
+           02 FILLER               PIC X(13) VALUE SPACES.
+           02 L2-PAG               PIC ZZ9.
+
+       01  L3.
+           02 FILLER          PIC X(02) VALUE SPACES.
+           02 FILLER          PIC X(44) VALUE 'NOMBRE'.
+           02 FILLER          PIC X(14) VALUE 'R.U.T.'.
+           02 FILLER          PIC X(17) VALUE 'DEUDA SUPER VGTE.'.
+
+       01  L4.
+           02 FILLER          PIC X(02) VALUE SPACES.
+           02 FILLER          PIC X(75) VALUE ALL '-'.
+
+       01  L5.
+           02 FILLER          PIC X(02) VALUE SPACES.
+           02 L5-NOMBRE       PIC X(40)B(04).
+           02 L5-NRUT         PIC X(08).
+           02 FILLER          PIC X(01) VALUE '-'.
+           02 L5-DRUT         PIC X(01)B(04).
+           02 L5-DSV          PIC ZZ.ZZZ.ZZZ.ZZ9.
+
+
+       01  LT.
+           02 FILLER          PIC X(16) VALUE SPACES.
+           02 LT-GLOS         PIC X(34) VALUE 'TOTAL DE CLIENTES: '.
+           02 LT-CAN          PIC ZZZ.ZZ9.
+
+       EJECT
+      ******************************************************************
+      *      USER INFORMATION BLOCK                                    *
+      ******************************************************************
+      *
+       01  UIB.
+           05 FILLER               PIC X(32) VALUE 'SGCPED01'.
+      *
+      *
+      ******************************************************************
+      *      REQUEST AREA  DSF                                         *
+      ******************************************************************
+      *
+       01  REQ-DSF-AREA.
+           02 REQ-DSF-CMD          PIC X(5).
+           02 REQ-DSF-TBLNM        PIC X(3) VALUE 'DSF'.
+           02 REQ-DSF-KEYNM        PIC X(5) VALUE 'DSF00'.
+           02 REQ-DSF-RETURN-CODE  PIC X(2) VALUE '  '.
+           02 REQ-DSF-INT-RTN-CD   PIC X(1).
+           02 REQ-DSF-DBID         PIC S9(4) COMP VALUE +101.
+           02 REQ-DSF-TBLID        PIC X(7).
+           02 FILLER               PIC X(25).
+           02 REQ-DSF-COUNT-MAX    PIC S9(4) COMP.
+           02 REQ-DSF-IO-COUNT     PIC S9(4) COMP.
+           02 FILLER               PIC X(22).
+           02 REQ-DSF-KEY-VALUE    PIC X(12).
+      *
+      *
+      ******************************************************************
+      *      REQUEST AREA  DSF                                         *
+      ******************************************************************
+      *
+       01  REQ-RBS-AREA.
+           02 REQ-RBS-CMD          PIC X(5).
+           02 REQ-RBS-TBLNM        PIC X(3) VALUE 'RBS'.
+           02 REQ-RBS-KEYNM        PIC X(5) VALUE 'RBS00'.
+           02 REQ-RBS-RETURN-CODE  PIC X(2) VALUE '  '.
+           02 REQ-RBS-INT-RTN-CD   PIC X(1).
+           02 REQ-RBS-DBID         PIC S9(4) COMP VALUE +101.
+           02 REQ-RBS-TBLID        PIC X(7).
+           02 FILLER               PIC X(25).
+           02 REQ-RBS-COUNT-MAX    PIC S9(4) COMP.
+           02 REQ-RBS-IO-COUNT     PIC S9(4) COMP.
+           02 FILLER               PIC X(22).
+           02 REQ-RBS-KEY-VALUE    PIC X(12).
+      ******************************************************************
+      *
+      *
+      *
+       EJECT
+
+       01  REG-RBS.
+      *    COPYDD DSU-R-RBS.DSU-E-RBS00(PROD),01,D
+      *                             EQUIVALENTE AL REGISTRO RBS
+           02  DSU-E-RBS00.
+      *                             RELACION BANCO SUPER
+               03  RBS.
+      *                             FILLER COMPATIBILIDAD VSAM/MVS
+                   04  RBS-GLS-FLAG PICTURE X(1).
+      *                             KEY CLAVE PRIMARIA REGISTRO
+                   04  RBS-KEY-IREG.
+      *                             IDENTIFICACION RELACION BANCO SUPER
+                       05  RBS-KEY-IRBS.
+      *                             COD. INT. COMP. DEUDOR
+                       06  RBS-CIC-IDEU.
+      *                             CENTRO ASIGNACION IDENTIFICACION
+                       07  RBS-CAI-IDEU.
+                       08  RBS-COD-TDEU
+                                    PICTURE X(1).
+                       08  RBS-COD-CDEU
+                                    PICTURE X(3).
+      *                             IDENT. INTERNA COMPUTACIONAL
+                       07  RBS-IIC-IDEU
+                                    PICTURE X(8).
+      *                             TIME STAMP TRANSACCION
+                       05  RBS-STP-ITRN.
+      *                             FECHA TRANSACCION
+                       06  RBS-FEC-FTRN.
+                       07  RBS-NUM-STRN
+                                    PICTURE 9(2).
+                       07  RBS-NUM-ATRN
+                                    PICTURE 9(2).
+                       07  RBS-NUM-MTRN
+                                    PICTURE 9(2).
+                       07  RBS-NUM-DTRN
+                                    PICTURE 9(2).
+      *                             HORA TRANSACCION
+                       06  RBS-HRA-HRTR.
+                       07  RBS-NUM-HHTR
+                                    PICTURE 9(2).
+                       07  RBS-NUM-MMTR
+                                    PICTURE 9(2).
+                       07  RBS-NUM-SSTR
+                                    PICTURE 9(2).
+      *                             INDICADOR TIPO ACCION
+                   04  RBS-MSC-TACC PICTURE X(1).
+      *                             INDICADOR STATUS
+                   04  RBS-MSC-STAT PICTURE X(1).
+      *                             CODIGO ORIGEN TRANSACCION
+                   04  RBS-COD-OTRN.
+      *                             INDICADOR TIPO ORIGEN
+                       05  RBS-MSC-TTRN
+                                    PICTURE X(1).
+      *                             CODIGO TIPO ORIGEN
+                       05  RBS-COD-TTRN
+                                    PICTURE X(3).
+      *                             AUTOR TRANSACCION
+                   04  RBS-COD-ATRN PICTURE X(12).
+      *                             COD. INT. COMP. CLIENTE
+                   04  RBS-CIC-ICLI.
+      *                             CENTRO ASIGNACION IDENTIFICACION
+                       05  RBS-CAI-ICLI.
+                       06  RBS-COD-TCLI
+                                    PICTURE X(1).
+                       06  RBS-COD-CCLI
+                                    PICTURE X(3).
+      *                             IDENT. INTERNA COMPUTACIONAL
+                       05  RBS-IIC-ICLI
+                                    PICTURE X(8).
+      *                             IDENTIFICACION CLIENTE SEGUN SUPER
+                   04  RBS-GLS-ICLS.
+      *                             RUT CLIENTE SEGUN SUPER
+                       05  RBS-NUM-RUTS
+                                    PICTURE X(8).
+      *                             DIGITO VERIFICADOR RUT
+                       05  RBS-VRF-RUTS
+                                    PICTURE X(1).
+      *                             NOMBRE CLIENTE SEGUN SUPER (PERSONA
+                   04  RBS-GLS-NCLS PICTURE X(40).
+      *                             SOUNDEX NOMBRE CLIENTE SUPER
+                   04  RBS-SNX-NCLS PICTURE X(3).
+      *                             IND TIPO PAREO DEUDOR-CLIENTE ( R/N
+                   04  RBS-IND-TPDC PICTURE X(1).
+      *                             IND DEUDA SISTEMA FINANCIERO
+                   04  RBS-IND-IDSF PICTURE X(1).
+      *                             IND CASTIGOS SISTEMA FINANCIERO
+                   04  RBS-IND-ICSF PICTURE X(1).
+      *                             IND CASTIGOS PROPIO BANCO
+                   04  RBS-IND-ICPB PICTURE X(1).
+      *                             IND CASTIGOS VIGENTES SISTEMA FINAN
+                   04  RBS-IND-ICVS PICTURE X(1).
+      *                             IND CASTIGOS VIGENTES BANCO
+                   04  RBS-IND-ICVB PICTURE X(1).
+      *                             DISPONIBLE
+                   04  RBS-GLS-DISP PICTURE X(2).
+      *
+       EJECT
+
+       01  REG-DSF.
+      *    COPYDD DSU-R-DSF.DSU-E-DSF00(PROD),01,D
+      *                             EQUIVALENTE AL REGISTRO DSF
+           02  DSU-E-DSF00.
+      *                             DEUDA SISTEMA FINANCIERO
+               03  DSF.
+      *                             FILLER COMPATIBILIDAD VSAM/MVS
+                   04  DSF-GLS-FLAG PICTURE X(1).
+      *                             CLAVE PRIMARIA REGISTRO
+                   04  DSF-KEY-IREG.
+      *                             IDENTIFICACION DEUDA SISTEMA FINANCI
+                       05  DSF-KEY-IDSF.
+      *                             COD. INT. COMP. DEUDOR
+                       06  DSF-CIC-IDEU.
+      *                             CENTRO ASIGNACION IDENTIFICACION
+                       07  DSF-CAI-IDEU.
+                       08  DSF-COD-TDEU
+                                    PICTURE X(1).
+                       08  DSF-COD-CDEU
+                                    PICTURE X(3).
+      *                             IDENT. INTERNA COMPUTACIONAL
+                       07  DSF-IIC-IDEU
+                                    PICTURE X(8).
+      *                             TIME STAMP TRANSACCION
+                       05  DSF-STP-ITRN.
+      *                             FECHA TRANSACCION
+                       06  DSF-FEC-FTRN.
+                       07  DSF-NUM-STRN
+                                    PICTURE 9(2).
+                       07  DSF-NUM-ATRN
+                                    PICTURE 9(2).
+                       07  DSF-NUM-MTRN
+                                    PICTURE 9(2).
+                       07  DSF-NUM-DTRN
+                                    PICTURE 9(2).
+      *                             HORA TRANSACCION
+                       06  DSF-HRA-HRTR.
+                       07  DSF-NUM-HHTR
+                                    PICTURE 9(2).
+                       07  DSF-NUM-MMTR
+                                    PICTURE 9(2).
+                       07  DSF-NUM-SSTR
+                                    PICTURE 9(2).
+      *                             INDICADOR TIPO ACCION
+                   04  DSF-MSC-TACC PICTURE X(1).
+      *                             INDICADOR STATUS
+                   04  DSF-MSC-STAT PICTURE X(1).
+      *                             CODIGO ORIGEN TRANSACCION
+                   04  DSF-COD-OTRN.
+      *                             INDICADOR TIPO ORIGEN
+                       05  DSF-MSC-TTRN
+                                    PICTURE X(1).
+      *                             CODIGO TIPO ORIGEN
+                       05  DSF-COD-TTRN
+                                    PICTURE X(3).
+      *                             AUTOR TRANSACCION
+                   04  DSF-COD-ATRN PICTURE X(12).
+      *                             COD. INT. COMP. CLIENTE
+                   04  DSF-CIC-ICLI.
+      *                             CENTRO ASIGNACION IDENTIFICACION
+                       05  DSF-CAI-ICLI.
+                       06  DSF-COD-TCLI
+                                    PICTURE X(1).
+                       06  DSF-COD-CCLI
+                                    PICTURE X(3).
+      *                             IDENT. INTERNA COMPUTACIONAL
+                       05  DSF-IIC-ICLI
+                                    PICTURE X(8).
+      *                             DIRECTA VIGENTE M/N
+                   04  DSF-VAL-DVGN PICTURE 9(11)
+                                        COMPUTATIONAL-3.
+      *                             DIRECTA VIGENTE M/X
+                   04  DSF-VAL-DVGX PICTURE 9(11)
+                                        COMPUTATIONAL-3.
+      *                             DIRECTA VENCIDA M/N
+                   04  DSF-VAL-DVCN PICTURE 9(11)
+                                        COMPUTATIONAL-3.
+      *                             DIRECTA VENCIDA M/X
+                   04  DSF-VAL-DVCX PICTURE 9(11)
+                                        COMPUTATIONAL-3.
+      *                             INDIRECTA VIGENTE TOTAL
+                   04  DSF-VAL-IVGT PICTURE 9(11)
+                                        COMPUTATIONAL-3.
+      *                             INDIRECTA VENCIDA TOTAL
+                   04  DSF-VAL-IVCT PICTURE 9(11)
+                                        COMPUTATIONAL-3.
+      *                             MONTO CASTIGOS DIRECTOS
+                   04  DSF-VAL-CDIR PICTURE 9(11)
+                                        COMPUTATIONAL-3.
+      *                             MONTO CASTIGOS INDIRECTOS
+                   04  DSF-VAL-CIND PICTURE 9(11)
+                                        COMPUTATIONAL-3.
+      *                             DEUDA COMERCIAL
+                   04  DSF-VAL-DCOM PICTURE 9(11)
+                                        COMPUTATIONAL-3.
+      *                             DEUDA CREDITOS DE CONSUMO
+                   04  DSF-VAL-DCON PICTURE 9(11)
+                                        COMPUTATIONAL-3.
+      *                             DEUDA CREDITO HIPOTECARIO
+                   04  DSF-VAL-DHIP PICTURE 9(11)
+                                        COMPUTATIONAL-3.
+      *                             DEUDA MOROSA ENTRE 60 Y 90 DIAS
+                   04  DSF-VAL-DMOR PICTURE 9(11)
+                                        COMPUTATIONAL-3.
+      *                             NRO. INSTIT. DEUDOR CON CRED.CONSUMO
+                   04  DSF-NUM-ICRC PICTURE 9(2).
+      *                             MONTO DE LINEA DE CREDITO DISPONIBLE
+                   04  DSF-VAL-LDCD PICTURE 9(11)
+                                        COMPUTATIONAL-3.
+      *                             MONTO DEUDA DIRECTA INVER. FINANC.
+                   04  DSF-VAL-DDIF PICTURE 9(11)
+                                        COMPUTATIONAL-3.
+      *                             MONTO DEUDA DIRECTA OPERS. CON PACTO
+                   04  DSF-VAL-DDOP PICTURE 9(11)
+                                        COMPUTATIONAL-3.
+      *                             DISPONIBLE
+                   04  DSF-GLS-DISP PICTURE X(13).
+      *
+      *
+      ******************************************************************
+      *                 ELEMENT LIST                                   *
+      ******************************************************************
+      *
+       01  ELEM-LIST.
+           03 ELEM           PIC X(05).
+           03 ELEM-SEC       PIC X(01).
+           03 FILLER         PIC X(05) VALUE SPACES.
+
+      *
+           COPY RLOVR001.
+       EJECT
+       PROCEDURE DIVISION.
+      *===================
+       A-CONTROL SECTION.
+      *==================
+           ENTRY 'DBMSCBL'.
+       AA-INICIO.
+           PERFORM B-INICIAR.
+       AB-PROCESO.
+           PERFORM C-PROCESAR.
+       AC-FIN.
+           PERFORM D-TERMINAR.
+       AZ-FIN-PROGRAMA.
+           STOP RUN.
+
+       EJECT
+       B-INICIAR SECTION.
+      *==================
+       BA-CONTROL-PROCESO.
+      *-------------------
+           PERFORM BB-ABRE-ARCHIVOS.
+           PERFORM BC-ACEPTA-PARAMETRO.
+           GO TO BZ-FIN.
+
+       BB-ABRE-ARCHIVOS.
+      *-----------------
+
+           OPEN INPUT CYDVD01.
+           IF WR-FS-CYDVD01 NOT = 00
+              DISPLAY 'ERROR AL OPEN INPUT CYDVD01 FS: ' WR-FS-CYDVD01
+              DISPLAY 'SGCPED01 CANCELADO'
+              STOP RUN.
+
+           OPEN OUTPUT LISTADO.
+
+       BC-ACEPTA-PARAMETRO.
+      *-----------------------
+           ACCEPT WS-FEC-AMD FROM DATE.
+           MOVE WS-DIA-AMD TO WS-DIA-DMA   WS-NUM-DDAT.
+           MOVE WS-MES-AMD TO WS-MES-DMA   WS-NUM-MDAT.
+           MOVE WS-ANO-AMD TO WS-ANO-DMA   WS-NUM-ADAT.
+           IF WS-NUM-ADAT < ROLL-YY
+              MOVE 20      TO WS-NUM-SDAT
+           ELSE
+              MOVE 19      TO WS-NUM-SDAT
+           END-IF
+           MOVE WS-FEC-DMA TO L1-FEC.
+
+           ACCEPT WS-HORA    FROM TIME.
+           MOVE WS-HH  TO  WS-HH2.
+           MOVE WS-MM  TO  WS-MM2.
+           MOVE WS-SS  TO  WS-SS2.
+
+           MOVE ALL '0' TO WP-VALORX1 WP-VALORX2.
+
+           ACCEPT WP-VALOR1.
+           ACCEPT WP-VALOR2.
+
+           IF WP-VALORX1 IS NUMERIC
+              NEXT SENTENCE
+           ELSE
+              DISPLAY 'ERROR EN PARAMETRO WP-VALOR1 ' WP-VALORX1
+              DISPLAY 'SGCPED01 CANCELADO'
+              CLOSE CYDVD01 LISTADO
+              STOP RUN.
+
+           IF WP-VALORX2 IS NUMERIC AND WP-VALOR2 > ZEROS
+              AND WP-VALOR2 > WP-VALOR1
+              NEXT SENTENCE
+           ELSE
+              DISPLAY 'ERROR EN PARAMETRO WP-VALOR2 ' WP-VALORX2
+              DISPLAY 'SGCPED01 CANCELADO'
+              CLOSE CYDVD01 LISTADO
+              STOP RUN.
+      *
+       BZ-FIN.   EXIT.
+
+
+
+
+
+       EJECT
+       C-PROCESAR SECTION.
+      *===================
+       CA-CONTROL-PROCESO.
+      *-------------------
+           PERFORM   CB-LOCKY-DSF.
+           PERFORM   CB-REDKX-DSF.
+           PERFORM   CC-PROCESAR-DSF.
+       CZ-FIN-PROC.    EXIT.
+
+
+       CC-PROCESAR-DSF SECTION.
+      *----------------------------*
+       CC-PROC-DSF.
+
+           IF WS-FIN = 'S'
+              GO TO CC-FIN-PROCESAR-DSF.
+
+           IF (DSF-VAL-DVGN NOT < WP-VALOR1) AND
+              (DSF-VAL-DVGN NOT > WP-VALOR2) AND
+              DSF-VAL-DVCN = ZEROS     AND
+              DSF-VAL-CDIR = ZEROS     AND
+              DSF-VAL-DMOR = ZEROS
+              NEXT SENTENCE
+           ELSE
+              PERFORM   CB-REDNX-DSF
+              GO TO CC-PROC-DSF.
+
+           MOVE DSF-CIC-IDEU  TO REQ-RBS-KEY-VALUE.
+           PERFORM CB-REDKX-RBS.
+           IF REQ-RBS-RETURN-CODE  = '  '
+              PERFORM CB-LEER-CYDVD01
+              IF WR-FS-CYDVD01  = 23
+                 PERFORM CB-LISTAR-DET
+              ELSE
+              IF D01-DEUDA-DIR-VGTE-MN-IF = ZEROS AND
+                 D01-DEUDA-DIR-VGTE-ME-IF = ZEROS AND
+                 D01-DEUDA-DIR-MOR1-MN-IF = ZEROS AND
+                 D01-DEUDA-DIR-MOR2-MN-IF = ZEROS AND
+                 D01-DEUDA-DIR-MOR1-ME-IF = ZEROS AND
+                 D01-DEUDA-DIR-MOR2-ME-IF = ZEROS AND
+                 D01-DEUDA-DIR-VCDA-MN-IF = ZEROS AND
+                 D01-DEUDA-DIR-VCDA-ME-IF = ZEROS
+                 PERFORM CB-LISTAR-DET
+              ELSE
+                 DISPLAY ' '
+                 DISPLAY RBS-GLS-NCLS '  RUT: ' RBS-GLS-ICLS
+                         '   DEUDA:  ' D01-DEUDA-DIR-VGTE-MN-IF.
+
+           PERFORM   CB-REDNX-DSF.
+           GO TO CC-PROC-DSF.
+
+       CC-FIN-PROCESAR-DSF.  EXIT.
+
+
+
+       EJECT
+       CB-LECTURAS SECTION.
+      *--------------------------
+
+       CB-LEER-CYDVD01.
+      *----------------
+           MOVE RBS-NUM-RUTS TO NRUT-W.
+           MOVE RUT-W        TO D01-RUT-D-NUM.
+           MOVE RBS-VRF-RUTS TO D01-RUT-D-VER.
+           MOVE '2'          TO D01-TIPO-REG.
+           READ CYDVD01 END-READ
+           IF (WR-FS-CYDVD01 NOT = 0 AND NOT = 23)
+               DISPLAY 'ERROR AL READ CYDVD01 FS: ' WR-FS-CYDVD01
+               CLOSE CYDVD01 LISTADO
+               GOBACK.
+
+           IF (WR-FS-CYDVD01  = 0 )
+            ADD 1 TO WS-LEI-D01.
+
+
+       CB-REDKX-DSF.
+           MOVE SPACES  TO REQ-DSF-RETURN-CODE.
+           MOVE 'REDKX' TO REQ-DSF-CMD.
+           MOVE 'DSF'   TO REQ-DSF-TBLNM.
+           MOVE 'DSF00' TO REQ-DSF-KEYNM.
+           MOVE 'DSF00' TO REQ-DSF-TBLID.
+           MOVE 'DSF00' TO ELEM.
+           CALL 'DBNTRY' USING UIB REQ-DSF-AREA DSF ELEM-LIST.
+           IF REQ-DSF-RETURN-CODE NOT = '  ' AND
+              REQ-DSF-RETURN-CODE NOT = '14'
+              DISPLAY   '**************************'
+              DISPLAY   '* ERROR: REDKX TABLA DSF         *'
+              DISPLAY   '* TABLA          : ' REQ-DSF-TBLNM
+              DISPLAY   '* CODIGO RETORNO : ' REQ-DSF-RETURN-CODE
+              DISPLAY   '* REQ. AREA      : ' REQ-DSF-AREA
+              DISPLAY   '* PGM. SGCPED01 CANCELADO *'
+              CLOSE CYDVD01 LISTADO
+              GOBACK.
+
+            ADD 1 TO WS-LEI-DSF.
+
+
+       CB-LOCKY-DSF.
+      *----------------*
+
+           MOVE LOW-VALUES TO REQ-DSF-KEY-VALUE.
+           MOVE SPACES    TO REQ-DSF-RETURN-CODE.
+           MOVE 'LOCKY'   TO REQ-DSF-CMD.
+           MOVE 'DSF'     TO REQ-DSF-TBLNM.
+           MOVE 'DSF00'   TO REQ-DSF-KEYNM.
+           MOVE 'DSF00'   TO REQ-DSF-TBLID.
+           MOVE 'DSF00'   TO ELEM.
+           CALL 'DBNTRY' USING UIB REQ-DSF-AREA DSF ELEM-LIST.
+           IF REQ-DSF-RETURN-CODE NOT = '  '
+              DISPLAY   '**************************'
+              DISPLAY   '* ERROR: LOCKY TABLA DSF *'
+              DISPLAY   '* TABLA          : ' REQ-DSF-TBLNM
+              DISPLAY   '* CODIGO RETORNO : ' REQ-DSF-RETURN-CODE
+              DISPLAY   '* REQ. AREA      : ' REQ-DSF-AREA
+              DISPLAY   '* PGM. SGCPED01 CANCELADO *'
+              CLOSE CYDVD01 LISTADO
+              GOBACK.
+
+
+       CB-REDNX-DSF.
+      *----------------*
+
+           MOVE SPACES    TO REQ-DSF-RETURN-CODE.
+           MOVE 'REDNX'   TO REQ-DSF-CMD.
+           MOVE 'DSF'     TO REQ-DSF-TBLNM.
+           MOVE 'DSF00'   TO REQ-DSF-KEYNM.
+           MOVE 'DSF00'   TO REQ-DSF-TBLID.
+           MOVE 'DSF00'   TO ELEM.
+           CALL 'DBNTRY' USING UIB REQ-DSF-AREA DSF ELEM-LIST.
+           IF REQ-DSF-RETURN-CODE NOT = '  ' AND
+              REQ-DSF-RETURN-CODE NOT = '14'
+              DISPLAY   '**************************'
+              DISPLAY   '* ERROR: REDNX TABLA DSF *'
+              DISPLAY   '* TABLA          : ' REQ-DSF-TBLNM
+              DISPLAY   '* CODIGO RETORNO : ' REQ-DSF-RETURN-CODE
+              DISPLAY   '* REQ. AREA      : ' REQ-DSF-AREA
+              DISPLAY   '* PGM. SGCPAOPE CANCELADO *'
+              CLOSE CYDVD01 LISTADO
+              GOBACK.
+
+           IF REQ-DSF-RETURN-CODE = '14'  MOVE 'S' TO WS-FIN
+           ELSE
+            ADD 1 TO WS-LEI-DSF.
+
+       CB-REDKX-RBS.
+           MOVE SPACES  TO REQ-RBS-RETURN-CODE.
+           MOVE 'REDKX' TO REQ-RBS-CMD.
+           MOVE 'RBS'   TO REQ-RBS-TBLNM.
+           MOVE 'RBS00' TO REQ-RBS-KEYNM.
+           MOVE 'RBS00' TO REQ-RBS-TBLID.
+           MOVE 'RBS00' TO ELEM.
+           CALL 'DBNTRY' USING UIB REQ-RBS-AREA RBS ELEM-LIST.
+           IF REQ-RBS-RETURN-CODE NOT = '  ' AND
+              REQ-RBS-RETURN-CODE NOT = '14'
+              DISPLAY   '**************************'
+              DISPLAY   '* ERROR: RDUKX TABLA RBS         *'
+              DISPLAY   '* TABLA          : ' REQ-RBS-TBLNM
+              DISPLAY   '* CODIGO RETORNO : ' REQ-RBS-RETURN-CODE
+              DISPLAY   '* REQ. AREA      : ' REQ-RBS-AREA
+              DISPLAY   '* PGM. SGCPED01 CANCELADO *'
+              CLOSE CYDVD01 LISTADO
+              GOBACK.
+
+
+            ADD 1 TO WS-LEI-RBS.
+       CB-FIN-ACC-TABLAS.  EXIT.
+
+
+       CB-LISTAR-DEUDOR SECTION.
+      *==========================
+
+       CB-LISTAR-DET.
+            MOVE RBS-GLS-NCLS TO L5-NOMBRE.
+            MOVE RBS-NUM-RUTS TO L5-NRUT.
+            MOVE RBS-VRF-RUTS TO L5-DRUT.
+            MOVE DSF-VAL-DVGN TO L5-DSV.
+            IF WS-LIN > 57 PERFORM CB-TITULOS.
+            WRITE REG-LISTADO FROM L5 AFTER 1.
+            ADD 1 TO WS-LIN.
+
+       CB-TITULOS.
+            ADD 1 TO WS-PAG.
+            MOVE WS-PAG TO L2-PAG.
+            WRITE REG-LISTADO FROM L1 AFTER PAGE.
+            WRITE REG-LISTADO FROM L2 AFTER 1.
+            WRITE REG-LISTADO FROM L3 AFTER 2.
+            WRITE REG-LISTADO FROM L4 AFTER 1.
+            MOVE 6 TO WS-LIN.
+
+
+       EJECT
+       D-TERMINAR SECTION.
+      *===================
+                DISPLAY 'REG-LEIDOS DSF: ' WS-LEI-DSF.
+                DISPLAY 'REG-LEIDOS RBS: ' WS-LEI-RBS.
+                DISPLAY 'REG-LEIDOS D01: ' WS-LEI-D01.
+
+       DB-CIERRA-REPORTER.
+      *-------------------
+              CLOSE CYDVD01 LISTADO.
+
+       DZ-FIN.  EXIT.
+

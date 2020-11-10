@@ -1,0 +1,513 @@
+       IDENTIFICATION DIVISION.
+      *========================
+       PROGRAM-ID. COLPPSCO.
+       AUTHOR. ADA.
+       DATE-WRITTEN. 1-SEP-1999 15:26:36
+      *
+      * PROGRAMA RECIBE MENSAJES DE UN PC CON REQUERIMIENTOS
+      * RELACIONADOS CON LA EMISION DE CERTIFICADOS DE COLOCACIONES
+      *
+
+      *Nota: revisar largos de mensajes para recibir y enviar
+
+       ENVIRONMENT DIVISION.
+       DATA DIVISION.
+
+       WORKING-STORAGE SECTION.
+      *========================
+       COPY GNSWGFEC.
+       COPY GNSWGHOY.
+       COPY GNSWGSYS.
+       COPY GNSWCFIO.
+       COPY GNSWVFIO.
+       COPY GNSWGFRM.
+       COPY GNSWGCPT.
+       COPY GNSWVSCR.
+       COPY GNSWVIDD.
+       COPY GNSWGRQA.
+       COPY GNSWGUIB.
+       COPY GNSWGELS.
+       COPY GNSBRTAB.
+       COPY GNSBRMSG.
+       COPY COLWGSCO.
+       COPY COLBRSCO.
+       COPY SGCBRDBC.
+       COPY TABBRUSR.
+       COPY TABBROFI.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-TAB-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-MSG-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-DBC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-USR-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-OFI-REQA==.
+
+       01  SND-SEND VALUE SPACES.
+           03 SND-HEAD-SEND.
+      *
+      *       Status Respuesta 0=OK ; 1=ERR
+              05 SND-RES-STAT                         PIC X(0001).
+      *
+      *       Fecha Transaccion
+              05 SND-FEC-FTRN                         PIC X(0008).
+      *
+      *       Hora Transaccion
+              05 SND-HRS-HTRN                         PIC X(0006).
+      *
+      *       Indicador Mensajes Pendientes 0=NO ; 1=SI
+              05 SND-IND-MSGP                         PIC X(0001).
+      *
+      *       Largo de la parte Variable del Mensaje
+              05 SND-NUM-LENM                         PIC 9(0005).
+      *
+      *       Codigo Transaccion
+              05 SND-COD-TRAN                         PIC X(0008).
+      *
+      *       Codigo Sistema
+              05 SND-COD-SIST                         PIC X(0003).
+      *
+      *       Codigo Usuario
+              05 SND-COD-USER                         PIC X(0012).
+      *
+      *       Password
+              05 SND-COD-PASS                         PIC X(0008).
+      *
+      *       Filler Vacio y Fijo de 111 Caracteres
+           03 SND-GLS-FILL                            PIC X(0111).
+      *
+      *    DATA a ser transmitida de OUTPUT
+           03 SND-GLS-DOUT                            PIC X(1089).
+      *
+      *
+       01  RCV-RECEIVE VALUE SPACES.
+      *
+      *    Header utilizado por el Driver de Comunicacion
+           03 RCV-HEAD-DRIVE.
+               05 RCV-HEAD-DRIVE-TRAN                 PIC X(008).
+               05 RCV-HEAD-DRIVE-SIST                 PIC X(003).
+               05 RCV-HEAD-DRIVE-USER                 PIC X(012).
+               05 RCV-HEAD-DRIVE-PSSW                 PIC X(008).
+      *
+      *    Identificacion del TCP-IP
+           03 RCV-IDEN-TCPIP                          PIC X(0006).
+      *
+      *    Indicador de Mensajes: I=Inicio, C=Continua,
+      *                           F=Fin,    X=Msg.Unico
+           03 RCV-IND-MENS                            PIC X(0001).
+      *
+      *    DATA a ser transmitida de INPUT
+           03 RCV-GLS-DINP                            PIC X(1024).
+
+      * Fin variables area de comunicacion BCI
+
+       01  TSIDENT.
+           03 TSKNO                    PIC S9(07) COMP-3.
+           03 TERM                     PIC X(04).
+
+       01  WSS-VARI.
+      *LARGO RECEIVE = 31 + 6 + 1 + 1024 = 1062
+           03 WSS-LEN-RCV    VALUE +1062     COMP    PIC S9(04).
+      *LARGO SEND = 52 + 111 + 1089 = 1252
+           03 WSS-LEN-SND    VALUE +1252     COMP    PIC S9(04).
+           03 WSS-NUM-OCUR   VALUE  5                PIC 9(02).
+           03 WSS-I                                  PIC 9(02).
+           03 WSS-NOMC.
+              05 WSS-NOMB                            PIC X(25).
+              05 WSS-APAT                            PIC X(25).
+              05 WSS-AMAT                            PIC X(25).
+           03 WSS-TCOR-STR.
+              05 WSS-HHCO-STR                        PIC X(02).
+              05 FILLER                              PIC X(01).
+              05 WSS-MMCO-STR                        PIC X(02).
+           03 WSS-TCOR REDEFINES WSS-TCOR-STR.
+              05 WSS-HHCO                            PIC 9(02).
+              05 FILLER                              PIC X(01).
+              05 WSS-MMCO                            PIC 9(02).
+          03  WSS-CMND         VALUE 0               PIC 9(04).
+
+       LINKAGE SECTION.
+      *----------------
+       01  DFHCOMMAREA.
+           02 FILLER                     PIC X(01).
+       COPY GNSLGFIO.
+
+       PROCEDURE DIVISION.
+      *===================
+
+       MAIN SECTION.
+       INI-MAIN.
+       COPY GNSBGEDB.
+           PERFORM GNS-HDL-VSM.
+
+           MOVE 'COLPPSCO'  TO IDD-PROG FIO-PROG.
+           MOVE IDD-VARI    TO SYS-CMMA.
+           MOVE +507        TO SYS-TCMA.
+           MOVE 'GNSPPIDD'  TO SYS-PROG.
+           MOVE SYS-LINK    TO SYS-CMND.
+           PERFORM GNS-PRO-SYS.
+           MOVE SYS-CMMA TO IDD-VARI.
+
+           PERFORM PROCESA-MSG.
+       FIN-MAIN.
+           EXEC CICS RETURN END-EXEC.
+       EXT-MAIN.
+           EXIT.
+
+       PROCESA-MSG SECTION.
+       INI-PROCESA-MSG.
+      *
+      *Inicializa variables
+           MOVE SPACES TO SND-SEND.
+           MOVE SPACES TO SCO-OUTP.
+           MOVE '0'    TO SCO-CRET.
+      *
+      *Recibe Mensaje desde Cliente
+           PERFORM RCV-MSG-INP-HST.
+      *
+      *Procesa el requerimiento solicitado
+           MOVE RCV-GLS-DINP TO SCO-INPU.
+           IF SCO-CMND = 'CON'
+               PERFORM PROCESA-CON
+               MOVE SCO-LCON TO SND-NUM-LENM
+           ELSE
+           IF SCO-CMND = 'ING'
+               PERFORM REVISA-HORA
+               IF SCO-CRET NOT = '1'
+                   PERFORM PROCESA-ING
+                   MOVE SCO-LING TO SND-NUM-LENM
+               ELSE
+                   NEXT SENTENCE
+           ELSE
+           IF SCO-CMND = 'ELI'
+               PERFORM REVISA-HORA
+               IF SCO-CRET NOT = '1'
+                   PERFORM PROCESA-ELI
+                   MOVE SCO-LELI TO SND-NUM-LENM
+               ELSE
+                   NEXT SENTENCE
+           ELSE
+               MOVE '1' TO SCO-CRET
+               MOVE 'COMANDO INEXISTENTE, REVISAR APLICACION'
+                        TO SCO-MENS
+               MOVE SCO-LERR TO SND-NUM-LENM.
+      *
+      *Envia Mensaje al Cliente
+           PERFORM ENV-MSG-OUT-HST.
+       FIN-PROCESA-MSG.
+           EXIT.
+
+      *-------------------------------------------------------------
+
+       RCV-MSG-INP-HST SECTION.
+       INI-RCV-MSG-INP-HST.
+           MOVE SPACES TO RCV-RECEIVE.
+           EXEC CICS RECEIVE
+                     INTO(RCV-RECEIVE)
+                     LENGTH(WSS-LEN-RCV)
+                     CONVID(EIBTRMID)
+                     END-EXEC.
+           MOVE EIBTRMID    TO TERM.
+           MOVE EIBTASKN    TO TSKNO.
+           IF EIBCONF = HIGH-VALUES
+               EXEC CICS ISSUE CONFIRMATION
+                         CONVID(TERM)
+               END-EXEC.
+       FIN-RCV-MSG-INP-HST.
+           EXIT.
+
+      *-------------------------------------------------------------
+
+       REVISA-HORA SECTION.
+       INI-REVISA-HORA.
+           MOVE 'COL' TO FIO-SIST.
+           MOVE 'VSN'        TO TAB-COD-TTAB IN TAB.
+           MOVE 'SCOTIMEOUT' TO TAB-COD-CTAB IN TAB.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM GNS-FIO-TAB.
+           IF FIO-STAT-OKS AND TAB-IND-VIGE IN TAB NOT = 'N'
+               MOVE TAB-GLS-ABRV IN TAB TO WSS-TCOR-STR
+               IF NOT ( WSS-HHCO-STR IS NUMERIC AND
+                        WSS-MMCO-STR IS NUMERIC )
+                   MOVE 17 TO WSS-HHCO
+                   MOVE 00 TO WSS-MMCO
+               ELSE
+                   NEXT SENTENCE
+           ELSE
+               MOVE 17 TO WSS-HHCO
+               MOVE 00 TO WSS-MMCO.
+           PERFORM GET-FHOY.
+           IF ( HOY-HHHY > WSS-HHCO ) OR
+              ( HOY-HHHY = WSS-HHCO AND
+                HOY-MMHY > WSS-MMCO )
+               MOVE '1' TO SCO-CRET
+               MOVE 'ESTA FUERA DE LA HORA PERMITIDA PARA OPERAR'
+                        TO SCO-MENS
+               MOVE SCO-LERR TO SND-NUM-LENM.
+       FIN-REVISA-HORA.
+           EXIT.
+
+      *-------------------------------------------------------------
+
+       PROCESA-CON SECTION.
+       INI-PROCESA-CON.
+           MOVE SPACES TO SCO-DOUT-RD1.
+
+           MOVE 0 TO WSS-I.
+       LUP-PROCESA-CON.
+           ADD 1 TO WSS-I.
+           IF WSS-I > WSS-NUM-OCUR
+               GO TO FIN-PROCESA-CON.
+           IF SCO-IDCS( WSS-I ) NOT > SPACES
+               GO TO LUP-PROCESA-CON.
+           PERFORM BUSCA-DBC-Y-SCO.
+           GO TO LUP-PROCESA-CON.
+       FIN-PROCESA-CON.
+           EXIT.
+
+       BUSCA-DBC-Y-SCO SECTION.
+       INI-BUSCA-DBC-Y-SCO.
+      *Busca si el cliente existe en la tabla DBC de SGC
+           MOVE SCO-NIDC( WSS-I ) TO DBC-NUM-ICLI IN DBC.
+           MOVE SCO-IIDC( WSS-I ) TO DBC-IND-ICLI IN DBC.
+           MOVE SCO-GIDC( WSS-I ) TO DBC-GLS-ICLI IN DBC.
+           MOVE 'DBC-IDC-ICLI' TO FIO-AKEY.
+           MOVE FIO-GET-KEY    TO FIO-CMND.
+           PERFORM SGC-FIO-DBC.
+           IF NOT FIO-STAT-OKS
+      *        Llena codigo que indica que cliente no existe
+               MOVE 'CLIENTE INEXISTENTE' TO SCO-NOMC-OUT( WSS-I )
+               MOVE '3'                   TO SCO-CRET-OUT( WSS-I )
+               GO TO FIN-BUSCA-DBC-Y-SCO.
+           IF DBC-COD-OFIC IN DBC NOT = SCO-OFIS-CON
+      *        Llena codigo que indica que cliente es de otra
+      *        oficina distinta a la del usuario solicitante
+               MOVE 'CLIENTE DE OTRA OFICINA'
+                                          TO SCO-NOMC-OUT( WSS-I )
+               MOVE '4'                   TO SCO-CRET-OUT( WSS-I )
+               GO TO FIN-BUSCA-DBC-Y-SCO.
+      *
+      *Llena los datos de cliente en mensaje de salida
+           MOVE DBC-CIC-ICLI IN DBC TO SCO-CICC-ING-OUT( WSS-I ).
+           IF DBC-IND-TICL IN DBC = 'P'
+               MOVE DBC-GLS-NOMB IN DBC TO WSS-NOMB
+               MOVE DBC-GLS-APAT IN DBC TO WSS-APAT
+               MOVE DBC-GLS-AMAT IN DBC TO WSS-AMAT
+           ELSE
+               MOVE DBC-GLS-NOMC IN DBC TO WSS-NOMC.
+           MOVE WSS-NOMC TO CPT-STRN.
+           PERFORM CPT-BLKS.
+           MOVE CPT-STRN            TO SCO-NOMC-OUT( WSS-I ).
+           MOVE DBC-COD-OFIC IN DBC TO OFI-COD-OFIC IN OFI.
+           PERFORM BUS-OFI.
+           MOVE OFI-GLS-DESC IN OFI TO SCO-GOFC-OUT( WSS-I ).
+           MOVE DBC-COD-EJEC IN DBC TO USR-COD-USER IN USR.
+           PERFORM BUS-USR.
+           MOVE USR-GLS-DESC IN USR TO SCO-GEJC-OUT( WSS-I ).
+           MOVE DBC-IND-TICL IN DBC TO SCO-TPER-OUT( WSS-I ).
+      *
+      *Busca si existe alguna solicitud para el cliente
+           MOVE DBC-CIC-ICLI IN DBC TO SCO-CIC-ICLI IN SCO.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM COL-FIO-SCO.
+           IF NOT FIO-STAT-OKS
+      *        Llena codigo que indica que cliente existe y solicitud no
+               MOVE '2' TO SCO-CRET-OUT( WSS-I )
+               GO TO FIN-BUSCA-DBC-Y-SCO.
+      *
+      *Llena los datos de solicitud mensaje de salida
+           MOVE SCO-FEC-FSCO IN SCO TO SCO-FSOL-OUT( WSS-I ).
+           MOVE SCO-COD-OFSO IN SCO TO OFI-COD-OFIC IN OFI.
+           PERFORM BUS-OFI.
+           MOVE OFI-GLS-DESC IN OFI TO SCO-GOFS-OUT( WSS-I ).
+           MOVE SCO-COD-AUTS IN SCO TO USR-COD-USER IN USR.
+           PERFORM BUS-USR.
+           MOVE USR-GLS-DESC IN USR TO SCO-GAUS-OUT( WSS-I ).
+           MOVE SCO-FEC-FIRS IN SCO TO SCO-FIPE-OUT( WSS-I ).
+           MOVE SCO-FEC-FTRS IN SCO TO SCO-FFPE-OUT( WSS-I ).
+      *
+      *Llena codigo que indica que cliente y solicitud existen
+           MOVE '1' TO SCO-CRET-OUT( WSS-I ).
+       FIN-BUSCA-DBC-Y-SCO.
+           EXIT.
+
+      *-------------------------------------------------------------
+
+       PROCESA-ING SECTION.
+       INI-PROCESA-ING.
+           MOVE SPACES TO SCO-DOUT-RD2.
+           MOVE '0' TO SCO-CRET-ING.
+           MOVE 0 TO WSS-I.
+       LUP-PROCESA-ING.
+           ADD 1 TO WSS-I.
+           IF WSS-I > WSS-NUM-OCUR
+               GO TO FIN-PROCESA-ING.
+           IF SCO-CICC-ING( WSS-I ) NOT > SPACES
+               GO TO LUP-PROCESA-ING.
+           PERFORM INGRESA-SCO.
+           IF FIO-STAT-OKS
+               GO TO LUP-PROCESA-ING.
+           MOVE '1' TO SCO-CRET-ING.
+      *    MOVE FIO-BCK-OUT TO FIO-CMND.
+      *    PERFORM COL-FIO-SCO.
+           MOVE '1' TO SCO-CRET.
+           MOVE 'ERROR AL PROCESAR INGRESO, REINTENTE'
+                        TO SCO-MENS.
+       FIN-PROCESA-ING.
+           EXIT.
+
+       INGRESA-SCO SECTION.
+       INI-INGRESA-SCO.
+           MOVE SCO-CICC-ING( WSS-I ) TO SCO-CIC-ICLI.
+           MOVE FIO-GET-KEY-UPD TO FIO-CMND.
+           PERFORM COL-FIO-SCO.
+           IF FIO-STAT-OKS
+               MOVE 'M' TO SCO-MSC-TACC
+               MOVE FIO-MOD TO FIO-CMND
+           ELSE
+               MOVE 'I' TO SCO-MSC-TACC
+               MOVE FIO-PUT TO FIO-CMND.
+           MOVE SCO-CICC-ING( WSS-I ) TO SCO-CIC-ICLI IN SCO.
+           PERFORM GET-FHOY.
+           IF SCO-FECS > ZEROES
+               MOVE SCO-FECS      TO SCO-FEC-FSCO IN SCO
+           ELSE
+               MOVE HOY-FHOY      TO SCO-FEC-FSCO IN SCO.
+           MOVE SCO-OFIS          TO SCO-COD-OFSO IN SCO.
+           MOVE SCO-AUTS          TO SCO-COD-AUTS IN SCO.
+           PERFORM GET-FHOY.
+           MOVE HOY-STP-ITRN      TO SCO-STP-ITRN IN SCO.
+           MOVE 'I'               TO SCO-COD-STAT IN SCO.
+           MOVE TERM              TO SCO-COD-OTRN IN SCO.
+           MOVE SCO-AUTS          TO SCO-COD-ATRN IN SCO.
+           MOVE 1                 TO SCO-NUM-DIRS IN SCO.
+           MOVE 1                 TO SCO-NUM-MIRS IN SCO.
+           MOVE SCO-SEAS          TO SCO-NUM-SIRS IN SCO
+                                     SCO-NUM-STRS IN SCO.
+           MOVE SCO-AEAS          TO SCO-NUM-AIRS IN SCO
+                                     SCO-NUM-ATRS IN SCO.
+           IF SCO-AEAS = HOY-AHOY
+               MOVE SCO-NUM-DSCO  TO SCO-NUM-DTRS IN SCO
+               MOVE SCO-NUM-MSCO  TO SCO-NUM-MTRS IN SCO
+               MOVE FIO-CMND TO WSS-CMND
+               PERFORM BUSCAR-HBL-ANTERIOR
+               MOVE WSS-CMND TO FIO-CMND
+           ELSE
+               MOVE 31            TO SCO-NUM-DTRS IN SCO
+               MOVE 12            TO SCO-NUM-MTRS IN SCO.
+           MOVE SPACES            TO SCO-GLS-DISP IN SCO.
+           PERFORM COL-FIO-SCO.
+       FIN-INGRESA-SCO.
+           EXIT.
+
+       BUSCAR-HBL-ANTERIOR SECTION.
+       INI-BUSCAR-HBL-ANTERIOR.
+           MOVE SCO-NUM-DTRS IN SCO TO FEC-ITM1.
+           MOVE SCO-NUM-MTRS IN SCO TO FEC-ITM2.
+           MOVE SCO-NUM-STRS IN SCO TO FEC-ITM3.
+           MOVE SCO-NUM-ATRS IN SCO TO FEC-ITM4.
+       LUP-BUSCAR-HBL-ANTERIOR.
+           MOVE FEC-FORM-FEC TO FEC-FORM.
+           MOVE 1            TO FEC-NDIA.
+           MOVE FEC-RST-DIA  TO FEC-CMND.
+           PERFORM CAL-FEC.
+           IF NOT FEC-STAT-OKS
+               GO TO FIN-BUSCAR-HBL-ANTERIOR.
+           MOVE FEC-FORM-FEC TO FEC-FORM.
+           MOVE FEC-VHBL-S   TO FEC-VHBL.
+           MOVE FEC-FBLK-N   TO FEC-FBLK.
+           MOVE FEC-CHOY-N   TO FEC-CHOY.
+           MOVE FEC-VAL-FEC  TO FEC-CMND.
+           PERFORM PRO-FEC.
+           IF FEC-STAT-FER
+               GO TO LUP-BUSCAR-HBL-ANTERIOR.
+           IF FEC-STAT-OKS
+               MOVE FEC-ITM1 TO SCO-NUM-DTRS IN SCO
+               MOVE FEC-ITM2 TO SCO-NUM-MTRS IN SCO
+               MOVE FEC-ITM3 TO SCO-NUM-STRS IN SCO
+               MOVE FEC-ITM4 TO SCO-NUM-ATRS IN SCO.
+       FIN-BUSCAR-HBL-ANTERIOR.
+           EXIT.
+
+      *-------------------------------------------------------------
+
+       PROCESA-ELI SECTION.
+       INI-PROCESA-ELI.
+           MOVE SPACES TO SCO-DOUT-RD3.
+           MOVE '0' TO SCO-CRET-ELI.
+           MOVE 0 TO WSS-I.
+       LUP-PROCESA-ELI.
+           ADD 1 TO WSS-I.
+           IF WSS-I > WSS-NUM-OCUR
+               GO TO FIN-PROCESA-ELI.
+           IF SCO-CICC-ELI( WSS-I ) NOT > SPACES
+               GO TO LUP-PROCESA-ELI.
+           PERFORM ELIMINA-SCO.
+           IF FIO-STAT-OKS
+               GO TO LUP-PROCESA-ELI.
+           MOVE '1' TO SCO-CRET-ELI.
+      *    MOVE FIO-BCK-OUT TO FIO-CMND.
+      *    PERFORM COL-FIO-SCO.
+           MOVE '1' TO SCO-CRET.
+           MOVE 'ERROR AL PROCESAR ELIMINACION, REINTENTE'
+                        TO SCO-MENS.
+       FIN-PROCESA-ELI.
+           EXIT.
+
+       ELIMINA-SCO SECTION.
+       INI-ELIMINA-SCO.
+           MOVE SCO-CICC-ELI( WSS-I ) TO SCO-CIC-ICLI.
+           MOVE FIO-GET-KEY-UPD TO FIO-CMND.
+           PERFORM COL-FIO-SCO.
+           IF NOT FIO-STAT-OKS
+               GO TO FIN-ELIMINA-SCO.
+           MOVE FIO-DEL TO FIO-CMND.
+           PERFORM COL-FIO-SCO.
+       FIN-ELIMINA-SCO.
+           EXIT.
+
+      *-------------------------------------------------------------
+
+       ENV-MSG-OUT-HST SECTION.
+       INI-ENV-MSG-OUT-HST.
+           MOVE '0'      TO SND-RES-STAT.
+           PERFORM GET-FHOY.
+           MOVE HOY-FHOY TO SND-FEC-FTRN.
+           MOVE HOY-HHOY TO SND-HRS-HTRN.
+           MOVE '0'      TO SND-IND-MSGP.
+      *    MOVE +1024    TO SND-NUM-LENM.
+           MOVE RCV-HEAD-DRIVE-TRAN TO SND-COD-TRAN.
+           MOVE RCV-HEAD-DRIVE-SIST TO SND-COD-SIST.
+           MOVE RCV-HEAD-DRIVE-USER TO SND-COD-USER.
+           MOVE RCV-HEAD-DRIVE-PSSW TO SND-COD-PASS.
+           MOVE SPACES   TO SND-GLS-FILL.
+           MOVE SPACES   TO SND-GLS-DOUT.
+           MOVE SCO-OUTP TO SND-GLS-DOUT.
+           EXEC CICS SEND
+                     LENGTH(WSS-LEN-SND)
+                     FROM(SND-SEND)
+                     CONVID(TERM)
+                     LAST
+           END-EXEC.
+       FIN-ENV-MSG-OUT-HST.
+           EXIT.
+
+      *-------------------------------------------------------------
+
+       COPY GNSBGEND.
+       COPY GNSBPFEC.
+       COPY GNSBGFEC.
+       COPY GNSBGHOY.
+       COPY GNSBHSYS.
+       COPY GNSBGSYS.
+       COPY GNSBIABT.
+       COPY GNSBHVSM.
+       COPY GNSBGVSM.
+       COPY GNSBGDTC.
+       COPY GNSBGCPT.
+       COPY GNSBBMSG.
+       COPY GNSBFTAB.
+       COPY GNSBFMSG.
+       COPY SGCBFDBC.
+       COPY COLBFSCO.
+       COPY TABBBUSR.
+       COPY TABBFUSR.
+       COPY TABBBOFI.
+       COPY TABBFOFI.

@@ -1,0 +1,137 @@
+       IDENTIFICATION DIVISION.
+      *=======================
+       PROGRAM-ID.  GENPGM.
+       AUTHOR.      CONSIST.
+
+      * Genera Archivo de Edicion para Generacion de Programa Interactivo.
+
+       ENVIRONMENT DIVISION.
+      *====================
+
+       DATA DIVISION.
+      *=============
+
+       WORKING-STORAGE SECTION.
+      *-----------------------
+       COPY GNSWIRPF.
+       COPY GNSBRRPF.
+       COPY GNSWCFIO.
+       COPY GNSWVFIO.
+       01  WSS-VARI.
+           03 WSS-KEY-DPRO                                PIC X(12).
+           03 WSS-GLS-OUTP                                PIC X(28).
+           03 WSS-GLS-CCPP                                PIC X(03).
+           03 WSS-VERS                                    PIC X(03).
+           03 WSS-MENS.
+              05 WSS-MEN1                                 PIC X(40).
+              05 WSS-MEN2                                 PIC X(40).
+           03 WSS-STAT           COMP   VALUE 0           PIC 9(09).
+              88 WSS-STAT-OKS           VALUE 0.
+              88 WSS-STAT-MAL           VALUE 1.
+           03 WSS-VCMD                  VALUE SPACES.
+              05 WSS-CMND OCCURS 10                       PIC X(03).
+           03 WSS-SIND.
+              05 WSS-I                                    PIC 9(02).
+
+       PROCEDURE DIVISION.
+      *==================
+
+       MAIN SECTION.
+       INI-MAIN.
+           MOVE FIO-INP TO FIO-CMND.
+           PERFORM GNS-FIO-RPF.
+           CALL 'LIB$GET_SYMBOL' USING BY DESCRIPTOR 'FIL' WSS-KEY-DPRO.
+           CALL 'LIB$GET_SYMBOL' USING BY DESCRIPTOR 'OUT' WSS-GLS-OUTP.
+           CALL 'LIB$GET_SYMBOL' USING BY DESCRIPTOR 'CPP' WSS-GLS-CCPP.
+           CALL 'LIB$GET_SYMBOL' USING BY DESCRIPTOR 'GNS$VRS' WSS-VERS.
+           PERFORM FND-KEY.
+           IF NOT FIO-STAT-OKS
+               MOVE 'NO EXISTE Definicion en Archivo RPF' TO WSS-MENS
+               GO TO MSG-MAIN.
+           PERFORM LEE-RPF.
+           IF NOT FIO-STAT-OKS
+               MOVE 'Definicion INCOMPLETA en Archivo RPF' TO WSS-MENS
+               GO TO MSG-MAIN.
+           IF WSS-MENS > SPACES
+               GO TO MSG-MAIN.
+           CALL 'GENPGMEDT' USING
+                            BY DESCRIPTOR WSS-GLS-OUTP
+                                          FRM-GLS-DAUT IN RPF-FLD
+                                          FRM-GLS-ABAS IN RPF-FLD
+                                          FRM-GLS-NFRM IN RPF-FLD
+                                          FRM-GLS-LFRM IN RPF-FLD
+                                          FRM-GLS-UARA IN RPF-FLD
+                                          WSS-VCMD
+                            BY REFERENCE  WSS-STAT.
+           MOVE FIO-CLO TO FIO-CMND.
+           PERFORM GNS-FIO-RPF.
+           IF NOT WSS-STAT-MAL
+               GO TO FIN-MAIN.
+           MOVE 'ERROR en GENERACION de Archivo de EDICION' TO WSS-MENS.
+       MSG-MAIN.
+           DISPLAY WSS-KEY-DPRO , ': ' , WSS-MENS.
+           CALL 'LIB$SET_SYMBOL' USING BY DESCRIPTOR
+                                 'GNS$MSG' WSS-MENS.
+           CALL 'SYS$EXIT' USING BY VALUE 0.
+       FIN-MAIN.
+           STOP RUN.
+
+       FND-KEY SECTION.
+       INI-FND-KEY.
+           MOVE SPACES       TO RPF-KEY-DPTR IN RPF.
+           MOVE WSS-KEY-DPRO TO RPF-KEY-DPRO IN RPF.
+           MOVE 'A'          TO RPF-KEY-TREG IN RPF.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM GNS-FIO-RPF.
+       FIN-FND-KEY.
+           EXIT.
+
+       LEE-RPF SECTION.
+       INI-LEE-RPF.
+           MOVE SPACES TO WSS-MENS.
+           MOVE RPF-KEY-DPRO IN RPF TO RPF-COD-DPRO IN RPF-FLD.
+           MOVE RPF-GLS-DAUT IN RPF TO FRM-GLS-DAUT IN RPF-FLD.
+
+           MOVE 'B' TO RPF-KEY-TREG IN RPF.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM GNS-FIO-RPF.
+           IF NOT FIO-STAT-OKS
+               GO TO FIN-LEE-RPF.
+           MOVE RPF-GLS-ABAS IN RPF TO FRM-GLS-ABAS IN RPF-FLD.
+
+           MOVE 'C ' TO RPF-KEY-TRYC IN RPF.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM GNS-FIO-RPF.
+           IF NOT FIO-STAT-OKS
+               GO TO FIN-LEE-RPF.
+           MOVE RPF-GLS-UARA IN RPF TO FRM-GLS-UARA IN RPF-FLD.
+
+           MOVE 0 TO WSS-I.
+       LUP-LEE-RPF.
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM GNS-FIO-RPF.
+           IF ( FIO-STAT-OKS AND
+                RPF-COD-DPRO IN RPF = RPF-COD-DPRO IN RPF-FLD AND
+                RPF-COD-TREG IN RPF = 'C' )
+              ADD 1 RPF-COD-CORR IN RPF GIVING WSS-I
+              MOVE RPF-COD-CCPP IN RPF TO WSS-CMND(WSS-I)
+              GO TO LUP-LEE-RPF.
+           IF WSS-VERS = 'V31' AND WSS-I = 0 AND WSS-GLS-CCPP = 'DEF'
+               MOVE '%E-EN V3.1, con parametro CPP=DEF, debe '
+                    TO WSS-MEN1
+               MOVE 'definir algun comando para su programa  '
+                    TO WSS-MEN2
+               GO TO FIN-LEE-RPF.
+
+           MOVE WSS-KEY-DPRO TO RPF-KEY-DPRO IN RPF.
+           MOVE 'P0'         TO RPF-KEY-TRYC IN RPF.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM GNS-FIO-RPF.
+           IF NOT FIO-STAT-OKS
+               GO TO FIN-LEE-RPF.
+           MOVE RPF-GLS-LFRM IN RPF TO FRM-GLS-LFRM IN RPF-FLD.
+           MOVE RPF-GLS-NFRM IN RPF TO FRM-GLS-NFRM IN RPF-FLD.
+       FIN-LEE-RPF.
+           EXIT.
+
+       COPY GNSBFRPF.

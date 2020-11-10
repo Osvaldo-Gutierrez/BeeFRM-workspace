@@ -1,0 +1,213 @@
+100
+	COMMON ( FIO_VARI ) STRING FILLER=26,FIO_STAT=1,FIO_INFO=1,	&
+				   FIO_ACCS=1,FILL
+	%INCLUDE %FROM %CDD "DESREG.ENT"
+	COMMON ( ENT ) ENT ENT
+	DECLARE STRING	CONSTANT	FIO_STAT_OKS = "0",	&
+					FIO_ACCS_UPD = "3"
+
+	DECLARE INTEGER NUMTOKEN,	SC_NUMTOKEN	,&
+			SZTOKEN	, 	SC_SZTOKEN	,&
+			TOKEN	,	SC_TOKEN 	,&
+			P_P	,	SC_P_P		,&
+			P_Q	,	SC_P_Q 		,&
+			SZ_I_B
+
+	DECLARE	STRING	C_Q	,	SC_C_Q		,&
+			VALTOKEN,	SC_VALTOKEN	,&
+			STRTOKEN,	PROY
+
+	DECLARE INTEGER	CONSTANT &
+			KEYTOK = 1,	IDNTOK = 2	,&
+			NUMTOK = 3,	STRTOK = 4	,&
+			CHRTOK = 5,	EOLTOK = 6	,&
+			ETXTOK = 7,	HTAB   = 9
+
+
+	DECLARE INTEGER C_FILE_FDL,	ACCION		,&
+			T_ENTI,		S_ENTI		,&
+			S_DESC,		S_NAME		,&
+			T_DESC
+
+	DECLARE STRING  &
+			ASCI_BELL,	FILE_FDL	,&
+			O_L,		V_M(4)		,&
+			V_B(12),	E_DESC		,&
+			E_BIBL,		E_NAME
+
+
+   DECLARE INTEGER CONSTANT &
+			HTAB 	  =  9,	NO	  =  0	,&
+			ZI	  =  1
+
+210
+ !==========================================================================
+    DEF INTEGER NEXTTOKEN
+	ON ERROR GO TO LABE_ERRO
+	IF TOKEN = ETXTOK THEN
+		NEXTTOKEN = ETXTOK
+		GO TO LABE_ASIG
+	END IF
+        P_P = P_Q 
+ LABE_SIGA:
+	WHILE (MID$(I_B$,P_P,1) = " " OR ASCII(MID$(I_B$,P_P,1)) = HTAB) AND &
+			P_P <= SZ_I_B
+		P_P = P_P + 1
+	NEXT
+	P_Q = P_P 
+ NEXT_READ:
+	IF P_P > SZ_I_B OR I_B$ = "" THEN
+		GET #C_FILE_FDL%
+		SZ_I_B = RECOUNT
+	     	MOVE FROM #C_FILE_FDL% , I_B$ = SZ_I_B
+		P_P, P_Q  = 1
+		GO TO LABE_SIGA
+	END IF
+	C_Q = MID$(I_B$,P_Q,1)
+	IF (C_Q >= "A" AND C_Q <= "Z") OR (C_Q >= "a" AND C_Q <= "z") THEN
+	         WHILE (MID$(I_B$,P_P,1) >= "A" AND MID$(I_B$,P_P,1) <= "Z" &
+	            OR  MID$(I_B$,P_P,1)  = "-" 	  &
+	            OR  MID$(I_B$,P_P,1)  = "0" 	  &
+		    OR  MID$(I_B$,P_P,1) >= "a" AND &
+		        MID$(I_B$,P_P,1) <= "z")
+	            			P_P = P_P + 1
+		 NEXT
+	         SZTOKEN = P_P - P_Q
+		 NEXTTOKEN = IDNTOK
+	   	 VALTOKEN = MID$(I_B$,P_Q,SZTOKEN)
+	ELSE
+	IF C_Q >= "0" AND C_Q <= "9" THEN
+	          WHILE MID$(I_B$,P_P,1) >= "0" AND MID$(I_B$,P_P,1) <= "9"
+		             P_P = P_P + 1
+	          NEXT
+	          SZTOKEN = P_P - P_Q
+		  NEXTTOKEN = NUMTOK
+		  VALTOKEN = MID$(I_B$,P_Q,SZTOKEN)
+	          NUMTOKEN  = VAL(VALTOKEN)
+	ELSE
+	IF C_Q = '"'  OR C_Q = "'" THEN
+		P_P = P_P + 1
+	        WHILE MID$(I_B$,P_P,1) <> C_Q
+  	              P_P = P_P + 1
+	        NEXT
+	        SZTOKEN = P_P - (P_Q + 1)
+	        P_P = P_P + 1
+		NEXTTOKEN = STRTOK
+		STRTOKEN = MID$(I_B$,P_Q + 1,SZTOKEN)
+		VALTOKEN = C_Q + STRTOKEN + C_Q
+	ELSE
+		NEXTTOKEN = CHRTOK
+		VALTOKEN = MID$(I_B$,P_P,1)
+		IF VALTOKEN = "!" THEN
+			IF S_DESC = NO AND T_DESC = 1 THEN
+				J% = INSTR(1,I_B$," ") + 1
+				IF J% = 1 THEN
+					J% = INSTR(1,I_B$,"	") + 1
+				END IF
+				SW% = 0
+				WHILE ( J% <= SZ_I_B ) AND ( SW% = 0 )
+					IF ( MID$(I_B$,J%,1) <> " " ) AND &
+					   ( MID$(I_B$,J%,1) <> "	" ) THEN
+						SW% = 1
+					ELSE
+						J% = J% + 1
+					END IF
+				NEXT
+	 			E_DESC = MID$(I_B$,J%,SZ_I_B - J% + 1)
+				S_DESC = ZI
+				P_P = SZ_I_B + 1
+				GO TO NEXT_READ
+			END IF
+			T_DESC = T_DESC + 1
+		END IF
+			P_P = P_P + 1
+		SZTOKEN = 1
+	END IF
+	END IF
+	END IF
+	GO TO LABE_ASIG
+ LABE_ERRO:
+	CLOSE #C_FILE_FDL%
+	IF ERR = 11 THEN
+		NEXTTOKEN = ETXTOK
+	ELSE
+		PRINT "ERROR(";ERR;") ";ERT$(ERR);" en linea ";erl;", MODULO ";ern$
+	END IF
+	RESUME 800
+ LABE_ASIG:
+	P_Q = P_P
+800
+	END DEF
+
+ !==========================================================================
+
+
+ ! ------------------------------------------------------------------
+ !               MODULO PRINCIPAL
+ ! __________________________________________________________________
+
+
+	ON ERROR GO TO  LABE_BADD
+	ASCI_BELL = CHR$(07)
+	O_L = CHR$(13) + CHR$(10)
+	C_FILE_FDL% = 1	
+	BLANCO$ = ""
+	T_DESC = 0
+	FOR I% = 1 TO 12
+		V_B(13 - I%) = BLANCO$
+		BLANCO$ = BLANCO$ + " "
+	NEXT I%
+
+ !	INPUT FILE_FDL
+	CALL LIB$GET_SYMBOL("PTH",FILE_FDL)
+
+	OPEN FILE_FDL FOR INPUT  AS FILE #C_FILE_FDL%,	RECORDSIZE 255, &
+	             ORGANIZATION SEQUENTIAL VARIABLE, 	RECORDTYPE ANY
+
+	GET #C_FILE_FDL%
+	SZ_I_B  = RECOUNT
+	MOVE FROM #C_FILE_FDL% , I_B$ = SZ_I_B
+	E_DESC = I_B$
+	GET #C_FILE_FDL%
+	SZ_I_B  = RECOUNT
+	MOVE FROM #C_FILE_FDL% , I_B$ = SZ_I_B
+	P_P,P_Q = 1
+	WHILE TOKEN <> ETXTOK
+		IF VALTOKEN = "RECORD" AND S_NAME = NO THEN
+			TOKEN = NEXTTOKEN
+			E_BIBL = VALTOKEN
+			TOKEN = NEXTTOKEN
+			TOKEN = NEXTTOKEN
+			E_NAME = VALTOKEN
+			S_NAME = ZI
+		END IF
+		TOKEN = NEXTTOKEN
+		IF S_DESC = ZI AND S_NAME = ZI THEN
+			TOKEN = ETXTOK
+		END IF
+	NEXT
+	FIO_ACCS = FIO_ACCS_UPD
+	CALL "DESFIOENT" BY REF ("<ACC>")
+	CALL "DESFIOENT" BY REF ("<UPD>")
+	IF E_BIBL = "REG" THEN
+		CALL LIB$GET_SYMBOL("DES$PRY",PROY)
+		E_BIBL = PROY + "REG"
+	END IF
+	ENT::ENT_KEY_TENT = "R"
+	ENT::ENT_KEY_MODU = E_NAME
+	ENT::ENT_KEY_BIBL = E_BIBL
+	ENT::ENT_GLS_DESC = E_DESC
+	CALL "DESFIOENT" BY REF ("<PUT>")
+	IF FIO_STAT <>  FIO_STAT_OKS THEN
+		CALL "DESFIOENT" BY REF ("<MOD>")
+	END IF		
+	CALL "DESFIOENT" BY REF ("<CLO>")
+	GO TO LABE_ATRA
+		
+ LABE_BADD:
+	PRINT "ERROR(";ERR;") : ";ERT$(ERR);". En modulo ";ERN$
+	RESUME 999
+999
+	CALL SYS$EXIT BY VALUE (0)
+ LABE_ATRA:
+ END

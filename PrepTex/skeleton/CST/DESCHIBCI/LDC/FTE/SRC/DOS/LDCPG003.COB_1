@@ -1,0 +1,1622 @@
+       IDENTIFICATION DIVISION.
+      *-----------------------*
+       PROGRAM-ID. LDCPG003.
+       AUTHOR.     K.CERPA
+      ******************************************************************
+      *  SISTEMA  : MARGEN DE ENDEUDAMIENTO.                           *
+      *  OBJETIVO : ACTUALIZA EN TABLA CCL (COBRO COMISION LINEA) LOS  *
+      *             REGISTROS A COBRAR.                                *
+      *                                                                *
+      *  Archivos :                                                    *
+      *   ENTRADA : TABLA CCL                                          *
+      *                                                                *
+      *   SALIDA  : TABLA CCL ACTUALIZADA.                             *
+      *           : ARCHIVO INYECTOR.                                  *
+      *                                                                *
+      ******************************************************************
+       ENVIRONMENT DIVISION.
+      *--------------------*
+       CONFIGURATION SECTION.
+      *---------------------*
+       SPECIAL-NAMES.
+           C01 IS CANAL-1
+           DECIMAL-POINT IS COMMA.
+       INPUT-OUTPUT SECTION.
+      *--------------------*
+       FILE-CONTROL.
+      *------------*
+           SELECT ENTRADA   ASSIGN TO SYS018-ENTRADA
+                            FILE STATUS IS FS-ENT.
+
+           SELECT INYECTOR  ASSIGN TO SYS019-INYECTOR
+                            FILE STATUS IS FS-INY.
+
+       DATA DIVISION.
+      *-------------*
+       FILE SECTION.
+      *------------*
+       FD  ENTRADA  LABEL RECORD IS STANDARD
+           BLOCK CONTAINS 0 RECORDS.
+       01  ECL.
+      * Identificacion de la linea
+           05 ECL-KEY-LDC.
+      *       Cod. int. comp. cobro comision
+              07 ECL-CIC-LDC.
+      *          Centro asignacion identificacion
+                 09 ECL-CAI-LDC.
+                    11 ECL-COD-TLDC                   PIC X(01).
+                    11 ECL-COD-CLDC                   PIC X(03).
+      *          Identificacion interna computacional
+                 09 ECL-ICC-LDC.
+                    11 ECL-COD-OLDC.
+                       13 ECL-COD-SLDC                PIC X(02).
+                       13 ECL-IND-SLDC                PIC X(01).
+                    11 ECL-GSL-NLDC                   PIC X(05).
+      *       Tipo de linea de credito
+              07 ECL-COD-TIPO                         PIC X(03).
+      *    Fecha cobro anterior
+           05 ECL-FEC-CBR-ANT.
+              07 ECL-CBR-ANT-FS                       PIC 9(02).
+              07 ECL-CBR-ANT-FA                       PIC 9(02).
+              07 ECL-CBR-ANT-FM                       PIC 9(02).
+              07 ECL-CBR-ANT-FD                       PIC 9(02).
+      *    Monto del cobro anterior
+           05 ECL-MTO-CBR-ANT                         PIC 9(09)V9(04).
+      *    Moneda del cobro anterior
+           05 ECL-MON-CBR-ANT                         PIC X(06).
+      *    Porcentaje descuento anterior
+           05 ECL-PCT-DCT-ANT                         PIC 9(03).
+      *    Fecha del cobro
+           05 ECL-FEC-CBR.
+              07 ECL-FEC-CBR-FS                       PIC 9(02).
+              07 ECL-FEC-CBR-FA                       PIC 9(02).
+              07 ECL-FEC-CBR-FM                       PIC 9(02).
+              07 ECL-FEC-CBR-FD                       PIC 9(02).
+      *    Monto del cobro
+           05 ECL-MTO-CBR                             PIC 9(09)V9(04).
+      *    Moneda del cobro
+           05 ECL-MON-CBR                             PIC X(06).
+      *    Porcentaje de descuento
+           05 ECL-PCT-DCT                             PIC 9(03).
+      *    Fecha del proximo cobro
+           05 ECL-FEC-CBR-PXM.
+              07 ECL-CBR-PXM-FS                       PIC 9(02).
+              07 ECL-CBR-PXM-FA                       PIC 9(02).
+              07 ECL-CBR-PXM-FM                       PIC 9(02).
+              07 ECL-CBR-PXM-FD                       PIC 9(02).
+      *    Porcentaje de proximo descuento
+           05 ECL-PCT-DCT-PXM                         PIC 9(03).
+      *    Fecha de creacion
+           05 ECL-FEC-CRE.
+              07 ECL-FEC-CRE-FS                       PIC 9(02).
+              07 ECL-FEC-CRE-FA                       PIC 9(02).
+              07 ECL-FEC-CRE-FM                       PIC 9(02).
+              07 ECL-FEC-CRE-FD                       PIC 9(02).
+      *    Hora de creacion
+           05 ECL-HOR-CRE.
+              07 ECL-HOR-CRE-HH                       PIC 9(02).
+              07 ECL-HOR-CRE-MM                       PIC 9(02).
+              07 ECL-HOR-CRE-SS                       PIC 9(02).
+      *    Fecha actualizacion
+           05 ECL-FEC-ACT.
+              07 ECL-FEC-ACT-FS                       PIC 9(02).
+              07 ECL-FEC-ACT-FA                       PIC 9(02).
+              07 ECL-FEC-ACT-FM                       PIC 9(02).
+              07 ECL-FEC-ACT-FD                       PIC 9(02).
+      *    Hora de actualizacion
+           05 ECL-HOR-ACT.
+              07 ECL-HOR-ACT-HH                       PIC 9(02).
+              07 ECL-HOR-ACT-MM                       PIC 9(02).
+              07 ECL-HOR-ACT-SS                       PIC 9(02).
+      *    Autor actualizacion
+           05 ECL-IDN-ATR-ACT                         PIC X(12).
+           05 FILLER                                  PIC X(24).
+
+       FD  INYECTOR LABEL RECORD IS STANDARD
+           BLOCK CONTAINS 0 RECORDS.
+       01  INY.
+           03  INY-NUM-TREG                         PIC 9(01).
+           03  INY-NUM-NCTA                         PIC 9(08).
+           03  INY-NUM-IMPU                         PIC 9(01).
+           03  INY-COD-SCHE                         PIC X(07).
+           03  INY-SGV-MNTO                         PIC 9(10)V9(02).
+           03  INY-COD-TMVO                         PIC X(01).
+           03  INY-NUM-CBAN                         PIC 9(02).
+           03  INY-COD-DIS1                         PIC X(04).
+           03  INY-FEC-FMVO.
+               05  INY-NUM-DMVO                     PIC 9(02).
+               05  INY-NUM-MMVO                     PIC 9(02).
+               05  INY-NUM-AMVO                     PIC 9(01).
+           03  INY-IND-TATM                         PIC X(01).
+           03  INY-CIC-IOPC.
+               05  INY-CAI-IOPC.
+                   07  INY-COD-TOPC                 PIC X(01).
+                   07  INY-COD-COPC                 PIC X(03).
+               05  INY-IIC-IOPC.
+                   07  INY-COD-OOPC.
+                       09  INY-COD-SOPC             PIC X(02).
+                       09  INY-IND-SOPC             PIC X(01).
+                   07  INY-GLS-NOPC                 PIC X(05).
+           03  INY-GLS-DIS2                         PIC X(01).
+           03  INY-COD-SORI                         PIC X(03).
+           03  INY-NUM-ICAN                         PIC 9(03).
+           03  INY-GLS-DIS3                         PIC X(01).
+           03  INY-COD-SREC                         PIC X(03).
+           03  INY-GLS-DIS4                         PIC X(15).
+
+       WORKING-STORAGE SECTION.
+      *-----------------------*
+       77  W-FIN                   PIC X(02)        VALUE 'NO'.
+       77  W-FIN-ECL               PIC X(02)        VALUE 'NO'.
+       77  W-FIN-LDC               PIC X(02)        VALUE 'NO'.
+       77  W-FIN-CLF               PIC X(02)        VALUE 'NO'.
+       77  W-VAL-CLF               PIC X(02)        VALUE 'NO'.
+       77  W-VAL-LDC               PIC X(02)        VALUE 'NO'.
+       77  FS-INY                  PIC 9(02)        VALUE 0.
+       77  FS-ENT                  PIC 9(02)        VALUE 0.
+       77  WG-INY                  PIC 9(08)        VALUE 0.
+       77  WN-INY                  PIC 9(08)        VALUE 0.
+       77  WN-CCL                  PIC 9(08)        VALUE 0.
+       77  WL-CCL                  PIC 9(08)        VALUE 0.
+       77  WE-CCL                  PIC 9(08)        VALUE 0.
+       77  WA-CCL                  PIC 9(08)        VALUE 0.
+       77  WL-CLF                  PIC 9(08)        VALUE 0.
+       77  WN-CLF                  PIC 9(08)        VALUE 0.
+       77  WL-RDC                  PIC 9(08)        VALUE 0.
+       77  WL-TCL                  PIC 9(08)        VALUE 0.
+       77  WL-CAM                  PIC 9(08)        VALUE 0.
+       77  WL-LDC                  PIC 9(08)        VALUE 0.
+       77  WL-DCE                  PIC 9(08)        VALUE 0.
+       77  WN-DCE                  PIC 9(08)        VALUE 0.
+       77  WL-DCP                  PIC 9(08)        VALUE 0.
+       77  WN-DCP                  PIC 9(08)        VALUE 0.
+       77  WC-TAB                  PIC 9(03)        VALUE 0.
+       77  SW-VALIDO               PIC 9(01)        VALUE 0.
+       77  I                       PIC 9(03)        VALUE 0.
+       77  W-SGV-VCAM              PIC S9(11)V9(04) VALUE +0.
+       77  W-INY-SGV-MNTO          PIC  9(10)       VALUE 0.
+
+       01  W-LLAVE-TABLA.
+           05  W-TIPO-LINEA        PIC X(03).
+           05  W-TIPO-BANCA        PIC X(03).
+
+       01  VAR-DISPLAY.
+           05  VAR-DIS             PIC  ZZZZZZZZ9,9999.
+
+       01  W-PARAMETRO.
+           05 W-FECHA-PAR.
+              07 W-SIG-PAR         PIC 9(02).
+              07 W-ANO-PAR         PIC 9(02).
+              07 W-ANO-PAR-R REDEFINES W-ANO-PAR.
+                 09 W-ANO-PAR-1    PIC 9(01).
+                 09 W-ANO-PAR-2    PIC 9(01).
+              07 W-MES-PAR         PIC 9(02).
+              07 W-DIA-PAR         PIC 9(02).
+
+       01  W-FECHA-RGO-INI.
+           05 W-SIG-RGO-INI     PIC 9(02).
+           05 W-ANO-RGO-INI     PIC 9(02).
+           05 W-MES-RGO-INI     PIC 9(02).
+           05 W-DIA-RGO-INI     PIC 9(02).
+
+       01  W-FECHA-CBR-PXM.
+           05 W-FEC-CBR-PXM        PIC 9(04).
+           05 W-FEC-CBR-PXM-R REDEFINES W-FEC-CBR-PXM.
+              07 W-CBR-PXM-FS  PIC 9(02).
+              07 W-CBR-PXM-FA  PIC 9(02).
+           05 W-CBR-PXM-FM     PIC 9(02).
+           05 W-CBR-PXM-FD     PIC 9(02).
+
+       01  W-FEC-SISTEMA.
+           05 W-SIG-SIS            PIC 9(02).
+           05 W-FEC-SIS            PIC 9(06).
+           05 W-FEC-SIS-R REDEFINES W-FEC-SIS.
+              07 W-ANO-SIS         PIC 9(02).
+              07 W-MES-SIS         PIC 9(02).
+              07 W-DIA-SIS         PIC 9(02).
+
+       01  W-HOR-SISTEMA           PIC 9(08).
+       01  W-HOR-SIS-R REDEFINES W-HOR-SISTEMA.
+           05 W-HORA-SIS           PIC 9(06).
+           05 W-HORA-MILI-SEG      PIC 9(02).
+
+       01  TABLA-LINEAS.
+           05 TAB-LNA OCCURS 100 TIMES.
+              07  TAB-LLAVE.
+                  09  TAB-LLAVE-1   PIC X(03).
+                  09  TAB-LLAVE-2   PIC X(03).
+              07  TAB-MTO-CBR       PIC 9(09)V9(04).
+              07  TAB-MON-CBR       PIC X(06).
+              07  TAB-MTO-CBR-PESOS PIC 9(09)V9(04).
+
+          COPY RTNWCALE.
+
+       01  UIB.
+           05 FILLER               PIC  X(32) VALUE 'LDCPG003'.
+
+       01  REQ-AREA-CCL.
+           03 CCL-COMMAND          PIC  X(05).
+           03 CCL-TABLE            PIC  X(03) VALUE 'CCL'.
+           03 CCL-KEY              PIC  X(05) VALUE 'CCL00'.
+           03 CCL-RET-COD          PIC  X(02) VALUE SPACES.
+           03 CCL-INT-RC           PIC  X(01).
+           03 CCL-DB-ID            PIC S9(04) COMP VALUE +260.
+           03 CCL-REC-ID           PIC  X(07).
+           03 FILLER               PIC  X(25).
+           03 CCL-CONT-MAX         PIC S9(04) COMP.
+           03 CCL-CONT-IO          PIC S9(04) COMP.
+           03 FILLER               PIC  X(22).
+           03 CCL-VAL-KEY          PIC  X(15).
+
+       01  REQ-AREA-CLF.
+           03 CLF-COMMAND          PIC  X(05) VALUE 'REDKX'.
+           03 CLF-TABLE            PIC  X(03) VALUE 'CLF'.
+           03 CLF-KEY              PIC  X(05) VALUE 'CLF00'.
+           03 CLF-RET-COD          PIC  X(02) VALUE SPACES.
+           03 CLF-INT-RC           PIC  X(01).
+           03 CLF-DB-ID            PIC S9(04) COMP VALUE +260.
+           03 CLF-REC-ID           PIC  X(07).
+           03 FILLER               PIC  X(25).
+           03 CLF-CONT-MAX         PIC S9(04) COMP.
+           03 CLF-CONT-IO          PIC S9(04) COMP.
+           03 FILLER               PIC  X(22).
+           03 CLF-VAL-KEY          PIC  X(12).
+
+       01  REQ-AREA-DCE.
+           03 DCE-COMMAND          PIC  X(05) VALUE 'REDKX'.
+           03 DCE-TABLE            PIC  X(03) VALUE 'DCE'.
+           03 DCE-KEY              PIC  X(05) VALUE 'DCE00'.
+           03 DCE-RET-COD          PIC  X(02) VALUE SPACES.
+           03 DCE-INT-RC           PIC  X(01).
+           03 DCE-DB-ID            PIC S9(04) COMP VALUE +100.
+           03 DCE-REC-ID           PIC  X(07).
+           03 FILLER               PIC  X(25).
+           03 DCE-CONT-MAX         PIC S9(04) COMP.
+           03 DCE-CONT-IO          PIC S9(04) COMP.
+           03 FILLER               PIC  X(22).
+           03 DCE-VAL-KEY          PIC  X(12).
+
+       01  REQ-AREA-DCP.
+           03 DCP-COMMAND          PIC  X(05) VALUE 'REDKX'.
+           03 DCP-TABLE            PIC  X(03) VALUE 'DCP'.
+           03 DCP-KEY              PIC  X(05) VALUE 'DCP00'.
+           03 DCP-RET-COD          PIC  X(02) VALUE SPACES.
+           03 DCP-INT-RC           PIC  X(01).
+           03 DCP-DB-ID            PIC S9(04) COMP VALUE +100.
+           03 DCP-REC-ID           PIC  X(07).
+           03 FILLER               PIC  X(25).
+           03 DCP-CONT-MAX         PIC S9(04) COMP.
+           03 DCP-CONT-IO          PIC S9(04) COMP.
+           03 FILLER               PIC  X(22).
+           03 DCP-VAL-KEY          PIC  X(12).
+
+       01  REQ-AREA-LDC.
+           03 LDC-COMMAND          PIC  X(05).
+           03 LDC-TABLE            PIC  X(03) VALUE 'LDC'.
+           03 LDC-KEY              PIC  X(05) VALUE 'LDC00'.
+           03 LDC-RET-COD          PIC  X(02) VALUE SPACES.
+           03 LDC-INT-RC           PIC  X(01).
+           03 LDC-DB-ID            PIC S9(04) COMP VALUE +260.
+           03 LDC-REC-ID           PIC  X(07).
+           03 FILLER               PIC  X(25).
+           03 LDC-CONT-MAX         PIC S9(04) COMP.
+           03 LDC-CONT-IO          PIC S9(04) COMP.
+           03 FILLER               PIC  X(22).
+           03 LDC-VAL-KEY          PIC  X(14).
+           03 LDC-VAL-KEY-R REDEFINES LDC-VAL-KEY.
+              05 LDC-VAL-KEY-1     PIC  X(12).
+              05 LDC-VAL-KEY-2     PIC  X(02).
+
+       01  REQ-AREA-RDC.
+           03 RDC-COMMAND          PIC  X(05) VALUE 'REDKX'.
+           03 RDC-TABLE            PIC  X(03) VALUE 'RDC'.
+           03 RDC-KEY              PIC  X(05) VALUE 'RDC01'.
+           03 RDC-RET-COD          PIC  X(02) VALUE SPACES.
+           03 RDC-INT-RC           PIC  X(01).
+           03 RDC-DB-ID            PIC S9(04) COMP VALUE +260.
+           03 RDC-REC-ID           PIC  X(07).
+           03 FILLER               PIC  X(25).
+           03 RDC-CONT-MAX         PIC S9(04) COMP.
+           03 RDC-CONT-IO          PIC S9(04) COMP.
+           03 FILLER               PIC  X(22).
+           03 RDC-VAL-KEY          PIC  X(12).
+
+       01  REQ-AREA-TCL.
+           03 TCL-COMMAND          PIC  X(05).
+           03 TCL-TABLE            PIC  X(03) VALUE 'TAB'.
+           03 TCL-KEY              PIC  X(05) VALUE 'TAB00'.
+           03 TCL-RET-COD          PIC  X(02) VALUE SPACES.
+           03 TCL-INT-RC           PIC  X(01).
+           03 TCL-DB-ID            PIC S9(04) COMP VALUE +200.
+           03 TCL-REC-ID           PIC  X(07).
+           03 FILLER               PIC  X(25).
+           03 TCL-CONT-MAX         PIC S9(04) COMP.
+           03 TCL-CONT-IO          PIC S9(04) COMP.
+           03 FILLER               PIC  X(22).
+           03 TCL-VAL-KEY.
+              05 TCL-VAL-KEY-1     PIC  X(03).
+              05 TCL-VAL-KEY-2     PIC  X(03).
+              05 TCL-VAL-KEY-3     PIC  X(09).
+
+       01  REQ-AREA-CAM.
+           03 CAM-COMMAND          PIC  X(05) VALUE 'REDKX'.
+           03 CAM-TABLE            PIC  X(03) VALUE 'CAM'.
+           03 CAM-KEY              PIC  X(05) VALUE 'CAM00'.
+           03 CAM-RET-COD          PIC  X(02) VALUE SPACES.
+           03 CAM-INT-RC           PIC  X(01).
+           03 CAM-DB-ID            PIC S9(04) COMP VALUE +150.
+           03 CAM-REC-ID           PIC  X(07).
+           03 FILLER               PIC  X(25).
+           03 CAM-CONT-MAX         PIC S9(04) COMP.
+           03 CAM-CONT-IO          PIC S9(04) COMP.
+           03 FILLER               PIC  X(22).
+           03 CAM-VAL-KEY.
+              05 CAM-VAL-KEY-FE1   PIC  9(08).
+              05 CAM-VAL-KEY-FE2   PIC  9(08).
+              05 CAM-VAL-KEY-COD1  PIC  X(06).
+              05 CAM-VAL-KEY-COD2  PIC  X(06).
+
+       01  REG-CCL.
+      *    COPYDD LDC-R-CCL.LDC-E-CCL00(PROD),01,D
+      *                             EQUIVALENTE AL REGISTRO CCL
+           02  LDC-E-CCL00.
+      *                             NOMBRE REGISTRO    : CCL.
+               03  CCL.
+      *                             IDENTIFICACION DE LA LINEA
+                   04  CCL-KEY-LDC.
+      *                             COD. INT. COMP. COBRO COMISION
+                       05  CCL-CIC-LDC.
+      *                             CENTRO ASIGNACION IDENTIFICACION
+                       06  CCL-CAI-LDC.
+                       07  CCL-COD-TLDC
+                                    PICTURE X(1).
+                       07  CCL-COD-CLDC
+                                    PICTURE X(3).
+      *                             IDENTIFICACION INTERNA COMPUTACIONAL
+                       06  CCL-ICC-LDC.
+                       07  CCL-COD-OLDC.
+                       08  CCL-COD-SLDC
+                                    PICTURE X(2).
+                       08  CCL-IND-SLDC
+                                    PICTURE X(1).
+                       07  CCL-GSL-NLDC
+                                    PICTURE X(5).
+                       05  CCL-COD-TIPO
+                                    PICTURE X(3).
+      *                             FECHA COBRO ANTERIOR
+                   04  CCL-FEC-CBR-ANT.
+                       05  CCL-CBR-ANT-FS
+                                    PICTURE 9(2).
+                       05  CCL-CBR-ANT-FA
+                                    PICTURE 9(2).
+                       05  CCL-CBR-ANT-FM
+                                    PICTURE 9(2).
+                       05  CCL-CBR-ANT-FD
+                                    PICTURE 9(2).
+      *                             MONTO DEL COBRO ANTERIOR
+                   04  CCL-MTO-CBR-ANT
+                                    PICTURE 9(9)V9(4).
+      *                             MONEDA DEL COBRO ANTERIOR
+                   04  CCL-MON-CBR-ANT
+                                    PICTURE X(6).
+      *                             PORCENTAJE DESCUENTO ANTERIOR
+                   04  CCL-PCT-DCT-ANT
+                                    PICTURE 9(3).
+      *                             FECHA DEL COBRO
+                   04  CCL-FEC-CBR.
+                       05  CCL-FEC-CBR-FS
+                                    PICTURE 9(2).
+                       05  CCL-FEC-CBR-FA
+                                    PICTURE 9(2).
+                       05  CCL-FEC-CBR-FM
+                                    PICTURE 9(2).
+                       05  CCL-FEC-CBR-FD
+                                    PICTURE 9(2).
+      *                             MONTO DEL COBRO
+                   04  CCL-MTO-CBR  PICTURE 9(9)V9(4).
+      *                             MONEDA DEL COBRO
+                   04  CCL-MON-CBR  PICTURE X(6).
+      *                             PORCENTAJE DE DESCUENTO
+                   04  CCL-PCT-DCT  PICTURE 9(3).
+      *                             FECHA DEL PROXIMO COBRO
+                   04  CCL-FEC-CBR-PXM.
+                       05  CCL-CBR-PXM-FS
+                                    PICTURE 9(2).
+                       05  CCL-CBR-PXM-FA
+                                    PICTURE 9(2).
+                       05  CCL-CBR-PXM-FM
+                                    PICTURE 9(2).
+                       05  CCL-CBR-PXM-FD
+                                    PICTURE 9(2).
+      *                             PORCENTAJE DE PROXIMO DESCUENTO
+                   04  CCL-PCT-DCT-PXM
+                                    PICTURE 9(3).
+      *                             FECHA DE CREACION
+                   04  CCL-FEC-CRE.
+                       05  CCL-FEC-CRE-FS
+                                    PICTURE 9(2).
+                       05  CCL-FEC-CRE-FA
+                                    PICTURE 9(2).
+                       05  CCL-FEC-CRE-FM
+                                    PICTURE 9(2).
+                       05  CCL-FEC-CRE-FD
+                                    PICTURE 9(2).
+      *                             HORA DE CREACION
+                   04  CCL-HOR-CRE.
+                       05  CCL-HOR-CRE-HH
+                                    PICTURE 9(2).
+                       05  CCL-HOR-CRE-MM
+                                    PICTURE 9(2).
+                       05  CCL-HOR-CRE-SS
+                                    PICTURE 9(2).
+      *                             FECHA ACTUALIZACION
+                   04  CCL-FEC-ACT.
+                       05  CCL-FEC-ACT-FS
+                                    PICTURE 9(2).
+                       05  CCL-FEC-ACT-FA
+                                    PICTURE 9(2).
+                       05  CCL-FEC-ACT-FM
+                                    PICTURE 9(2).
+                       05  CCL-FEC-ACT-FD
+                                    PICTURE 9(2).
+      *                             HORA DE ACTUALIZACION
+                   04  CCL-HOR-ACT.
+                       05  CCL-HOR-ACT-HH
+                                    PICTURE 9(2).
+                       05  CCL-HOR-ACT-MM
+                                    PICTURE 9(2).
+                       05  CCL-HOR-ACT-SS
+                                    PICTURE 9(2).
+      *                             AUTOR ACTUALIZACION
+                   04  CCL-IDN-ATR-ACT
+                                    PICTURE X(12).
+      *                             GLOSA DISPONIBLE
+                   04  CCL-GLS-DISP PICTURE X(24).
+
+       01  REG-CLF.
+      *    COPYDD LDC-R-CLF.LDC-E-CLF00(PROD),01,D
+           02  LDC-E-CLF00.
+               03  CLF.
+                   04  CLF-GLS-FLAG PICTURE X(1).
+                   04  CLF-KEY-IREG.
+                       05  CLF-KEY-ICLF.
+                       06  CLF-CIC-ICLF.
+                       07  CLF-CAI-ICLF.
+                       08  CLF-COD-TCLF
+                                    PICTURE X(1).
+                       08  CLF-COD-CCLF
+                                    PICTURE X(3).
+                       07  CLF-IIC-ICLF.
+                       08  CLF-COD-OCLF.
+                       09  CLF-COD-SCLF
+                                    PICTURE X(2).
+                       09  CLF-IND-SCLF
+                                    PICTURE X(1).
+                       08  CLF-GLS-NCLF
+                                    PICTURE X(5).
+                       05  CLF-STP-ITRN.
+                       06  CLF-FEC-FTRN.
+                       07  CLF-NUM-STRN
+                                    PICTURE 9(2).
+                       07  CLF-NUM-ATRN
+                                    PICTURE 9(2).
+                       07  CLF-NUM-MTRN
+                                    PICTURE 9(2).
+                       07  CLF-NUM-DTRN
+                                    PICTURE 9(2).
+                       06  CLF-HRA-HRTR.
+                       07  CLF-NUM-HHTR
+                                    PICTURE 9(2).
+                       07  CLF-NUM-MMTR
+                                    PICTURE 9(2).
+                       07  CLF-NUM-SSTR
+                                    PICTURE 9(2).
+                   04  CLF-MSC-TACC PICTURE X(1).
+                   04  CLF-MSC-STAT PICTURE X(1).
+                   04  CLF-COD-OTRN.
+                       05  CLF-MSC-TTRN
+                                    PICTURE X(1).
+                       05  CLF-COD-TTRN
+                                    PICTURE X(3).
+                   04  CLF-COD-ATRN PICTURE X(12).
+                   04  CLF-COD-VCCF.
+                       05  CLF-IND-TVCF
+                                    PICTURE X(1).
+                       05  CLF-COD-CVCF
+                                    PICTURE X(3).
+                       05  CLF-IND-TCCF
+                                    PICTURE X(2).
+                   04  CLF-COD-COCF.
+                       05  CLF-COD-TOCF
+                                    PICTURE X(3).
+                       05  CLF-COD-AOCF
+                                    PICTURE X(3).
+                   04  CLF-COD-OFIC PICTURE X(3).
+                   04  CLF-COD-EJEC PICTURE X(12).
+                   04  CLF-FEC-FAPE.
+                       05  CLF-NUM-SAPE
+                                    PICTURE 9(2).
+                       05  CLF-NUM-AAPE
+                                    PICTURE 9(2).
+                       05  CLF-NUM-MAPE
+                                    PICTURE 9(2).
+                       05  CLF-NUM-DAPE
+                                    PICTURE 9(2).
+                   04  CLF-FEC-FING.
+                       05  CLF-NUM-SING
+                                    PICTURE 9(2).
+                       05  CLF-NUM-AING
+                                    PICTURE 9(2).
+                       05  CLF-NUM-MING
+                                    PICTURE 9(2).
+                       05  CLF-NUM-DING
+                                    PICTURE 9(2).
+                   04  CLF-NUM-PREV PICTURE 9(3).
+                   04  CLF-IND-PREV PICTURE X(1).
+                   04  CLF-FEC-FURV.
+                       05  CLF-NUM-SURV
+                                    PICTURE 9(2).
+                       05  CLF-NUM-AURV
+                                    PICTURE 9(2).
+                       05  CLF-NUM-MURV
+                                    PICTURE 9(2).
+                       05  CLF-NUM-DURV
+                                    PICTURE 9(2).
+                   04  CLF-NUM-PVIG PICTURE 9(3).
+                   04  CLF-IND-PVIG PICTURE X(1).
+                   04  CLF-FEC-FCIE.
+                       05  CLF-NUM-SCIE
+                                    PICTURE 9(2).
+                       05  CLF-NUM-ACIE
+                                    PICTURE 9(2).
+                       05  CLF-NUM-MCIE
+                                    PICTURE 9(2).
+                       05  CLF-NUM-DCIE
+                                    PICTURE 9(2).
+                   04  CLF-COD-RAZC PICTURE X(1).
+                   04  CLF-COD-STAT PICTURE X(1).
+                   04  CLF-VAL-CMAX PICTURE 9(11)V9(4)
+                                        COMPUTATIONAL-3.
+                   04  CLF-FEC-FPRV.
+                       05  CLF-NUM-SPRV
+                                    PICTURE 9(2).
+                       05  CLF-NUM-APRV
+                                    PICTURE 9(2).
+                       05  CLF-NUM-MPRV
+                                    PICTURE 9(2).
+                       05  CLF-NUM-DPRV
+                                    PICTURE 9(2).
+                   04  CLF-FEC-FVEN.
+                       05  CLF-NUM-SVEN
+                                    PICTURE 9(2).
+                       05  CLF-NUM-AVEN
+                                    PICTURE 9(2).
+                       05  CLF-NUM-MVEN
+                                    PICTURE 9(2).
+                       05  CLF-NUM-DVEN
+                                    PICTURE 9(2).
+                   04  CLF-IND-RSTR PICTURE X(1).
+                   04  CLF-IND-UCAP PICTURE X(1).
+                   04  CLF-IND-COMI PICTURE X(1).
+                   04  CLF-VAL-COMI PICTURE 9(11)V9(4)
+                                        COMPUTATIONAL-3.
+                   04  CLF-CIC-ICAC.
+                       05  CLF-CAI-ICAC.
+                       06  CLF-COD-TCAC
+                                    PICTURE X(1).
+                       06  CLF-COD-CCAC
+                                    PICTURE X(3).
+                       05  CLF-IIC-ICAC
+                                    PICTURE X(8).
+                   04  CLF-CIC-CREN.
+                       05  CLF-CAI-CREN.
+                       06  CLF-COD-TREN
+                                    PICTURE X(1).
+                       06  CLF-COD-CREN
+                                    PICTURE X(3).
+                       05  CLF-IIC-CREN
+                                    PICTURE X(8).
+                   04  CLF-GLS-DISP PICTURE X(10).
+
+       01  REG-LDC.
+      *    COPYDD LDC-R-LDC.LDC-E-LDC00(PROD),01,D
+           02  LDC-E-LDC00.
+               03  LDC.
+                   04  LDC-GLS-FLAG PICTURE X(1).
+                   04  LDC-KEY-IREG.
+                       05  LDC-KEY-ILDC.
+                       06  LDC-CIC-ICLF.
+                       07  LDC-CAI-ICLF.
+                       08  LDC-COD-TCLF
+                                    PICTURE X(1).
+                       08  LDC-COD-CCLF
+                                    PICTURE X(3).
+                       07  LDC-IIC-ICLF.
+                       08  LDC-COD-OCLF.
+                       09  LDC-COD-SCLF
+                                    PICTURE X(2).
+                       09  LDC-IND-SCLF
+                                    PICTURE X(1).
+                       08  LDC-GLS-NCLF
+                                    PICTURE X(5).
+                       06  LDC-NUM-ILDC
+                                    PICTURE 9(2).
+                       05  LDC-STP-ITRN.
+                       06  LDC-FEC-FTRN.
+                       07  LDC-NUM-STRN
+                                    PICTURE 9(2).
+                       07  LDC-NUM-ATRN
+                                    PICTURE 9(2).
+                       07  LDC-NUM-MTRN
+                                    PICTURE 9(2).
+                       07  LDC-NUM-DTRN
+                                    PICTURE 9(2).
+                       06  LDC-HRA-HRTR.
+                       07  LDC-NUM-HHTR
+                                    PICTURE 9(2).
+                       07  LDC-NUM-MMTR
+                                    PICTURE 9(2).
+                       07  LDC-NUM-SSTR
+                                    PICTURE 9(2).
+                   04  LDC-MSC-TACC PICTURE X(1).
+                   04  LDC-MSC-STAT PICTURE X(1).
+                   04  LDC-COD-OTRN.
+                       05  LDC-MSC-TTRN
+                                    PICTURE X(1).
+                       05  LDC-COD-TTRN
+                                    PICTURE X(3).
+                   04  LDC-COD-ATRN PICTURE X(12).
+                   04  LDC-GLS-DESC PICTURE X(40).
+                   04  LDC-GLS-DCOR PICTURE X(12).
+                   04  LDC-VAL-CMAX PICTURE 9(11)V9(4)
+                                        COMPUTATIONAL-3.
+                   04  LDC-IND-MGAR PICTURE X(1).
+                   04  LDC-NUM-PVIG PICTURE 9(3).
+                   04  LDC-IND-PVIG PICTURE X(1).
+                   04  LDC-IND-VIGE PICTURE X(1).
+                   04  LDC-FEC-FVEN.
+                       05  LDC-NUM-SVEN
+                                    PICTURE 9(2).
+                       05  LDC-NUM-AVEN
+                                    PICTURE 9(2).
+                       05  LDC-NUM-MVEN
+                                    PICTURE 9(2).
+                       05  LDC-NUM-DVEN
+                                    PICTURE 9(2).
+                   04  LDC-FILLER   PICTURE X(1).
+                   04  LDC-VAL-RSG1 PICTURE 9(3)
+                                        COMPUTATIONAL-3.
+                   04  LDC-VAL-RSG2 PICTURE 9(3)
+                                        COMPUTATIONAL-3.
+                   04  LDC-COD-TIPO PICTURE X(3).
+                   04  LDC-GLS-DISP PICTURE X(20).
+
+       01  REG-RDC.
+      *    COPYDD LDC-R-RDC.LDC-E-RDC00(PROD),01,D
+           02  LDC-E-RDC00.
+               03  RDC.
+                   04  RDC-GLS-FLAG PICTURE X(1).
+                   04  RDC-KEY-IREG.
+                       05  RDC-KEY-IRDC.
+                       06  RDC-CIC-ICLI.
+                       07  RDC-CAI-ICLI
+                                    PICTURE X(4).
+                       07  RDC-IIC-ICLI
+                                    PICTURE X(8).
+                       06  RDC-KEY-ICLF.
+                       07  RDC-CIC-ICLF.
+                       08  RDC-CAI-ICLF
+                                    PICTURE X(4).
+                       08  RDC-IIC-ICLF
+                                    PICTURE X(8).
+                       05  RDC-STP-ITRN.
+                       06  RDC-FEC-FTRN.
+                       07  RDC-NUM-STRN
+                                    PICTURE 9(2).
+                       07  RDC-NUM-ATRN
+                                    PICTURE 9(2).
+                       07  RDC-NUM-MTRN
+                                    PICTURE 9(2).
+                       07  RDC-NUM-DTRN
+                                    PICTURE 9(2).
+                       06  RDC-HRA-HRTR.
+                       07  RDC-NUM-HHTR
+                                    PICTURE 9(2).
+                       07  RDC-NUM-MMTR
+                                    PICTURE 9(2).
+                       07  RDC-NUM-SSTR
+                                    PICTURE 9(2).
+                   04  RDC-MSC-TACC PICTURE X(1).
+                   04  RDC-MSC-STAT PICTURE X(1).
+                   04  RDC-COD-OTRN.
+                       05  RDC-MSC-TTRN
+                                    PICTURE X(1).
+                       05  RDC-COD-TTRN
+                                    PICTURE X(3).
+                   04  RDC-COD-ATRN PICTURE X(12).
+                   04  RDC-VAL-PRDC PICTURE 9(3)V9(6)
+                                        COMPUTATIONAL.
+                   04  RDC-COD-RDCF PICTURE X(3).
+                   04  RDC-GLS-DISP PICTURE X(16).
+
+       01  REG-TCL.
+           03 TCL-GLS-FLAG              PIC X(01).
+           03 TCL-KEY-IREG.
+              05 TCL-COD-TCLL.
+                 07 TCL-COD-TTCL        PIC X(03).
+                 07 TCL-COD-CTCL        PIC X(12).
+              05 TCL-STP-ITRN.
+                 07 TCL-FEC-FTRN.
+                    09 TCL-NUM-STRN     PIC 9(02).
+                    09 TCL-NUM-ATRN     PIC 9(02).
+                    09 TCL-NUM-MTRN     PIC 9(02).
+                    09 TCL-NUM-DTRN     PIC 9(02).
+                 07 TCL-HRA-HRTR.
+                    09 TCL-NUM-HHTR     PIC 9(02).
+                    09 TCL-NUM-MMTR     PIC 9(02).
+                    09 TCL-NUM-SSTR     PIC 9(02).
+           03 TCL-MSC-TACC              PIC X(01).
+           03 TCL-MSC-STAT              PIC X(01).
+           03 TCL-COD-OTRN.
+              05 TCL-MSC-TTRN           PIC X(01).
+              05 TCL-COD-TTRN           PIC X(03).
+           03 TCL-COD-ATRN              PIC X(12).
+           03 TCL-CIC-TCLL.
+              05 TCL-CIC-TTCL           PIC X(03).
+              05 TCL-CIC-CTCL           PIC X(12).
+           03 TCL-EXT-TCLL.
+              05 TCL-EXT-TTCL           PIC X(03).
+              05 TCL-EXT-CTCL           PIC X(05).
+           03 TCL-GLS-DCOR              PIC X(12).
+           03 TCL-GLS-ABRV              PIC X(05).
+           03 TCL-GLS-DESC              PIC X(40).
+           03 TCL-GLS-DATA.
+              05 TCL-MTO-COMI           PIC 9(09)V9(04).
+              05 TCL-FILL               PIC X(06).
+              05 TCL-MON-COMI           PIC X(06).
+              05 TCL-DISP               PIC X(35).
+           03 TCL-SNX-TCLL.
+              05 TCL-SNX-TTCL           PIC X(03).
+              05 TCL-SNX-CTCL           PIC X(03).
+
+       01  REG-CAM.
+      *    COPYDD TAB-R-CAM.TAB-E-CAM00(PROD),01,D
+      *                             EQUIVALENTE AL REGISTRO CAM
+           02  TAB-E-CAM00.
+      *                             REGISTRO DE VALORES DE CAMBIOS
+               03  CAM.
+      *                             FILLER COMPATIBILIDAD VSAM/MVS
+                   04  CAM-GLS-FLAG PICTURE X(1).
+      *                             CLAVE PRIMARIA REGISTRO
+                   04  CAM-KEY-IREG.
+      *                             KEY     FECHA 1 + FECHA 2 + VALOR 1
+                       05  CAM-KEY-CAMB.
+      *                             FECHA DE CAMBIO
+                       06  CAM-FEC-CAMB.
+      *                             FECHA 1 + FECHA 2
+                       07  CAM-FEC-FCAM
+                                        OCCURS 2 TIMES.
+                       08  CAM-NUM-SCAM
+                                    PICTURE 9(2).
+                       08  CAM-NUM-ACAM
+                                    PICTURE 9(2).
+                       08  CAM-NUM-MCAM
+                                    PICTURE 9(2).
+                       08  CAM-NUM-DCAM
+                                    PICTURE 9(2).
+      *                             CODIGO VALOR DE CAMBIO
+                       06  CAM-COD-CAMB.
+      *                             VALOR 1 + VALOR 2
+                       07  CAM-COD-VCAM
+                                        OCCURS 2 TIMES.
+      *                             TIPO VALOR                   TAB TVA
+                       08  CAM-MSC-TVAL
+                                    PICTURE X(1).
+      *                             CODIGO VALOR
+                       08  CAM-COD-CVAL
+                                    PICTURE X(3).
+      *                             TIPO CAMBIO
+                       08  CAM-COD-TCAM
+                                    PICTURE X(2).
+      *                             TIME STAMP TRANSACCION
+                       05  CAM-STP-ITRN.
+      *                             FECHA TRANSACCION
+                       06  CAM-FEC-FTRN.
+                       07  CAM-NUM-STRN
+                                    PICTURE 9(2).
+                       07  CAM-NUM-ATRN
+                                    PICTURE 9(2).
+                       07  CAM-NUM-MTRN
+                                    PICTURE 9(2).
+                       07  CAM-NUM-DTRN
+                                    PICTURE 9(2).
+      *                             HORA TRANSACCION
+                       06  CAM-HRA-HRTR.
+                       07  CAM-NUM-HHTR
+                                    PICTURE 9(2).
+                       07  CAM-NUM-MMTR
+                                    PICTURE 9(2).
+                       07  CAM-NUM-SSTR
+                                    PICTURE 9(2).
+      *                             INDICADOR TIPO ACCION
+                   04  CAM-MSC-TACC PICTURE X(1).
+      *                             INDICADOR STATUS
+                   04  CAM-MSC-STAT PICTURE X(1).
+      *                             INDICADOR VIGENCIA
+                   04  CAM-IND-VIGE
+                             REDEFINES CAM-MSC-STAT
+                                    PICTURE X(1).
+      *                             CODIGO ORIGEN TRANSACCION
+                   04  CAM-COD-OTRN.
+      *                             INDICADOR TIPO ORIGEN
+                       05  CAM-MSC-TTRN
+                                    PICTURE X(1).
+      *                             CODIGO TIPO ORIGEN
+                       05  CAM-COD-TTRN
+                                    PICTURE X(3).
+      *                             AUTOR TRANSACCION
+                   04  CAM-COD-ATRN PICTURE X(12).
+      *                             VALOR DE CAMBIO
+                   04  CAM-SGV-VCAM PICTURE S9(11)V9(4)
+                                        COMPUTATIONAL-3.
+      *                             DISPONIBLE
+                   04  CAM-GLS-DISP PICTURE X(6).
+
+       01  REG-DCE.
+      *    COPYDD DGC-R-DCE.DGC-E-DCE00(PROD),01,D
+      *                             EQUIVALENTE AL REGISTRO DCE
+           02  DGC-E-DCE00.
+      *                             DATOS COMPLEMENTARIOS EMPRESAS
+               03  DCE.
+      *                             FILLER COMPATIBILIDAD VSAM/MVS
+                   04  DCE-GLS-FLAG PICTURE X(1).
+      *                             KEY CLAVE PRIMARIA REGISTRO
+                   04  DCE-KEY-IREG.
+      *                             IDENTIFICACION DATOS COMPLEMENTARIOS
+                       05  DCE-KEY-IDCE.
+      *                             COD. INT. COMP. CLIENTE
+                       06  DCE-CIC-ICLI.
+      *                             CENTRO ASIGNACION IDENTIFICACION
+                       07  DCE-CAI-ICLI.
+                       08  DCE-COD-TCLI
+                                    PICTURE X(1).
+                       08  DCE-COD-CCLI
+                                    PICTURE X(3).
+      *                             IDENT. INTERNA COMPUTACIONAL
+                       07  DCE-IIC-ICLI
+                                    PICTURE X(8).
+      *                             TIME STAMP TRANSACCION
+                       05  DCE-STP-ITRN.
+      *                             FECHA TRANSACCION
+                       06  DCE-FEC-FTRN.
+                       07  DCE-NUM-STRN
+                                    PICTURE 9(2).
+                       07  DCE-NUM-ATRN
+                                    PICTURE 9(2).
+                       07  DCE-NUM-MTRN
+                                    PICTURE 9(2).
+                       07  DCE-NUM-DTRN
+                                    PICTURE 9(2).
+      *                             HORA TRANSACCION
+                       06  DCE-HRA-HRTR.
+                       07  DCE-NUM-HHTR
+                                    PICTURE 9(2).
+                       07  DCE-NUM-MMTR
+                                    PICTURE 9(2).
+                       07  DCE-NUM-SSTR
+                                    PICTURE 9(2).
+      *                             INDICADOR TIPO ACCION
+                   04  DCE-MSC-TACC PICTURE X(1).
+      *                             INDICADOR STATUS
+                   04  DCE-MSC-STAT PICTURE X(1).
+      *                             CODIGO ORIGEN TRANSACCION
+                   04  DCE-COD-OTRN.
+      *                             INDICADOR TIPO ORIGEN
+                       05  DCE-MSC-TTRN
+                                    PICTURE X(1).
+      *                             CODIGO TIPO ORIGEN
+                       05  DCE-COD-TTRN
+                                    PICTURE X(3).
+      *                             AUTOR TRANSACCION
+                   04  DCE-COD-ATRN PICTURE X(12).
+      *                             NOMBRE FANTASIA
+                   04  DCE-GLS-NFAN PICTURE X(40).
+      *                             EXT CODIGO TIPO DE SOCIEDAD
+                   04  DCE-COD-TSOC PICTURE X(2).
+      *                             FECHA CONSTITUCION EMPRESA
+                   04  DCE-FEC-FCTT.
+                       05  DCE-NUM-SCTT
+                                    PICTURE 9(2).
+                       05  DCE-NUM-ACTT
+                                    PICTURE 9(2).
+                       05  DCE-NUM-MCTT
+                                    PICTURE 9(2).
+                       05  DCE-NUM-DCTT
+                                    PICTURE 9(2).
+      *                             FECHA ULTIMA MODIFICACION ESCRITURA
+                   04  DCE-FEC-FUME.
+                       05  DCE-NUM-SUME
+                                    PICTURE 9(2).
+                       05  DCE-NUM-AUME
+                                    PICTURE 9(2).
+                       05  DCE-NUM-MUME
+                                    PICTURE 9(2).
+                       05  DCE-NUM-DUME
+                                    PICTURE 9(2).
+      *                             FECHA CADUCIDAD EMPRESA
+                   04  DCE-FEC-FCAD.
+                       05  DCE-NUM-SCAD
+                                    PICTURE 9(2).
+                       05  DCE-NUM-ACAD
+                                    PICTURE 9(2).
+                       05  DCE-NUM-MCAD
+                                    PICTURE 9(2).
+                       05  DCE-NUM-DCAD
+                                    PICTURE 9(2).
+      *                             INDICADOR RENOVACION AUTOMATICA ( S/
+                   04  DCE-IND-RAUT PICTURE X(1).
+      *                             OPR INDICADOR CASA MATRIZ O SUCURSAL
+                   04  DCE-IND-CMOS PICTURE X(1).
+      *                             EXT INDICADOR CATEGORIA ( COMO DEUDO
+                   04  DCE-IND-CATE PICTURE X(3).
+      *                             EXT TIPO DE EMPRESA  ( COMO DEUDOR )
+                   04  DCE-IND-TEMP PICTURE X(3).
+      *                             CODIGO TIPO BANCA
+                   04  DCE-COD-TBAN PICTURE X(3).
+      *                             TIPO PLAN
+                   04  DCE-COD-TPLN PICTURE X(1).
+      *                             PAIS DE NACIMIENTO
+                   04  DCE-COD-PNAC PICTURE X(3).
+      *                             DISPONIBLE
+                   04  DCE-GLS-DISP PICTURE X(32).
+
+       01  REG-DCP.
+      *    COPYDD DGC-R-DCP.DGC-E-DCP00(PROD),01,D
+      *                             EQUIVALENTE AL REGISTRO DCP
+           02  DGC-E-DCP00.
+      *                             DATOS COMPLEMENTARIOS PERSONAS
+               03  DCP.
+      *                             FILLER COMPATIBILIDAD VSAM/MVS
+                   04  DCP-GLS-FLAG PICTURE X(1).
+      *                             KEY CLAVE PRIMARIA REGISTRO
+                   04  DCP-KEY-IREG.
+      *                             ID DATOS COMPLEMENTARIOS PERSONAS
+                       05  DCP-KEY-IDCP.
+      *                             COD. INT. COMP. CLIENTE
+                       06  DCP-CIC-ICLI.
+      *                             CENTRO ASIGNACION IDENTIFICACION
+                       07  DCP-CAI-ICLI.
+                       08  DCP-COD-TCLI
+                                    PICTURE X(1).
+                       08  DCP-COD-CCLI
+                                    PICTURE X(3).
+      *                             IDENT. INTERNA COMPUTACIONAL
+                       07  DCP-IIC-ICLI
+                                    PICTURE X(8).
+      *                             TIME STAMP TRANSACCION
+                       05  DCP-STP-ITRN.
+      *                             FECHA TRANSACCION
+                       06  DCP-FEC-FTRN.
+                       07  DCP-NUM-STRN
+                                    PICTURE 9(2).
+                       07  DCP-NUM-ATRN
+                                    PICTURE 9(2).
+                       07  DCP-NUM-MTRN
+                                    PICTURE 9(2).
+                       07  DCP-NUM-DTRN
+                                    PICTURE 9(2).
+      *                             HORA TRANSACCION
+                       06  DCP-HRA-HRTR.
+                       07  DCP-NUM-HHTR
+                                    PICTURE 9(2).
+                       07  DCP-NUM-MMTR
+                                    PICTURE 9(2).
+                       07  DCP-NUM-SSTR
+                                    PICTURE 9(2).
+      *                             INDICADOR TIPO ACCION
+                   04  DCP-MSC-TACC PICTURE X(1).
+      *                             INDICADOR STATUS
+                   04  DCP-MSC-STAT PICTURE X(1).
+      *                             CODIGO ORIGEN TRANSACCION
+                   04  DCP-COD-OTRN.
+      *                             INDICADOR TIPO ORIGEN
+                       05  DCP-MSC-TTRN
+                                    PICTURE X(1).
+      *                             CODIGO TIPO ORIGEN
+                       05  DCP-COD-TTRN
+                                    PICTURE X(3).
+      *                             AUTOR TRANSACCION
+                   04  DCP-COD-ATRN PICTURE X(12).
+      *                             FECHA DE NACIMIENTO
+                   04  DCP-FEC-FNAC.
+                       05  DCP-NUM-SNAC
+                                    PICTURE 9(2).
+                       05  DCP-NUM-ANAC
+                                    PICTURE 9(2).
+                       05  DCP-NUM-MNAC
+                                    PICTURE 9(2).
+                       05  DCP-NUM-DNAC
+                                    PICTURE 9(2).
+      *                             CODIGO DEL PAIS DE LA NACIONALIDAD
+                   04  DCP-COD-PNAC PICTURE X(3).
+      *                             INDICADOR DE SEXO
+                   04  DCP-IND-SEXO PICTURE X(1).
+      *                             INDICADOR DE ESTADO CIVIL
+                   04  DCP-IND-ECIV PICTURE X(3).
+      *                             CEDULA DE IDENTIDAD
+                   04  DCP-NUM-CIDE PICTURE X(8).
+      *                             DIGITO VERIFICADOR CEDULA IDENTIDAD
+                   04  DCP-VRF-CIDE PICTURE X(1).
+      *                             GABINETE CEDULA DE IDENTIDAD
+                   04  DCP-GLS-GABI PICTURE X(12).
+      *                             CODIGO TIPO BANCA
+                   04  DCP-COD-TBAN PICTURE X(3).
+      *                             INDICADOR NIVEL EDUCACIONAL
+                   04  DCP-IND-NEDU PICTURE X(3).
+      *                             CODIGO DE ACTIVIDAD SECUNDARIA
+                   04  DCP-COD-ACTS PICTURE X(9).
+      *                             CODIGO DE PROFESION
+                   04  DCP-COD-PROF PICTURE X(5).
+      *                             INDICADOR DE SITUACION LABORAL
+                   04  DCP-IND-SLAB PICTURE X(3).
+      *                             CODIGO CATEGORIA SOCIOECONOMICA
+                   04  DCP-COD-CSEC PICTURE X(2).
+      *                             INDICADOR SITUACION CASA
+                   04  DCP-IND-CASA PICTURE X(5).
+      *                             # MSJ ASOC A NOMBRE DE PILA (SBT)
+                   04  DCP-NUM-NMSG PICTURE 9(4).
+      *                             INDICADOR REGIMEN CONYUGAL
+                   04  DCP-IND-RCNY PICTURE X(1).
+      *                             TIPO PLAN
+                   04  DCP-COD-TPLN PICTURE X(1).
+
+       01  ELEM-LIST-CCL.
+           03 ELEM-1-CCL     PIC X(5) VALUE 'CCL00'.
+           03 ELEM-SEC-CCL   PIC X(1).
+           03 FILLER         PIC X(5) VALUE SPACES.
+
+       01  ELEM-LIST-CLF.
+           03 ELEM-1-CLF     PIC X(5) VALUE 'CLF00'.
+           03 ELEM-SEC-CLF   PIC X(1).
+           03 FILLER         PIC X(5) VALUE SPACES.
+
+       01  ELEM-LIST-LDC.
+           03 ELEM-1-LDC     PIC X(5) VALUE 'LDC00'.
+           03 ELEM-SEC-LDC   PIC X(1).
+           03 FILLER         PIC X(5) VALUE SPACES.
+
+       01  ELEM-LIST-RDC.
+           03 ELEM-1-RDC     PIC X(5) VALUE 'RDC00'.
+           03 ELEM-SEC-RDC   PIC X(1).
+           03 FILLER         PIC X(5) VALUE SPACES.
+
+       01  ELEM-LIST-DCE.
+           03 ELEM-1-DCE     PIC X(5) VALUE 'DCE00'.
+           03 ELEM-SEC-DCE   PIC X(1).
+           03 FILLER         PIC X(5) VALUE SPACES.
+
+       01  ELEM-LIST-DCP.
+           03 ELEM-1-DCP     PIC X(5) VALUE 'DCP00'.
+           03 ELEM-SEC-DCP   PIC X(1).
+           03 FILLER         PIC X(5) VALUE SPACES.
+
+       01  ELEM-LIST-TCL.
+           03 ELEM-1-TCL     PIC X(5) VALUE 'TAB00'.
+           03 ELEM-SEC-TCL   PIC X(1).
+           03 FILLER         PIC X(5) VALUE SPACES.
+
+       01  ELEM-LIST-CAM.
+           03 ELEM-1-CAM     PIC X(5) VALUE 'CAM00'.
+           03 ELEM-SEC-CAM   PIC X(1).
+           03 FILLER         PIC X(5) VALUE SPACES.
+
+       PROCEDURE DIVISION.
+      *------------------*
+           ENTRY 'DBMSCBL'.
+           PERFORM 010-LEER-PARAMETRO.
+           PERFORM 020-BUSCAR-RANGOS-FECHAS.
+           PERFORM 040-ABRIR-ARCHIVOS.
+           PERFORM 050-CARGAR-TABLA-CBR.
+           PERFORM 100-LEER-ENTRADA.
+           PERFORM 110-PROCESAR-ECL UNTIL W-FECHA-PAR < ECL-FEC-CBR-PXM
+                       OR W-FIN-ECL = 'SI'.
+           PERFORM 300-ESTADISTICAS
+           GOBACK.
+
+       010-LEER-PARAMETRO.
+      *------------------*
+           ACCEPT W-PARAMETRO
+           MOVE 'INFO'          TO CALEAREA-FUNCION
+           MOVE  W-SIG-PAR      TO CALEAREA-FECHA-1-AM
+           MOVE  W-ANO-PAR      TO CALEAREA-FECHA-1-AA
+           MOVE  W-MES-PAR      TO CALEAREA-FECHA-1-M
+           MOVE  W-DIA-PAR      TO CALEAREA-FECHA-1-D
+           CALL 'RUTUCALE' USING RTNWCALE
+           IF CALEAREA-COD-RET = 0
+              DISPLAY 'PARAMETRO : ' W-PARAMETRO
+           ELSE
+              DISPLAY 'ERROR EN FECHA DE PARAMETRO : ' W-PARAMETRO
+              DISPLAY 'AL LEER RUTINA FECHA, COD-RET. : '
+                       CALEAREA-COD-RET
+              DISPLAY '*** SE CANCELA PROGRAMA LDCPG003 ***'
+              MOVE 100 TO RETURN-CODE
+              GOBACK
+           END-IF.
+           ACCEPT W-FEC-SIS FROM DATE
+           IF W-ANO-SIS > 50
+              MOVE 19 TO W-SIG-SIS
+           ELSE
+              MOVE 20 TO W-SIG-SIS
+           END-IF.
+           ACCEPT W-HOR-SISTEMA FROM TIME.
+
+       020-BUSCAR-RANGOS-FECHAS.
+      *------------------------*
+           MOVE 'BDHA'        TO CALEAREA-FUNCION
+           PERFORM 030-CALL-RUTUCALE
+           MOVE CALEAREA-FECHA-2-AM TO CALEAREA-FECHA-1-AM
+           MOVE CALEAREA-FECHA-2-AA TO CALEAREA-FECHA-1-AA
+           MOVE CALEAREA-FECHA-2-M  TO CALEAREA-FECHA-1-M
+           MOVE CALEAREA-FECHA-2-D  TO CALEAREA-FECHA-1-D
+           MOVE 'AVNDC'             TO CALEAREA-FUNCION
+           MOVE 1                   TO CALEAREA-NUM-DIA
+           PERFORM 030-CALL-RUTUCALE
+           MOVE CALEAREA-FECHA-2-AM TO W-SIG-RGO-INI
+           MOVE CALEAREA-FECHA-2-AA TO W-ANO-RGO-INI
+           MOVE CALEAREA-FECHA-2-M  TO W-MES-RGO-INI
+           MOVE CALEAREA-FECHA-2-D  TO W-DIA-RGO-INI
+           DISPLAY '  '
+           IF W-FECHA-RGO-INI = W-FECHA-PAR
+              DISPLAY 'FECHA A PROCESAR : ' W-FECHA-PAR
+           ELSE
+              DISPLAY 'RANGOS DE FECHAS A PROCESAR : '
+              DISPLAY '  '
+              DISPLAY 'DESDE  : ' W-FECHA-RGO-INI
+              DISPLAY 'HASTA  : ' W-FECHA-PAR.
+
+       030-CALL-RUTUCALE.
+      *-----------------*
+           CALL 'RUTUCALE' USING RTNWCALE
+           IF CALEAREA-COD-RET = 0
+              NEXT SENTENCE
+           ELSE
+              DISPLAY 'ERROR AL LEER RUTINA FECHA, COD-RET. : '
+                       CALEAREA-COD-RET
+              DISPLAY '*** SE CANCELA PROGRAMA LDCPG003 ***'
+              MOVE 100 TO RETURN-CODE
+              GOBACK
+           END-IF.
+
+       040-ABRIR-ARCHIVOS.
+      *------------------*
+           OPEN INPUT ENTRADA
+           IF FS-ENT NOT = 0
+              DISPLAY ' ERROR AL ABRIR ENTRADA  F.S. : ' FS-ENT
+              DISPLAY '*** SE CANCELA PROGRAMA LDCPG003 ***'
+              MOVE 100 TO RETURN-CODE
+              GOBACK
+           END-IF.
+           OPEN OUTPUT INYECTOR
+           IF FS-INY NOT = 0
+              DISPLAY ' ERROR AL ABRIR INYECTOR F.S. : ' FS-INY
+              DISPLAY '*** SE CANCELA PROGRAMA LDCPG003 ***'
+              MOVE 100 TO RETURN-CODE
+              GOBACK
+           END-IF.
+
+       050-CARGAR-TABLA-CBR.
+      *--------------------*
+           MOVE ZEROES TO TABLA-LINEAS.
+           MOVE LOW-VALUE       TO TCL-VAL-KEY
+           MOVE 'TCL'           TO TCL-VAL-KEY-1
+           MOVE 'REDKG'         TO TCL-COMMAND
+           PERFORM 060-LEER-TCL
+           IF TCL-RET-COD = SPACES
+              IF 'TCL' = TCL-VAL-KEY-1
+                  ADD 1 TO WL-TCL
+                  PERFORM 070-REDNX-TCL UNTIL ( 'TCL' NOT =
+                    TCL-VAL-KEY-1 OR TCL-RET-COD = '14' OR I = 100 )
+                  MOVE I TO WC-TAB
+                  DISPLAY '*----------------------------------------*'
+                  DISPLAY '* ---        TABLA DE TRABAJO        --- *'
+                  DISPLAY '*                                        *'
+                  PERFORM 090-DESPLIEGA-TABLA VARYING I FROM 1 BY 1
+                                      UNTIL I > WC-TAB
+                  DISPLAY '*----------------------------------------*'
+              ELSE
+                 DISPLAY 'NO EXISTE TABLA TCL : ' TCL-RET-COD
+                 DISPLAY 'LLAVE               : ' TCL-VAL-KEY
+                 DISPLAY '*** SE CANCELA PROGRAMA LDCPG003 ***'
+                 MOVE 100 TO RETURN-CODE
+                 PERFORM 300-ESTADISTICAS
+                 GOBACK
+              END-IF
+           ELSE
+              DISPLAY 'NO EXISTE TABLA TCL : ' TCL-RET-COD
+              DISPLAY 'LLAVE               : ' TCL-VAL-KEY
+              DISPLAY '*** SE CANCELA PROGRAMA LDCPG003 ***'
+              MOVE 100 TO RETURN-CODE
+              PERFORM 300-ESTADISTICAS
+              GOBACK
+           END-IF.
+
+       060-LEER-TCL.
+      *------------*
+           CALL 'DBNTRY' USING UIB REQ-AREA-TCL REG-TCL ELEM-LIST-TCL.
+           IF TCL-RET-COD = SPACES OR TCL-RET-COD = '14'
+              NEXT SENTENCE
+           ELSE
+              DISPLAY 'ERROR AL LEER TABLA TCL : ' TCL-RET-COD
+              DISPLAY 'LLAVE           : ' TCL-VAL-KEY
+              DISPLAY '*** SE CANCELA PROGRAMA LDCPG003 ***'
+              MOVE 100 TO RETURN-CODE
+              PERFORM 300-ESTADISTICAS
+              GOBACK
+           END-IF.
+
+       070-REDNX-TCL.
+      *-------------*
+           MOVE 'REDNX'  TO TCL-COMMAND
+           PERFORM 060-LEER-TCL
+           IF TCL-RET-COD = SPACES AND
+              'TCL' = TCL-VAL-KEY-1 AND TCL-MSC-STAT = 'S'
+              ADD 1 TO WL-TCL I
+              MOVE TCL-VAL-KEY-2  TO TAB-LLAVE-1(I)
+              MOVE TCL-VAL-KEY-3  TO TAB-LLAVE-2(I)
+              MOVE TCL-MTO-COMI   TO TAB-MTO-CBR(I)
+              MOVE TCL-MON-COMI   TO TAB-MON-CBR(I)
+              PERFORM 080-BUSCAR-TIPO-CAMBIO
+              COMPUTE TAB-MTO-CBR-PESOS(I) = W-SGV-VCAM * TCL-MTO-COMI
+           END-IF.
+
+       080-BUSCAR-TIPO-CAMBIO.
+      *----------------------*
+           IF TCL-MON-COMI = '0999  '
+              MOVE 1 TO W-SGV-VCAM
+           ELSE
+             MOVE W-FECHA-PAR   TO CAM-VAL-KEY-FE1 CAM-VAL-KEY-FE2
+             MOVE TCL-MON-COMI  TO CAM-VAL-KEY-COD1
+             MOVE '0999  '      TO CAM-VAL-KEY-COD2
+             CALL 'DBNTRY' USING UIB REQ-AREA-CAM REG-CAM ELEM-LIST-CAM
+             IF CAM-RET-COD = SPACES
+                ADD  1 TO WL-CAM
+                MOVE CAM-SGV-VCAM TO W-SGV-VCAM
+             ELSE
+             IF CAM-RET-COD = '14'
+                DISPLAY 'NO EXISTE REGISTRO EN TABLA CAM : ' CAM-RET-COD
+                DISPLAY 'LLAVE           : ' CAM-VAL-KEY
+                DISPLAY '*** SE CANCELA PROGRAMA LDCPG003 ***'
+                PERFORM 300-ESTADISTICAS
+                MOVE 100 TO RETURN-CODE
+                GOBACK
+             ELSE
+                DISPLAY 'ERROR AL LEER TABLA CAM : ' CAM-RET-COD
+                DISPLAY 'LLAVE           : ' CAM-VAL-KEY
+                DISPLAY '*** SE CANCELA PROGRAMA LDCPG003 ***'
+                PERFORM 300-ESTADISTICAS
+                MOVE 100 TO RETURN-CODE
+                GOBACK
+             END-IF
+             END-IF
+           END-IF.
+
+       090-DESPLIEGA-TABLA.
+      *-------------------*
+           DISPLAY '*  TAB-LLAVE-1      ( ' I ' ) = ' TAB-LLAVE-1(I)
+           DISPLAY '*  TAB-LLAVE-2      ( ' I ' ) = ' TAB-LLAVE-2(I)
+           MOVE TAB-MTO-CBR(I) TO VAR-DIS
+           DISPLAY '*  TAB-MTO-CBR      ( ' I ' ) = ' VAR-DIS
+           DISPLAY '*  TAB-MON-CBR      ( ' I ' ) = ' TAB-MON-CBR(I)
+           MOVE  TAB-MTO-CBR-PESOS(I) TO VAR-DIS
+           DISPLAY '*  TAB-MTO-CBR-PESOS( ' I ' ) = ' VAR-DIS
+           DISPLAY '*                                        *'.
+
+       100-LEER-ENTRADA.
+      *----------------*
+           READ ENTRADA AT END MOVE 'SI' TO W-FIN-ECL.
+           IF W-FIN-ECL = 'NO'
+              ADD 1 TO WE-CCL
+           END-IF.
+
+       110-PROCESAR-ECL.
+      *----------------*
+           IF ECL-FEC-CBR-PXM < W-FECHA-RGO-INI
+              ADD 1 TO WN-CCL
+              PERFORM 100-LEER-ENTRADA
+           ELSE
+              PERFORM 120-PROCESAR-REGISTRO
+           END-IF.
+
+       120-PROCESAR-REGISTRO.
+      *---------------------*
+           PERFORM 130-VALIDAR
+           IF W-VAL-CLF = 'SI' AND W-VAL-LDC = 'SI' AND SW-VALIDO = 1
+              PERFORM 250-COBRAR-CCL
+           ELSE
+              ADD 1 TO WN-CCL
+           END-IF.
+           PERFORM 100-LEER-ENTRADA.
+
+       130-VALIDAR.
+      *-----------*
+           MOVE 0 TO SW-VALIDO
+           PERFORM 140-BUSCAR-TIPO-BANCA
+           PERFORM 180-VALIDAR-TIPO-LNA
+           IF SW-VALIDO = 1
+               PERFORM 200-VALIDAR-CLF
+               IF W-VAL-CLF = 'SI'
+                   PERFORM 220-VALIDAR-LDC
+               END-IF
+           END-IF.
+
+       140-BUSCAR-TIPO-BANCA.
+      *---------------------*
+           PERFORM 150-LEER-CIC-DEUDOR
+           IF RDC-RET-COD = SPACES
+              ADD  1 TO WL-RDC
+              PERFORM 160-LEER-DCE
+            ELSE
+              MOVE SPACES TO W-TIPO-BANCA
+           END-IF.
+
+       150-LEER-CIC-DEUDOR.
+      *-------------------*
+           MOVE ECL-CIC-LDC    TO RDC-VAL-KEY
+           CALL 'DBNTRY' USING UIB REQ-AREA-RDC REG-RDC
+                         ELEM-LIST-RDC.
+           IF RDC-RET-COD = SPACES OR '14'
+              NEXT SENTENCE
+           ELSE
+              DISPLAY 'ERROR AL LEER TABLA RDC : ' RDC-RET-COD
+              DISPLAY 'LLAVE           : ' RDC-VAL-KEY
+              DISPLAY '*** SE CANCELA PROGRAMA LDCPG003 ***'
+              PERFORM 300-ESTADISTICAS
+              MOVE 100 TO RETURN-CODE
+              GOBACK
+           END-IF.
+
+       160-LEER-DCE.
+      *------------*
+           MOVE RDC-CIC-ICLI   TO DCE-VAL-KEY
+           CALL 'DBNTRY' USING UIB REQ-AREA-DCE REG-DCE
+                         ELEM-LIST-DCE.
+           IF DCE-RET-COD = SPACES
+              ADD  1 TO WL-DCE
+              MOVE DCE-COD-TBAN TO W-TIPO-BANCA
+           ELSE
+           IF DCE-RET-COD = '14'
+              ADD  1      TO WN-DCE
+              PERFORM 170-BUSCAR-EN-DCP
+           ELSE
+              DISPLAY 'ERROR AL LEER TABLA DCE : ' DCE-RET-COD
+              DISPLAY 'LLAVE           : ' DCE-VAL-KEY
+              DISPLAY '*** SE CANCELA PROGRAMA LDCPG003 ***'
+              PERFORM 300-ESTADISTICAS
+              MOVE 100 TO RETURN-CODE
+              GOBACK
+           END-IF
+           END-IF.
+
+       170-BUSCAR-EN-DCP.
+      *-----------------*
+           MOVE RDC-CIC-ICLI   TO DCP-VAL-KEY
+           CALL 'DBNTRY' USING UIB REQ-AREA-DCP REG-DCP ELEM-LIST-DCP
+           IF DCP-RET-COD = SPACES
+              ADD  1 TO WL-DCP
+              MOVE DCP-COD-TBAN TO W-TIPO-BANCA
+           ELSE
+           IF DCP-RET-COD = '14'
+              ADD  1      TO WN-DCP
+              MOVE SPACES TO W-TIPO-BANCA
+           ELSE
+              DISPLAY 'ERROR AL LEER TABLA DCP : ' DCP-RET-COD
+              DISPLAY 'LLAVE           : ' DCP-VAL-KEY
+              DISPLAY '*** SE CANCELA PROGRAMA LDCPG003 ***'
+              PERFORM 300-ESTADISTICAS
+              MOVE 100 TO RETURN-CODE
+              GOBACK
+           END-IF
+           END-IF.
+
+       180-VALIDAR-TIPO-LNA.
+      *--------------------*
+           MOVE ECL-COD-TIPO TO W-TIPO-LINEA
+           MOVE 0            TO SW-VALIDO
+           PERFORM 190-BUSCAR-EN-TABLA VARYING I FROM 1 BY 1 UNTIL
+                             ( SW-VALIDO = 1 OR I > WC-TAB )
+           COMPUTE I = I - 1.
+
+       190-BUSCAR-EN-TABLA.
+      *-------------------*
+           IF W-LLAVE-TABLA = TAB-LLAVE(I)
+              MOVE 1 TO SW-VALIDO
+           END-IF.
+
+       200-VALIDAR-CLF.
+      *---------------*
+           MOVE 'NO' TO W-VAL-CLF
+           PERFORM 210-LEER-CLF
+           IF CLF-RET-COD = SPACES
+               IF CLF-MSC-STAT = 'A'
+                  IF CLF-FEC-FVEN NOT < W-FECHA-PAR
+                    MOVE 'SI' TO W-VAL-CLF
+                  END-IF
+               END-IF
+           END-IF.
+
+       210-LEER-CLF.
+      *------------*
+           MOVE ECL-CIC-LDC TO CLF-VAL-KEY
+           CALL 'DBNTRY' USING UIB REQ-AREA-CLF REG-CLF ELEM-LIST-CLF
+           IF CLF-RET-COD = SPACES OR '14'
+              NEXT SENTENCE
+           ELSE
+              DISPLAY 'ERROR AL LEER TABLA CLF : ' CLF-RET-COD
+              DISPLAY 'LLAVE           : ' CLF-VAL-KEY
+              DISPLAY '*** SE CANCELA PROGRAMA LDCPG003 ***'
+              PERFORM 300-ESTADISTICAS
+              MOVE 100 TO RETURN-CODE
+              GOBACK
+           END-IF.
+
+       220-VALIDAR-LDC.
+      *---------------*
+           MOVE 'NO'         TO W-VAL-LDC W-FIN-LDC
+           MOVE CLF-CIC-ICLF TO LDC-VAL-KEY-1
+           MOVE LOW-VALUE    TO LDC-VAL-KEY-2
+           MOVE 'REDKG'      TO LDC-COMMAND
+           PERFORM 230-BUSCAR-LDC UNTIL W-VAL-LDC = 'SI'
+                                     OR W-FIN-LDC = 'SI'.
+
+       230-BUSCAR-LDC.
+      *--------------*
+           PERFORM 240-LEER-LDC
+           IF LDC-RET-COD  = SPACES AND
+              CLF-CIC-ICLF = LDC-VAL-KEY-1
+                IF LDC-FEC-FVEN NOT < W-FECHA-PAR  AND
+                   ECL-COD-TIPO     = LDC-COD-TIPO AND
+                   LDC-IND-VIGE     = 'S'
+                   MOVE 'SI' TO W-VAL-LDC
+                ELSE
+                   MOVE 'REDNX' TO LDC-COMMAND
+                END-IF
+           ELSE
+             MOVE 'SI' TO W-FIN-LDC
+           END-IF.
+
+       240-LEER-LDC.
+      *------------*
+           CALL 'DBNTRY' USING UIB REQ-AREA-LDC REG-LDC ELEM-LIST-LDC
+           IF LDC-RET-COD = SPACES OR '14'
+              NEXT SENTENCE
+           ELSE
+              DISPLAY 'ERROR AL LEER TABLA LDC : ' LDC-RET-COD
+              DISPLAY 'LLAVE           : ' LDC-VAL-KEY-1
+              DISPLAY '*** SE CANCELA PROGRAMA LDCPG003 ***'
+              MOVE 100 TO RETURN-CODE
+              PERFORM 300-ESTADISTICAS
+              GOBACK
+           END-IF.
+
+       250-COBRAR-CCL.
+      *--------------*
+           PERFORM 260-LEER-CCL.
+           MOVE CCL-FEC-CBR     TO CCL-FEC-CBR-ANT
+           MOVE CCL-MTO-CBR     TO CCL-MTO-CBR-ANT
+           MOVE CCL-MON-CBR     TO CCL-MON-CBR-ANT
+           MOVE CCL-PCT-DCT     TO CCL-PCT-DCT-ANT
+           MOVE CCL-PCT-DCT-PXM TO CCL-PCT-DCT
+           MOVE W-FECHA-PAR     TO CCL-FEC-CBR
+           MOVE W-FEC-SISTEMA   TO CCL-FEC-ACT
+           MOVE W-HORA-SIS      TO CCL-HOR-ACT
+           MOVE 'LDCPG003'      TO CCL-IDN-ATR-ACT
+           MOVE TAB-MON-CBR(I)  TO CCL-MON-CBR
+           COMPUTE CCL-MTO-CBR = TAB-MTO-CBR(I) *
+                   (( 100 - CCL-PCT-DCT-PXM ) / 100 )
+           COMPUTE W-INY-SGV-MNTO ROUNDED = TAB-MTO-CBR-PESOS(I) *
+                   (( 100 - CCL-PCT-DCT-PXM ) / 100 ).
+           PERFORM 270-CALCULAR-FEC-CBR-PXM
+           PERFORM 280-GRABAR-INYECTOR
+           PERFORM 290-ACTUALIZA-CCL.
+
+       260-LEER-CCL.
+      *------------*
+           MOVE ECL-KEY-LDC    TO CCL-VAL-KEY.
+           MOVE 'RDUKX'        TO CCL-COMMAND
+           CALL 'DBNTRY' USING UIB REQ-AREA-CCL REG-CCL ELEM-LIST-CCL
+           IF CCL-RET-COD = SPACES
+              ADD 1 TO WL-CCL
+           ELSE
+              DISPLAY 'ERROR AL LEER TABLA CCL : ' CCL-RET-COD
+              DISPLAY 'LLAVE           : ' CCL-VAL-KEY
+              DISPLAY '*** SE CANCELA PROGRAMA LDCPG003 ***'
+              PERFORM 300-ESTADISTICAS
+              MOVE 100 TO RETURN-CODE
+              GOBACK
+           END-IF.
+
+       270-CALCULAR-FEC-CBR-PXM.
+      *------------------------*
+           IF CCL-CBR-PXM-FM = 2 AND CCL-CBR-PXM-FD = 29
+              MOVE 28          TO CCL-CBR-PXM-FD
+           END-IF.
+           MOVE CCL-CBR-PXM-FS TO W-CBR-PXM-FS
+           MOVE CCL-CBR-PXM-FA TO W-CBR-PXM-FA
+           ADD  1              TO W-FEC-CBR-PXM
+           MOVE W-CBR-PXM-FS   TO CCL-CBR-PXM-FS
+           MOVE W-CBR-PXM-FA   TO CCL-CBR-PXM-FA.
+
+       280-GRABAR-INYECTOR.
+      *-------------------*
+           IF W-INY-SGV-MNTO > 0
+              MOVE SPACES          TO INY
+              IF CLF-IIC-ICAC = SPACES
+                 MOVE 0            TO INY-NUM-NCTA
+              ELSE
+                 MOVE CLF-IIC-ICAC TO INY-NUM-NCTA
+              END-IF
+              MOVE 9               TO INY-NUM-TREG INY-NUM-IMPU
+              MOVE W-INY-SGV-MNTO  TO INY-SGV-MNTO
+              MOVE 'J'             TO INY-COD-TMVO
+              MOVE 0               TO INY-NUM-CBAN INY-IND-TATM
+                                      INY-NUM-ICAN
+              MOVE W-DIA-PAR       TO INY-NUM-DMVO
+              MOVE W-MES-PAR       TO INY-NUM-MMVO
+              MOVE W-ANO-PAR-2     TO INY-NUM-AMVO
+              WRITE INY
+              IF FS-INY = 0
+                 ADD  1 TO WG-INY
+                 MOVE 0 TO W-INY-SGV-MNTO
+              ELSE
+                 DISPLAY ' ERROR AL GRABAR INYECTOR, F-S. : ' FS-INY
+                 DISPLAY ' *** SE CANCELA PROGRAMA LDCPG003 *** '
+                 PERFORM 300-ESTADISTICAS
+                 MOVE 100 TO RETURN-CODE
+                 GOBACK
+              END-IF
+           ELSE
+             ADD 1 TO WN-INY
+           END-IF.
+
+       290-ACTUALIZA-CCL.
+      *-----------------*
+           MOVE 'UPDAT'        TO CCL-COMMAND
+           CALL 'DBNTRY' USING UIB REQ-AREA-CCL REG-CCL
+                               ELEM-LIST-CCL.
+           IF CCL-RET-COD = SPACES
+              ADD 1 TO WA-CCL
+           ELSE
+              DISPLAY 'ERROR AL ADDIT EN TABLA CCL : ' CCL-RET-COD
+              DISPLAY 'LLAVE           : ' CCL-VAL-KEY
+              DISPLAY '*** SE CANCELA PROGRAMA LDCPG003 ***'
+              PERFORM 300-ESTADISTICAS
+              MOVE 100 TO RETURN-CODE
+              GOBACK
+           END-IF.
+
+       300-ESTADISTICAS.
+      *----------------*
+           IF WA-CCL = 0
+              DISPLAY '******************************************** '
+              DISPLAY '*                                          * '
+              DISPLAY '*    NO HAY REGISTROS PARA PROCESAR HOY    * '
+              DISPLAY '*                                          * '
+              DISPLAY '******************************************** '
+           ELSE
+             DISPLAY '******************************************** '
+             DISPLAY '*       ESTADISTICAS    LDCPG003           * '
+             DISPLAY '******************************************** '
+             DISPLAY '*                                          * '
+             DISPLAY '* VALORIZACIONES LEIDAS TABLA CAM   : ' WL-CAM
+             DISPLAY '* REG. CARGADOS EN TABLA DE TRABAJO : ' WC-TAB
+             DISPLAY '*                                          * '
+             DISPLAY '* REG. LEIDOS ENTRADA               : ' WE-CCL
+             DISPLAY '* REG. LEIDOS CCL                   : ' WL-CCL
+             DISPLAY '* REG. ACTUALIZADOS EN CCL          : ' WA-CCL
+             DISPLAY '* REG. NO PROCESADOS ENTRADA        : ' WN-CCL
+             DISPLAY '* REG. GRABADOS EN INYECTOR         : ' WG-INY
+             DISPLAY '* REG. NO GRAB. INYEC MONTO = CERO  : ' WN-INY
+             DISPLAY '*                                          * '
+             DISPLAY '******************************************** '
+           END-IF.
+           CLOSE INYECTOR ENTRADA.

@@ -1,0 +1,193 @@
+       IDENTIFICATION DIVISION.
+      *=======================
+       PROGRAM-ID.      GARPGCLV.
+       AUTHOR.          CONSIST.
+       DATE-WRITTEN.    25-Nov-91 07:26 PM.
+
+      * Programa Generador de Claves Seleccionando GDG Por Oficina
+      *   para listar Detalle (GARPLDET)
+
+       ENVIRONMENT DIVISION.
+      *====================
+       CONFIGURATION SECTION.
+      *---------------------
+       SPECIAL-NAMES.
+            DECIMAL-POINT IS COMMA.
+
+       DATA DIVISION.
+      *=============
+
+       WORKING-STORAGE SECTION.
+      *-----------------------
+       COPY GNSWCFIO.
+       COPY GNSWVFIO.
+
+       COPY GNSWGSYS.
+
+       COPY GNSBRMSG.
+       COPY GNSBRTAB.
+
+       COPY TABBROFI.
+
+       COPY GARBRGDG.
+       COPY GARBRCLV.
+
+*% IF PGM_DTC
+       COPY GNSWVIDD.
+       COPY GNSWGRQA.
+       COPY GNSWGUIB.
+       COPY GNSWGELS.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-TAB-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-MSG-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-OFI-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-GDG-REQA==.
+*% END
+
+       01  WSS-VARI.
+           03 WSS-COD-OFIC            VALUE SPACES PIC X(03).
+           03 WSS-CONT-GDG            VALUE ZEROES PIC 9(05).
+           03 WSS-CONT-CLV            VALUE ZEROES PIC 9(05).
+
+       PROCEDURE DIVISION.
+      *==================
+       MAIN SECTION.
+      *------------
+       INI-MAIN.
+*% IF PGM_DTC
+       COPY GNSBGEDB.
+*% END
+           PERFORM INI-INP.
+           PERFORM LUP-MAIN.
+
+       FIN-MAIN.
+           MOVE FIO-CLO TO FIO-CMND.
+           PERFORM GAR-FIO-CLV.
+
+           DISPLAY '  TOTALES DE CONTROL'
+           DISPLAY '======================'
+           DISPLAY 'REG. LEIDOS   GDG     : ' WSS-CONT-GDG.
+           DISPLAY 'REG. GRABADOS CLV     : ' WSS-CONT-CLV.
+           DISPLAY '======================'
+       COPY GNSBGGBK.
+
+       INI-INP SECTION.
+       INI-INI-INP.
+           MOVE 'GARPGCLV' TO FIO-PROG.
+*% IF PGM_DTC
+           PERFORM GNS-BUS-IDD.
+*% END
+
+           MOVE FIO-ACCS-UPD TO FIO-ACCS.
+           MOVE FIO-ACC      TO FIO-CMND.
+           MOVE 'GNS'        TO FIO-SIST.
+           PERFORM GNS-FIO-TAB.
+           MOVE FIO-INP      TO FIO-CMND.
+           MOVE 'GNS'        TO FIO-SIST.
+           PERFORM GNS-FIO-TAB.
+
+           MOVE FIO-ACCS-UPD TO FIO-ACCS.
+           MOVE FIO-ACC      TO FIO-CMND.
+           MOVE 'TAB'        TO FIO-SIST.
+           PERFORM TAB-FIO-OFI.
+           MOVE FIO-INP TO FIO-CMND.
+           MOVE 'TAB'   TO FIO-SIST.
+           PERFORM TAB-FIO-OFI.
+
+           MOVE FIO-ACCS-UPD TO FIO-ACCS.
+           MOVE FIO-ACC      TO FIO-CMND.
+           MOVE 'TAB'        TO FIO-SIST.
+           PERFORM GNS-FIO-TAB.
+           MOVE FIO-INP TO FIO-CMND.
+           MOVE 'TAB'   TO FIO-SIST.
+           PERFORM GNS-FIO-TAB.
+
+      *Captura Codigo de Oficina
+           DISPLAY 'INGRESE OFICINA  (*/0XX/999) : '.
+           ACCEPT WSS-COD-OFIC IN WSS-VARI.
+           DISPLAY WSS-COD-OFIC IN WSS-VARI.
+
+      *VAL-OFI Valida Codigo de Oficina
+           IF ( WSS-COD-OFIC IN WSS-VARI > SPACES AND 
+                WSS-COD-OFIC IN WSS-VARI NOT = '*' )
+               MOVE WSS-COD-OFIC IN WSS-VARI TO OFI-COD-OFIC IN OFI
+               PERFORM VAL-OFI
+               IF MSG-COD-MENS = 'COD    NEX'
+                   DISPLAY 'ERROR: CODIGO DE OFICINA INEXISTENTE'
+                   DISPLAY 'OFICINA : ' OFI-COD-OFIC IN OFI
+                   PERFORM PRG-ABT.
+
+           MOVE FIO-OUT TO FIO-CMND.
+           MOVE 'GAR'   TO FIO-SIST.
+           PERFORM GAR-FIO-CLV
+           IF NOT FIO-STAT-OKS
+               DISPLAY 'ERROR AL ABRIR DE OUTPUT ARCHIVO GARCLV '
+               PERFORM PRG-ABT.
+
+           MOVE FIO-ACCS-UPD TO FIO-ACCS.
+           MOVE FIO-ACC      TO FIO-CMND.
+           PERFORM GAR-FIO-GDG.
+           MOVE FIO-INP TO FIO-CMND.
+           PERFORM GAR-FIO-GDG.
+
+           MOVE FIO-GET-FST TO FIO-CMND.
+           PERFORM GAR-FIO-GDG.
+
+       FIN-INI-INP.
+           EXIT.
+
+       LUP-MAIN SECTION.
+       INI-LUP-MAIN.
+           IF NOT FIO-STAT-OKS
+               GO TO FIN-LUP-MAIN.
+
+           ADD 1 TO WSS-CONT-GDG.
+
+           IF NOT (
+              GAR-IND-CPL IN GDG = 'S' AND
+              GAR-ES1 IN GDG > '09' AND GAR-ES1 IN GDG < '20' AND
+              (WSS-COD-OFIC = '*' OR WSS-COD-OFIC = GAR-COD-OFI IN GDG
+               OR WSS-COD-OFIC = '0XX' AND GAR-COD-OFI IN GDG < '100')
+              )
+                 GO TO NXT-INP-MAIN.
+
+           MOVE GAR-NUM-SIS IN GDG TO GAR-NUM-SIS IN CLV.
+           MOVE GAR-COD-CRR IN GDG TO GAR-COD-CRR IN CLV.
+           MOVE FIO-PUT TO FIO-CMND.
+           PERFORM GAR-FIO-CLV.
+           IF NOT FIO-STAT-OKS
+               DISPLAY 'ERROR AL GRABAR REGISTRO CLV     : ' FIO-STAT
+               DISPLAY 'CLAVE : ' GAR-CLV-CLV-1 IN CLV
+               PERFORM PRG-ABT.
+
+           ADD 1 TO WSS-CONT-CLV.
+
+       NXT-INP-MAIN.
+
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM GAR-FIO-GDG.
+
+           GO TO INI-LUP-MAIN.
+
+       FIN-LUP-MAIN.
+           EXIT.
+
+      *Entidades de GAR
+       COPY GARBFGDG.
+       COPY GARBFCLV.
+
+      *Entidades de TAB
+       COPY TABBFOFI.
+       COPY TABBBOFI.
+       COPY TABBVOFI.
+
+      *Entidades de GNS
+*% IF PGM_DTC
+       COPY GNSBGDTC.
+       COPY GNSBGIDD.
+*% END
+       COPY GNSBFTAB.
+       COPY GNSBBTAB.
+       COPY GNSBFMSG.
+       COPY GNSBBMSG.
+       COPY GNSBBSYS.
+       COPY GNSBTABT.

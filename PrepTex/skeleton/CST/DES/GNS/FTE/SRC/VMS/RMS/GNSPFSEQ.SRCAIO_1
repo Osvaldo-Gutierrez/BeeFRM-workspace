@@ -1,0 +1,233 @@
+       IDENTIFICATION DIVISION.
+      *=======================
+       PROGRAM-ID.     {sis}PF{reg}.
+       AUTHOR.          CONSIST.
+       
+      * Subrutina FIO para archivo secuencial {sis}{reg}.
+       
+       ENVIRONMENT DIVISION.
+      *====================
+       INPUT-OUTPUT SECTION.
+      *--------------------
+       FILE-CONTROL.
+           SELECT {sis}{reg} ASSIGN TO VID-{sis}{reg}
+                      ORGANIZATION           IS SEQUENTIAL
+                      ACCESS                 IS SEQUENTIAL
+                      STATUS                 IS FIO-STAT.
+
+       DATA DIVISION.
+      *=============
+       FILE SECTION.
+      *------------
+       FD {sis}{reg}
+               EXTERNAL
+               LABEL RECORDS STANDARD
+               RECORD {var}{rsz}{dep}
+               VALUE OF ID VID-{sis}{reg}
+       .
+       COPY {sis}BR{reg}.
+
+       WORKING-STORAGE SECTION.
+      *-----------------------
+       01 VID-{sis}{reg}  EXTERNAL                   PIC X(26).
+       01 WSS-VARI.
+           03 WSS-IVEZ              VALUE 0          PIC 9(01).
+               88 PRIMERA-VEZ       VALUE 0.
+           03 WSS-ACCS              VALUE 0          PIC 9(01).
+           03 WSS-RLCK              VALUE 0          PIC 9(01).
+           03 WSS-IFNF              VALUE 0          PIC 9(01).
+           03 WSS-RLEN     COMP     VALUE {rsz}     PIC 9(04).
+           03 WSS-ILCK     COMP     VALUE 0          PIC 9(04).
+       
+       COPY GNSWVFIO.
+       COPY GNSWCFIO.
+
+       LINKAGE SECTION.
+      *---------------
+       01 LNK-CMND                         PIC 9(04).
+       01 LNK-REGI                         PIC X({rsz}).
+
+       PROCEDURE DIVISION USING LNK-CMND LNK-REGI.
+      *===========================================
+       
+       COPY GNSBEFIO
+           REPLACING
+           FIO-IFNF     BY     WSS-IFNF
+           FIO-RLCK     BY     WSS-RLCK
+           FIO-VOID     BY     VID-{sis}{reg}.
+
+       MAIN SECTION.
+      *------------
+       INI-MAIN.
+           MOVE LNK-CMND TO FIO-CMND.
+           IF PRIMERA-VEZ
+               MOVE ZEROES     TO     FIO-STAT
+                                      WSS-ACCS
+                                      WSS-RLCK
+                                      WSS-IFNF
+               MOVE '{sis}{reg}'     TO     VID-{sis}{reg}
+               MOVE {rsz}      TO     WSS-RLEN
+               MOVE 1          TO     WSS-IVEZ.
+           GO TO
+               ERR-MAIN        INI-GET-NXT     INI-GET-NXT
+               ERR-MAIN        ERR-MAIN        INI-PUT-FIL
+               INI-MOD-FIL     ERR-MAIN        ERR-MAIN
+               INI-INP-FIL     INI-OUT-FIL     INI-UPD-FIL
+               INI-CLO-FIL     ERR-MAIN        ERR-MAIN
+               ERR-MAIN        ERR-MAIN        INI-ULK-REC
+               INI-ULK-ALL     INI-VID-FIL     INI-ACC-FIL
+               INI-REC-LCK     INI-FNF-FIL     INI-REC-LEN
+               EXT-FIL
+                   DEPENDING ON FIO-CMND.
+
+       ERR-MAIN.
+           DISPLAY '? Codigo '
+               LINE 23 COLUMN 1 WITH BELL REVERSED
+               FIO-CMND REVERSED
+               '  invalido en {sis}PF{reg} para archivo '
+               LINE 24 COLUMN 1 REVERSED
+               VID-{sis}{reg} REVERSED ' : ABORTO' REVERSED.
+       FIN-MAIN.
+           STOP RUN.
+       NUL-FUNC.
+           MOVE '00'   TO FIO-STAT.
+           EXIT PROGRAM.
+       
+       GET-NXT SECTION.
+       INI-GET-NXT.
+           MOVE 1 TO WSS-ILCK.
+       LUP-GET-NXT.
+           READ {sis}{reg} INTO LNK-REGI.
+           IF FIO-STAT-RLU
+               IF WSS-ILCK > 20
+                   GO TO FIN-GET-NXT
+               ELSE
+                   ADD 1 TO WSS-ILCK
+                    GO TO LUP-GET-NXT.
+           MOVE FIO-RLEN TO WSS-RLEN.
+       FIN-GET-NXT.
+           EXIT PROGRAM.
+
+       PUT-FIL SECTION.
+       INI-PUT-FIL.
+           MOVE WSS-RLEN TO FIO-RLEN.
+           MOVE LNK-REGI TO {reg}.
+           WRITE {reg}.
+       FIN-PUT-FIL.
+           EXIT PROGRAM.
+
+       MOD-FIL SECTION.
+       INI-MOD-FIL.
+           MOVE WSS-RLEN TO FIO-RLEN.
+           MOVE LNK-REGI TO {reg}.
+           REWRITE {reg}.
+       FIN-MOD-FIL.
+           EXIT PROGRAM.
+
+       INP-FIL SECTION.
+       INI-INP-FIL.
+           IF WSS-ACCS = FIO-ACCS-UPD
+                OPEN INPUT {sis}{reg}
+           ELSE
+           IF WSS-ACCS = FIO-ACCS-NOT
+                GO TO ERR-OPE
+           ELSE
+                OPEN INPUT {sis}{reg}.
+       FIN-INP-FIL.
+           EXIT PROGRAM.
+
+       OUT-FIL SECTION.
+       INI-OUT-FIL.
+           IF WSS-ACCS = FIO-ACCS-UPD
+                GO TO ERR-OPE
+           ELSE
+           IF WSS-ACCS = FIO-ACCS-INP
+                GO TO ERR-OPE
+           ELSE
+                OPEN OUTPUT {sis}{reg}.
+       FIN-OUT-FIL.
+           EXIT PROGRAM.
+
+       UPD-FIL SECTION.
+       INI-UPD-FIL.
+           IF WSS-ACCS = FIO-ACCS-UPD
+                GO TO ERR-OPE
+           ELSE
+           IF WSS-ACCS = FIO-ACCS-INP
+                 GO TO ERR-OPE
+           ELSE
+                 OPEN I-O {sis}{reg}.
+       FIN-UPD-FIL.
+           EXIT PROGRAM.
+
+       EXT-FIL SECTION.
+       INI-EXT-FIL.
+           IF WSS-ACCS = FIO-ACCS-UPD
+                GO TO ERR-OPE
+           ELSE
+           IF WSS-ACCS = FIO-ACCS-INP
+                GO TO ERR-OPE
+           ELSE
+                OPEN EXTEND {sis}{reg}.
+       FIN-EXT-FIL.
+           EXIT PROGRAM.
+
+       CLO-FIL SECTION.
+       INI-CLO-FIL.
+           CLOSE {sis}{reg}.
+           MOVE 0 TO WSS-IVEZ.
+       FIN-CLO-FIL.
+           EXIT PROGRAM.
+
+       ULK-REC SECTION.
+       INI-ULK-REC.
+           UNLOCK {sis}{reg} RECORD.
+       FIN-ULK-REC.
+           EXIT PROGRAM.
+
+       ULK-ALL SECTION.
+       INI-ULK-ALL.
+           UNLOCK {sis}{reg} ALL.
+       FIN-ULK-ALL.
+           EXIT PROGRAM.
+
+       VID-FIL SECTION.
+       INI-VID-FIL.
+           MOVE FIO-VOID TO VID-{sis}{reg}.
+       FIN-VID-FIL.
+           EXIT PROGRAM.
+
+       ACC-FIL SECTION.
+       INI-ACC-FIL.
+           MOVE FIO-ACCS TO WSS-ACCS.
+       FIN-ACC-FIL.
+           EXIT PROGRAM.
+
+       REC-LCK SECTION.
+       INI-REC-LCK.
+           MOVE FIO-RLCK TO WSS-RLCK.
+       FIN-REC-LCK.
+           EXIT PROGRAM.
+
+       FNF-FIL SECTION.
+       INI-FNF-FIL.
+           MOVE FIO-IFNF TO WSS-IFNF.
+       FIN-FNF-FIL.
+           EXIT PROGRAM.
+
+       REC-LEN SECTION.
+       INI-REC-LEN.
+           MOVE FIO-RLEN TO WSS-RLEN.
+       FIN-REC-LEN.
+           EXIT PROGRAM.
+
+       ERR-OPE SECTION.
+       INI-ERR-OPE.
+           DISPLAY '? Actualizacion simultanea no permitida'
+                LINE 23 COLUMN 1 WITH BELL REVERSED
+                '  en archivo secuencial '
+                LINE 24 COLUMN 1 REVERSED
+                FIO-VOID REVERSED ' : ABORTO' REVERSED.
+           STOP RUN.
+       FIN-ERR-OPE.
+           EXIT.

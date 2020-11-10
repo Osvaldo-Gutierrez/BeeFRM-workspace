@@ -1,0 +1,379 @@
+      *$ASCII
+       IDENTIFICATION DIVISION.
+      *=======================
+       PROGRAM-ID.     GNSPPPRV.
+       AUTHOR.          CONSIST.
+
+      * Subrutina Privilegios
+
+       ENVIRONMENT DIVISION.
+      *=====================
+       CONFIGURATION SECTION.
+      *----------------------
+       SPECIAL-NAMES.
+               DECIMAL-POINT IS COMMA.
+
+       DATA DIVISION.
+      *==============
+       WORKING-STORAGE SECTION.
+      *-----------------------
+       01  WSS-VARI.
+           03 WSS-CERRAR-RUG         VALUE 'N'            PIC X(01).
+           03 WSS-CERRAR-PDP         VALUE 'N'            PIC X(01).
+           03 WSS-COD-TCON                           PIC X(03).
+           03 WSS-IVEZ              VALUE 0          PIC 9(01).
+               88 PRIMERA-VEZ       VALUE 0.
+           03 WSS-I        VALUE ZEROES                PIC 9(04).
+           03 WSS-T        VALUE ZEROES                PIC 9(04).
+           03 WSS-PDP OCCURS 50 TIMES.
+              05 WSS-PDP-COD-GRPO                      PIC X(12).
+              05 WSS-PDP-COD-TDPU                      PIC X(02).
+              05 WSS-PDP-NUM-SECU                      PIC 9(04).
+              05 WSS-PDP-COD-SIST                      PIC X(03).
+              05 WSS-PDP-COD-NEMO                      PIC X(12).
+              05 WSS-PDP-COD-CMND                      PIC X(03).
+              05 WSS-PDP-COD-PROC                      PIC X(12).
+              05 WSS-PDP-IND-RESP                      PIC X(01).
+
+       COPY GNSWVSCR.
+       COPY GNSWGSYS.
+       COPY GNSWGUYP.
+       COPY GNSLGUYP.
+       COPY GNSWVFIO.
+       COPY GNSWCFIO.
+       COPY GNSBRPDP.
+       COPY GNSBRRUG.
+
+       LINKAGE SECTION.
+      *---------------
+       01  DFHCOMMAREA.
+           02 FILLER                        PIC X(47).
+       COPY GNSLGFIO.
+
+       PROCEDURE DIVISION.
+      *===================
+
+       MAIN SECTION.
+      *------------
+       INI-MAIN.
+      *     IF PRIMERA-VEZ
+      *         MOVE FIO-ACC      TO FIO-CMND
+      *         MOVE FIO-ACCS-UPD TO FIO-ACCS
+      *         PERFORM GNS-FIO-PDP
+      *         MOVE FIO-INP TO FIO-CMND
+      *         PERFORM GNS-FIO-PDP
+
+      *         MOVE FIO-ACC      TO FIO-CMND
+      *         MOVE FIO-ACCS-UPD TO FIO-ACCS
+      *         PERFORM GNS-FIO-RUG
+      *         MOVE FIO-INP TO FIO-CMND
+      *         PERFORM GNS-FIO-RUG
+      *         MOVE 1 TO WSS-IVEZ.
+
+           MOVE DFHCOMMAREA TO UYP-VARI.
+           PERFORM GNS-HDL-VSM.
+           PERFORM CRG-WSS-PDP.
+           IF WSS-I = ZEROES
+              MOVE UYP-STAT-UNDE  TO UYP-COD-STAT
+              MOVE 'N' TO UYP-IND-RESP
+           ELSE
+              PERFORM DET-PRV
+              IF WSS-COD-TCON = UYP-CON-MALO
+                  MOVE UYP-STAT-TCER TO UYP-COD-STAT.
+           MOVE UYP-VARI TO DFHCOMMAREA.
+       FIN-MAIN.
+           EXEC CICS RETURN END-EXEC.
+
+       CRG-WSS-PDP SECTION.
+       INI-CRG-WSS-PDP.
+           MOVE ZEROES TO WSS-I.
+           PERFORM GET-PDP-ALL.
+
+           MOVE LOW-VALUES               TO RUG-KEY-IRUG IN RUG.
+           MOVE UYP-COD-USER IN UYP-VARI TO RUG-COD-USER IN RUG.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+       CIC-CRG-WSS-PDP.
+           MOVE 'RUG-COD-USER' TO FIO-AKEY.
+           PERFORM GNS-FIO-RUG.
+           IF NOT FIO-STAT-OKS
+               GO TO END-CRG-WSS-PDP.
+           MOVE 'S' TO WSS-CERRAR-RUG.
+
+           IF UYP-COD-USER IN UYP-VARI NOT =
+              RUG-COD-USER IN RUG
+               GO TO END-CRG-WSS-PDP.
+
+           PERFORM GET-PDP.
+
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           GO TO CIC-CRG-WSS-PDP.
+
+       END-CRG-WSS-PDP.
+           IF WSS-CERRAR-RUG = 'S'
+               MOVE 'RUG-COD-USER' TO FIO-AKEY
+               MOVE 'N' TO WSS-CERRAR-RUG
+               MOVE FIO-END-BRW TO FIO-CMND
+               PERFORM GNS-FIO-RUG.
+       FIN-CRG-WSS-PDP.
+           EXIT.
+
+       GET-PDP-ALL SECTION.
+       INI-GET-PDP-ALL.
+           MOVE 'N' TO WSS-CERRAR-PDP.
+           MOVE LOW-VALUES          TO PDP-KEY-IPDP IN PDP.
+           MOVE '*'                 TO PDP-COD-GRPO IN PDP.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+       CIC-GET-PDP-ALL.
+           PERFORM GNS-FIO-PDP.
+           IF NOT FIO-STAT-OKS
+               GO TO FIN-GET-PDP-ALL.
+
+           MOVE 'S' TO WSS-CERRAR-PDP.
+           IF PDP-COD-GRPO IN PDP NOT = '*'
+               GO TO FIN-GET-PDP-ALL.
+
+           ADD 1 TO WSS-I.
+           MOVE     PDP-COD-GRPO IN PDP TO
+                WSS-PDP-COD-GRPO IN WSS-PDP(WSS-I).
+           MOVE     PDP-COD-TDPU IN PDP TO
+                WSS-PDP-COD-TDPU IN WSS-PDP(WSS-I).
+           MOVE     PDP-NUM-SECU IN PDP TO
+                WSS-PDP-NUM-SECU IN WSS-PDP(WSS-I).
+           MOVE     PDP-COD-SIST IN PDP TO
+                WSS-PDP-COD-SIST IN WSS-PDP(WSS-I).
+           MOVE     PDP-COD-NEMO IN PDP TO
+                WSS-PDP-COD-NEMO IN WSS-PDP(WSS-I).
+           MOVE     PDP-COD-CMND IN PDP TO
+                WSS-PDP-COD-CMND IN WSS-PDP(WSS-I).
+           MOVE     PDP-COD-PROC IN PDP TO
+                WSS-PDP-COD-PROC IN WSS-PDP(WSS-I).
+           MOVE     PDP-IND-RESP IN PDP TO
+                WSS-PDP-IND-RESP IN WSS-PDP(WSS-I).
+
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           GO TO CIC-GET-PDP-ALL.
+
+       FIN-GET-PDP-ALL.
+
+           IF WSS-CERRAR-PDP = 'S'
+               MOVE 'N' TO WSS-CERRAR-PDP
+               MOVE FIO-END-BRW TO FIO-CMND
+               PERFORM GNS-FIO-PDP.
+       EXT-GET-PDP-ALL.
+           EXIT.
+
+       GET-PDP SECTION.
+       INI-GET-PDP.
+           MOVE 'N' TO WSS-CERRAR-PDP.
+           MOVE LOW-VALUES          TO PDP-KEY-IPDP IN PDP.
+           MOVE RUG-COD-GRPO IN RUG TO PDP-COD-GRPO IN PDP.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+       CIC-GET-PDP-2.
+           PERFORM GNS-FIO-PDP.
+           IF NOT FIO-STAT-OKS
+               GO TO END-GET-PDP.
+
+           MOVE 'S' TO WSS-CERRAR-PDP.
+           IF RUG-COD-GRPO IN RUG NOT =
+              PDP-COD-GRPO IN PDP
+               GO TO END-GET-PDP.
+
+           ADD 1 TO WSS-I.
+           MOVE     PDP-COD-GRPO IN PDP TO
+                WSS-PDP-COD-GRPO IN WSS-PDP(WSS-I).
+           MOVE     PDP-COD-TDPU IN PDP TO
+                WSS-PDP-COD-TDPU IN WSS-PDP(WSS-I).
+           MOVE     PDP-NUM-SECU IN PDP TO
+                WSS-PDP-NUM-SECU IN WSS-PDP(WSS-I).
+           MOVE     PDP-COD-SIST IN PDP TO
+                WSS-PDP-COD-SIST IN WSS-PDP(WSS-I).
+           MOVE     PDP-COD-NEMO IN PDP TO
+                WSS-PDP-COD-NEMO IN WSS-PDP(WSS-I).
+           MOVE     PDP-COD-CMND IN PDP TO
+                WSS-PDP-COD-CMND IN WSS-PDP(WSS-I).
+           MOVE     PDP-COD-PROC IN PDP TO
+                WSS-PDP-COD-PROC IN WSS-PDP(WSS-I).
+           MOVE     PDP-IND-RESP IN PDP TO
+                WSS-PDP-IND-RESP IN WSS-PDP(WSS-I).
+
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           GO TO CIC-GET-PDP-2.
+
+       END-GET-PDP.
+           IF WSS-CERRAR-PDP = 'S'
+               MOVE 'N' TO WSS-CERRAR-PDP
+               MOVE FIO-END-BRW TO FIO-CMND
+               PERFORM GNS-FIO-PDP.
+       FIN-GET-PDP.
+           EXIT.
+
+       DET-PRV SECTION.
+       INI-DET-PRV.
+           MOVE WSS-I TO WSS-T.
+           MOVE 'N' TO UYP-IND-RESP.
+           IF UYP-COD-TDPU = UYP-COD-TDPU-GB
+                PERFORM BUS-PRV-SIST VARYING WSS-I FROM 1 BY 1
+                        UNTIL WSS-I > WSS-T
+           ELSE
+           PERFORM DET-WSS-COD-TCON
+           IF WSS-COD-TCON = UYP-CON-SIST
+                PERFORM BUS-PRV-SIST VARYING WSS-I FROM 1 BY 1
+                        UNTIL WSS-I > WSS-T
+           ELSE
+           IF WSS-COD-TCON = UYP-CON-NEMO
+                PERFORM BUS-PRV-NEMO VARYING WSS-I FROM 1 BY 1
+                        UNTIL WSS-I > WSS-T
+           ELSE
+           IF WSS-COD-TCON = UYP-CON-CMND
+                PERFORM BUS-PRV-CMND VARYING WSS-I FROM 1 BY 1
+                        UNTIL WSS-I > WSS-T
+           ELSE
+           IF WSS-COD-TCON = UYP-CON-PROC
+                PERFORM BUS-PRV-PROC VARYING WSS-I FROM 1 BY 1
+                        UNTIL WSS-I > WSS-T
+           ELSE
+           IF WSS-COD-TCON = UYP-CON-MALO
+                MOVE UYP-STAT-TCER TO UYP-COD-STAT.
+       FIN-DET-PRV.
+           EXIT.
+
+       DET-WSS-COD-TCON SECTION.
+       INI-DET-WSS-COD-TCON.
+           IF      UYP-COD-PROC > SPACES
+              MOVE UYP-CON-PROC TO WSS-COD-TCON
+           ELSE
+           IF      UYP-COD-CMND > SPACES
+              MOVE UYP-CON-CMND TO WSS-COD-TCON
+           ELSE
+           IF      UYP-COD-NEMO > SPACES
+              MOVE UYP-CON-NEMO TO WSS-COD-TCON
+           ELSE
+           IF      UYP-COD-SIST > SPACES
+              MOVE UYP-CON-SIST TO WSS-COD-TCON
+           ELSE
+              MOVE UYP-CON-MALO TO WSS-COD-TCON.
+       FIN-DET-WSS-COD-TCON.
+           EXIT.
+
+       BUS-PRV-SIST SECTION.
+       INI-BUS-PRV-SIST.
+           IF (
+                WSS-PDP-COD-SIST IN WSS-PDP(WSS-I) =
+                '*  '
+                                 OR
+                WSS-PDP-COD-SIST IN WSS-PDP(WSS-I) =
+                    UYP-COD-SIST IN UYP-VARI
+               )
+                  IF WSS-PDP-COD-NEMO IN WSS-PDP(WSS-I) = '*  ' AND
+                     WSS-PDP-COD-CMND IN WSS-PDP(WSS-I) = '*  '
+                         MOVE WSS-PDP-IND-RESP IN WSS-PDP(WSS-I) TO
+                                  UYP-IND-RESP IN UYP-VARI
+                         ADD 1 WSS-T GIVING WSS-I
+                  ELSE
+                  IF WSS-PDP-IND-RESP IN WSS-PDP(WSS-I) = 'S'
+                         MOVE WSS-PDP-IND-RESP IN WSS-PDP(WSS-I) TO
+                                  UYP-IND-RESP IN UYP-VARI
+                         ADD 1 WSS-T GIVING WSS-I.
+       FIN-BUS-PRV-SIST.
+           EXIT.
+
+       BUS-PRV-NEMO SECTION.
+       INI-BUS-PRV-NEMO.
+           IF (
+                WSS-PDP-COD-SIST IN WSS-PDP(WSS-I)
+                = '*  '
+                     OR
+                WSS-PDP-COD-SIST IN WSS-PDP(WSS-I)
+                =   UYP-COD-SIST IN UYP-VARI
+              )
+              AND
+              (
+                WSS-PDP-COD-NEMO IN WSS-PDP(WSS-I) =
+                '*  '
+                     OR
+                WSS-PDP-COD-NEMO IN WSS-PDP(WSS-I)
+                =   UYP-COD-NEMO IN UYP-VARI
+              )
+                    IF WSS-PDP-COD-CMND IN WSS-PDP(WSS-I)
+                       = '*  '
+                          MOVE WSS-PDP-IND-RESP IN WSS-PDP(WSS-I) TO
+                                   UYP-IND-RESP IN UYP-VARI
+                          ADD 1 WSS-T GIVING WSS-I
+                    ELSE
+                    IF WSS-PDP-IND-RESP IN WSS-PDP(WSS-I)
+                       = 'S'
+                         MOVE WSS-PDP-IND-RESP IN WSS-PDP(WSS-I) TO
+                                  UYP-IND-RESP IN UYP-VARI
+                         ADD 1 WSS-T GIVING WSS-I.
+       FIN-BUS-PRV-NEMO.
+           EXIT.
+
+       BUS-PRV-CMND SECTION.
+       INI-BUS-PRV-CMND.
+           IF (
+                WSS-PDP-COD-SIST IN WSS-PDP(WSS-I)
+                = '*  '
+                     OR
+                WSS-PDP-COD-SIST IN WSS-PDP(WSS-I)
+                =   UYP-COD-SIST IN UYP-VARI
+               )
+               AND
+               (
+                 WSS-PDP-COD-NEMO IN WSS-PDP(WSS-I) =
+                 '*  '
+                                 OR
+                 WSS-PDP-COD-NEMO IN WSS-PDP(WSS-I) =
+                     UYP-COD-NEMO IN UYP-VARI
+                )
+                AND
+                (
+                 WSS-PDP-COD-CMND IN WSS-PDP(WSS-I) =
+                 '*  '           OR
+                  WSS-PDP-COD-CMND IN WSS-PDP(WSS-I) =
+                      UYP-COD-CMND IN UYP-VARI
+                 )
+                     MOVE WSS-PDP-IND-RESP IN WSS-PDP(WSS-I) TO
+                              UYP-IND-RESP IN UYP-VARI
+                     ADD 1 WSS-T GIVING WSS-I.
+       FIN-BUS-PRV-CMND.
+           EXIT.
+
+       BUS-PRV-PROC SECTION.
+       INI-BUS-PRV-PROC.
+           IF (
+                WSS-PDP-COD-SIST IN WSS-PDP(WSS-I)
+                = '*  '
+                     OR
+                WSS-PDP-COD-SIST IN WSS-PDP(WSS-I)
+                =   UYP-COD-SIST IN UYP-VARI
+               )
+               AND
+               (
+                 WSS-PDP-COD-NEMO IN WSS-PDP(WSS-I) =
+                 '*  '
+                                 OR
+                 WSS-PDP-COD-NEMO IN WSS-PDP(WSS-I) =
+                     UYP-COD-NEMO IN UYP-VARI
+                )
+                AND
+                (
+                 WSS-PDP-COD-CMND IN WSS-PDP(WSS-I) =
+                 '*  '           OR
+                  WSS-PDP-COD-CMND IN WSS-PDP(WSS-I) =
+                      UYP-COD-CMND IN UYP-VARI
+                 )
+                     MOVE WSS-PDP-IND-RESP IN WSS-PDP(WSS-I) TO
+                              UYP-IND-RESP IN UYP-VARI
+                     ADD 1 WSS-T GIVING WSS-I.
+       FIN-BUS-PRV-PROC.
+           EXIT.
+
+       COPY GNSBFPDP.
+       COPY GNSBFRUG.
+       COPY GNSBHVSM.
+       COPY GNSBGVSM.
+       COPY GNSBGSYS.
+       PRG-ABT SECTION.
+       INI-PRG-ABT.
+       FIN-PRG-ABT.
+           EXIT.

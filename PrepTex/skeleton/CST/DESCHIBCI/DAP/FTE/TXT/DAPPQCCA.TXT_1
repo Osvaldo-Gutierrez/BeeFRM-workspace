@@ -1,0 +1,184 @@
+*%! Codigo adicional para DAPPQCCA
+*% IF SETTAG
+*% VSNPQ = "09.08.27"
+*% FNCPQ = "090802"
+*% VSNPU = "09.08.27"
+*% FNCPU = "090802"
+*% END
+*% IF WSS
+      *<<<< WSS
+      *Entidades de DAP
+       COPY SGCBRDBC.
+       COPY DAPBRRCC.
+       COPY DAPBRLIQ.
+       COPY DAPBRCAD.
+       COPY TABBRCAM.
+      *
+       COPY GNSWGCPT.
+       COPY GNSWGSTR.
+       COPY GNSWGPES.
+
+       01  WSS-VARI.
+           03  WSS-NUM-LEN3                          PIC 9(03).
+           03  WSS-TOT-ICAD                          PIC 9(03).
+           03  WSS-PGM-STAT.
+              05 PGM-STAT-CAD           VALUE '23'   PIC X(02).
+                 88 PGM-STAT-CAD-OKS    VALUE '00'.
+                 88 PGM-STAT-CAD-NUL    VALUE '  '.
+           03  WSS-VAL-IPES                          PIC 9(11)V9(04).
+           03  WSS-CAPT                              PIC 9(11)V9(04).
+           03  WSS-SGV-VCAM                          PIC 9(11)V9(04).
+           03  WSS-CIC-VCAM.
+              05  WSS-CIC-TVAL                       PIC X(01).
+              05  WSS-CIC-CVAL                       PIC X(03).
+              05  WSS-CIC-TCAM                       PIC X(08).
+      *>>>> WSS
+*% END
+*% IF WSS_DTC
+      *<<<< WSS_DTC
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-RCC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-LIQ-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-CAD-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-DBC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-CAM-REQA==.
+      *>>>>
+*% END
+*% IF FIN_SCR_TRL
+      *<<<< FIN_SCR_TRL
+           MOVE OPD-CIC-IOPD IN OPD TO RCC-CIC-IOPD IN RCC.
+           MOVE 'RCC-KEY-IOPD' TO FIO-AKEY.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM DAP-FIO-RCC.
+           IF FIO-STAT-OKS AND
+              OPD-CIC-IOPD IN OPD = RCC-CIC-IOPD IN RCC
+                 MOVE RCC-CIC-ICLI IN RCC TO DBC-CIC-ICLI IN DBC
+                 MOVE FIO-GET-KEY TO FIO-CMND
+                 PERFORM SGC-FIO-DBC
+                 MOVE FIO-STAT TO PGM-STAT-DBC
+                 IF FIO-STAT-OKS
+                     PERFORM GET-NXT-RCC   
+                     MOVE DBC-GLS-NOMC IN DBC TO CPT-STRN
+                     PERFORM CPT-BLKS.
+                     MOVE CPT-STRN            TO DBC-GLS-NOMC IN DBC
+                     PERFORM PUT-DBC-CCA.
+
+           MOVE ZEROES TO WSS-TOT-ICAD.
+           MOVE OPD-CIC-IOPD IN OPD TO CAD-CIC-IOPD IN CAD.
+           MOVE LIQ-NUM-ILIQ IN CCA-FLD TO CAD-NUM-ILIQ IN CAD.
+           MOVE ZEROES                  TO CAD-NUM-ICAD IN CAD.
+           MOVE FIO-GET-NLS TO FIO-CMND
+           PERFORM PRO-CAD.
+      *>>>>
+*% END
+*% IF EOF
+      *<<<< EOF
+       PRO-CAD SECTION.
+       INI-PRO-CAD.
+           PERFORM DAP-FIO-CAD.
+           IF NOT FIO-STAT-OKS
+               GO TO FIN-PRO-CAD.
+           IF NOT ( OPD-CIC-IOPD IN OPD = CAD-CIC-IOPD IN CAD AND
+                    LIQ-NUM-ILIQ IN CCA-FLD = CAD-NUM-ILIQ IN CAD )
+               GO TO FIN-PRO-CAD.
+           ADD 1 TO WSS-TOT-ICAD.
+           MOVE CAD-NUM-ICAD IN CAD TO
+                FRM-NUM-ICAD IN CCA-FLD(WSS-TOT-ICAD).
+           MOVE CAD-CAI-ICAD IN CAD TO
+                FRM-CAI-ICAD IN CCA-FLD(WSS-TOT-ICAD).
+           MOVE CAD-IIC-ICAD IN CAD TO
+                FRM-IIC-ICAD IN CCA-FLD(WSS-TOT-ICAD).
+
+           PERFORM BUS-VPES.
+
+           MOVE 'TAB' TO MSC-COD-SIST.
+           MOVE 'TCYA' TO MSC-COD-TMSC IN MSC.
+           MOVE CAD-IND-TCAD IN CAD TO MSC-COD-CMSC IN MSC.
+           PERFORM BUS-MSC
+           MOVE MSC-GLS-DESC IN MSC TO
+                FRM-GLS-TCAD IN CCA-FLD(WSS-TOT-ICAD).
+
+           IF WSS-TOT-ICAD < 10
+               MOVE FIO-GET-NXT TO FIO-CMND
+               GO TO INI-PRO-CAD.
+       FIN-PRO-CAD.
+           EXIT.
+
+       GET-NXT-RCC SECTION.
+       INI-GET-NXT-RCC.
+           MOVE 'RCC-KEY-IOPD' TO FIO-AKEY.
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM DAP-FIO-RCC.
+           IF FIO-STAT-OKS AND
+              OPD-CIC-IOPD IN OPD = RCC-CIC-IOPD IN RCC
+                MOVE 'M' TO DBC-IND-ICLI IN DBC
+           ELSE
+                MOVE SPACES TO DBC-IND-ICLI IN DBC.
+       FIN-GET-NXT-RCC.
+           EXIT.
+
+       BUS-VPES SECTION.
+       INI-BUS-VPES.
+      *SE ACCESA LA BDD, PUES ES NECESARIO OBTENER
+      *EL CIC DE OPD-COD-VCAM
+      *BUS-TAB busca glosa de codigo en tabla
+           IF OPD-COD-VCAM IN OPD NOT > SPACES
+               GO TO FIN-BUS-VPES.
+
+           MOVE 'TAB' TO TAB-COD-SIST.
+           MOVE 'VLR' TO TAB-COD-TTAB IN TAB.
+           MOVE OPD-COD-VCAM IN OPD TO TAB-COD-CTAB IN TAB.
+           PERFORM BUS-TAB.
+           MOVE TAB-CIC-CTAB IN TAB TO WSS-CIC-VCAM.
+
+      *    moneda extranjera
+           IF WSS-CIC-TVAL NOT = '0'
+                MOVE ZEROES TO 
+                       FRM-VAL-VPES IN CCA-FLD(WSS-TOT-ICAD)
+                MOVE CAD-SGV-LIQU IN CAD TO
+                       FRM-SGV-LIQU IN CCA-FLD(WSS-TOT-ICAD)
+                GO TO FIN-BUS-VPES.
+
+      *    moneda chilena y pesos
+           IF WSS-CIC-VCAM = '0999'
+                MOVE CAD-SGV-LIQU IN CAD TO 
+                       FRM-VAL-VPES IN CCA-FLD(WSS-TOT-ICAD)
+                MOVE CAD-SGV-LIQU IN CAD TO
+                       FRM-SGV-LIQU IN CCA-FLD(WSS-TOT-ICAD)
+                GO TO FIN-BUS-VPES.
+
+      *    moneda reajustable, chilena y no pesos ; convertir a pesos
+           MOVE '0999  '            TO TAB-CIC-CTAB IN TAB.
+           MOVE OPD-COD-VCAM IN OPD TO TAB-COD-CTAB IN TAB.
+           MOVE OPD-NUM-DREA IN OPD TO TAB-NUM-DTRN IN TAB.
+           MOVE OPD-NUM-MREA IN OPD TO TAB-NUM-MTRN IN TAB.
+           MOVE OPD-NUM-SREA IN OPD TO TAB-NUM-STRN IN TAB.
+           MOVE OPD-NUM-AREA IN OPD TO TAB-NUM-ATRN IN TAB.
+           PERFORM GET-VCAM.
+           IF MSG-COD-MENS = SPACES
+               MOVE CAM-SGV-VCAM IN CAM TO WSS-SGV-VCAM IN WSS-VARI
+           ELSE
+               MOVE 1 TO WSS-SGV-VCAM IN WSS-VARI.
+
+           MOVE CAD-SGV-LIQU IN CAD TO 
+               FRM-VAL-VPES IN CCA-FLD(WSS-TOT-ICAD).
+
+           DIVIDE CAD-SGV-LIQU IN CAD BY 
+               WSS-SGV-VCAM IN WSS-VARI GIVING 
+               FRM-SGV-LIQU IN CCA-FLD(WSS-TOT-ICAD) ROUNDED.
+       FIN-BUS-VPES.
+           EXIT.
+
+      *Entidades de DAP
+       COPY DAPBFRCC.
+       COPY DAPBFLIQ.
+       COPY DAPBFCAD.
+       COPY SGCBFDBC.
+       COPY TABBFCAM.
+
+       COPY GNSBGCPT.
+       COPY GNSBGSTR.
+       COPY GNSBBMSC.
+       COPY GNSBGCAM.
+       COPY GNSBGPES.
+      *>>>>
+*% END

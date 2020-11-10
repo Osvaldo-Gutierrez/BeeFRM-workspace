@@ -1,0 +1,199 @@
+		Traspaso Automatico a Cartera Vencida
+		-------------------------------------
+
+
+Programa     :  COLPBVTC Traspasa vencimientos a cartera vencida
+		entre FHOY y Fecha de termino indicada "acelerando"
+		los creditos cuando corresponde.
+
+Archivo Base :  COLVEN Vencimientos ( DATACOM ) .
+
+Archivos Anexos :  COLOPC, COLDLC 
+		   COLEVC, SGCDBC 
+		   COLRDC, COLDLC
+		   TABOFI, TABVLR
+		   TABCAM, TABUSR
+		   COLRCV, COLCCT
+		   COLRDT, COLCCB
+		   COLTOC, COLICG  ( Todos DATACOM )
+
+Tablas       : Todas DATACOM
+
+		Sistema	Tabla Codigo	Descripcion
+		===     ===   ===
+		TAB	VLR		Monedas y otros
+		TAB	CAM		Valores de cambio
+
+		COL	PCV   		Parametros Cartera Vencida
+		COL	PCV   DCV	Numero de dias para pasar un
+					vencimiento a cartera vencida
+					Este valor se especifica en la abre-
+					viacion del codigo.
+
+		COL	PCV   ACV	Numero de dias despues que se
+					ha presentado la demanda judicial
+					que implican aceleracion del credito.
+					( Generalmente 90 )
+					Este valor se especifica en la abre-
+					viacion del codigo.
+
+		COL	MSC   SCTBVCD(CIC) Situacion contable vencida
+					   se accesa por CIC
+
+		COL	MSC   SCTBCAS(CIC) Situacion contable castigada
+					   se accesa por CIC
+
+
+Parametros   :  
+
+		- Oficina
+			Especificacion de oficina para reporte
+			Todas o alguna especifica.
+			Todas = *
+			
+		- Fecha de Termino solicitud (DDMMSSAA) : 
+			Rango final para traspaso
+
+
+Validacion de parametros :
+
+		Oficina :
+		Se lee la oficina para la cual se solicita el reporte en
+		caso de ser una oficina especifica.
+
+		Fecha de termino solicitud :
+		Debe ser una fecha valida, habil o no habil, distinta de
+		blancos.
+
+		Aunque no se ingresa se considera la fecha de proceso
+		como la fecha en que se ejecuta este programa ( FHOY ).
+
+		Consistencia :
+		Fecha de proceso  debe ser <= que fecha de termino de
+		solicitud. 
+
+		- Se obtiene de tabla "PCV" el Numero de dias para pasar
+		  un vencimiento a cartera vencida, para lo cual se accesa el
+		  codigo "DCV" a traves del CIC.
+
+		- Se obtiene de tabla "PCV" el numero de dias despues que 
+		  se ha presenta la demanda judicial que implican aceleracion
+		  del credito , para lo cual se accesa el codigo "ACV" a
+		  traves del CIC.
+
+		- Se obtiene de tabla miscelanea(MSCSCTB) la situacion
+		  contable vencida, para lo cual se accesa el codigo "VCD" a
+		  traves del CIC .
+
+		- Se obtiene de tabla miscelanea(MSCSCTB) la situacion
+		  contable castigada, para lo cual se accesa el codigo "CAS" a
+		  traves del CIC .
+
+		  En caso de no existir alguno de los codigos anteriores o
+		  detectarse algun error en la validacion de los parametros
+		  el programa aborta con un mensaje explicativo.
+
+
+
+
+Algoritmo    :  
+
+		- A partir de la fecha de proceso y fecha de
+		  termino de solicitud se obtienen la fecha de inicio de
+		  seleccion y fecha de termino de seleccion de registros VEN.
+
+		  a) Fecha de inicio de seleccion.
+
+		  i.-
+
+		  Si la fecha de inicio de solicitud es una fecha habil
+		  entonces
+		         fecha de inicio seleccion = fecha inicio solicitud
+						     menos numero de dias para
+						     traspasar un vencimiento
+						     a cartera vencida.
+
+	          sino
+			 fecha de inicio seleccion = proxima fecha habil a
+						     fecha inicio solicitud
+						     menos numero de dias para
+						     traspasar un vencimiento
+						     a cartera vencida.
+
+
+		  b) Fecha de termino de seleccion.
+
+		  i.-
+
+		  Si la fecha de termino de solicitud posee fecha(s) sucesivas
+		  no habiles
+		  entonces
+	 	     fecha de termino de seleccion = fecha termino solicitud mas
+						     el numero de dias sucesivos
+						     no habiles a fecha de
+						     termino de solicitud
+						     menos numero de dias para
+						     traspasar un vencimiento
+						     a cartera vencida.
+
+		  en caso contrario
+		     fecha de termino de seleccion = fecha termino solicitud.
+						     menos numero de dias para
+						     traspasar un vencimiento
+						     a cartera vencida.
+
+		La obtencion de estas fechas de seleccion se basa en la
+		especificacion de que un vencimiento que sera traspasado a
+		cartera vencida en un dia no habil, se debe traspasar en el
+		dia habil anterior.
+
+		Se seleccionan todos los registros de archivo VEN cuya fecha de
+		vencimientos pertenezcan al rango :
+
+		Fecha de inicio de seleccion - fecha de termino de seleccion.
+
+		Con el vencimiento se obtiene la operacion de credito
+		asociada ( OPC ).
+
+		Con el vencimiento se obtiene el documento legal asociado
+		( DLC ).
+
+		Estos vencimientos se traspasan a cartera vencida si ademas
+		cumplen las siguientes condiciones :
+
+		a) El codigo de la situacion contable del vencimiento
+		   VEN-IND-SCTB NOT = ( "VCD" y "CAS" )
+
+		En cada documento se mantiene la cantidad de vencimientos
+		asociados a el en situacion contable especial. A esta cantidad
+		se le agrega el nuevo vencimiento que se traspasara a cartera
+		vencida.
+
+		La fecha de traspaso se obtiene como :
+		Fecha de traspaso = fecha de vencimiento + numero de dias
+		para traspasar un vencimiento a cartera vencida.
+		Si la fecha de traspaso obtenida no es habil, entonces fecha
+		de traspaso = fecha habil anterior mas cercana a fecha de
+		taspaso obtenida.
+
+		El traspaso a cartera vencida de un vencimiento, fisicamente
+		corresponde a modificar dicho vencimiento, dejandolo con el
+		codigo de situacion contable "VENCIDA". Ademas 	se deja
+		grabado un registro CCT, para dejar constancia de la
+		transaccion. La tabla CCT mantiene en forma correlativa los
+		cambios de situacion contable de los documentos.
+		Tambien se graba un registro RDT ( Relacion Documento
+		Situacion Contable ) donde se mantiene el saldo del documento
+		para la situacion contable especifica en que se encuentra
+		el documento.
+
+		La aceleracion de un credito se produce en forma automatica
+	 	a los "n" dias de presentada la demanda judicial, siempre
+		que sea dia habil bancario, en caso contrario se efectua
+		el dia habil bancario anterior mas cercano.
+		Donde "n" representa el parametro leido en el codigo
+		"ACV" de la tabla "PCV" del sistema "COL" definido
+		anteriormente. Para lo cual en los documentos se deja en cero
+		el numero de vencimientos en situacion contable especial y con
+		codigo de situacion "VENCIDA" en el codigo de situacion
+		contable.

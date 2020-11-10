@@ -1,0 +1,674 @@
+       IDENTIFICATION DIVISION.
+      *========================
+       PROGRAM-ID. DAPPLNLQ.
+       AUTHOR.     CECILIA PIZARRO.
+      *REMARKS.
+      ******************************************************************
+      *  INTERSOFT                                                     *
+      *  MIGRACION A COBOL OS/390                                      *
+      *  FECHA: 30 DE MARZO DE 1998                                    *
+      ******************************************************************
+      ******************************************************************
+      *  SISTEMA    : DEPOSITOS A PLAZO                                *
+      *  SUB-SISTEMA: INFORMES OFICINAS
+      *  ANALISTA   : CECILIA PIZARRO                                  *
+      *  OBJETIVO :                                                    *
+      *           - INFORME DE LIQUIDACIONES DE DOCUMENTOS RENOVABLES  *
+      *             NO LIQUIDADAS POR CAJA.                            *
+      *                                                                *
+      *  INPUT    :                                                    *
+      *             TABLA LIQ: BD 370
+      *             TABLA OPD: BD 370
+      *  OUTPUT   :                                                    *
+      *             INFORME
+      *                                                                *
+      *  FECHA    : AGO/92.                                            *
+      *                                                                *
+      *  MANTENCIONES                                                  *
+      *  ============                                                  *
+      *            PROGRAMADOR: CECILIA PIZARRO                        *
+      *            FECHA      : 27/11/92                               *
+      *            CAMBIO     : ACCESO AL CIC ORIGEN CUANDO ES RENOV.  *
+      *                                                                *
+      *            PROGRAMADOR: CECILIA PIZARRO                        *
+      *            FECHA      : 03/12/93                               *
+      *            CAMBIO     : SE CAMBIA ACCESO DESDE LIQ A LIC       *
+      *                                                                *
+      *            PROGRAMADOR: XXXXXXXXXXXXXXXXXXXXXXXXXXX            *
+      *            FECHA      : DD/MM/AA                               *
+      *            CAMBIO     : XXXXXXXXXXXXXXXXXXXXXXXXXXX            *
+      *                                                                *
+      ******************************************************************
+      ******************************************************************
+      *      MANTENCIONES.
+      *      ==============
+      *
+      *      PROGRAMADOR : FORMAT 2000 INC.
+      *      FECHA       : 20.02.1998
+      *      CAMBIO      : SE APLICA TECNICA WINDOWING PARA CONVERSION
+      *                      2000 COMPLIANT.
+      ******************************************************************
+       ENVIRONMENT DIVISION.
+      *=====================
+           SKIP1
+       CONFIGURATION SECTION.
+      *----------------------
+       SPECIAL-NAMES.
+           C01 IS CANAL-1
+           DECIMAL-POINT IS COMMA.
+           SKIP1
+      *
+       INPUT-OUTPUT SECTION.
+      *=====================
+       FILE-CONTROL.
+      * ARCHIVO TOTALES CUADRE OFICINA
+           SELECT LISTADO        ASSIGN TO DAPLLIS.
+
+           SELECT DAPLIC         ASSIGN TO DAPMLIC
+                                 FILE STATUS  IS FS-LIC.
+      *
+       DATA DIVISION.
+      *==============
+      *
+       FILE SECTION.
+      *=============
+      *
+       FD  LISTADO
+           LABEL RECORD IS OMITTED.
+       01  REG-LISTADO          PIC X(132).
+      *
+       FD  DAPLIC
+           LABEL RECORDS IS STANDARD
+           RECORD CONTAINS 90 CHARACTERS
+           BLOCK CONTAINS 0 RECORDS.
+           COPY DAPBRLIC.
+      *
+       WORKING-STORAGE SECTION.
+      *========================
+
+       01  WE-EXTERNAS.
+           03 WE-TIME.
+              10  WE-TIME-HH         PIC 99.
+              10  WE-TIME-MM         PIC 99.
+              10  WE-TIME-SS         PIC 99.
+              10  WE-TIME-MI         PIC 99.
+
+           03 WE-FECHA-DATE.
+              10 WE-AA-DATE          PIC 9(02).
+              10 WE-MM-DATE          PIC 9(02).
+              10 WE-DD-DATE          PIC 9(02).
+      *
+       01  WE-HORA.
+           02 WE-HORA-HH             PIC 9(02).
+           02 FILLER                 PIC X(01) VALUE ':'.
+           02 WE-HORA-MM             PIC 9(02).
+           02 FILLER                 PIC X(01) VALUE ':'.
+           02 WE-HORA-SS             PIC 9(02).
+           02 FILLER                 PIC X(01) VALUE ':'.
+           02 WE-HORA-MI             PIC 9(02).
+      *
+      *
+       01  FECHA-BRITISH.
+           02 DD-BRITISH PIC 9(02).
+           02 FILLER     PIC X(01) VALUE '/'.
+           02 MM-BRITISH PIC 9(02).
+           02 FILLER     PIC X(01) VALUE '/'.
+           02 SSAA-BRITISH.
+              03 SS-BRITISH PIC 9(02).
+              03 AA-BRITISH PIC 9(02).
+      *
+      *
+       01  W-CONTADORES.
+           03 WA-LEIDOS-LIQ          PIC 9(08) VALUE 0.
+           03 WA-LEIDOS-LIC          PIC 9(08) VALUE 0.
+           03 WA-SELEC-LIQ           PIC 9(08) VALUE 0.
+
+      *
+       01  W-VARIABLES.
+           03 SW-ERROR               PIC 9(01) VALUE 0.
+           03 FS-LIC                 PIC 9(02) VALUE 0.
+           03 FIN-LIC                PIC X(02) VALUE 'NO'.
+      *
+       01  W-REGISTROS-DE-TRABAJO.
+           03 WS-CODIGO-CAMB.
+              05 WS-COD-VCAMB               PIC X(04).
+              05 WS-TIPO-CAMB               PIC X(02).
+           03 WR-TABLA-ERR                  PIC X(4).
+           03 WR-MENSAJE                    PIC X(10).
+           03 WR-CODIGO                     PIC X(2).
+           03 WR-FIN-SORT                   PIC X(2) VALUE 'NO'.
+           03 WR-LARGO-CUA                  PIC 9(3).
+           03 WS-PAG-LREC                   PIC 9(5).
+           03 WS-LIN-LREC                   PIC 9(2) VALUE 99.
+           03 WR-GRAB                       PIC X(1).
+           03 WR-CAMBIO                     PIC X(4).
+
+           03 WR-MONEDA                     PIC X(06).
+           03 WR-OFICINA                    PIC X(03).
+           03 WR-OPERADOR                   PIC X(12).
+
+           03 WR-FECHA.
+              05 WR-FECHA-SS                PIC 9(2).
+              05 WR-FECHA-AA                PIC 9(2).
+              05 WR-FECHA-MM                PIC 9(2).
+              05 WR-FECHA-DD                PIC 9(2).
+
+           03 WR-GLS-DATA.
+              05  WR-GLS                    PIC X(18).
+              05  WR-DATA                   PIC X(01).
+              05  WR-FILLER                 PIC X(41).
+
+           03 WR-COD-EXT.
+              05  WR-COD-EXT-1       PIC X(04).
+              05  WR-COD-EXT-2       PIC X(04).
+
+           03 WR-COD-INT.
+              05  WR-COD-INT-1       PIC X(04).
+              05  WR-COD-INT-2       PIC X(04).
+
+       01  W-TABLAS.
+           05 WT-TABLA-MSC OCCURS 100 TIMES
+                               INDEXED BY I-MSC.
+              06  WT-MSC-EXT         PIC X(05).
+              06  WT-MSC-INT         PIC X(04).
+              06  WT-MSC-DES         PIC X(12).
+              06  WT-MSC-IND         PIC 9(03).
+
+      *
+       01  W-PARAMETRO.
+           03 WP-FECHA.
+              05 WP-FECHA-DD         PIC X(02).
+              05 WP-FECHA-MM         PIC X(02).
+              05 WP-FECHA-SS         PIC X(02).
+              05 WP-FECHA-AA         PIC X(02).
+           03 WP-OFICINA             PIC X(03).
+
+           COPY RTNWCALE.
+           COPY RUTWTOFI.
+      ******************************************************************
+      * LINEAS DE INFORME
+      ******
+       01  TITULO-1.
+           02 FILLER                 PIC X(94) VALUE
+              'BANCO DE CREDITO E INVERSIONES'.
+           02 FILLER                 PIC X(22) VALUE 'DAPPLNLQ '.
+           02 FILLER                 PIC X(08) VALUE 'FECHA :'.
+           02 FECHA-TIT              PIC X(08).
+
+       01  TITULO-2.
+           02 FILLER                 PIC X(44) VALUE
+              'SISTEMA DE DEPOSITOS A PLAZO        '.
+           02 FILLER                 PIC X(76) VALUE SPACES.
+           02 FILLER                 PIC X(09) VALUE 'PAGINA :'.
+           02 PAGINA-TIT             PIC ZZ9.
+
+       01  TITULO-3.
+           02 FILLER                 PIC X(44) VALUE SPACES.
+           02 FILLER                 PIC X(76) VALUE
+              'LIQUIDACIONES DAP NO CANCELADAS       '.
+
+       01  TITULO-4.
+           02 FILLER                 PIC X(49) VALUE SPACES.
+           02 FILLER                 PIC X(10) VALUE
+              'SUCURSAL: '.
+           02 SUCURSAL-TIT           PIC X(38).
+
+       01  TITULO-5.
+           02 FILLER                 PIC X(40) VALUE
+              'NUMERO DOCTO.   SERIAL       FECHA LIQU.'.
+           02 FILLER                 PIC X(14) VALUE SPACES.
+           02 FILLER                 PIC X(55) VALUE
+              'MONTO LIQUIDACION     STATUS     MONEDA     OFICINA    '.
+
+       01  TITULO-ALL.
+           02 FILLER                 PIC X(132) VALUE ALL '-'.
+
+       01  LINEA-DET.
+           02 FILLER                 PIC X(01) VALUE SPACES.
+           02 LD-NUMERO              PIC ZZZZZZZZZZZ9.
+           02 FILLER                 PIC X(04) VALUE SPACES.
+           02 LD-SERIAL              PIC ZZZZZZZZZZZ9.
+           02 FILLER                 PIC X(05) VALUE SPACES.
+           02 LD-LIQUI-DD            PIC 9(2).
+           02 FILLER                 PIC X(01) VALUE '/'.
+           02 LD-LIQUI-MM            PIC 9(2).
+           02 FILLER                 PIC X(01) VALUE '/'.
+           02 LD-LIQUI-AA            PIC 9(2).
+           02 FILLER                 PIC X(14) VALUE SPACES.
+           02 LD-MONTO               PIC ZZZZZ.ZZZ.ZZ9,99.
+           02 FILLER                 PIC X(06) VALUE SPACES.
+           02 LD-STATUS              PIC X(1).
+           02 FILLER                 PIC X(08) VALUE SPACES.
+           02 LD-MONEDA              PIC X(6).
+           02 FILLER                 PIC X(05) VALUE SPACES.
+           02 LD-OFICINA             PIC X(3).
+      *
+       01  LINEA-DET2.
+           02 FILLER                 PIC X(50) VALUE
+             'NO HAY LIQUIDACIONES NO CANCELADAS'.
+           02 FILLER                 PIC X(82) VALUE SPACES.
+      ******************************************************************
+      *      USER INFORMATION BLOCK                                    *
+      ******************************************************************
+      *
+       01  UIB.
+           05 FILLER                 PIC X(32) VALUE 'DAPPLNLQ'.
+      *
+      ******************************************************************
+      *      REQUEST AREA                                              *
+      ******************************************************************
+      *
+       01  REQ-AREA-OPD.
+           02 REQ-COMAN-OPD        PIC X(05).
+           02 REQ-TBLNM-OPD        PIC X(03)  VALUE 'OPD'.
+           02 REQ-KEYNM-OPD        PIC X(05)  VALUE 'OPD00'.
+           02 REQ-RTNCD-OPD        PIC X(02)  VALUE SPACES.
+           02 REQ-INRCD-OPD        PIC X(01).
+           02 REQ-DBIDE-OPD        PIC S9(4)  COMP VALUE +370.
+           02 REQ-TBLID-OPD        PIC X(07).
+           02 FILLER               PIC X(25).
+           02 REQ-CTMAX-OPD        PIC S9(4)  COMP.
+           02 REQ-IOCNT-OPD        PIC S9(4)  COMP.
+           02 FILLER               PIC X(22).
+           02 REQ-KYVAL-OPD.
+              03 REQ-CLAVE-OPD     PIC X(12).
+      *
+       01  REQ-AREA-LIQ.
+           02 REQ-COMAN-LIQ        PIC X(05).
+           02 REQ-TBLNM-LIQ        PIC X(03)  VALUE 'LIQ'.
+           02 REQ-KEYNM-LIQ        PIC X(05)  VALUE 'LIQ00'.
+           02 REQ-RTNCD-LIQ        PIC X(02)  VALUE SPACES.
+           02 REQ-INRCD-LIQ        PIC X(01).
+           02 REQ-DBIDE-LIQ        PIC S9(4)  COMP VALUE +370.
+           02 REQ-TBLID-LIQ        PIC X(07).
+           02 FILLER               PIC X(25).
+           02 REQ-CTMAX-LIQ        PIC S9(4)  COMP.
+           02 REQ-IOCNT-LIQ        PIC S9(4)  COMP.
+           02 FILLER               PIC X(22).
+           02 REQ-KYVAL-LIQ.
+              03 REQ-LIQ-CIC-IOPD  PIC X(12).
+              03 REQ-LIQ-NUM-ILIQ  PIC 9(03).
+      *
+      ******************************************************************
+      *                   WORK AREA                                    *
+      ******************************************************************
+      *
+       01  REG-OPD.
+           COPYDD DAP-R-OPD.DAP-E-OPD00(PROD),02,D
+      *
+       01  REG-LIQ.
+           COPYDD DAP-R-LIQ.DAP-E-LIQ00(PROD),02,D
+      *
+      *
+      ******************************************************************
+      *                 ELEMENT LIST                                   *
+      ******************************************************************
+      *
+       01  ELM-LIS-OPD.
+           03 ELEM-OPD             PIC X(05)  VALUE 'OPD00'.
+           03 ELSE-OPD             PIC X(01).
+           03 FILLER               PIC X(05)  VALUE SPACES.
+      *
+       01  ELM-LIS-LIQ.
+           03 ELEM-LIQ             PIC X(05)  VALUE 'LIQ00'.
+           03 ELSE-LIQ             PIC X(01).
+           03 FILLER               PIC X(05)  VALUE SPACES.
+      *
+      *
+      *-----------------------------------------------------------------
+      *
+           COPY RLOVR001.
+
+       PROCEDURE DIVISION.
+      *===================
+      *
+       A-CONTROL SECTION.
+      *==================
+           ENTRY 'DBMSCBL'.
+      *
+       AA-INICIO.
+      *----------
+           PERFORM B-INICIAR.
+
+       AB-PROCESO.
+      *-----------
+           IF SW-ERROR = 0
+              PERFORM C-PROCESAR
+           END-IF.
+
+       AC-FIN.
+      *-------
+           PERFORM F-TERMINAR.
+
+       AZ-FIN-PROGRAMA.
+      *----------------
+           GOBACK.
+
+       B-INICIAR SECTION.
+      *==================
+       BA-CONTROL-PROCESO.
+      *-------------------
+           PERFORM BB-ACCEPT-TARJETA.
+           PERFORM BC-ABRE-LISTADO.
+           GO TO BZ-FIN-SECTION.
+
+       BB-ACCEPT-TARJETA.
+      *------------------
+           ACCEPT WP-FECHA.
+           ACCEPT WP-OFICINA.
+           DISPLAY 'WP-OFICINA:' WP-OFICINA
+           DISPLAY        '* TARJETA PARAM. : ' W-PARAMETRO.
+      * ACCEPTAR HORA
+           ACCEPT WE-TIME      FROM TIME.
+           MOVE WE-TIME-HH TO WE-HORA-HH
+                              WE-TIME-HH.
+           MOVE WE-TIME-MM TO WE-HORA-MM
+                              WE-TIME-MM.
+           MOVE WE-TIME-SS TO WE-HORA-SS
+                              WE-TIME-SS.
+           MOVE WE-TIME-MI TO WE-HORA-MI.
+      * ACCEPTAR FECHA
+           ACCEPT WE-FECHA-DATE FROM DATE.
+           MOVE WE-DD-DATE TO DD-BRITISH.
+           MOVE WE-MM-DATE TO MM-BRITISH.
+           MOVE WE-AA-DATE TO AA-BRITISH.
+      *****IF WE-AA-DATE NOT < 80
+           IF WE-AA-DATE < ROLL-YY
+              MOVE 20 TO SS-BRITISH
+           ELSE
+              MOVE 19 TO SS-BRITISH.
+      *
+      * CARGA TABLA CALENDARIO
+           MOVE '00000000' TO CALEAREA-FECHA-1.
+           MOVE 'CARGAR' TO CALEAREA-FUNCION.
+           CALL 'RUTUCALE' USING RTNWCALE.
+           IF CALEAREA-COD-RET NOT = 0
+             DISPLAY
+               'ERROR EN LA CARGA DE ARCHIVO CALENDARIO. CODIGO DE '
+               'RETORNO = ' CALEAREA-COD-RET
+             MOVE 1  TO SW-ERROR
+           END-IF.
+      *
+      *
+      *  VALIDA FECHA PARAMETRO
+      *
+           MOVE WP-FECHA-DD TO CALEAREA-FECHA-1-D.
+           MOVE WP-FECHA-MM TO CALEAREA-FECHA-1-M.
+           MOVE WP-FECHA-AA TO CALEAREA-FECHA-1-AA.
+      *****MOVE 19          TO CALEAREA-FECHA-1-AM.
+           IF CALEAREA-FECHA-1-AA < ROLL-YY
+              MOVE 20 TO CALEAREA-FECHA-1-AM
+           ELSE
+              MOVE 19 TO CALEAREA-FECHA-1-AM
+           END-IF.
+           MOVE 'INFO'      TO CALEAREA-FUNCION.
+           CALL 'RUTUCALE'     USING RTNWCALE.
+           IF CALEAREA-COD-RET NOT = 0
+             DISPLAY
+               'ERROR EN FECHA DE EMISION INGRESADA POR PARAMETRO '
+               'CODIGO DE RETORNO = ' CALEAREA-COD-RET
+                '  ' WP-FECHA
+             MOVE 1  TO SW-ERROR
+           ELSE
+             MOVE WP-FECHA-DD TO WR-FECHA-DD
+             MOVE WP-FECHA-MM TO WR-FECHA-MM
+             MOVE WP-FECHA-AA TO WR-FECHA-AA
+             MOVE WP-FECHA-SS TO WR-FECHA-SS
+             DISPLAY 'TARJETA PARAMETRO'
+             DISPLAY '-----------------'
+             DISPLAY 'FECHA   : ' WP-FECHA
+           END-IF.
+
+      * VALIDA OFICINA
+           IF WP-OFICINA = SPACES   OR
+              WP-OFICINA = '*'
+              MOVE 'TOTAL BANCO'        TO SUCURSAL-TIT
+              DISPLAY 'OFICINA SELECCIONADA:  TODAS'
+           ELSE
+              MOVE WP-OFICINA    TO RUTWTOFI-COD-OFIC
+              CALL 'RUTUTOFI' USING RUTWTOFI
+              IF RUTWTOFI-RETURN-CODE  = SPACES
+                 DISPLAY 'OFICINA SELECCIONADA:' WP-OFICINA
+                 MOVE RUTWTOFI-GLS-DESC    TO SUCURSAL-TIT
+              ELSE
+                 DISPLAY 'ERROR OFICINA NO EXISTE   CODIGO RETORNO:'
+                          RUTWTOFI-RETURN-CODE  '  ' WP-OFICINA
+                 MOVE 1  TO SW-ERROR
+              END-IF
+           END-IF.
+      *
+       BC-ABRE-LISTADO.
+      *---------------
+           OPEN OUTPUT LISTADO.
+      *
+           OPEN INPUT  DAPLIC.
+           IF FS-LIC NOT = 0
+              DISPLAY 'ERROR EN OPEN ARCHIVO LIC'
+              DISPLAY 'FILE STATUS : ' FS-LIC
+              DISPLAY 'SE CANCELA EL PROCESO'
+              MOVE 1  TO SW-ERROR
+           END-IF.
+      *
+       BZ-FIN-SECTION.
+      *---------------
+           EXIT.
+
+       C-PROCESAR SECTION.
+      *===================
+       CA-CONTROL.
+      *-----------
+           PERFORM DB-LEE-LIC.
+           PERFORM DB1-LEER-TABLA-LIC UNTIL
+                            FS-LIC NOT = 0      OR
+                            FIN-LIC = 'SI'      OR
+                            SW-ERROR = 1
+           IF WA-SELEC-LIQ = 0
+              PERFORM DC-IMPRIME-MENSAJE
+           END-IF.
+           GO TO   CZZ-FIN-DE-SECCION.
+       DB-LEE-LIC.
+      *------------
+           READ DAPLIC  AT END MOVE 'SI' TO FIN-LIC.
+           IF FS-LIC = 0
+              ADD 1 TO WA-LEIDOS-LIC
+           ELSE
+               IF FS-LIC NOT = 10
+                   DISPLAY 'ERROR AL ACCESAR ARCHIVO    LIC'
+                   '  FS-LIC: ' FS-LIC
+                    PERFORM D1-PROCESO-ERROR
+                END-IF
+           END-IF.
+
+       DB1-LEER-TABLA-LIC.
+      *-------------------
+      ** REVISA LIQUIDACIONES SI SON RENOVABLES Y SI NO HAN SIDO
+      ** CANCELADAS.
+
+           IF (WP-OFICINA = SPACES OR WP-OFICINA = '*')
+              IF  LIC-COD-STAT = 'S'
+                  PERFORM DB3-ACCESAR-TABLA-OPD
+              END-IF
+           ELSE
+              IF LIQ-COD-OFIC = WP-OFICINA
+                 IF  LIC-COD-STAT = 'S'
+                    PERFORM DB3-ACCESAR-TABLA-OPD
+                 END-IF
+           END-IF.
+           PERFORM DB-LEE-LIC.
+      *
+       DB3-ACCESAR-TABLA-OPD.
+      *----------------------
+      * REVISA EN LA OPD SI ES UN RENOVABLE.
+      * CPZ 10.03.1993 ACCESA CON OPD-CIC-ORIG CUANDO ES RENOV.
+           MOVE  LIC-CIC-IOPD TO REQ-CLAVE-OPD.
+           PERFORM  DB5-LEE-OPD.
+           IF REQ-RTNCD-OPD = SPACES
+              IF OPD-COD-RENO = 'S'  AND SW-ERROR = 0
+                 PERFORM DB4-REGISTRO-LIQ-SELECC
+              END-IF
+           END-IF.
+       DB5-LEE-OPD.
+      *------------
+           MOVE 'REDKY'       TO REQ-COMAN-OPD.
+           CALL 'DBNTRY' USING UIB REQ-AREA-OPD REG-OPD ELM-LIS-OPD.
+           IF REQ-RTNCD-OPD NOT = SPACES AND
+              REQ-RTNCD-OPD NOT = '14'
+              MOVE 'LEER  EN  '  TO WR-MENSAJE
+              MOVE ' OPD'        TO WR-TABLA-ERR
+              MOVE REQ-RTNCD-OPD TO WR-CODIGO
+              PERFORM D1-PROCESO-ERROR
+           ELSE
+              IF REQ-RTNCD-OPD = '14'
+                 DISPLAY 'REGISTRO NO EXISTE EN TABLA OPD '
+                 DISPLAY 'CLAVE OPD    : ' REQ-KYVAL-OPD
+           END-IF.
+      *
+       DB4-REGISTRO-LIQ-SELECC.
+      *------------------------
+      ** LEE REGISTRO LIQ
+           MOVE 'REDKY'       TO REQ-COMAN-LIQ.
+           MOVE OPD-CIC-IOPD  TO REQ-LIQ-CIC-IOPD
+           MOVE 1             TO REQ-LIQ-NUM-ILIQ
+           CALL 'DBNTRY' USING UIB REQ-AREA-LIQ REG-LIQ ELM-LIS-LIQ.
+           IF REQ-RTNCD-LIQ NOT = SPACES  AND
+              REQ-RTNCD-LIQ NOT = '14'
+              MOVE 'LEER   EN '  TO WR-MENSAJE
+              MOVE ' LIQ'        TO WR-TABLA-ERR
+              MOVE REQ-RTNCD-LIQ TO WR-CODIGO
+              PERFORM D1-PROCESO-ERROR
+           ELSE
+               IF REQ-RTNCD-LIQ NOT = '14'
+                  ADD 1 TO WA-LEIDOS-LIQ
+                  IF LIQ-FEC-FCMP NOT > WR-FECHA
+                    PERFORM DB5-GENERA-LISTADO
+                  END-IF
+               ELSE
+                MOVE 'REDKY'       TO REQ-COMAN-LIQ
+                MOVE OPD-CIC-GREN  TO REQ-LIQ-CIC-IOPD
+                MOVE 1             TO REQ-LIQ-NUM-ILIQ
+               CALL 'DBNTRY' USING UIB REQ-AREA-LIQ REG-LIQ ELM-LIS-LIQ
+               IF REQ-RTNCD-LIQ  = SPACES
+                  ADD 1 TO WA-LEIDOS-LIQ
+                  IF LIQ-FEC-FCMP NOT > WR-FECHA
+                    PERFORM DB5-GENERA-LISTADO
+                  ELSE
+                    MOVE 'LEER   EN '  TO WR-MENSAJE
+                    MOVE ' LIQ'        TO WR-TABLA-ERR
+                    MOVE REQ-RTNCD-LIQ TO WR-CODIGO
+                    PERFORM D1-PROCESO-ERROR
+                  END-IF
+               END-IF
+           END-IF.
+      *
+        DB5-GENERA-LISTADO.
+      *--------------------
+           IF WS-LIN-LREC > 58
+              PERFORM EA-TITULO-INFORME
+           END-IF
+           MOVE OPD-CIC-IOPD  TO LD-NUMERO
+           MOVE OPD-CIC-ISER  TO LD-SERIAL
+           MOVE LIQ-NUM-ACMP  TO LD-LIQUI-AA
+           MOVE LIQ-NUM-MCMP  TO LD-LIQUI-MM
+           MOVE LIQ-NUM-DCMP  TO LD-LIQUI-DD
+           MOVE LIQ-SGV-TPAG  TO LD-MONTO
+           MOVE LIQ-COD-STAT  TO LD-STATUS
+           MOVE OPD-COD-VCAM  TO LD-MONEDA
+           MOVE LIQ-COD-OFIC  TO LD-OFICINA
+           WRITE REG-LISTADO FROM LINEA-DET AFTER 1 LINES.
+           ADD 1  TO WA-SELEC-LIQ
+           ADD 1  TO WS-LIN-LREC.
+      *
+       DC-IMPRIME-MENSAJE.
+      *------------------
+           PERFORM EA-TITULO-INFORME
+           WRITE REG-LISTADO FROM LINEA-DET2 AFTER 1 LINES.
+      *
+       EA-TITULO-INFORME.
+      *-------------------
+           ADD  1                     TO WS-PAG-LREC.
+           MOVE WP-FECHA              TO FECHA-TIT.
+           MOVE WS-PAG-LREC           TO PAGINA-TIT.
+           MOVE 9                     TO WS-LIN-LREC.
+           WRITE REG-LISTADO FROM TITULO-1   AFTER PAGE.
+           WRITE REG-LISTADO FROM TITULO-2   AFTER 1.
+           WRITE REG-LISTADO FROM TITULO-3   AFTER 1.
+           WRITE REG-LISTADO FROM TITULO-4   AFTER 1.
+           WRITE REG-LISTADO FROM TITULO-ALL AFTER 2.
+           WRITE REG-LISTADO FROM TITULO-5   AFTER 1.
+           WRITE REG-LISTADO FROM TITULO-ALL AFTER 2.
+
+      *
+       D1-PROCESO-ERROR.
+      *-----------------
+           DISPLAY ' '.
+           DISPLAY ' '.
+           DISPLAY '*****************************************'.
+           DISPLAY '*                                       *'.
+           DISPLAY 'ERROR AL ' WR-MENSAJE 'TABLA' WR-TABLA-ERR.
+           DISPLAY 'CODIGO DE RETORNO : ' WR-CODIGO '       *'.
+           DISPLAY '*                                       *'.
+           DISPLAY '*****************************************'.
+           MOVE 1  TO SW-ERROR.
+      *
+       CZZ-FIN-DE-SECCION.
+      *------------------
+           EXIT.
+      *
+       F-TERMINAR  SECTION.
+      *--------------------
+       FA-CONTROL.
+      *----------
+           PERFORM FB-TOTALES.
+           PERFORM FC-CIERRA-LISTADO.
+           GO TO FZZ-FIN-DE-SECCION.
+           SKIP1
+
+       FB-TOTALES.
+      *----------
+           DISPLAY ' '.
+           DISPLAY ' FECHA : ' FECHA-BRITISH.
+           DISPLAY ' HORA  : ' WE-HORA.
+           DISPLAY ' '
+           DISPLAY '+---------------------------------------------+'
+           DISPLAY '+ ESTADISTICAS DE PROCESO.  PROGRAMA DAPPLNLQ +'
+           DISPLAY '+---------------------------------------------+'
+           DISPLAY '          FECHA : ' WP-FECHA.
+           DISPLAY '+---------------------------------------------+'
+           DISPLAY 'REG. LEIDOS   TABLA LIC      :'  WA-LEIDOS-LIC.
+           DISPLAY 'REG. SELECCIONADOS TABLA LIQ :'  WA-SELEC-LIQ.
+           DISPLAY '***********************************************'.
+           SKIP1
+           DISPLAY ' '
+           DISPLAY '+-------------------------------------------+'
+           DISPLAY '+ MENSAJES PARA EL EXPLOTADOR               +'
+           DISPLAY '+-------------------------------------------+'.
+      *
+           IF SW-ERROR    = 1
+              DISPLAY ' HAY MENSAJES PARA EL EXPLOTADOR'
+              DISPLAY ' '
+              DISPLAY ' '
+              DISPLAY ' '
+              DISPLAY '************************************************'
+              DISPLAY '************************************************'
+              DISPLAY '****                                        ****'
+              DISPLAY '****      TERMINO ERRONEO DEL PROCESO       ****'
+              DISPLAY '****                                        ****'
+              DISPLAY '************************************************'
+              DISPLAY '************************************************'
+              MOVE 100 TO RETURN-CODE
+           ELSE
+              DISPLAY ' NO HAY MENSAJES PARA EL EXPLOTADOR'
+              DISPLAY ' '
+              DISPLAY ' '
+              DISPLAY ' '
+              DISPLAY '*** PROCESO TERMINO EN FORMA NORMAL ***'
+           END-IF.
+       FC-CIERRA-LISTADO.
+      *------------------
+           CLOSE LISTADO DAPLIC.
+           SKIP1
+       FZZ-FIN-DE-SECCION.
+      *-----------------
+           EXIT.
+           EJECT
+

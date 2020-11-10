@@ -1,0 +1,227 @@
+       IDENTIFICATION DIVISION.
+      *========================
+       PROGRAM-ID. COLPSSCO.
+       AUTHOR. ADA.
+       DATE-WRITTEN. 1-SEP-1999 15:26:36
+      *
+      * PROGRAMA RECIBE MENSAJES DE UN PC Y LOS APILA EN TSs PARA
+      * LUEGO SER LEIDAS DESDE UN MONITOR DE REQUERIMIENTOS
+      *
+       ENVIRONMENT DIVISION.
+       DATA DIVISION.
+
+       WORKING-STORAGE SECTION.
+      *========================
+       COPY GNSWGTSK.
+       COPY GNSWGHOY.
+       COPY GNSWGSYS.
+       COPY GNSWCFIO.
+       COPY GNSWVFIO.
+       COPY GNSWGQUE.
+       COPY GNSWGFRM.
+       COPY GNSWVSCR.
+
+       01  SND-SEND VALUE SPACES.
+           03 SND-HEAD-SEND.
+      *
+      *       Status Respuesta 0=OK ; 1=ERR
+              05 SND-RES-STAT                         PIC X(0001).
+      *
+      *       Fecha Transaccion
+              05 SND-FEC-FTRN                         PIC X(0008).
+      *
+      *       Hora Transaccion
+              05 SND-HRS-HTRN                         PIC X(0006).
+      *
+      *       Indicador Mensajes Pendientes 0=NO ; 1=SI
+              05 SND-IND-MSGP                         PIC X(0001).
+      *
+      *       Largo de la parte Variable del Mensaje
+              05 SND-NUM-LENM                         PIC 9(0005).
+      *
+      *       Codigo Transaccion
+              05 SND-COD-TRAN                         PIC X(0008).
+      *
+      *       Codigo Sistema
+              05 SND-COD-SIST                         PIC X(0003).
+      *
+      *       Codigo Usuario
+              05 SND-COD-USER                         PIC X(0012).
+      *
+      *       Password
+              05 SND-COD-PASS                         PIC X(0008).
+      *
+      *       Filler Vacio y Fijo de 111 Caracteres
+           03 SND-GLS-FILL                            PIC X(0111).
+      *
+      *    DATA a ser transmitida de OUTPUT
+           03 SND-GLS-DOUT                            PIC X(1088).
+      *
+      *
+       01  RCV-RECEIVE VALUE SPACES.
+      *
+      *    Header utilizado por el Driver de Comunicacion
+           03 RCV-HEAD-DRIVE                          PIC X(0031).
+      *
+      *    Identificacion del TCP-IP
+           03 RCV-IDEN-TCPIP                          PIC X(0006).
+      *
+      *    Indicador de Mensajes: I=Inicio, C=Continua,
+      *                           F=Fin,    X=Msg.Unico
+           03 RCV-IND-MENS                            PIC X(0001).
+      *
+      *    DATA a ser transmitida de INPUT
+           03 RCV-GLS-DINP                            PIC X(1024).
+
+       77  WSS-MSG-OKS          VALUE '0'             PIC X(1024).
+
+      * Fin variables area de comunicacion BCI
+
+       01  TSIDENT.
+           03 TSKNO                    PIC S9(07) COMP-3.
+           03 TERM                     PIC X(04).
+
+       01  WSS-VARI.
+      *                   LARGO RECEIVE = 31 + 6 + 1 + 1024 = 1062
+           03 WSS-LEN-RCV    VALUE +1062     COMP    PIC S9(04).
+           03 WSS-LEN-SND    VALUE +1166     COMP    PIC S9(04).
+      *
+       01  TSPT-VARI.
+           03 WSS-NOM-TSPT.
+              05 WSS-COD-TERM     VALUE 'TM'          PIC X(02).
+              05 WSS-COD-TYPE     VALUE SPACES        PIC X(06).
+           03 WSS-LEN-TSPT     VALUE +1025     COMP   PIC S9(04).
+           03 WSS-NITM-TSPT    VALUE ZEROES           PIC 9(05).
+           03 WSS-ITEM-TSPT.
+               05  WSS-INDICA                         PIC X(0001).
+               05  WSS-DATA                           PIC X(1024).
+      *
+       LINKAGE SECTION.
+      *----------------
+       01  DFHCOMMAREA.
+           02 FILLER                     PIC X(01).
+       COPY GNSLGFIO.
+
+       PROCEDURE DIVISION.
+      *===================
+
+       MAIN SECTION.
+       INI-MAIN.
+           PERFORM GET-FHOY.
+           PERFORM GNS-ERR-QUE.
+           PERFORM GNS-HDL-VSM.
+           PERFORM PROCESO-RECIBE-MSG.
+       FIN-MAIN.
+           EXEC CICS RETURN END-EXEC.
+       EXT-MAIN.
+           EXIT.
+
+       PROCESO-RECIBE-MSG SECTION.
+       INI-PROCESO-RECIBE-MSG.
+           PERFORM PROCESO-GRABA-TS.
+       FIN-PROCESO-RECIBE-MSG.
+           EXIT.
+
+       PROCESO-GRABA-TS SECTION.
+       INI-PROCESO-GRABA-TS.
+           PERFORM RCV-MSG-INP-HST.
+
+           IF NOT ( RCV-IND-MENS = 'I' OR RCV-IND-MENS = 'X'
+                 OR RCV-IND-MENS = 'F' OR RCV-IND-MENS = 'C' )
+                   GO TO LNK-PROCESO-GRABA-TS.
+
+           MOVE RCV-IDEN-TCPIP TO WSS-COD-TYPE.
+
+           IF RCV-IND-MENS = 'I' OR RCV-IND-MENS = 'X'
+               PERFORM GET-TSK-TERM
+               MOVE TSK-TERM-ALF TO QUE-TERM
+               MOVE 'ASCO'       TO QUE-TYPE
+               MOVE +2 TO QUE-LITM
+               MOVE 'OK'    TO QUE-ITEM
+               MOVE QUE-PUT TO QUE-CMND
+               PERFORM GNS-PRO-QUE
+
+               MOVE WSS-NOM-TSPT   TO QUE-COLA
+               MOVE QUE-DEL        TO QUE-CMND
+               PERFORM GNS-PRO-QUE.
+
+            MOVE WSS-NOM-TSPT   TO QUE-COLA.
+            MOVE WSS-LEN-TSPT   TO QUE-LITM.
+            MOVE SPACES         TO WSS-INDICA.
+            MOVE RCV-GLS-DINP   TO WSS-DATA.
+            MOVE WSS-ITEM-TSPT  TO QUE-ITEM.
+            MOVE QUE-PUT        TO QUE-CMND.
+            PERFORM GNS-PRO-QUE.
+       LNK-PROCESO-GRABA-TS.
+           IF RCV-IND-MENS = 'F' OR RCV-IND-MENS = 'X'
+               MOVE SYS-XCTL       TO SYS-CMND
+               MOVE RCV-IDEN-TCPIP TO SYS-CMMA
+               MOVE +6             TO SYS-TCMA
+               MOVE 'COLPPTMS'     TO SYS-PROG
+               PERFORM GNS-PRO-SYS
+               EXEC CICS
+                    RETURN
+               END-EXEC
+               GO TO FIN-PROCESO-GRABA-TS
+           ELSE
+              MOVE '0'         TO SND-RES-STAT
+              MOVE HOY-FHOY    TO SND-FEC-FTRN
+              MOVE HOY-HHOY    TO SND-HRS-HTRN
+              MOVE '0'         TO SND-IND-MSGP
+              MOVE +1024       TO SND-NUM-LENM
+              MOVE SPACES      TO SND-COD-TRAN
+              MOVE SPACES      TO SND-COD-SIST
+              MOVE SPACES      TO SND-COD-USER
+              MOVE SPACES      TO SND-COD-PASS
+              MOVE SPACES      TO SND-GLS-FILL
+              MOVE WSS-MSG-OKS TO SND-GLS-DOUT
+              PERFORM ENV-MSG-OUT-HST-ULT
+              GO TO FIN-PROCESO-GRABA-TS.
+
+       FIN-PROCESO-GRABA-TS.
+           EXIT.
+
+       RCV-MSG-INP-HST SECTION.
+       INI-RCV-MSG-INP-HST.
+           MOVE SPACES TO RCV-RECEIVE.
+           EXEC CICS RECEIVE
+                     INTO(RCV-RECEIVE)
+                     LENGTH(WSS-LEN-RCV)
+                     CONVID(EIBTRMID)
+                     END-EXEC.
+
+           MOVE EIBTRMID    TO TERM.
+           MOVE EIBTASKN    TO TSKNO.
+
+           IF EIBCONF  = HIGH-VALUES
+              EXEC CICS       ISSUE CONFIRMATION
+                              CONVID(TERM)
+              END-EXEC.
+
+       FIN-RCV-MSG-INP-HST.
+           EXIT.
+
+       ENV-MSG-OUT-HST-ULT SECTION.
+       INI-ENV-MSG-OUT-HST-ULT.
+           EXEC CICS SEND
+                     LENGTH(WSS-LEN-SND)
+                     FROM(SND-SEND)
+                     CONVID(TERM)
+                     LAST
+           END-EXEC.
+           IF RCV-IND-MENS = 'F' OR RCV-IND-MENS = 'X'
+               MOVE WSS-NOM-TSPT   TO QUE-COLA
+               MOVE QUE-DEL        TO QUE-CMND
+               PERFORM GNS-PRO-QUE.
+       FIN-ENV-MSG-OUT-HST-ULT.
+           EXIT.
+
+       COPY GNSBGEND.
+       COPY GNSBGHOY.
+       COPY GNSBHSYS.
+       COPY GNSBGSYS.
+       COPY GNSBIABT.
+       COPY GNSBHVSM.
+       COPY GNSBGVSM.
+       COPY GNSBGQUE.
+       COPY GNSBGTSK.

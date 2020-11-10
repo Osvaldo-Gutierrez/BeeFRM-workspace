@@ -1,0 +1,478 @@
+//ISILVA  JOB ,,CLASS=A,MSGCLASS=X,USER=ISILVA,PASSWORD=SLVOCT,
+//            REGION=4M
+/*ROUTE PRINT MVS
+//TXTINS EXEC PGM=AFOLIBR
+//STEPLIB  DD DSN=ADR.LIB.V38.LOAD,DISP=SHR
+//MASTER   DD DSN=DAPCL.FUENTES,DISP=SHR
+//OSJOB    DD DUMMY
+//SYSPRINT DD SYSOUT=X
+//SYSIN    DD *
+-ADD DAPPPLIQ,PSWD=CONS,ARC
+     DUMMY
+-EMOD
+-SEL DAPPPLIQ,CONS
+-REP ALL
+       IDENTIFICATION DIVISION.
+      *========================
+       PROGRAM-ID.   DAPPPLIQ.
+       AUTHOR.       CONSIST.
+       DATE-WRITTEN. 18-Oct-91 06:42 PM.
+
+      * PROCESA LIQUIDACIONES ESTADO 'R'
+      * ORDENES DE NO PAGO O CONDICIONES DE GARANTIAS
+
+       ENVIRONMENT DIVISION.
+      *=====================
+       CONFIGURATION SECTION.
+      *----------------------
+       SPECIAL-NAMES.
+               DECIMAL-POINT IS COMMA.
+
+       DATA DIVISION.
+      *==============
+
+       WORKING-STORAGE SECTION.
+      *------------------------
+       01  SCR-VARI.
+           02 SCR-CIC-IOPD              PIC X(12).
+           02 SCR-COD-MENS              PIC X(12).
+
+       COPY GNSBRTAB.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-TAB-REQA==.
+
+       COPY GNSBRMSC.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-MSC-REQA==.
+
+       COPY GNSBRMSG.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-MSG-REQA==.
+
+       COPY DAPBROPD.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-OPD-REQA==.
+
+       COPY DAPBRLIQ.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-LIQ-REQA==.
+
+       COPY DAPBRCAD.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-CAD-REQA==.
+
+       COPY DAPBRLIC.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-LIC-REQA==.
+
+       COPY DAPWGDDT.
+
+       COPY GNSWVIDD.
+       COPY GNSWGRQA.
+       COPY GNSWGUIB.
+       COPY GNSWGELS.
+       COPY GNSWCFIO.
+       COPY GNSWVFIO.
+       COPY GNSWGFRM.
+       COPY GNSWGSYS.
+       COPY GNSWGFEC.
+       COPY GNSWGHOY.
+
+       01  WSS-VARI.
+           03 WSS-NUM-OFIC                        PIC 9(03).
+           03  WSS-LIC-SGV-TPAG COMP-3 VALUE ZEROES PIC S9(11)V9(04).
+           03 PGM-STAT-LIC           VALUE '23'      PIC X(02).
+              88 PGM-STAT-LIC-OKS    VALUE '00'.
+              88 PGM-STAT-LIC-NUL    VALUE '  '.
+           03 PGM-STAT-LIQ           VALUE '23'      PIC X(02).
+              88 PGM-STAT-LIQ-OKS    VALUE '00'.
+              88 PGM-STAT-LIQ-NUL    VALUE '  '.
+
+           03 WSS-CIC-VCAM.
+              04 WSS-CIC-TVAL           PIC X(01).
+              04 WSS-CIC-CVAL           PIC X(03).
+              04 WSS-CIC-TCAM           PIC X(08).
+
+       LINKAGE SECTION.
+      *----------------
+       01  DFHCOMMAREA.
+           02 FILLER                    PIC X(24).
+
+       PROCEDURE DIVISION.
+      *===================
+
+       MAIN SECTION.
+       INI-MAIN.
+           PERFORM INI.
+           MOVE DFHCOMMAREA TO SCR-VARI.
+           MOVE SPACES TO SCR-COD-MENS.
+
+           MOVE SCR-CIC-IOPD TO OPD-CIC-IOPD IN OPD.
+           PERFORM DAP-FIO-OPD.
+           IF NOT FIO-STAT-OKS
+               MOVE 'OPD    NEX' TO SCR-COD-MENS
+               GO TO END-MAIN.
+
+           MOVE 'TAB' TO TAB-COD-SIST.
+           MOVE 'VLR' TO TAB-COD-TTAB IN TAB.
+           MOVE OPD-COD-VCAM IN OPD TO TAB-COD-CTAB IN TAB.
+           PERFORM VAL-COD.
+           IF MSG-COD-MENS > SPACES
+               MOVE 'CODVCAMNEX' TO SCR-COD-MENS
+               GO TO END-MAIN.
+               
+           MOVE TAB-CIC-CTAB IN TAB TO WSS-CIC-VCAM.
+
+           MOVE OPD-CIC-IOPD IN OPD TO LIQ-CIC-IOPD IN LIQ.
+           MOVE ZEROES              TO LIQ-NUM-ILIQ IN LIQ.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM DAP-FIO-LIQ.
+           IF NOT FIO-STAT-OKS
+               MOVE 'LIQ    NEX' TO SCR-COD-MENS
+               GO TO END-MAIN.
+
+           IF OPD-CIC-IOPD NOT = LIQ-CIC-IOPD IN LIQ
+               MOVE 'LIQ    NEG' TO SCR-COD-MENS
+               GO TO END-MAIN.
+
+           IF LIQ-COD-STAT IN LIQ NOT = 'R'
+               MOVE 'LIQSTATERR' TO SCR-COD-MENS
+               GO TO END-MAIN.
+
+           MOVE LIQ-CIC-IOPD IN LIQ TO CAD-CIC-IOPD IN CAD.
+           MOVE LIQ-NUM-ILIQ IN LIQ TO CAD-NUM-ILIQ IN CAD.
+           MOVE 0                   TO CAD-NUM-ICAD IN CAD.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM DAP-FIO-CAD.
+           IF NOT FIO-STAT-OKS
+               MOVE 'CAD    NEX' TO SCR-COD-MENS
+               GO TO END-MAIN.
+
+           IF NOT ( LIQ-CIC-IOPD IN LIQ = CAD-CIC-IOPD IN CAD AND
+                    LIQ-NUM-ILIQ IN LIQ = CAD-NUM-ILIQ IN CAD )
+               MOVE 'CAD    NEG' TO SCR-COD-MENS
+               GO TO END-MAIN.
+
+           MOVE 'TAB' TO MSC-COD-SIST.
+           MOVE 'TCYA' TO MSC-COD-TMSC IN MSC.
+           MOVE CAD-IND-TCAD IN CAD TO MSC-COD-CMSC IN MSC.
+           PERFORM VAL-IND.
+           IF FRM-SUAR = FRM-SUAR-MAL
+               MOVE 'CODTCYAERR' TO SCR-COD-MENS
+               GO TO END-MAIN.
+        
+           IF MSC-CIC-MSCL IN MSC = 'TCYACAJA'
+                PERFORM PRO-LIC
+           ELSE
+                PERFORM LNK-DDT.
+       END-MAIN.
+           GOBACK.
+       FIN-MAIN.
+           EXIT.
+
+       INI SECTION.
+       INI-INI.
+       COPY GNSBGEIB.
+       COPY GNSBGEDB.
+           PERFORM GNS-BUS-VCA.
+           PERFORM GNS-HDL-SYS.
+           PERFORM GNS-HDL-FRM.
+           MOVE 'DAPPPLIQ' TO FIO-PROG.
+           PERFORM GNS-BUS-IDD.
+           PERFORM GET-FHOY.
+       FIN-INI.
+           EXIT.
+
+       COPY GNSBPRCK.
+       COPY GNSBBVCA.
+       COPY GNSBBIDD.
+
+
+      * Link al Disparador de Transacciones
+      * GRABAR TD PARA Disparador de Transacciones
+       LNK-DDT SECTION.
+       INI-LNK-DDT.
+           PERFORM GNS-ERR-TDQ.
+
+           MOVE SPACES TO MSG-COD-MENS.
+      * 
+      *    fecha proceso
+           MOVE HOY-SHOY IN HOY-VARI TO DDT-NUM-SPRO.
+           MOVE HOY-AHOY IN HOY-VARI TO DDT-NUM-APRO.
+           MOVE HOY-MHOY IN HOY-VARI TO DDT-NUM-MPRO.
+           MOVE HOY-DHOY IN HOY-VARI TO DDT-NUM-DPRO.
+      * 
+      *    numero unico de operacion
+           MOVE SPACES TO DDT-NUM-NUOP.
+      * 
+      *    ambiente
+           MOVE 'S' TO DDT-GLS-AMBT.
+      *    
+      *    sistema
+           MOVE 'DAP' TO DDT-GLS-SIST.
+      *    
+      *    modalidad
+           MOVE 'L'   TO DDT-GLS-MODA.
+      *    
+      *    identificacion del operador
+           MOVE SPACES TO DDT-GLS-IDOP.
+      *    
+      *    codigo terminal
+      *     MOVE 'DAP' TO FIO-SIST.
+      *     MOVE 'PDT' TO TAB-COD-TTAB IN TAB.
+      *     MOVE 'DDTNUMITER' TO TAB-COD-CTAB IN TAB.
+      *     MOVE FIO-GET-KEY TO FIO-CMND.
+      *     PERFORM GNS-FIO-TAB.
+      *     IF FIO-STAT-OKS
+      *         MOVE TAB-GLS-ABRV TO DDT-NUM-ITER
+      *     ELSE
+      *        el mismo que usa sbt para modo tarde ICU     
+      *         MOVE 0972 TO DDT-NUM-ITER.
+
+           MOVE OPD-COD-OFIC IN OPD TO WSS-NUM-OFIC.
+           ADD 1100 WSS-NUM-OFIC GIVING DDT-NUM-ITER.
+      *    sistema
+      *     MOVE WSS-IND-TCTA TO DDT-COD-SIST
+           MOVE 'CCT' TO DDT-COD-SIST.
+      *    transaccion
+      *     IF WSS-IND-TCTA = 'AHO'
+      *         MOVE TO DDT-COD-TRAN
+      *     ELSE
+            MOVE '07700' TO DDT-COD-TRAN.
+      *    
+      *    codigo sistema 1
+           MOVE 'CCT' TO DDT-COD-SIS1.
+      *    
+      *    codigo transaccion 1
+           MOVE '08600' TO DDT-COD-TRN1.
+      *
+      *    codigo sistema 2
+           MOVE SPACES TO DDT-COD-SIS2.
+      *
+      *    codigo transaccion 2
+           MOVE SPACES TO DDT-COD-TRN2.
+      *
+      *    solicitud
+           MOVE '00' TO DDT-GLS-SOLI.
+      *
+      *    tipo de formato
+           MOVE SPACES TO DDT-COD-FORM.
+      *
+      *    tipo de documento
+           MOVE SPACES TO DDT-COD-TDOC.
+      *
+      *    numero de cuenta giradora
+           MOVE CAD-CIC-ICAD IN CAD TO DDT-NUM-CGIR.
+      *
+      *    serial
+           MOVE '00000000005E' TO DDT-GLS-SERI.
+      *
+      *    monto de la operacion
+           IF LIQ-SGV-PESO IN LIQ > ZEROES
+               MOVE LIQ-SGV-PESO IN LIQ TO DDT-VAL-MONT
+           ELSE
+               MOVE LIQ-SGV-TPAG IN LIQ TO DDT-VAL-MONT.
+      *
+      *    oficina origen
+           MOVE '000' TO DDT-COD-OFIC.
+      *
+      *    numero de cuenta deposito
+           MOVE SPACES TO DDT-NUM-CDEP.
+      *
+      *    indicador de llave de supervisor
+           MOVE ZEROES TO DDT-IND-SUPE.
+      *
+      *    nivel de rechazo
+           MOVE SPACES TO DDT-IND-NRCH.
+      *
+      *    codigos de rechazo (10 codigod de 3 bytes c/u)
+           MOVE SPACES TO DDT-VEC-RCHZ.
+      *
+      *    fecha del rechazo
+           MOVE ZEROES TO DDT-FEC-FRCH.
+      *
+      *    numero correlativo de ingreso
+           MOVE ZEROES TO DDT-NUM-INGR.
+      *
+      *    numero de lote
+           MOVE ZEROES TO DDT-NUM-LOTE.
+      *
+      *    monto 1
+           MOVE '000000000000' TO DDT-NUM-MNT1.
+      *
+      *    monto 2
+           MOVE '000000000000' TO DDT-NUM-MNT2.
+      *
+      *    indicador de modo tarde
+           MOVE '0' TO DDT-IND-TARD.
+      *
+      *    numero de operacion
+           MOVE OPD-CIC-IOPD IN OPD TO DDT-CIC-IOPD.
+      *
+      *     MOVE +226 TO WSS-TWALENG.
+      *     EXEC CICS ASSIGN TWALENG(WSS-TWALENG) END-EXEC.
+      *        IF WSS-TWALENG > 0 THEN
+      *     EXEC CICS ADDRESS TWA(LKS-WAPTR) END-EXEC.
+      *     MOVE DDT-VARI TO LKS-DDT.
+      *     EXEC CICS LINK PROGRAM ('DSTLINK') END-EXEC.
+      *     MOVE LKS-DDT TO DDT-VARI.
+      *
+           EXEC CICS WRITEQ TD
+                     QUEUE('DST3')
+                     FROM(DDT-VARI)
+                     LENGTH(+226)
+           END-EXEC.
+      *    SIMULACION DE LNK-ERRONEO POR SALDO INSUFICIENTE EN CTA CTE
+      *     IF WSS-CIC-ICAD = '    11111119'
+      *         MOVE 'RCH' TO DDT-COD-SIST.
+           
+      *    analizar retorno  DDT-COD-RCHZ(1-->10)
+      *     IF DDT-COD-SIST = 'RCH'
+      *         MOVE HOY-FHOY TO DDT-FEC-FRCH
+      *         MOVE 'DAP'        TO MSG-COD-SIST
+      *         MOVE 'DDT    RCH' TO MSG-COD-MENS
+      *         PERFORM GET-MSG
+      *         MOVE MSG-GLS-DESC TO WSS-GLS-DATA
+      *     ELSE
+      *         MOVE SPACES       TO WSS-GLS-DATA.
+       FIN-LNK-DDT.       
+           EXIT.
+
+       GNS-ERR-TDQ SECTION.
+       INI-GNS-ERR-TDQ.
+           EXEC CICS HANDLE CONDITION
+                     IOERR     (GNS-TDQ-IOE)
+                     LENGERR   (GNS-TDQ-LEN)
+                     NOSPACE   (GNS-TDQ-NOS)
+                     NOTOPEN   (GNS-TDQ-NOT)
+                     QIDERR    (GNS-TDQ-QID)
+      *               QZERO     (GNS-TDQ-QZE)
+           END-EXEC.
+       FIN-GNS-ERR-TDQ.
+           EXIT.
+
+       GNS-TDQ-IOE.
+           MOVE 'IOERR EN TRANSIENT DATA ' TO FRM-MEN1.
+           MOVE 'DST3' TO FRM-MEN2.
+           GO TO TDQ-ERR-ABT.
+
+       GNS-TDQ-LEN.
+           MOVE 'ERROR DE LARGO EN TRANSIENT DATA ' TO FRM-MEN1.
+           MOVE 'DST3' TO FRM-MEN2.
+           GO TO TDQ-ERR-ABT.
+
+       GNS-TDQ-NOS.
+           MOVE 'ERROR DE ESPACIO EN TRANSIENT DATA ' TO FRM-MEN1.
+           MOVE 'DST3' TO FRM-MEN2.
+           GO TO TDQ-ERR-ABT.
+
+       GNS-TDQ-NOT.
+           MOVE 'ERROR : TRANSIENT DATA NO ABIERTA ' TO FRM-MEN1.
+           MOVE 'DST3' TO FRM-MEN2.
+           GO TO TDQ-ERR-ABT.
+
+       GNS-TDQ-QID.
+           MOVE 'NO EXISTE TRANSIENT DATA ' TO FRM-MEN1.
+           MOVE 'DST3' TO FRM-MEN2.
+           GO TO TDQ-ERR-ABT.
+
+      * GNS-TDQ-QZE.
+      *     MOVE TDQ-STAT-QZE TO TDQ-STAT.
+      *     GO TO FIN-GNS-PRO-TDQ.
+
+       TDQ-ERR-ABT.
+           MOVE 'GNSPPABT' TO SYS-PROG.
+           MOVE FRM-MENS   TO SYS-MENS.
+           MOVE +79        TO SYS-TCMA.
+           EXEC CICS XCTL
+                     PROGRAM(SYS-PROG)
+                     COMMAREA(SYS-MENS)
+                     LENGTH(SYS-TCMA)
+           END-EXEC.
+
+
+       PRO-LIC SECTION.
+       INI-PRO-LIC.
+           MOVE LIQ-SGV-TPAG IN LIQ TO WSS-LIC-SGV-TPAG.
+           MOVE OPD-CIC-ISER IN OPD TO LIC-CIC-ISER IN LIC.
+           MOVE FIO-GET-KEY-UPD TO FIO-CMND.
+           PERFORM DAP-FIO-LIC.
+           MOVE FIO-STAT TO PGM-STAT-LIC.
+
+           IF SCR-CIC-TVAL = '0'
+               MOVE LIQ-SGV-PESO IN LIQ TO WSS-LIC-SGV-TPAG
+           ELSE
+               MOVE LIQ-SGV-TPAG IN LIQ TO WSS-LIC-SGV-TPAG.
+
+           IF NOT PGM-STAT-LIC-OKS
+              MOVE WSS-LIC-SGV-TPAG        TO LIC-SGV-TPAG IN LIC
+
+              MOVE SPACES                  TO LIC-GLS-FLAG IN LIC
+              MOVE ZEROES                  TO LIC-FEC-FLIQ IN LIC
+              MOVE 'S'                     TO LIC-COD-STAT IN LIC
+              MOVE LIQ-COD-OFIC IN LIQ     TO LIC-COD-OFIC IN LIC
+              MOVE OPD-COD-VCAM IN OPD     TO LIC-COD-VCAM IN LIC
+              MOVE SPACES                  TO LIC-GLS-DISP IN LIC
+              MOVE FIO-PUT TO FIO-CMND
+           ELSE
+              ADD WSS-LIC-SGV-TPAG TO LIC-SGV-TPAG IN LIC
+              IF LIC-SGV-TPAG IN LIC = ZEROES
+                  MOVE FIO-DEL TO FIO-CMND
+              ELSE
+                  MOVE FIO-MOD TO FIO-CMND.
+
+           PERFORM DAP-FIO-LIC.
+           IF NOT FIO-STAT-OKS
+      *        Error inconsistencia en el ingreso : hacer LOGTB e informar      
+               MOVE FIO-MENS TO SCR-COD-MENS.
+       FIN-PRO-LIC.
+           EXIT.
+
+       COPY DAPBFOPD.
+       COPY DAPBFLIQ.
+       COPY DAPBFCAD.
+       COPY DAPBFLIC.
+
+       COPY GNSBHFRM.
+       COPY GNSBGFRM.
+       COPY GNSBHSYS.
+       COPY GNSBGSYS.
+       COPY GNSBGFEC.
+       COPY GNSBGHOY.
+       COPY GNSBGDTC.
+       COPY GNSBIABT.
+       COPY GNSBVIND.
+       COPY GNSBVMSC.
+       COPY GNSBFMSC.
+       COPY GNSBBMSG.
+       COPY GNSBFMSG.
+       COPY GNSBFTAB.
+-END
+/*
+//CICDTC  EXEC DFHEITCL,PARM.LKED='MAP,XREF'
+//TRN.SYSIN    DD DSN=DAPCL.FUENTES(DAPPPLIQ),DISP=SHR,SUBSYS=LAM
+//COB.SYSLIB   DD DSN=CICS.V211.COBLIB,DISP=SHR,SUBSYS=LAM
+//             DD DSN=GNSCL.FUENTES.V31,DISP=SHR,SUBSYS=LAM
+//             DD DSN=GNSCL.FUENTES,DISP=SHR,SUBSYS=LAM
+//             DD DSN=GNSCL.FIO.LINEA,DISP=SHR,SUBSYS=LAM
+//             DD DSN=DAPCL.FUENTES,DISP=SHR,SUBSYS=LAM
+//             DD DSN=DAPCL.FIO.LINEA,DISP=SHR,SUBSYS=LAM
+//             DD DSN=TABCL.FUENTES,DISP=SHR,SUBSYS=LAM
+//             DD DSN=TABCL.FIO.LINEA,DISP=SHR,SUBSYS=LAM
+//             DD DSN=SGCCL.FUENTES,DISP=SHR,SUBSYS=LAM
+//             DD DSN=SGCCL.FIO.LINEA,DISP=SHR,SUBSYS=LAM
+//             DD DSN=DEUCL.FUENTES,DISP=SHR,SUBSYS=LAM
+//             DD DSN=DEUCL.FIO.LINEA,DISP=SHR,SUBSYS=LAM
+//             DD DSN=COLCL.FUENTES,DISP=SHR,SUBSYS=LAM
+//             DD DSN=COLCL.FIO.LINEA,DISP=SHR,SUBSYS=LAM
+//             DD DSN=SUPCL.FUENTES,DISP=SHR,SUBSYS=LAM
+//             DD DSN=SUPCL.FIO.LINEA,DISP=SHR,SUBSYS=LAM
+//             DD DSN=DAPCL.FUENTES,DISP=SHR,SUBSYS=LAM
+//             DD DSN=DAPCL.FIO.LINEA,DISP=SHR,SUBSYS=LAM
+//             DD DSN=SBTCL.FUENTES,DISP=SHR,SUBSYS=LAM
+//             DD DSN=SBTCL.FIO.LINEA,DISP=SHR,SUBSYS=LAM
+//COB.SYSUT4   DD UNIT=SYSDA,SPACE=(TRK,(20,5))
+//COB.SYSUT5   DD UNIT=SYSDA,SPACE=(TRK,(20,5))
+//LKED.SYSLIB  DD DSN=CICS.V211.LOADLIB,DISP=SHR
+//             DD DSN=GNSCM.RUTINAS.CONSIST,DISP=SHR
+//             DD DSN=GNSCM.LINEA,DISP=SHR
+//             DD DSN=DAPCM.LINEA,DISP=SHR
+//             DD DSN=COB.VSCLLIB,DISP=SHR
+//LKED.SYSLMOD DD DSN=DAPCM.LINEA(DAPPPLIQ),DISP=SHR
+//LKED.SYSLIN  DD DSN=CICS.V211.COBLIB(DFHEILIC),DISP=SHR
+//             DD DSN=&&LOADSET,DISP=(OLD,DELETE)
+//             DD DSN=ADR.DB75.OBJECT.DESA(DBCSVPR),DISP=SHR
+//

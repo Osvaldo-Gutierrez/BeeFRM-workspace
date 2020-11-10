@@ -1,0 +1,228 @@
+       IDENTIFICATION DIVISION.
+      *========================
+       PROGRAM-ID.       GARPKRCE.
+       AUTHOR.           CONSIST(RVM).
+       DATE-WRITTEN.     9-NOV-1995 12:11:41.
+
+      * PROGRAMA BATCH QUE SE RECORRE LA ENTIDAD GNSRCE, Y LIMPIA
+      * FECHA Y HORA GRABADOS ERRONEAMENTE.
+
+       ENVIRONMENT DIVISION.
+      *=====================
+       CONFIGURATION SECTION.
+      *=====================
+       SPECIAL-NAMES.
+           DECIMAL-POINT IS COMMA.
+
+       INPUT-OUTPUT SECTION.
+      *====================
+       FILE-CONTROL.
+      *-------------
+
+       DATA DIVISION.
+      *=============
+       FILE SECTION.
+      *------------
+
+       WORKING-STORAGE SECTION.
+      *-----------------------
+       COPY GNSBRRCE.
+
+       COPY GNSWVIDD.
+       COPY GNSWGRQA.
+       COPY GNSWGUIB.
+       COPY GNSWGELS.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-TAB-REQA==.
+       COPY GNSBRTAB.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-MSC-REQA==.
+       COPY GNSBRMSC.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-MSG-REQA==.
+       COPY GNSBRMSG.
+       COPY GNSWCFIO.
+       COPY GNSWVFIO.
+       COPY GNSWGSYS.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-RCE-REQA==.
+       COPY GNSWVNUM.
+       COPY GNSWCNUM.
+
+       01  WSS-VARI.
+           03  WSS-NUM-RCEL         VALUE ZEROES    PIC 9(05).
+           03  WSS-NUM-RCEM         VALUE ZEROES    PIC 9(05).
+           03  WSS-NUM-RBAD         VALUE ZEROES    PIC 9(01).
+           03  WSS-GLS-IENT.
+               05 WSS-GLS-IENT-KEY.
+                  07 WSS-GLS-IENT-KEY-4             PIC X(04).
+                  07 WSS-GLS-IENT-KEY-X-8           PIC X(08).
+                  07 WSS-GLS-IENT-KEY-9-8  REDEFINES         
+                     WSS-GLS-IENT-KEY-X-8           PIC 9(08).
+               05 WSS-GLS-IENT-AUX                  PIC X(18).
+
+       PROCEDURE DIVISION.
+      *===================
+       MAIN SECTION.
+      *------------
+       INI-MAIN.
+      *
+       COPY GNSBGEDB.
+      *EFECTUA APERTURA DE ARCHIVOS
+           PERFORM INICIO-RCE.
+
+      *PROCESO PRINCIPAL
+           PERFORM PROCESO-RCE.
+
+      *CIERRA ARCHIVOS
+           PERFORM FINAL-RCE.
+      *
+       FIN-MAIN.
+           DISPLAY ' '.
+           DISPLAY 'ESTADISTICAS  GARPKRCE'.
+           DISPLAY '----------------------'.
+           DISPLAY 'REG. GNSRCE LEIDOS      : '
+                   WSS-NUM-RCEL IN WSS-VARI.
+           DISPLAY 'REG. GNSRCE MODIFICADOS : '
+                   WSS-NUM-RCEM IN WSS-VARI.
+           DISPLAY ' '.
+      *
+           IF WSS-NUM-RBAD IN WSS-VARI > ZEROES
+      *        PERFORM GNS-PRG-ABT
+               MOVE 99 TO RETURN-CODE
+               PERFORM PRG-ABT
+           ELSE
+               PERFORM GNS-PRO-END.
+
+      ***********************************************************
+      * PROCESO DE APERTURA DE ARCHIVOS Y LECTURA DE PARAMETROS *
+      ***********************************************************
+       INICIO-RCE SECTION.
+      *---------------
+       INI-INICIO-RCE.
+           MOVE 'GARPKRCE' TO FIO-PROG.
+           PERFORM GNS-BUS-IDD.
+
+      *APERTURA DE ARCHIVOS
+
+      *GNSRCE
+           MOVE FIO-UPD TO FIO-CMND.
+           PERFORM GNS-FIO-RCE.
+           IF NOT FIO-STAT-OKS
+               DISPLAY 'ERROR AL ABRIR ARCHIVO GNSRCE '
+               DISPLAY 'DE UPDATE  '    FIO-STAT
+               MOVE 1 TO WSS-NUM-RBAD IN WSS-VARI
+               GO TO FIN-INICIO-RCE.
+
+       FIN-INICIO-RCE.
+           EXIT.
+
+       PROCESO-RCE SECTION.
+      *--------------------
+       INI-PROCESO-RCE.
+
+      *LEE A PARTIR DESDE EL PRIMER REGISTRO RCE
+           MOVE FIO-GET-FST TO FIO-CMND.
+           PERFORM GNS-FIO-RCE.
+           IF NOT FIO-STAT-OKS
+               DISPLAY 'NO EXISTEN REGISTROS GNSRCE'
+               MOVE 1 TO WSS-NUM-RBAD IN WSS-VARI
+               GO TO FIN-PROCESO-RCE.
+
+       LUP-PROCESO-RCE.
+           IF NOT FIO-STAT-OKS
+               GO TO FIN-PROCESO-RCE.
+
+      *CONTADOR DE REGISTROS LEIDOS
+           ADD 1 TO WSS-NUM-RCEL IN WSS-VARI.
+
+           IF RCE-COD-SIST IN RCE = 'GAR'
+               MOVE FIO-GET-KEY-UPD TO FIO-CMND
+               PERFORM GNS-FIO-RCE
+               IF NOT FIO-STAT-OKS
+                   DISPLAY 'ERROR: AL TOMAR DE UPD REGISTRO RCE '
+                      RCE-KEY-IREG IN RCE
+                   MOVE 1 TO WSS-NUM-RBAD IN WSS-VARI
+                   GO TO FIN-PROCESO-RCE
+               ELSE
+      *
+      *ELIMINA FECHA Y HORA 
+                   PERFORM RCE-CLS-GLS
+      *
+      *CONVIERTE A NUMERICO EN CASO DE QUE NO SEA
+                   PERFORM RCE-VAL-NUM
+                   IF NOT NUM-STAT-OKS
+                       MOVE 1 TO WSS-NUM-RBAD IN WSS-VARI
+                       GO TO FIN-PROCESO-RCE
+                   ELSE
+      *
+                   MOVE WSS-GLS-IENT IN WSS-VARI TO RCE-GLS-IENT IN RCE
+      *
+                   MOVE FIO-MOD TO FIO-CMND
+                   PERFORM GNS-FIO-RCE
+                   IF NOT FIO-STAT-OKS
+                       DISPLAY 'ERROR: AL MODIFICAR REGISTRO RCE '
+                         RCE-KEY-IREG IN RCE
+                       MOVE 1 TO WSS-NUM-RBAD IN WSS-VARI
+                       GO TO FIN-PROCESO-RCE
+                   ELSE
+      *CONTADOR DE REGISTROS MODIFICADOS
+                       ADD 1 TO WSS-NUM-RCEM IN WSS-VARI.
+               
+       NXT-PROCESO-RCE.
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM GNS-FIO-RCE.
+           GO TO LUP-PROCESO-RCE.
+
+       FIN-PROCESO-RCE.
+           EXIT.
+
+       RCE-CLS-GLS SECTION.
+       INI-RCE-CLS-GLS.
+           IF RCE-COD-ENTI IN RCE = 'GES' OR
+              RCE-COD-ENTI IN RCE = 'GTP' OR
+              RCE-COD-ENTI IN RCE = 'GVT'
+               MOVE RCE-GLS-IENT IN RCE TO WSS-GLS-IENT IN WSS-VARI
+           ELSE
+               MOVE RCE-GLS-IENT IN RCE TO WSS-GLS-IENT IN WSS-VARI
+               MOVE SPACES TO WSS-GLS-IENT-AUX IN WSS-VARI.
+       FIN-RCE-CLS-GLS.
+           EXIT.
+
+       RCE-VAL-NUM SECTION.
+       INI-RCE-VAL-NUM.
+           IF WSS-GLS-IENT-KEY-X-8 IN WSS-VARI NOT NUMERIC
+               MOVE WSS-GLS-IENT-KEY-X-8 IN WSS-VARI TO NUM-NUME
+               MOVE NUM-ZERO-S TO NUM-ZERO
+               MOVE NUM-SGNO-N TO NUM-SGNO
+               MOVE 8 TO NUM-NENT
+               MOVE 0 TO NUM-NDCM
+               PERFORM VAL-NUM
+               IF NUM-STAT-OKS
+                   MOVE NUM-NN9N TO WSS-GLS-IENT-KEY-9-8
+                                  IN WSS-VARI
+               ELSE
+                   DISPLAY 'ERROR EN VALNUM : ' NUM-MENS
+                          '   CON RCE : ' RCE.
+       FIN-RCE-VAL-NUM.
+           EXIT.
+
+       FINAL-RCE SECTION.
+       INI-FINAL-RCE.
+      *-------------------------------------
+           MOVE FIO-CLO TO FIO-CMND.
+           PERFORM GNS-FIO-RCE.
+      *-------------------------------------
+       FIN-FINAL-RCE.
+           EXIT.
+      *
+
+       COPY GNSBFRCE.
+       COPY GNSBVNUM.
+       COPY GNSBGDTC.
+       COPY GNSBGIDD.
+       COPY GNSBTABT.
+       COPY GNSBBSYS.
+       COPY GNSBGABT.
+       COPY GNSBBTAB.
+       COPY GNSBFMSG.
+       COPY GNSBBMSG.
+       COPY GNSBFTAB.
+       COPY GNSBFMSC.
+       COPY GNSBGEND.

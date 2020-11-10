@@ -1,0 +1,663 @@
+       IDENTIFICATION DIVISION.
+      *=======================
+       PROGRAM-ID.     LDCPSMCA.
+       AUTHOR.          CONSIST.
+       
+      * COPIA UNA CLF ACTIVADA CON UN NUEVO NUMERO, DEJANDO ESTA ULTIMA
+      * CERRADA Y LA ORIGINAL EN ESTADO INGRESADO, PARA QUE USUARIO LA
+      * ALTERE, VERIFIQUE Y ACTIVE
+      * RECIBE
+      *         05  MCA-KEY-ICLF.
+      * DEVUELVE
+      *         05  MCA-COD-SIST   
+      *         05  MCA-COD-MENS   
+
+      * SI HAY UN ERROR DEVUELVE MSG-COD-MENS CON EL CODIGO DEL MENSAJE ERROR
+      * EL ERROR SE MANEJA EN PROGRAMA LLAMADOR
+       
+       ENVIRONMENT DIVISION.
+      *====================
+       CONFIGURATION SECTION.
+      *----------------------
+       SPECIAL-NAMES.
+               DECIMAL-POINT IS COMMA.
+       
+       DATA DIVISION.
+      *=============
+
+       WORKING-STORAGE SECTION.
+      *-----------------------
+      *FLB CST  20-JUL-1994 
+       COPY GNSBRTAB.
+       COPY GNSBRMSG.
+       COPY GNSWCFIO.
+       COPY GNSWVFIO.
+       COPY GNSWGSYS.
+
+*% IF NOT PGM_VMS
+
+       COPY GNSWVIDD.
+       01  SCR-VARI.
+           03 SCR-SIST             VALUE 'DEU' PIC X(03).
+           03 SCR-QIDD                         PIC X(08).
+           03 SCR-LIDD                    COMP PIC S9(04).
+
+*% END
+*% IF PGM_DB2
+
+       COPY GNSWGSCA.
+*% END
+*% IF PGM_DB2
+           EXEC SQL INCLUDE LDCBRCLF END-EXEC.
+       COPY GNSWGRQS REPLACING ==SQL-REQA== BY ==SQL-CLF-REQA==.
+           EXEC SQL INCLUDE LDCBRRDC END-EXEC.
+       COPY GNSWGRQS REPLACING ==SQL-REQA== BY ==SQL-RDC-REQA==.
+           EXEC SQL INCLUDE LDCBRLDC END-EXEC.
+       COPY GNSWGRQS REPLACING ==SQL-REQA== BY ==SQL-LDC-REQA==.
+           EXEC SQL INCLUDE LDCBRARC END-EXEC.
+       COPY GNSWGRQS REPLACING ==SQL-REQA== BY ==SQL-ARC-REQA==.
+           EXEC SQL INCLUDE LDCBRARG END-EXEC.
+       COPY GNSWGRQS REPLACING ==SQL-REQA== BY ==SQL-ARG-REQA==.
+*% ELSE
+       COPY LDCBRCLF.
+       COPY LDCBRLDC.
+       COPY LDCBRRDC.
+       COPY LDCBRARC.
+       COPY LDCBRARG.
+
+*% END
+       COPY GNSWGHOY.
+       COPY GNSBRCIC.
+       COPY GNSWGCIC.
+       COPY GNSWCVRF.
+       COPY GNSWVVRF.
+
+*% IF NOT PGM_VMS
+       COPY LDCWGMCA.
+*% END
+*% IF PGM_DTC
+
+       COPY GNSWGRQA.
+       COPY GNSWGUIB.
+       COPY GNSWGELS.
+      *FLB CST  20-JUL-1994 
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-TAB-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-MSG-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-CIC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-CLF-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-RDC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-LDC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-ARC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-ARG-REQA==.
+
+*% END
+       01  WSS-VARI.
+           03 FRM-MENS                              PIC X(40).
+           03 FRM-SUAR                              PIC X(01).
+           03 FRM-SUAR-MAL                          PIC X(01).
+           03 WSS-RDC                COMP           PIC S9(04).
+           03 WSS-LDC                COMP           PIC S9(04).
+           03 WSS-ARC                COMP           PIC S9(04).
+           03 WSS-ARG                COMP           PIC S9(04).
+           03 WSS-I                  COMP           PIC S9(04).
+           03 WSS-CIC-ICLF.
+              05 WSS-CAI-ICLF                       PIC X(04).
+              05 WSS-IIC-ICLF                       PIC 9(08).
+
+      * Vector de Clientes de la CLF
+           03 VEC-CLI OCCURS 12.
+*% IF PGM_DB2
+              05 RDC-IIC-ICLI                       PIC X(08).
+*% ELSE
+              05 RDC-CIC-ICLI                       PIC X(12).
+*% END
+
+      * Vector de LCR'S 
+           03 VEC-LCR OCCURS 30.
+*% IF PGM_DB2
+              05 LDC-NUM-ILDC         COMP          PIC S9(04).
+*% ELSE
+              05 LDC-NUM-ILDC                       PIC 9(02).
+*% END
+
+      * Vector de ARC'S 
+*% IF PGM_PER
+      *LAV-BCP INI 03-AUG-1995
+      *    03 VEC-ARC OCCURS 40.
+           03 VEC-ARC OCCURS 80.
+      *LAV-BCP FIN 03-AUG-1995
+*% ELSE
+           03 VEC-ARC OCCURS 40.
+*% END
+*% IF PGM_DB2
+              05 ARC-NUM-ILDC         COMP          PIC S9(04).
+              05 ARC-NUM-IARC         COMP          PIC S9(04).
+*% ELSE
+              05 ARC-NUM-ILDC                       PIC 9(02).
+              05 ARC-NUM-IARC                       PIC 9(01).
+*% END
+
+      * Vector de ARG'S 
+*% IF PGM_PER
+      *LAV-BCP INI 03-AUG-1995
+      *    03 VEC-ARG OCCURS 40.
+           03 VEC-ARG OCCURS 80.
+      *LAV-BCP FIN 03-AUG-1995
+*% ELSE
+           03 VEC-ARG OCCURS 40.
+*% END
+*% IF PGM_DB2
+              05 ARG-NUM-ILDC         COMP          PIC S9(04).
+              05 ARG-NUM-IARG         COMP          PIC S9(04).
+*% ELSE
+              05 ARG-NUM-ILDC                       PIC 9(02).
+              05 ARG-NUM-IARG                       PIC 9(01).
+*% END
+
+       LINKAGE SECTION.
+      *---------------
+*% IF PGM_VMS
+       COPY LDCWGMCA.
+*% ELSE
+       01  DFHCOMMAREA.
+           02 FILLER                               PIC X(40).
+       COPY GNSLGFIO.
+*% END
+       
+*% IF PGM_VMS
+       PROCEDURE DIVISION USING MCA-VARI.
+      *=================================
+*% ELSE
+       PROCEDURE DIVISION.
+      *===================
+*% END
+       MAIN SECTION.
+      *------------
+       INI-MAIN.
+           PERFORM INI.
+
+           MOVE MCA-KEY-ICLF IN MCA-VARI TO CLF-KEY-ICLF.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM LDC-FIO-CLF.
+           IF NOT FIO-STAT-OKS
+               MOVE 'DEU'        TO MCA-COD-SIST
+               MOVE 'CLF    NEX' TO MCA-COD-MENS
+               GO TO FIN-MAIN.
+
+           PERFORM COP-RDC.
+           IF MCA-COD-MENS > SPACES
+               MOVE 'DEU'        TO MCA-COD-SIST
+               GO TO FIN-MAIN.
+
+           PERFORM COP-LDC.
+           IF MCA-COD-MENS > SPACES
+               MOVE 'DEU'        TO MCA-COD-SIST
+               GO TO FIN-MAIN.
+
+           PERFORM COP-ARC.
+           IF MCA-COD-MENS > SPACES
+               MOVE 'DEU'        TO MCA-COD-SIST
+               GO TO FIN-MAIN.
+
+           PERFORM COP-ARG.
+           IF MCA-COD-MENS > SPACES
+               MOVE 'DEU'        TO MCA-COD-SIST
+               GO TO FIN-MAIN.
+
+           PERFORM MCA-GET-CIC.
+           IF MCA-COD-MENS > SPACES
+               MOVE 'GNS'        TO MCA-COD-SIST
+               GO TO FIN-MAIN.
+
+           MOVE CIC-CAI-ICIC IN CIC TO CLF-CAI-ICLF IN CLF.
+           MOVE CIC-IIC-ICIC IN CIC TO CLF-IIC-ICLF IN CLF.
+           PERFORM GET-FHOY.
+           MOVE HOY-SHOY TO CLF-NUM-SCIE IN CLF.
+           MOVE HOY-AHOY TO CLF-NUM-ACIE IN CLF.
+           MOVE HOY-MHOY TO CLF-NUM-MCIE IN CLF.
+           MOVE HOY-DHOY TO CLF-NUM-DCIE IN CLF.
+           MOVE 'R'      TO CLF-COD-RAZC IN CLF.
+           MOVE 'R'      TO CLF-MSC-STAT IN CLF.
+
+           MOVE FIO-PUT TO FIO-CMND.
+           PERFORM LDC-FIO-CLF.
+           IF NOT FIO-STAT-OKS
+               MOVE 'DEU'        TO MCA-COD-SIST
+               MOVE 'CLF    PUT' TO MCA-COD-MENS
+               GO TO FIN-MAIN.
+
+           PERFORM PUT-RDC.
+           IF MCA-COD-MENS > SPACES
+               MOVE 'DEU'        TO MCA-COD-SIST
+               GO TO FIN-MAIN.
+
+           PERFORM PUT-LDC.
+           IF MCA-COD-MENS > SPACES
+               MOVE 'DEU'        TO MCA-COD-SIST
+               GO TO FIN-MAIN.
+
+           PERFORM PUT-ARC.
+           IF MCA-COD-MENS > SPACES
+               MOVE 'DEU'        TO MCA-COD-SIST
+               GO TO FIN-MAIN.
+
+           PERFORM PUT-ARG.
+           IF MCA-COD-MENS > SPACES
+               MOVE 'DEU'        TO MCA-COD-SIST
+               GO TO FIN-MAIN.
+
+           MOVE MCA-KEY-ICLF IN MCA-VARI TO CLF-KEY-ICLF.
+           MOVE FIO-GET-KEY-UPD TO FIO-CMND.
+           PERFORM LDC-FIO-CLF.
+           IF NOT FIO-STAT-OKS
+               MOVE 'DEU'        TO MCA-COD-SIST
+               MOVE 'CLF    NEX' TO MCA-COD-MENS
+               MOVE FIO-ULK-REC TO FIO-CMND
+               PERFORM LDC-FIO-CLF
+               GO TO FIN-MAIN.
+
+           MOVE HOY-SHOY TO CLF-NUM-SAPE IN CLF.
+           MOVE HOY-AHOY TO CLF-NUM-AAPE IN CLF.
+           MOVE HOY-MHOY TO CLF-NUM-MAPE IN CLF.
+           MOVE HOY-DHOY TO CLF-NUM-DAPE IN CLF.
+           MOVE WSS-CIC-ICLF IN WSS-VARI TO CLF-CIC-CREN IN CLF.
+           MOVE 'I'                      TO CLF-MSC-STAT IN CLF.
+           MOVE FIO-MOD TO FIO-CMND.
+           PERFORM LDC-FIO-CLF.
+           IF NOT FIO-STAT-OKS
+               MOVE 'DEU'        TO MCA-COD-SIST
+               MOVE 'CLF    MOD' TO MCA-COD-MENS
+               GO TO FIN-MAIN.
+
+       FIN-MAIN.
+      * Termina
+           PERFORM FIN.
+
+      *GET-CIC Obtener CIC
+       MCA-GET-CIC SECTION.
+       INI-MCA-GET-CIC.
+
+      *FLB CST  20-JUL-1994 MANEJA MEJOR CASO DE CLAVES CLF
+      *  OTORGADAS MANUALMENTE. LAS GENERADAS QUEDA IGUAL
+
+           MOVE CLF-CAI-ICLF IN CLF TO CIC-CAI-ICIC IN CIC.
+           MOVE CIC-GET TO CIC-CMND.
+           PERFORM PRO-CIC.
+           IF CIC-STAT NOT = CIC-STAT-OKS
+
+      * EXAMINA SI LOS CORRELATIVOS SE DAN DE LA FORMA XSUC O LIBRE
+               MOVE 'TAB'     TO FIO-SIST
+               MOVE 'VSN '    TO TAB-COD-TTAB IN TAB
+               MOVE 'CICXSUC' TO TAB-COD-CTAB IN TAB
+               MOVE FIO-GET-KEY TO FIO-CMND
+               PERFORM GNS-FIO-TAB
+               IF FIO-STAT-OKS AND TAB-IND-VIGE IN TAB = 'S'
+                   MOVE MSG-COD-MENS TO MCA-COD-MENS
+               ELSE
+      * CLAVES CLF OTORGADAS MANUALMENTE
+                   MOVE SPACES TO CIC-CAI-ICIC IN CIC
+                   MOVE CIC-GET TO CIC-CMND
+                   PERFORM PRO-CIC
+                   IF CIC-STAT NOT = CIC-STAT-OKS
+                       MOVE 'CAIBLKNEX' TO MCA-COD-MENS
+                   ELSE
+                       MOVE CIC-CIC-ICIC IN CIC TO CLF-CIC-ICLF IN CLF
+                       MOVE FIO-GET-KEY TO FIO-CMND
+                       PERFORM LDC-FIO-CLF
+                       IF FIO-STAT-OKS
+                           GO TO INI-MCA-GET-CIC
+                       ELSE
+                           MOVE SPACES TO MSG-COD-MENS
+                           MOVE CIC-CAI-ICIC IN CIC TO WSS-CAI-ICLF
+                           MOVE CIC-IIC-ICIC IN CIC TO WSS-IIC-ICLF
+           ELSE
+               MOVE CIC-CIC-ICIC IN CIC TO CLF-CIC-ICLF IN CLF
+               MOVE FIO-GET-KEY TO FIO-CMND
+               PERFORM LDC-FIO-CLF
+               IF FIO-STAT-OKS
+                   GO TO INI-MCA-GET-CIC
+               ELSE
+                   MOVE CIC-CAI-ICIC IN CIC TO WSS-CAI-ICLF.
+                   MOVE CIC-IIC-ICIC IN CIC TO WSS-IIC-ICLF.
+       FIN-MCA-GET-CIC.
+           EXIT.
+
+       COP-RDC SECTION.
+       INI-COP-RDC.
+           MOVE ZEROES TO WSS-RDC.
+*% IF PGM_DB2
+           MOVE SPACES                   TO RDC-IIC-ICLI IN RDC.
+*% ELSE
+           MOVE SPACES                   TO RDC-CIC-ICLI IN RDC.
+*% END
+           MOVE MCA-KEY-ICLF IN MCA-VARI TO RDC-KEY-ICLF IN RDC.
+
+           MOVE 'RDC-KEY-ICLF' TO FIO-AKEY.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM LDC-FIO-RDC.
+           IF NOT ( FIO-STAT-OKS AND
+                    MCA-KEY-ICLF IN MCA-VARI = RDC-KEY-ICLF IN RDC )
+               MOVE 'RDC    NEX' TO MCA-COD-MENS
+               IF FIO-STAT-OKS
+                   GO TO BRW-COP-RDC
+               ELSE
+                   GO TO FIN-COP-RDC.
+
+       LUP-COP-RDC.
+           ADD 1 TO WSS-RDC.
+*% IF PGM_DB2
+           MOVE RDC-IIC-ICLI IN RDC TO RDC-IIC-ICLI IN VEC-CLI(WSS-RDC).
+*% ELSE
+           MOVE RDC-CIC-ICLI IN RDC TO RDC-CIC-ICLI IN VEC-CLI(WSS-RDC).
+*% END
+
+           MOVE 'RDC-KEY-ICLF' TO FIO-AKEY.
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM LDC-FIO-RDC.
+           IF FIO-STAT-OKS AND
+              MCA-KEY-ICLF IN MCA-VARI = RDC-KEY-ICLF IN RDC 
+               GO TO LUP-COP-RDC.
+
+       BRW-COP-RDC.
+           IF FIO-STAT-OKS
+               MOVE 'RDC-KEY-ICLF' TO FIO-AKEY
+               MOVE FIO-END-BRW TO FIO-CMND
+               PERFORM LDC-FIO-RDC.
+       FIN-COP-RDC.
+           EXIT.
+
+       COP-LDC SECTION.
+       INI-COP-LDC.
+           MOVE ZEROES TO WSS-LDC.
+           MOVE MCA-KEY-ICLF IN MCA-VARI TO LDC-CIC-ICLF IN LDC.
+           MOVE ZEROS                    TO LDC-NUM-ILDC IN LDC.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM LDC-FIO-LDC.
+           IF NOT ( FIO-STAT-OKS AND
+                    MCA-KEY-ICLF IN MCA-VARI = LDC-CIC-ICLF IN LDC )
+               MOVE 'LDC    NEX' TO MCA-COD-MENS
+               IF FIO-STAT-OKS
+                   GO TO BRW-COP-LDC
+               ELSE
+                   GO TO FIN-COP-LDC.
+
+       LUP-COP-LDC.
+           ADD 1 TO WSS-LDC.
+           MOVE LDC-NUM-ILDC IN LDC TO LDC-NUM-ILDC IN VEC-LCR(WSS-LDC).
+
+           MOVE FIO-GET-NXT    TO FIO-CMND.
+           PERFORM LDC-FIO-LDC.
+           IF FIO-STAT-OKS AND
+              MCA-KEY-ICLF IN MCA-VARI = LDC-CIC-ICLF IN LDC
+               GO TO LUP-COP-LDC.
+
+       BRW-COP-LDC.
+           IF FIO-STAT-OKS
+               MOVE FIO-END-BRW TO FIO-CMND
+               PERFORM LDC-FIO-LDC.
+       FIN-COP-LDC.
+           EXIT.
+ 
+       COP-ARC SECTION.
+       INI-COP-ARC.
+           MOVE ZEROES TO WSS-ARC.
+           MOVE MCA-KEY-ICLF IN MCA-VARI TO ARC-CIC-ICLF IN ARC.
+           MOVE ZEROS                    TO ARC-NUM-ILDC IN ARC.
+           MOVE ZEROS                    TO ARC-NUM-IARC IN ARC. 
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM LDC-FIO-ARC.
+           IF NOT ( FIO-STAT-OKS AND
+                    MCA-KEY-ICLF IN MCA-VARI = ARC-CIC-ICLF IN ARC )
+               IF FIO-STAT-OKS
+                   GO TO BRW-COP-ARC
+               ELSE
+                   GO TO FIN-COP-ARC.
+
+       LUP-COP-ARC.
+           ADD 1 TO WSS-ARC.
+           MOVE ARC-NUM-ILDC IN ARC TO ARC-NUM-ILDC IN VEC-ARC(WSS-ARC).
+           MOVE ARC-NUM-IARC IN ARC TO ARC-NUM-IARC IN VEC-ARC(WSS-ARC).
+
+           MOVE FIO-GET-NXT    TO FIO-CMND.
+           PERFORM LDC-FIO-ARC.
+           IF FIO-STAT-OKS AND
+              MCA-KEY-ICLF IN MCA-VARI = ARC-CIC-ICLF IN ARC 
+               GO TO LUP-COP-ARC.
+
+       BRW-COP-ARC.
+           IF FIO-STAT-OKS 
+               MOVE FIO-END-BRW TO FIO-CMND
+               PERFORM LDC-FIO-ARC.
+       FIN-COP-ARC.
+           EXIT.
+
+       COP-ARG SECTION.
+       INI-COP-ARG.
+           MOVE ZEROES TO WSS-ARG.
+           MOVE MCA-KEY-ICLF IN MCA-VARI TO ARG-CIC-ICLF IN ARG.
+           MOVE ZEROS                    TO ARG-NUM-ILDC IN ARG.
+           MOVE ZEROS                    TO ARG-NUM-IARG IN ARG. 
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM LDC-FIO-ARG.
+           IF NOT ( FIO-STAT-OKS AND
+                    MCA-KEY-ICLF IN MCA-VARI = ARG-CIC-ICLF IN ARG )
+               IF FIO-STAT-OKS
+                   GO TO BRW-COP-ARG
+               ELSE
+                   GO TO FIN-COP-ARG.
+       LUP-COP-ARG.
+           ADD 1 TO WSS-ARG.
+           MOVE ARG-NUM-ILDC IN ARG TO ARG-NUM-ILDC IN VEC-ARG(WSS-ARG).
+           MOVE ARG-NUM-IARG IN ARG TO ARG-NUM-IARG IN VEC-ARG(WSS-ARG).
+
+           MOVE FIO-GET-NXT    TO FIO-CMND.
+           PERFORM LDC-FIO-ARG.
+           IF FIO-STAT-OKS AND
+              MCA-KEY-ICLF IN MCA-VARI = ARG-CIC-ICLF IN ARG 
+               GO TO LUP-COP-ARG.
+
+       BRW-COP-ARG.
+           IF FIO-STAT-OKS 
+               MOVE FIO-END-BRW TO FIO-CMND
+               PERFORM LDC-FIO-ARG.
+       FIN-COP-ARG.
+           EXIT.
+
+       PUT-RDC SECTION.
+       INI-PUT-RDC.
+           MOVE ZEROES TO WSS-I.
+       LUP-PUT-RDC.
+           ADD 1 TO WSS-I.
+           IF WSS-I > WSS-RDC
+               GO TO FIN-PUT-RDC.
+
+           MOVE MCA-KEY-ICLF IN MCA-VARI       TO RDC-KEY-ICLF IN RDC.
+*% IF PGM_DB2
+           MOVE RDC-IIC-ICLI IN VEC-CLI(WSS-I) TO RDC-IIC-ICLI IN RDC.
+*% ELSE
+           MOVE RDC-CIC-ICLI IN VEC-CLI(WSS-I) TO RDC-CIC-ICLI IN RDC.
+*% END
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM LDC-FIO-RDC.
+           IF NOT FIO-STAT-OKS 
+               GO TO LUP-PUT-RDC.
+
+           MOVE WSS-CIC-ICLF IN WSS-VARI TO RDC-KEY-ICLF IN RDC.
+           MOVE FIO-PUT TO FIO-CMND.
+           PERFORM LDC-FIO-RDC.
+           IF FIO-STAT-OKS 
+               GO TO LUP-PUT-RDC.
+           MOVE 'DEU'        TO MCA-COD-SIST.
+           MOVE 'RDC    PUT' TO MCA-COD-MENS.
+       FIN-PUT-RDC.
+           EXIT.
+
+       PUT-LDC SECTION.
+       INI-PUT-LDC.
+           MOVE ZEROES TO WSS-I.
+       LUP-PUT-LDC.
+           ADD 1 TO WSS-I.
+           IF WSS-I > WSS-LDC
+               GO TO FIN-PUT-LDC.
+
+           MOVE MCA-KEY-ICLF IN MCA-VARI       TO LDC-CIC-ICLF IN LDC.
+           MOVE LDC-NUM-ILDC IN VEC-LCR(WSS-I) TO LDC-NUM-ILDC IN LDC.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM LDC-FIO-LDC.
+           IF NOT FIO-STAT-OKS 
+               GO TO LUP-PUT-LDC.
+
+           MOVE WSS-CIC-ICLF IN WSS-VARI TO LDC-CIC-ICLF IN LDC.
+           MOVE FIO-PUT TO FIO-CMND.
+           PERFORM LDC-FIO-LDC.
+           IF FIO-STAT-OKS 
+               GO TO LUP-PUT-LDC.
+           MOVE 'DEU'        TO MCA-COD-SIST.
+           MOVE 'LDC    PUT' TO MCA-COD-MENS.
+       FIN-PUT-LDC.
+           EXIT.
+ 
+       PUT-ARC SECTION.
+       INI-PUT-ARC.
+           MOVE ZEROES TO WSS-I.
+       LUP-PUT-ARC.
+           ADD 1 TO WSS-I.
+           IF WSS-I > WSS-ARC
+               GO TO FIN-PUT-ARC.
+
+           MOVE MCA-KEY-ICLF IN MCA-VARI       TO ARC-CIC-ICLF IN ARC.
+           MOVE ARC-NUM-ILDC IN VEC-ARC(WSS-I) TO ARC-NUM-ILDC IN ARC.
+           MOVE ARC-NUM-IARC IN VEC-ARC(WSS-I) TO ARC-NUM-IARC IN ARC.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM LDC-FIO-ARC.
+           IF NOT FIO-STAT-OKS 
+               GO TO LUP-PUT-ARC.
+
+           MOVE WSS-CIC-ICLF IN WSS-VARI TO ARC-CIC-ICLF IN ARC.
+           MOVE FIO-PUT TO FIO-CMND.
+           PERFORM LDC-FIO-ARC.
+           IF FIO-STAT-OKS 
+               GO TO LUP-PUT-ARC.
+           MOVE 'DEU'        TO MCA-COD-SIST.
+           MOVE 'ARC    PUT' TO MCA-COD-MENS.
+       FIN-PUT-ARC.
+           EXIT.
+
+       PUT-ARG SECTION.
+       INI-PUT-ARG.
+           MOVE ZEROES TO WSS-I.
+       LUP-PUT-ARG.
+           ADD 1 TO WSS-I.
+           IF WSS-I > WSS-ARG
+               GO TO FIN-PUT-ARG.
+
+           MOVE MCA-KEY-ICLF IN MCA-VARI       TO ARG-CIC-ICLF IN ARG.
+           MOVE ARG-NUM-ILDC IN VEC-ARG(WSS-I) TO ARG-NUM-ILDC IN ARG.
+           MOVE ARG-NUM-IARG IN VEC-ARG(WSS-I) TO ARG-NUM-IARG IN ARG.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM LDC-FIO-ARG.
+           IF NOT FIO-STAT-OKS 
+               GO TO LUP-PUT-ARG.
+
+           MOVE WSS-CIC-ICLF IN WSS-VARI TO ARG-CIC-ICLF IN ARG.
+           MOVE FIO-PUT TO FIO-CMND.
+           PERFORM LDC-FIO-ARG.
+           IF FIO-STAT-OKS 
+               GO TO LUP-PUT-ARG.
+           MOVE 'DEU'        TO MCA-COD-SIST.
+           MOVE 'ARG    PUT' TO MCA-COD-MENS.
+       FIN-PUT-ARG.
+           EXIT.
+
+       INI SECTION.
+       INI-INI.
+*% IF PGM_DTC
+       COPY GNSBGEIB.
+       COPY GNSBGEDB.
+*% END
+*% IF PGM_VSI OR PGM_UVS AND SUB_CICS
+      *Handler para manejar VSAM
+           PERFORM GNS-HDL-VSM.
+*% END
+*% IF NOT PGM_VMS
+           MOVE DFHCOMMAREA  TO MCA-CMMA IN MCA-VARI.
+           MOVE MCA-PROG TO FIO-PROG.
+      *Buscar Independencia de Datos
+           MOVE MCA-QIDD TO SCR-QIDD.
+           MOVE MCA-LIDD TO SCR-LIDD.
+           PERFORM GNS-BUS-IDD.
+*% ELSE
+           MOVE FIO-ACCS-UPD TO FIO-ACCS.
+           MOVE FIO-ACC      TO FIO-CMND.
+           MOVE 'GNS'        TO FIO-SIST.
+           PERFORM GNS-FIO-CIC.
+           MOVE FIO-UPD TO FIO-CMND.
+           PERFORM GNS-FIO-CIC.
+
+*% END
+
+      * Limpia Variables de Retorno
+           MOVE SPACES  TO MCA-COD-SIST
+                           MCA-COD-MENS.
+
+       FIN-INI.
+           EXIT.
+
+       FIN SECTION.
+       INI-FIN.
+           IF MCA-COD-MENS IN MCA-VARI = SPACES AND
+              MSG-COD-MENS > SPACES
+               MOVE MSG-COD-MENS TO MCA-COD-MENS IN MCA-VARI.
+
+*% IF PGM_DTC OR SUB_CICS
+           MOVE MCA-CMMA IN MCA-VARI TO DFHCOMMAREA.
+           MOVE +0 TO EIBRESP.
+*% END
+*% IF PGM_DTC OR SUB_CICS
+       COPY GNSBGGBK.
+*% END
+       FIN-FIN.
+*% IF PGM_VMS OR NOT PGM_DTC AND NOT SUB_CICS
+           EXIT PROGRAM.
+*% ELSE
+           EXIT.
+*% END
+       COPY GNSBGSYS.
+*% IF NOT PGM_VMS
+       COPY GNSBBIDD.
+*% END
+*% IF PGM_VSI OR PGM_UVS AND SUB_CICS
+       COPY GNSBHVSM.
+       COPY GNSBGVSM.
+*% END
+*% IF PGM_DTC
+       COPY GNSBGDTC.
+*% END
+       COPY GNSBGMSG.
+*% IF PGM_DB2
+       COPY GNSBIAB2.
+*% ELSE
+       COPY GNSBIABT.
+*% END
+
+      *FLB CST  20-JUL-1994 
+       COPY GNSBFTAB.
+       COPY GNSBFMSG.
+       COPY GNSBGHOY.
+       COPY GNSBGCIC.
+       COPY GNSBPVRF.
+       COPY GNSBFCIC.
+
+*% IF PGM_DB2
+           EXEC SQL INCLUDE LDCBFCLF END-EXEC.
+           EXEC SQL INCLUDE LDCBFRDC END-EXEC.
+           EXEC SQL INCLUDE LDCBFLDC END-EXEC.
+           EXEC SQL INCLUDE LDCBFARC END-EXEC.
+           EXEC SQL INCLUDE LDCBFARG END-EXEC.
+*% ELSE
+       COPY LDCBFCLF.
+       COPY LDCBFLDC.
+       COPY LDCBFRDC.
+       COPY LDCBFARC.
+       COPY LDCBFARG.
+*% END

@@ -1,0 +1,146 @@
+		Generacion Archivos M6S y T10
+		-----------------------------
+
+	Diseno Solucion
+	===============
+
+
+  + DESCRIPCION :   Programa batch generador de montos acumulados por
+    GENERAL	    origen y destino sectorial.
+
+  + PROGRAMA    :   DAPPGSM6.
+
+  + PARAMETROS  :   Fecha proceso (DDMMSSAA) 
+                    
+  + ENTRADAS    :   ARCH. BASE       : OPD (Operaciones deposito a plazo) DAP.
+				       RCC (Relacion Cliente Operacion)
+				       LIQ ( Liquidaciones)
+				       DBC (Datos basicos de los clientes)
+				       CID (Intereses Devengados ya procesado)
+				       CAM (Valores de cambio)
+				       OFI (Oficinas)
+
+
+  + SALIDAS     :   Archivo SM6 : Archivo para emision reporte M6
+		    Archivo T10 : Archivo para emision reporte T10
+
+                                                     
+  + DESCRIPCION :   Este programa tiene por objeto generar dos archivos :
+    DEL PROCESO     
+
+		a) Montos acumulados para operaciones vigentes y vencidas
+		   no pagadas al ultimo dia calendario del mes de proceso
+		   segun agrupamiento de origen y destino sectorial.
+
+
+	    Acepta fecha de proceso (DDMMSSAA) WSS-FEC-FPRO
+	    y valida que sea ultimo dia calendario del mes.
+
+	    Acepta indicador de generador de archivo T10, ya que este
+	    debe generarse solo trimestralmente, y no mensualmente como
+	    M6S.
+
+
+
+	    Lee desde sistema TAB tabla VLR para cic's
+
+			0999 Pesos
+			0998 US$
+			0013 Pesos reajustable dolar
+			1013 Dolares
+
+	    y guardar sus codigo usuarios para posteriores comparaciones
+	    en variables.
+
+
+	    Si no existe alguno o no vigente => aborta
+
+	    Leer a fecha conversion desde sistema TAB tabla CAM para :
+
+			0999 0998
+			0999 0013
+			0999 1013
+
+	    Si no existe alguno o no verificado => aborta
+
+	    Recorre tabla OPD secuencialmente por llave principal y procesa
+	    operaciones con :
+
+		OPD-COD-STAT= 'G'
+				OR
+                ( OPD-COD-STAT = 'L' AND OPD-COD-RENO = 'N' AND
+		     LIQ-COD-STAT(1) = 'S' )
+			MOVE 'LIQ' TO WSS-IND-OSDK.
+
+	    Todas las operaciones vigentes y aquellas fijas vencidas
+	    ( Disponible a la vista ).
+
+	    Para cada una de estas operaciones graba o acumula
+	    en M6S y T10.
+
+	    M6S.
+		    Region : Segun subproceso "Busqueda region"
+		    Linea  : Segun subproceso "Busqueda linea"
+				( Codigo de origen y destino sectorial
+				  para M6S )
+		    Moneda :			OPD-COD-VCAM
+
+		    Monto  :			OPD-VAL-SCAP si
+		    				operacion vigente
+						mas intereses y reajustes
+						devengados
+						de archivo CID
+
+							o
+
+						LIQ-SGV-TPAG si
+						fijo vencido
+
+		    Disponible			SPACES
+
+
+	    T10.
+		    Region : Segun subproceso "Busqueda region"
+		    Linea  : Segun subproceso "Busqueda linea"
+		    Moneda			OPD-COD-VCAM
+
+		    Monto 			OPD-VAL-SCAP si
+		    (En pesos)                  operacion vigente
+						mas intereses y reajustes
+						devengados
+						de archivo CID
+
+							o
+
+						LIQ-SGV-TPAG si
+						fijo vencido
+
+		    Disponible			SPACES
+		
+	    Subproceso "Busqueda region" 
+
+		    Lee desde tabla OFI la oficina de la operacion
+
+		    IF OPD-COD-VCAM NOT = WSS-COD-1013
+			Leer desde tabla 'COM' de sistema 'TAB'
+			la comuna a que pertenece la oficina y
+			obtener de la comuna leida la region(Dato)
+		    ELSE
+			Realizar proceso anterior para la oficina
+			cabecera de OPD-COD-OFIC.
+			Siendo la oficina cabecera el campo 
+			"15. Ofic central Operativa" de la pantalla
+			de oficinas para OPD-COD-OFIC.
+
+	    Subproceso "Busqueda linea"
+
+			Leer el primer cliente de la operacion via 
+			DAP(RCC) ---> SGC(DBC)
+			IF DBC-COD-ODSE > SPACES
+				leer tabla ODS de sistema TAB y
+				de sus datos anexos obtener la "linea"
+				en reporte
+			ELSE
+				Mediante rango de ruts obtener el codigo de
+				ODS y realizar proceso anterior.
+				Ver tabla adjunta.

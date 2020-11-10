@@ -1,0 +1,319 @@
+       IDENTIFICATION DIVISION.
+      *=======================
+       PROGRAM-ID.      COLPGTAC.
+       AUTHOR.          BEE-TEAM (EX-CONSIST) (JUS)
+       DATE-WRITTEN. 17-DEC-1997
+      *
+      * Generador  de archivo COLTAC a partir de la acumulacion del
+      * movimiento contable diario (COLACU).
+      *
+      * Segun parametro genera archivo base (COLTAC) para listar;
+      *
+      *  Parametro (Tipo Listado);
+      *                           INGVCD : Ingresos a Cartera Vencida
+      *                           INGCAS : Ingresos a Castigo
+      *                           EGRVCD : Egresos a Cartera Vencida
+      *                           CASMES : Castigados en el mes
+      *JUS-INI 9-MAR-1998
+      *                           VARDEU : Varios Deudores
+      *JUS-FIN 9-MAR-1998
+      *
+       ENVIRONMENT DIVISION.
+      *====================
+       CONFIGURATION SECTION.
+      *---------------------
+       SPECIAL-NAMES.
+           DECIMAL-POINT IS COMMA.
+       DATA DIVISION.
+      *=============
+       WORKING-STORAGE SECTION.
+      *-----------------------
+      *<<<< WSS_DTC
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-OPC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-DLC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-DBC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-MSG-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-TAB-REQA==.
+      *<<<< WSS
+      *
+       COPY GNSWGRQA.
+       COPY GNSWGUIB.
+       COPY GNSWGELS.
+       COPY GNSWVIDD.
+       COPY GNSWCFIO.
+       COPY GNSWVFIO.
+       COPY GNSWGSYS.
+       COPY GNSWGCPT.
+      *
+       COPY COLBRACU.
+       COPY COLBRTAC.
+       COPY COLBROPC.
+       COPY COLBRDLC.
+       COPY SGCBRDBC.
+       COPY GNSWGFEC.
+      *
+       COPY GNSBRMSG.
+       COPY GNSWGHOY.
+       COPY GNSBRTAB.
+      *
+       01  WSS-VARI.
+           03 WSS-FEC-FPRO.
+              05 WSS-NUM-DPRO        VALUE ZEROES  PIC 9(02).
+              05 WSS-NUM-MPRO        VALUE ZEROES  PIC 9(02).
+              05 WSS-NUM-SPRO        VALUE ZEROES  PIC 9(02).
+              05 WSS-NUM-APRO        VALUE ZEROES  PIC 9(02).
+           03 WSS-FEC-FFEC.
+              05 WSS-NUM-SFEC        VALUE ZEROES  PIC 9(02).
+              05 WSS-NUM-AFEC        VALUE ZEROES  PIC 9(02).
+              05 WSS-NUM-MFEC        VALUE ZEROES  PIC 9(02).
+              05 WSS-NUM-DFEC        VALUE ZEROES  PIC 9(02).
+           03 WSS-COD-TDAT       VALUE SPACES      PIC X(06).
+      *
+       PROCEDURE DIVISION.
+      *==================*
+       MAIN SECTION.
+      *============*
+       INI-MAIN.
+       COPY GNSBGEDB.
+           MOVE 'COLPGTAC' TO FIO-PROG.
+           PERFORM GNS-BUS-IDD.
+           PERFORM OPEN-FILE.
+           PERFORM LEE-PARAM.
+           PERFORM PRO-ACU.
+           PERFORM CLOSE-FILE.
+       FIN-MAIN.
+           PERFORM GNS-PRO-END.
+
+       OPEN-FILE SECTION.
+      *-----------------*
+       INI-OPEN-FILE.
+           MOVE FIO-INP TO FIO-CMND.
+           PERFORM COL-FIO-ACU.
+           MOVE FIO-OUT TO FIO-CMND.
+           PERFORM COL-FIO-TAC.
+       FIN-OPEN-FILE.
+           EXIT.
+
+       LEE-PARAM SECTION.
+      *-----------------*
+       INI-LEE-PARAM.
+           DISPLAY ' '.
+           DISPLAY 'INICIO CAPTURA DE PARAMETROS'.
+           DISPLAY '****************************'.
+       FECHA-PROCESO.
+      *-------------*
+      *Captura Fecha de Proceso
+           ACCEPT WSS-FEC-FPRO IN WSS-VARI.
+           DISPLAY 'FEC.DE PROC. (DDMMSSAA): ' WSS-FEC-FPRO IN WSS-VARI.
+      *VAL-FEC Valida Fecha de Proceso
+           DISPLAY WSS-FEC-FPRO IN WSS-VARI.
+           MOVE WSS-FEC-FPRO    IN WSS-VARI TO FEC-FECH.
+           MOVE FEC-FORM-FEC TO FEC-FORM.
+           MOVE FEC-FBLK-N   TO FEC-FBLK.
+           MOVE FEC-CHOY-LE  TO FEC-CHOY.
+           MOVE FEC-VHBL-N   TO FEC-VHBL.
+           MOVE FEC-VAL-FEC  TO FEC-CMND.
+           PERFORM PRO-FEC.
+           IF NOT FEC-STAT-OKS
+               DISPLAY FEC-MENS
+               PERFORM GNS-PRO-ABT.
+
+           MOVE WSS-NUM-DPRO IN WSS-VARI TO WSS-NUM-DFEC IN WSS-VARI.
+           MOVE WSS-NUM-MPRO IN WSS-VARI TO WSS-NUM-MFEC IN WSS-VARI.
+           MOVE WSS-NUM-SPRO IN WSS-VARI TO WSS-NUM-SFEC IN WSS-VARI.
+           MOVE WSS-NUM-APRO IN WSS-VARI TO WSS-NUM-AFEC IN WSS-VARI.
+
+      *Captura Tipo de Datos a Crear
+           ACCEPT WSS-COD-TDAT IN WSS-VARI.
+           DISPLAY 'TIPO DE DATO A CREAR: ' WSS-COD-TDAT IN WSS-VARI.
+
+           IF NOT (WSS-COD-TDAT IN WSS-VARI = 'INGVCD' OR 'INGCAS' OR
+      *JUS-INI 9-MAR-1998
+      *                                        'EGRVCD' OR 'CASMES')
+                                    'EGRVCD' OR 'CASMES' OR 'VARDEU')
+               DISPLAY 'ERROR EN PARAMETRO DE TIPO DE DATO, DEBE SER'
+      *         DISPLAY '"INGVCD", "INGCAS", "EGRVCD" O "CASMES"'
+               DISPLAY 'INGVCD, INGCAS, EGRVCD, CASMES O VARDEU'
+      *JUS-FIN 9-MAR-1998
+               PERFORM GNS-PRO-ABT.
+       FIN-LEE-PARAM.
+           EXIT.
+
+       PRO-ACU SECTION.
+      *****************
+       INI-PRO-ACU.
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM COL-FIO-ACU.
+           IF NOT FIO-STAT-OKS
+               DISPLAY '---------------------------------------------'
+               DISPLAY 'ERROR EN EL PROCESO, ARCHIVO VACIO           '
+               DISPLAY '"MOVIMIENTO ACUMULADO" ACU                   '
+               DISPLAY '---------------------------------------------'
+               DISPLAY ' ********** PROCESO AUTOCANCELADO ***********'
+               DISPLAY '---------------------------------------------'
+               PERFORM GNS-PRO-END.
+
+           IF NOT FIO-STAT-OKS
+              GO TO FIN-PRO-ACU.
+
+       LUP-PRO-ACU.
+           MOVE ACU-CIC-IOPC IN ACU TO DLC-CIC-IOPC IN DLC.
+           MOVE 1                   TO DLC-NUM-IDLC IN DLC.
+           MOVE FIO-GET-KEY         TO FIO-CMND.
+           PERFORM COL-FIO-DLC.
+           IF NOT FIO-STAT-OKS
+              DISPLAY 'ERROR EN NUM.DLC: ' ACU-CIC-IOPC IN ACU
+              GO TO LEE-NXT-ACU.
+
+           IF WSS-COD-TDAT IN WSS-VARI = 'INGVCD' AND
+              ACU-COD-MVTO IN ACU = 'CUR' AND
+              DLC-IND-SCTB IN DLC = 'VCD' AND
+              ACU-FEC-FPRO IN ACU = WSS-FEC-FFEC IN WSS-VARI
+                 MOVE '1' TO TAC-IND-VCCA IN TAC
+           ELSE
+              IF WSS-COD-TDAT IN WSS-VARI = 'INGCAS' AND
+                 ACU-COD-MVTO IN ACU = 'CUR' AND
+                 DLC-IND-SCTB IN DLC = 'CAS' AND
+                 ACU-FEC-FPRO IN ACU = WSS-FEC-FFEC IN WSS-VARI
+                    MOVE '2' TO TAC-IND-VCCA IN TAC
+              ELSE
+                 IF WSS-COD-TDAT IN WSS-VARI = 'EGRVCD' AND
+                    ACU-COD-MVTO IN ACU = 'CAN' AND
+                    DLC-IND-SCTB IN DLC = 'VCD' AND
+                    ACU-FEC-FPRO IN ACU = WSS-FEC-FFEC IN WSS-VARI
+                       MOVE '3' TO TAC-IND-VCCA IN TAC
+                 ELSE
+                    IF WSS-COD-TDAT IN WSS-VARI = 'CASMES' AND
+                       ACU-COD-MVTO IN ACU = 'CUR' AND
+                       DLC-IND-SCTB IN DLC = 'CAS' AND
+                       ACU-NUM-MPRO IN ACU = WSS-NUM-MFEC AND
+                       ACU-NUM-SPRO IN ACU = WSS-NUM-SFEC AND
+                       ACU-NUM-APRO IN ACU = WSS-NUM-AFEC
+                          MOVE '4' TO TAC-IND-VCCA IN TAC
+                    ELSE
+      *JUS-INI 9-MAR-1998
+                       IF WSS-COD-TDAT IN WSS-VARI = 'VARDEU' AND
+                          (ACU-COD-TOOC IN ACU = 'VDE' OR
+      *RRM-INI 24/03/1998, PARA DEJAR A NIVEL DE TIO:
+                           ACU-COD-TOOC IN ACU = 'GTO') AND
+      *                    ACU-COD-COOC IN ACU = 'GTO306') AND
+      *RRM-FIN 24/03/1998
+                           DLC-IND-SCTB IN DLC = 'CAS' AND
+      *ALD-BCI-INI/06.01.1999
+                           ACU-COD-MVTO IN ACU = 'CUR' AND
+      *ALD-BCI-FIN/06.01.1999
+                          ACU-NUM-MPRO IN ACU = WSS-NUM-MFEC AND
+                          ACU-NUM-SPRO IN ACU = WSS-NUM-SFEC AND
+                          ACU-NUM-APRO IN ACU = WSS-NUM-AFEC
+                             MOVE '5' TO TAC-IND-VCCA IN TAC
+      *                       GO TO CON-VAR-DEU
+                       ELSE
+      *JUS-FIN 9-MAR-1998
+      *
+      * DPM ini  26-DEC-1997 Se eliminaron los Displays que no sean
+      * errores
+      *                 DISPLAY '*********** INI ERROR ***********'
+      *                 DISPLAY 'ERROR AL FILTRAR REG.ACU, REVISAR'
+      *                 DISPLAY 'TIPO LST: ' WSS-COD-TDAT IN WSS-VARI
+      *                 DISPLAY 'COD.MVTO: ' ACU-COD-MVTO IN ACU
+      *                 DISPLAY 'DLC-SCTB: ' DLC-IND-SCTB IN DLC
+      *                 DISPLAY 'NUM.OPER: ' ACU-CIC-IOPC IN ACU
+      *                 DISPLAY 'FECHA   : ' ACU-FEC-FPRO IN ACU
+      *                 DISPLAY '*********** FIN ERROR ***********'
+      * DPM fin  26-DEC-1997
+                       GO TO LEE-NXT-ACU.
+
+           MOVE ACU-COD-OFOC IN ACU TO TAC-COD-COPC IN TAC.
+           MOVE ACU-CAI-IOPC IN ACU TO TAC-CAI-IOPC IN TAC.
+           MOVE ACU-IIC-IOPC IN ACU TO TAC-IIC-IOPC IN TAC.
+           MOVE ACU-COD-COOC IN ACU TO TAC-COD-COOC IN TAC.
+           MOVE ACU-COD-VCOC IN ACU TO TAC-COD-VCOC IN TAC.
+           MOVE ACU-SGV-ICTB IN ACU TO TAC-VAL-CRED IN TAC.
+
+      *JUS-INI 16-JAN-1998
+           MOVE 'COL'               TO TAB-COD-SIST.
+           MOVE 'AUX'               TO TAB-COD-TTAB IN TAB.
+           MOVE ACU-COD-COOC IN ACU TO TAB-COD-CTAB IN TAB.
+           PERFORM BUS-TAB.
+           IF MSG-GLS-DESC NOT > SPACES
+              MOVE TAB-CIC-CTAB IN TAB TO TAC-CIC-CTAB IN TAC
+           ELSE
+              DISPLAY 'ERROR AL BUSCAR CIC DE TBL AUX/COL: '
+                       ACU-COD-COOC IN ACU.
+      *JUS-FIN 16-JAN-1998
+
+           MOVE WSS-FEC-FFEC IN WSS-VARI TO TAC-FEC-FPRO IN TAC.
+
+           MOVE ACU-IDC-ICLI IN ACU TO DBC-CIC-ICLI IN DBC.
+           MOVE FIO-GET-KEY         TO FIO-CMND.
+           PERFORM SGC-FIO-DBC.
+           IF NOT FIO-STAT-OKS
+              DISPLAY 'ERROR EN CIC: ' ACU-IDC-ICLI IN ACU
+           ELSE
+              MOVE DBC-NUM-ICLI IN DBC TO TAC-NUM-ICLI IN TAC
+              MOVE DBC-VRF-ICLI IN DBC TO TAC-VRF-ICLI IN TAC
+              MOVE DBC-GLS-NOMC IN DBC TO CPT-STRN
+              PERFORM CPT-BLKS
+              MOVE CPT-STRN            TO TAC-GLS-NOMC IN TAC.
+
+           MOVE ACU-IDC-ICLI IN ACU TO TAC-CIC-ICLI IN TAC.
+      *JUS-INI 12-MAR-1998
+       CON-VAR-DEU.
+      *JUS-FIN 12-MAR-1998
+           MOVE ACU-CIC-IOPC IN ACU TO OPC-CIC-IOPC IN OPC.
+           MOVE FIO-GET-KEY         TO FIO-CMND.
+           PERFORM COL-FIO-OPC.
+           IF NOT FIO-STAT-OKS
+              DISPLAY 'ERROR EN NUM.OPC: ' ACU-CIC-IOPC IN ACU
+           ELSE
+              MOVE OPC-IND-GARA IN OPC TO TAC-IND-GARA IN TAC
+      *JUS-INI 12-MAR-1998
+      *        MOVE OPC-FEC-FCOL IN OPC TO TAC-FEC-FIMV IN TAC.
+              MOVE OPC-FEC-FCOL IN OPC TO TAC-FEC-FIMV IN TAC
+              IF TAC-IND-VCCA IN TAC = '5'
+                 MOVE OPC-COD-RMOC IN OPC TO TAC-CIC-CTAB IN TAC.
+      *JUS-FIN 12-MAR-1998
+
+           MOVE FIO-PUT TO FIO-CMND.
+           PERFORM COL-FIO-TAC.
+       LEE-NXT-ACU.
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM COL-FIO-ACU.
+           IF FIO-STAT-OKS
+              GO TO LUP-PRO-ACU.
+       FIN-PRO-ACU.
+           EXIT.
+
+      ******************************************************************
+       CLOSE-FILE SECTION.
+      ********************
+       INI-CLOSE-FILE.
+           MOVE FIO-CLO TO FIO-CMND.
+           PERFORM COL-FIO-ACU.
+           PERFORM COL-FIO-TAC.
+       FIN-CLOSE-FILE.
+           EXIT.
+
+      ******************************************************************
+       COPY GNSBGFEC.
+       COPY GNSBPFEC.
+      *
+       COPY COLBFACU.
+       COPY COLBFTAC.
+       COPY COLBFOPC.
+       COPY COLBFDLC.
+       COPY SGCBFDBC.
+      *
+       COPY GNSBGDTC.
+       COPY GNSBGIDD.
+       COPY GNSBTABT.
+       COPY GNSBBSYS.
+       COPY GNSBGEND.
+       COPY GNSBGABT.
+      *
+       COPY GNSBFMSG.
+       COPY GNSBGHOY.
+       COPY GNSBBMSG.
+       COPY GNSBFTAB.
+       COPY GNSBBTAB.
+       COPY GNSBGCPT.

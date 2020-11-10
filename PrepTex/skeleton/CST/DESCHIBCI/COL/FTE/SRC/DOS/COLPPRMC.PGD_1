@@ -1,0 +1,701 @@
+       IDENTIFICATION DIVISION.
+      *========================
+       PROGRAM-ID. GNSPPRMC.
+       AUTHOR. CONSIST.
+       DATE-WRITTEN. 28 DE NOVIEMBRE DE 1995.
+      *
+      * RECIBE MENSAJE DE CLIENTE LO TRADUCE Y ENVIA AL MONITOR TRANS.
+      * RECIBE EL RETORNO DEL MONITOR TRANSACCIONAL Y LO ENVIA AL P.C.
+      *
+       ENVIRONMENT DIVISION.
+       DATA DIVISION.
+
+       WORKING-STORAGE SECTION.
+      *------------------------
+       COPY GNSWGSYS.
+       COPY GNSBRTDI.
+       COPY GNSBRTDO.
+       COPY GNSWGTDI.
+       COPY GNSWGTDO.
+       COPY COLWGFCS.
+       COPY GNSWCFIO.
+       COPY GNSWVFIO.
+       COPY GNSWGQUE.
+       COPY GNSWGFRM.
+       COPY GNSBRCCS.
+       COPY GNSWVSCR.
+       01  WSS-VARI.
+           03 I                                  PIC 9(03) COMP VALUE 0.
+           03 K                                  PIC 9(03) COMP VALUE 0.
+           03 WSS-CMSG VALUE SPACES              PIC X(12).
+           03 WSS-LENG VALUE +1500  COMP         PIC S9(04).
+           03 WSS-COD-TRAN.
+              05 WSS-COD-TRA1                    PIC X(04).
+              05 WSS-COD-TRA2                    PIC X(04) VALUE '----'.
+      * INPUT A RECIBIR DESDE EL PC
+       01  WSS-FORM-RCV.
+           03 WSS-PC-A-TRADUCTOR.
+              05 WSS-HEADER.
+                 07 WSS-TRAN                     PIC X(0004).
+                 07 FILLER REDEFINES WSS-TRAN.
+                    09 WSS-NUM-REQ VALUE 1       PIC 9(0002).
+                    09 WSS-NUM-INP               PIC 9(0001).
+                    09 WSS-NUM-OUT               PIC 9(0001).
+              05 WSS-DATA                        PIC X(1528).
+      *    CABECERA DEL MENSAJE A ENVIAR AL P.C.
+       01  WSS-FILLER.
+           03 WSS-HEAD-TRADUCTOR-PC.
+              05 WSS-PTAPC-HEADER                PIC X(03).
+              05 WSS-PTAPC-NTRAN                 PIC X(04).
+              05 WSS-PTAPC-BUFER                 PIC X(01).
+              05 WSS-PTAPC-ORIGEN                PIC X(01).
+              05 WSS-PTAPC-RETORNO               PIC X(02).
+              05 WSS-PTAPC-NROHOS                PIC X(06).
+              05 WSS-PTAPC-FORMEN                PIC X(01).
+      *--------------- EMPAQUETA EL FORMATO DEL HEADER ----
+       01  WSS-WORK.
+           03  TRES-BYTES          PIC 9(7) COMP-3 VALUE 0.
+           03  FILLER REDEFINES TRES-BYTES.
+               05 WS-HEAD-PACK     PIC X(3).
+               05 FILLER           PIC X(1).
+           03  TRES-BYTES-UNPACK   PIC 9(7)        VALUE ZEROES.
+           03  FILLER REDEFINES TRES-BYTES-UNPACK.
+               05 WS-HEAD-UNPACK     PIC 9(06).
+              05 WS-HEAD-SIGNO       PIC 9(01).
+           03 WSS-TOPE VALUE 1000    PIC 9(05).
+           03 WSS-CONTADOR           PIC 9(05).
+       LINKAGE SECTION.
+      *----------------
+       01  DFHCOMMAREA.
+           02 FILLER                     PIC X(3500).
+      *    02 FILLER                     PIC X(1920).
+       COPY GNSLGFIO.
+
+       PROCEDURE DIVISION.
+      *===================
+
+       MAIN SECTION.
+       INI-MAIN.
+           PERFORM GNS-ERR-QUE.
+           PERFORM GNS-HDL-VSM.
+           PERFORM RECIBIR-MENSAJE-INPUT.
+           PERFORM PROCESA-MENSAJE-INPUT.
+           PERFORM GRABAR-TD-INPUT.
+           PERFORM LLAMAR-A-MONITOR.
+           PERFORM LEER-TD-OUTPUT.
+           PERFORM PROCESA-MENSAJE-OUTPUT.
+           PERFORM ENVIAR-MENSAJE-OUTPUT.
+       FIN-MAIN.
+           EXEC CICS RETURN END-EXEC.
+       EXT-MAIN.
+           EXIT.
+
+       RECIBIR-MENSAJE-INPUT SECTION.
+       INI-RECIBIR-MENSAJE-INPUT.
+           MOVE 'TERM'      TO CCS-COD-TERM IN CCS.
+           MOVE 1           TO CCS-NUM-CORR IN CCS.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+       LUP-RECIBIR-MENSAJE-INPUT.
+           PERFORM GNS-FIO-CCS.
+           IF NOT FIO-STAT-OKS
+              GO TO LUP-RECIBIR-MENSAJE-INPUT.
+           IF CCS-IND-COMU IN CCS = '0'
+              PERFORM PRO-WAIT
+              GO TO LUP-RECIBIR-MENSAJE-INPUT.
+
+           MOVE CCS-GLS-DISP IN CCS TO WSS-FORM-RCV.
+           
+       FIN-RECIBIR-MENSAJE-INPUT.
+           EXIT.
+
+       ENVIAR-MENSAJE-OUTPUT SECTION.
+       INI-ENVIAR-MENSAJE-OUTPUT.
+           MOVE FIO-GET-KEY-UPD TO FIO-CMND.
+           PERFORM GNS-FIO-CCS.
+           IF NOT FIO-STAT-OKS
+              GO TO INI-ENVIAR-MENSAJE-OUTPUT.
+           MOVE '0'                 TO CCS-IND-COMU IN CCS.
+           MOVE PTAPC-011           TO CCS-GLS-DISP IN CCS.
+           MOVE FIO-MOD TO FIO-CMND.
+           PERFORM GNS-FIO-CCS.
+           IF NOT FIO-STAT-OKS
+              MOVE FIO-ULK-REC TO FIO-CMND
+              PERFORM GNS-FIO-CCS
+              GO TO INI-ENVIAR-MENSAJE-OUTPUT.
+       FIN-ENVIAR-MENSAJE-OUTPUT.
+           EXIT.
+      *
+       GRABAR-TD-INPUT SECTION.
+       INI-GRABAR-TD-INPUT.
+           MOVE 1                      TO TDI-NUM-RECO.
+           MOVE FIO-DEL                TO FIO-CMND.
+           PERFORM GNS-FIO-TDI.
+           MOVE 1                      TO TDO-NUM-RECO.
+           MOVE FIO-DEL                TO FIO-CMND.
+           PERFORM GNS-FIO-TDO.
+           MOVE 1                      TO TDI-NUM-RECO.
+           MOVE FIO-PUT                TO FIO-CMND.
+           PERFORM GNS-FIO-TDI.
+       FIN-GRABAR-TD-INPUT.
+           EXIT.
+
+
+       LLAMAR-A-MONITOR SECTION.
+       INI-LLAMAR-A-MONITOR.
+           MOVE SYS-LINK               TO SYS-CMND.
+           MOVE 0                      TO SYS-TCMA.
+           MOVE SPACES                 TO SYS-CMMA.
+           MOVE 'GNSPPMTD'             TO SYS-PROG.
+           PERFORM GNS-PRO-SYS.
+       FIN-LLAMAR-A-MONITOR.
+           EXIT.
+
+       LEER-TD-OUTPUT SECTION.
+       INI-LEER-TD-OUTPUT.
+           MOVE 1                       TO TDO-NUM-RECO.
+           MOVE FIO-GET-KEY             TO FIO-CMND.
+           PERFORM GNS-FIO-TDO.
+       FIN-LEER-TD-OUTPUT.
+           EXIT.
+
+       GET-TDI SECTION.
+       INI-GET-TDI.
+      *     PERFORM GNS-ERR-TDO.
+           MOVE 1 TO TDI-NUM-RECO.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM GNS-FIO-TDI.
+      *    IF NOT FIO-STAT-OKS
+      *        MOVE 'ABORTO: NO EXISTE MENSAJE DESDE TDI' TO SYS-MENS
+      *        MOVE SYS-ABOR TO SYS-CMND
+      *        PERFORM GNS-PRO-SYS.
+       FIN-GET-TDI.
+           EXIT.
+
+      *
+
+       PROCESA-MENSAJE-INPUT SECTION.
+       INI-PROCESA-MENSAJE-INPUT.
+           IF  WSS-NUM-REQ           EQUAL 01
+               MOVE WSS-FORM-RCV TO PCAPT-011
+               PERFORM  PROCESA-MENSAJE-INP01.
+
+      *    GRABA EN TIRA TRANSIENT DATA INPUT
+           MOVE PTAMX-011 TO TDI-GLS-DESC.
+       FIN-PROCESA-MENSAJE-INPUT.
+           EXIT.
+
+       PROCESA-MENSAJE-INP01 SECTION.
+      *-----------------------------*
+           MOVE PCAPT-011-OPC-CAI-IOPC  TO PTAMX-011-OPC-CAI-IOPC.
+           MOVE PCAPT-011-OPC-IIC-IOPC  TO PTAMX-011-OPC-IIC-IOPC.
+       FIN-PROCESA-MENSAJE-INP01.
+           EXIT.
+
+       PROCESA-MENSAJE-OUTPUT SECTION.
+       INI-PROCESA-MENSAJE-O.
+
+      *    MOVE  SPACES                    TO WSS-TRADUCTOR-A-PC.
+           IF  WSS-NUM-REQ       EQUAL 01
+               MOVE TDO-GLS-DESC IN TDO TO MXAPT-011
+               PERFORM  PROCESA-MENSAJE-OUT01.
+
+      *-----------------------------*
+       PROCESA-MENSAJE-OUT01 SECTION.
+      *-----------------------------*
+           MOVE  SPACES                TO PTAPC-011
+           MOVE MXAPT-011-FRM-GLS-MENS TO PTAPC-011-FRM-GLS-MENS.
+           MOVE MXAPT-011-OPC-COD-VCOC TO PTAPC-011-OPC-COD-VCOC.
+           MOVE MXAPT-011-OPC-COD-TOOC TO PTAPC-011-OPC-COD-TOOC.
+           MOVE MXAPT-011-DBC-GLS-NOMC TO PTAPC-011-DBC-GLS-NOMC.
+           MOVE MXAPT-011-FRM-OPE      TO PTAPC-011-FRM-OPE.
+           MOVE MXAPT-011-FRM-GLS-VEXP TO PTAPC-011-FRM-GLS-VEXP.
+           MOVE MXAPT-011-OPC-FEC-FCOL TO PTAPC-011-OPC-FEC-FCOL.
+           MOVE MXAPT-011-FRM-VAL-CRED TO PTAPC-011-FRM-VAL-CRED.
+           MOVE MXAPT-011-FRM-VAL-INTE TO PTAPC-011-FRM-VAL-INTE.
+           MOVE MXAPT-011-FRM-VAL-CVOM TO PTAPC-011-FRM-VAL-CVOM.
+           MOVE MXAPT-011-OPC-VAL-SEGD TO PTAPC-011-OPC-VAL-SEGD.
+           MOVE MXAPT-011-FRM-VAL-GAST TO PTAPC-011-FRM-VAL-GAST.
+           MOVE MXAPT-011-ITR-COD-TINT TO PTAPC-011-ITR-COD-TINT.
+           MOVE MXAPT-011-FRM-VAL-IMPU TO PTAPC-011-FRM-VAL-IMPU.
+           MOVE MXAPT-011-OPC-SGV-LIQU TO PTAPC-011-OPC-SGV-LIQU.
+           MOVE MXAPT-011-FRM-GLS-TINT TO PTAPC-011-FRM-GLS-TINT.
+           MOVE MXAPT-011-ITR-SGV-TINT TO PTAPC-011-ITR-SGV-TINT.
+           MOVE MXAPT-011-FRM-NUM-PANT TO PTAPC-011-FRM-NUM-PANT.
+           MOVE 1 TO I.
+       LUP-PROCESA-MENSAJE-OUT01.
+           MOVE MXAPT-011-FRM-NUM-IVCT(I) TO PTAPC-011-FRM-NUM-IVCT(I).
+           MOVE MXAPT-011-FRM-IND-CANC(I) TO PTAPC-011-FRM-IND-CANC(I).
+           MOVE MXAPT-011-FRM-FEC-FVEN(I) TO PTAPC-011-FRM-FEC-FVEN(I).
+           MOVE MXAPT-011-FRM-VAL-INTC(I) TO PTAPC-011-FRM-VAL-INTC(I).
+           MOVE MXAPT-011-FRM-VAL-SCAP(I) TO PTAPC-011-FRM-VAL-SCAP(I).
+           MOVE MXAPT-011-FRM-VAL-SSEG(I) TO PTAPC-011-FRM-VAL-SSEG(I).
+           MOVE MXAPT-011-FRM-VAL-IMPC(I) TO PTAPC-011-FRM-VAL-IMPC(I).
+           MOVE MXAPT-011-FRM-VAL-TOTA(I) TO PTAPC-011-FRM-VAL-TOTA(I).
+
+           ADD 1 TO I.
+           IF I NOT > 9
+              GO TO LUP-PROCESA-MENSAJE-OUT01.
+
+       FIN-PROCESA-MENSAJE-OUT01 SECTION.
+           EXIT.
+
+
+       PRO-WAIT SECTION.
+       INI-PRO-WAIT.
+           MOVE ZEROES TO WSS-CONTADOR.
+       CON-PRO-WAIT.
+           ADD 1 TO WSS-CONTADOR
+           IF WSS-CONTADOR < WSS-TOPE
+              GO TO CON-PRO-WAIT.
+       FIN-PRO-WAIT.
+           EXIT.
+
+       COPY GNSBGQUE.
+       COPY GNSBFTDI.
+       COPY GNSBFTDO.
+       COPY GNSBFCCS.
+
+       COPY GNSBGEND.
+
+       COPY GNSBHSYS.
+       COPY GNSBGSYS.
+       COPY GNSBIABT.
+      * COPY GNSBGVSM.
+      ********************* FIO *********************
+       FIO SECTION.
+       INI-FIO.
+           MOVE '00'   TO FIO-STAT.
+           MOVE SPACES TO FIO-MENS.
+           IF FIO-IVEZ NOT > SPACES
+               MOVE 'N' TO FIO-IVEZ
+               EXEC CICS IGNORE CONDITION
+                     DSIDERR
+                     DUPKEY
+                     DUPREC
+                     ENDFILE
+                     ILLOGIC
+                     IOERR
+                     NOSPACE
+                     NOTFND
+                     NOTOPEN
+               END-EXEC.
+      *
+           MOVE FIO-CMND TO FIO-IGET.
+
+           IF FIO-CMND = FIO-EBR-ALL
+               GO TO CON-FIO.
+
+           MOVE 1 TO FIO-IAUX.
+           SET FIO-ITBL TO 1.
+           SEARCH FIO-VSFL VARYING FIO-IAUX
+               AT END
+                   MOVE 'N' TO FIO-ISBR
+               WHEN FIO-NFIL( FIO-ITBL ) = FIO-VOID
+                   MOVE 'S' TO FIO-ISBR.
+           IF FIO-ISBR = 'S' AND ( NOT FIO-ICBR-YES ) AND
+              ( FIO-CMND NOT = FIO-END-BRW )
+               PERFORM CIC-FIO-EBRW.
+       CON-FIO.
+      *
+           GO TO CIC-FIO-GKEY CIC-FIO-GNXT CIC-FIO-GFST CIC-FIO-GNLS
+                 CIC-FIO-FNSF
+                 CIC-FIO-PUTF CIC-FIO-MODF CIC-FIO-DELF CIC-FIO-FNSF
+                 CIC-FIO-FDMY CIC-FIO-FDMY CIC-FIO-FDMY CIC-FIO-FDMY
+                 CIC-FIO-FEQL
+                 CIC-FIO-FFST CIC-FIO-FNLS CIC-FIO-FNSF CIC-FIO-ULKR
+                 CIC-FIO-FNSF CIC-FIO-FNSF CIC-FIO-FDMY CIC-FIO-FNSF
+                 CIC-FIO-FNSF CIC-FIO-FNSF CIC-FIO-FNSF
+                 CIC-FIO-GKEY CIC-FIO-GFST CIC-FIO-GNLS CIC-FIO-FNSF
+                 CIC-FIO-FEQL
+                 CIC-FIO-FFST CIC-FIO-FNLS CIC-FIO-FNSF CIC-FIO-GNXT
+                 CIC-FIO-GUPD CIC-FIO-GUPD CIC-FIO-EBRW CIC-FIO-BKOU
+                 CIC-FIO-GLEQ CIC-FIO-GPRV CIC-FIO-CPNT CIC-BFR-RFSH
+                 CIC-FIO-EBAL
+           DEPENDING ON FIO-CMND.
+           MOVE 'ABORTO: COMANDO INVALIDO PARA ARCHIVO ' TO FIO-MEN1.
+           MOVE FIO-VOID                                 TO FIO-MEN2.
+           GO TO CIC-FIO-FABT.
+
+       CIC-FIO-GKEY.
+           EXEC CICS READ
+                     DATASET(FIO-VOID)
+                     SET(FIO-PNT0)
+                     LENGTH(FIO-RLEN)
+                     RIDFLD(FIO-VKEY)
+           END-EXEC.
+       FIN-CIC-FIO-GKEY.
+           GO TO STT-FIO.
+
+       CIC-FIO-GNXT.
+           EXEC CICS READNEXT
+                     DATASET(FIO-VOID)
+                     SET(FIO-PNT0)
+                     LENGTH(FIO-RLEN)
+                     RIDFLD(FIO-VKEY)
+           END-EXEC.
+       FIN-CIC-FIO-GNXT.
+           GO TO STT-FIO.
+
+       CIC-FIO-GFST.
+           MOVE LOW-VALUES TO FIO-VKEY.
+           EXEC CICS STARTBR
+                     DATASET(FIO-VOID)
+                     RIDFLD(FIO-VKEY)
+           END-EXEC.
+           IF EIBRESP = ZEROES
+      *
+               PERFORM GNS-SBR-VSI
+      *
+               EXEC CICS READNEXT
+                         DATASET(FIO-VOID)
+                         SET(FIO-PNT0)
+                         LENGTH(FIO-RLEN)
+                         RIDFLD(FIO-VKEY)
+               END-EXEC.
+       FIN-CIC-FIO-GFST.
+           GO TO STT-FIO.
+
+       CIC-FIO-GNLS.
+           EXEC CICS STARTBR
+                     DATASET(FIO-VOID)
+                     RIDFLD(FIO-VKEY)
+           END-EXEC.
+           IF EIBRESP = ZEROES
+      *
+               PERFORM GNS-SBR-VSI
+      *
+               EXEC CICS READNEXT
+                         DATASET(FIO-VOID)
+                         SET(FIO-PNT0)
+                         LENGTH(FIO-RLEN)
+                         RIDFLD(FIO-VKEY)
+               END-EXEC.
+       FIN-CIC-FIO-GNLS.
+           GO TO STT-FIO.
+
+       CIC-FIO-PUTF.
+           EXEC CICS WRITE
+                     DATASET(FIO-VOID)
+                     FROM(FIO-DFLD)
+                     LENGTH(FIO-RLEN)
+                     RIDFLD(FIO-VKEY)
+           END-EXEC.
+       FIN-CIC-FIO-PUTF.
+           GO TO STT-FIO.
+
+       CIC-FIO-MODF.
+           EXEC CICS REWRITE
+                     DATASET(FIO-VOID)
+                     FROM(FIO-DFLD)
+                     LENGTH(FIO-RLEN)
+           END-EXEC.
+       FIN-CIC-FIO-MODF.
+           GO TO STT-FIO.
+
+       CIC-FIO-DELF.
+           EXEC CICS DELETE
+                     DATASET(FIO-VOID)
+           END-EXEC.
+       FIN-CIC-FIO-DELF.
+           GO TO STT-FIO.
+
+       CIC-FIO-FEQL.
+           EXEC CICS STARTBR
+                     DATASET(FIO-VOID)
+                     RIDFLD(FIO-VKEY)
+                     EQUAL
+           END-EXEC.
+      *
+           IF EIBRESP = ZEROES
+               PERFORM GNS-SBR-VSI.
+      *
+       FIN-CIC-FIO-FEQL.
+           GO TO STT-FIO.
+
+       CIC-FIO-FFST.
+           MOVE SPACES TO FIO-VKEY.
+           EXEC CICS STARTBR
+                     DATASET(FIO-VOID)
+                     RIDFLD(FIO-VKEY)
+           END-EXEC.
+      *
+           IF EIBRESP = ZEROES
+               PERFORM GNS-SBR-VSI.
+      *
+       FIN-CIC-FIO-FFST.
+           GO TO STT-FIO.
+
+       CIC-FIO-FNLS.
+           EXEC CICS STARTBR
+                     DATASET(FIO-VOID)
+                     RIDFLD(FIO-VKEY)
+           END-EXEC.
+      *
+           IF EIBRESP = ZEROES
+               PERFORM GNS-SBR-VSI.
+      *
+       FIN-CIC-FIO-FNLS.
+           GO TO STT-FIO.
+
+       CIC-FIO-ULKR.
+           EXEC CICS UNLOCK
+                     DATASET(FIO-VOID)
+           END-EXEC.
+       FIN-CIC-FIO-ULKR.
+           GO TO STT-FIO.
+
+       CIC-FIO-GUPD.
+           EXEC CICS READ
+                     DATASET(FIO-VOID)
+                     SET(FIO-PNT0)
+                     LENGTH(FIO-RLEN)
+                     RIDFLD(FIO-VKEY)
+                     UPDATE
+           END-EXEC.
+       FIN-CIC-FIO-GUPD.
+           GO TO STT-FIO.
+
+       CIC-FIO-EBRW.
+           EXEC CICS ENDBR
+                     DATASET(FIO-VOID)
+           END-EXEC.
+      *
+           IF FIO-ISBR = 'S'
+               MOVE SPACES TO FIO-NFIL( FIO-IAUX ).
+      *
+       FIN-CIC-FIO-EBRW.
+           GO TO STT-FIO.
+
+       CIC-FIO-GPRV.
+           IF FIO-KDEF = FIO-KDEF-S
+               MOVE FIO-KDEF-N TO FIO-KDEF
+               EXEC CICS STARTBR
+                         DATASET(FIO-VOID)
+                         RIDFLD(FIO-VKEY)
+               END-EXEC
+               IF EIBRESP = ZEROES
+      *
+                   PERFORM GNS-SBR-VSI
+      *
+                   EXEC CICS READPREV
+                         DATASET(FIO-VOID)
+                         SET(FIO-PNT0)
+                         LENGTH(FIO-RLEN)
+                         RIDFLD(FIO-VKEY)
+                   END-EXEC
+               ELSE
+                   NEXT SENTENCE
+           ELSE
+               EXEC CICS READPREV
+                     DATASET(FIO-VOID)
+                     SET(FIO-PNT0)
+                     LENGTH(FIO-RLEN)
+                     RIDFLD(FIO-VKEY)
+               END-EXEC.
+       FIN-CIC-FIO-GPRV.
+           GO TO STT-FIO.
+
+       CIC-BFR-RFSH.
+           MOVE LOW-VALUES TO FIO-VKEY.
+           EXEC CICS STARTBR
+                     DATASET(FIO-VOID)
+                     RIDFLD(FIO-VKEY)
+           END-EXEC.
+           IF EIBRESP = ZEROES
+               EXEC CICS ENDBR
+                     DATASET(FIO-VOID)
+               END-EXEC.
+       FIN-CIC-BFR-RFSH.
+           GO TO STT-FIO.
+
+       CIC-FIO-GLEQ.
+           EXEC CICS PUSH HANDLE END-EXEC.
+           EXEC CICS
+                HANDLE CONDITION NOTFND(CIC-FIO-GLEQ-ENDFILE)
+           END-EXEC.
+           MOVE FIO-VKEY TO FIO-CKEY.
+           EXEC CICS STARTBR
+                     DATASET(FIO-VOID)
+                     RIDFLD(FIO-VKEY)
+           END-EXEC.
+           EXEC CICS POP HANDLE END-EXEC.
+           GO TO CON-CIC-FIO-GLEQ.
+
+       CIC-FIO-GLEQ-ENDFILE.
+      *    IF EIBRESP = ZEROES
+               EXEC CICS POP HANDLE END-EXEC.
+               MOVE HIGH-VALUE TO FIO-VKEY
+               EXEC CICS STARTBR
+                         DATASET(FIO-VOID)
+                         RIDFLD(FIO-VKEY)
+               END-EXEC.
+
+           IF EIBRESP = ZEROES
+      *
+               PERFORM GNS-SBR-VSI.
+      *
+           IF EIBRESP = ZEROES
+                  EXEC CICS READPREV
+                            DATASET(FIO-VOID)
+                            SET(FIO-PNT0)
+                            LENGTH(FIO-RLEN)
+                            RIDFLD(FIO-VKEY)
+                  END-EXEC.
+
+
+      *           IF NOT EIBRESP = ZEROES
+      *              EXEC CICS ENDBR
+      *                        DATASET(FIO-VOID)
+      *              END-EXEC
+      *              MOVE '23' TO FIO-STAT
+      *              GO TO FIN-FIO.
+
+           GO TO STT-FIO.
+      *
+       CON-CIC-FIO-GLEQ.
+
+           IF EIBRESP = ZEROES
+      *
+               PERFORM GNS-SBR-VSI.
+      *
+           IF EIBRESP = ZEROES
+              EXEC CICS READNEXT
+                        DATASET(FIO-VOID)
+                        SET(FIO-PNT0)
+                        LENGTH(FIO-RLEN)
+                        RIDFLD(FIO-VKEY)
+              END-EXEC
+
+               IF EIBRESP = ZEROES
+                  EXEC CICS READPREV
+                            DATASET(FIO-VOID)
+                            SET(FIO-PNT0)
+                            LENGTH(FIO-RLEN)
+                            RIDFLD(FIO-VKEY)
+                  END-EXEC
+
+                   IF EIBRESP = ZEROES
+                       IF FIO-VKEY NOT = FIO-CKEY
+                          EXEC CICS READPREV
+                                    DATASET(FIO-VOID)
+                                    SET(FIO-PNT0)
+                                    LENGTH(FIO-RLEN)
+                                    RIDFLD(FIO-VKEY)
+                          END-EXEC
+
+                           IF NOT EIBRESP = ZEROES
+                               EXEC CICS ENDBR
+                                    DATASET(FIO-VOID)
+                               END-EXEC
+                               MOVE '23' TO FIO-STAT
+                               GO TO FIN-FIO.
+       FIN-CIC-FIO-GLEQ.
+           GO TO STT-FIO.
+
+       CIC-FIO-EBAL.
+           MOVE 1 TO FIO-IAUX.
+       LUP-CIC-FIO-EBAL.
+           IF FIO-NFIL( FIO-IAUX ) > SPACES
+               MOVE FIO-NFIL( FIO-IAUX ) TO FIO-VOID
+               EXEC CICS ENDBR
+                     DATASET(FIO-VOID)
+               END-EXEC
+               MOVE SPACES TO FIO-NFIL( FIO-IAUX )
+               ADD 1 TO FIO-IAUX
+               IF FIO-IAUX NOT > FIO-MXFL
+                   GO TO LUP-CIC-FIO-EBAL.
+       FIN-CIC-FIO-EBAL.
+      *    GO TO STT-FIO.
+           GO TO FIN-FIO.
+
+       CIC-FIO-FNSF.
+           MOVE 'ABORTO : COMANDO NO SOPORTADO, PARA ARCHIVO '
+                         TO FIO-MEN1.
+           MOVE FIO-VOID TO FIO-MEN2.
+       CIC-FIO-FABT.
+           EXEC CICS XCTL
+                     PROGRAM('GNSPPABT')
+                     COMMAREA(FIO-MENS)
+                     LENGTH(+79)
+           END-EXEC.
+           EXEC CICS RETURN END-EXEC.
+
+       CIC-FIO-BKOU.
+      *JSS-INI 16-DIC-1994
+      *    IF FRM-MENS NOT > SPACES
+      *        MOVE FIO-MENS TO FRM-MENS.
+      *    EXEC CICS XCTL
+      *              PROGRAM('GNSPPABT')
+      *              COMMAREA(FRM-MENS)
+      *              LENGTH(+79)
+      *    END-EXEC.
+      *    EXEC CICS RETURN END-EXEC.
+           EXEC CICS SYNCPOINT ROLLBACK END-EXEC.
+      *JSS-FIN 16-DIC-1994
+
+      *JSS-INI 21-SEP-1995
+       FIN-CIC-FIO-BKOU.
+           GO TO STT-FIO.
+       CIC-FIO-CPNT.
+           EXEC CICS SYNCPOINT END-EXEC.
+      *JSS-FIN 21-SEP-1995
+
+       STT-FIO.
+           IF EIBRESP = 12 AND
+              FIO-VOID = 'GNSMCCS'
+               MOVE 13 TO EIBRESP
+           ELSE
+           IF EIBRESP NOT = ZEROES
+               MOVE SPACES               TO FIO-MENS-DSC
+               MOVE 'Status VSI :'       TO FIO-MENS-DSC
+               MOVE EIBRESP              TO FIO-MENS-NTT
+               MOVE 'Key'                TO FIO-MENS-GKY
+               MOVE 'CMD'                TO FIO-MENS-GCM
+               MOVE FIO-CMND             TO FIO-MENS-CMD
+               MOVE 'FILE'               TO FIO-MENS-GFL
+               MOVE FIO-VOID             TO FIO-MENS-FIL
+               IF FIO-AKEY > SPACES
+                   MOVE FIO-AKEY         TO FIO-MENS-KEY
+               ELSE
+                   MOVE 'PRINCIPAL'      TO FIO-MENS-KEY.
+           IF EIBRESP = ZEROES
+               MOVE '00' TO FIO-STAT
+           ELSE
+           IF EIBRESP = 15
+               MOVE '02' TO FIO-STAT
+           ELSE
+           IF EIBRESP = 14
+               MOVE '22' TO FIO-STAT
+           ELSE
+           IF EIBRESP = 20
+               MOVE '10' TO FIO-STAT
+           ELSE
+           IF EIBRESP = 13
+               MOVE '23' TO FIO-STAT
+           ELSE
+      *         MOVE 'Aborto, VSI:'       TO FIO-MENS-DSC
+      *         MOVE '99' TO FIO-STAT
+      *         GO TO CIC-FIO-FABT.
+               MOVE '23' TO FIO-STAT.
+       FIN-STT-FIO.
+
+       CIC-FIO-FDMY.
+       FIN-FIO.
+           EXIT.
+
+       GNS-SBR-VSI SECTION.
+       INI-GNS-SBR-VSI.
+           MOVE 1 TO FIO-IAUX.
+       LUP-GNS-SBR-VSI.
+           IF FIO-NFIL( FIO-IAUX ) > SPACES
+               ADD 1 TO FIO-IAUX
+               IF FIO-IAUX NOT > FIO-MXFL
+                   GO TO LUP-GNS-SBR-VSI
+               ELSE
+                   MOVE 'OVERFLOW:VARIABLE FIO-NFIL, EN GNS-SBR-VSI' TO
+                        FIO-MENS
+                   PERFORM CIC-FIO-FABT.
+           MOVE FIO-VOID TO FIO-NFIL( FIO-IAUX ).
+       FIN-GNS-SBR-VSI.
+           EXIT.
+       COPY GNSBHVSM.

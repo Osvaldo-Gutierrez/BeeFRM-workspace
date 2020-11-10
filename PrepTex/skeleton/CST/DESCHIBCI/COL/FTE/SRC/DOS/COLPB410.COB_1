@@ -1,0 +1,2951 @@
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. COLPB410.
+       AUTHOR. P.JELDRES.
+      *REMARKS. GENERADOR DE MOVIMIENTOS DE CURSE
+      *         EN BASE A LAS SIGUIENTES TABLAS:
+      *          OPC,RDC,EVC,VEN,CYA,ICG Y DLC.
+      *  COMPILED.       06.07.98.
+      ******************************************************************
+      *  INTERSOFT                                                     *
+      *  MIGRACION A COBOL OS/390                                      *
+      *  FECHA: 30 DE MARZO DE 1998                                    *
+      ******************************************************************
+      ******************************************************************
+      **                 MODIFICACIONES                                *
+      ******************************************************************
+      **PROGRAMADOR: HUGO ZAPATA                                      **
+      **FECHA      : 28.02.92                                         **
+      **CAUSA      : GRABAR EN ARCHIVO DE ERRORES CLAVE DE LA OPC.    **
+      ******************************************************************
+      **PROGRAMADOR: OSVALDO DONOSO                                   **
+      **FECHA      : 30.04.93                                         **
+      **CAUSA      : ENTREGAR CODIGO DE RETORNO CUANDO SE CALCELA PGM.**
+      ******************************************************************
+      ******************************************************************
+      ******************************************************************
+      *      MANTENCIONES.
+      *      ==============
+      *
+      *      PROGRAMADOR : FORMAT 2000 INC.
+      *      FECHA       : 20.02.1998
+      *      CAMBIO      : SE APLICA TECNICA WINDOWING PARA CONVERSION
+      *                      2000 COMPLIANT.
+      ******************************************************************
+
+
+       ENVIRONMENT DIVISION.
+       CONFIGURATION SECTION.
+
+       SPECIAL-NAMES.
+           C01 IS CANAL-1
+           DECIMAL-POINT IS COMMA.
+       INPUT-OUTPUT SECTION.
+       FILE-CONTROL.
+      * CREV013      MOVIMIENTOS DE CURSE   DE SALIDA
+      * ERR-ERROR    ARCHIVO DE ERRORES     DE SALIDA
+      * CREM009      ARCHIVO DE CUOTAS      DE SALIDA
+      * SUC-SUCURSAL ARCHIVO DE SUCURSALES  DE CONSULTA
+      * TABLAOPE     TABLA DE OPERACIONES   DE CONSULTA
+           SELECT A-CREV013       ASSIGN SYS010-DA-S-CREV013.
+           SELECT A-CREM009       ASSIGN TO CREM009
+                                  ORGANIZATION IS INDEXED
+                                  ACCESS MODE  IS RANDOM
+                                  RECORD KEY   IS CUO-CLAVE
+                                  FILE STATUS  IS FS-CREM009.
+           SELECT ERR-ERROR       ASSIGN TO SYS011-AS-ERROR
+                                  ORGANIZATION IS SEQUENTIAL
+                                  ACCESS MODE  IS SEQUENTIAL
+                                  FILE STATUS  IS FS-ERROR.
+           SELECT TABLAOPE        ASSIGN TO TABOPE
+                                  ORGANIZATION IS INDEXED
+                                  ACCESS IS RANDOM
+                                  RECORD KEY IS OPESC-CLAVE
+                                  FILE STATUS  IS FS-TABOPE.
+           SELECT SUC-SUCURSAL    ASSIGN TO SUCUR
+                                  ORGANIZATION IS INDEXED
+                                  ACCESS MODE  IS DYNAMIC
+                                  RECORD KEY   IS SUC-CLAVE
+                                  FILE STATUS  IS FS-SUCURSAL.
+           SELECT CREDITO         ASSIGN TO CREDITO
+                                  ORGANIZATION IS INDEXED
+                                  ACCESS MODE  IS DYNAMIC
+                                  RECORD KEY   IS CRE-CLAVE
+                                  FILE STATUS  IS FS-CREDITO.
+           SELECT TAR-TARJETA     ASSIGN TO TARJE.
+           SELECT LISTADO ASSIGN TO UR-S-LISTADO.
+           SELECT SORTWK ASSIGN TO SYS001-DA-3340-S-SORTWK1.
+0
+       DATA DIVISION.
+       FILE SECTION.
+
+
+
+       FD  A-CREM009
+           LABEL RECORD IS STANDARD
+           RECORD CONTAINS 90  CHARACTERS.
+           COPY CREM009.
+
+
+       FD  A-CREV013
+           RECORD CONTAINS 200 CHARACTERS
+           BLOCK CONTAINS 15 RECORDS
+           LABEL RECORD STANDARD.
+           COPY CREV013.
+      *
+
+
+       FD  SUC-SUCURSAL
+           LABEL RECORD IS STANDARD
+           RECORD CONTAINS 69  CHARACTERS.
+       01  REG-SUC.
+           05 SUC-CLAVE        PIC 9(3).
+           05 SUC-NOMBRE       PIC X(25).
+           05 SUC-SERIAL       PIC 9(7).
+           05 FILLER           PIC X(34).
+       FD  TABLAOPE
+           RECORD CONTAINS 128 CHARACTERS
+           LABEL RECORD STANDARD.
+           COPY CRET131.
+       FD  CREDITO
+           RECORD CONTAINS 377 CHARACTERS
+           LABEL RECORD STANDARD.
+           COPY CREM002.
+
+
+       FD  ERR-ERROR
+           RECORD CONTAINS 128 CHARACTERS.
+       01  ERR-REG.
+           05 ERR-PARTE-COMUN.
+             10 ERR-CLAVE-CREDITOS.
+                 14 ERR-SUCURSAL       PIC 999.
+                 14 ERR-CODIGO-OPER.
+                    18 ERR-COD-OPER    PIC 999.
+                    18 ERR-SERIAL-OPER PIC 9(5).
+                 14 ERR-RUT-DD.
+                    18 ERR-RUT-DD-NUM  PIC 9(9).
+                    18 ERR-RUT-DD-VER  PIC X.
+              10 ERR-INDICADOR         PIC X.
+              10 ERR-N-CUOTAS          PIC 999.
+              10 ERR-DESCRIP           PIC X(30).
+              10 ERR-DESCRIP-PGMA      PIC X(7).
+              10 ERR-FILLER-COMUN      PIC X(44).
+           05 ERR-PARTE-CURSE.
+              10 ERR-FECHA-CURSE.
+                 14 ERR-FECHA-CURSE-AA PIC 99.
+                 14 ERR-FECHA-CURSE-MM PIC 99.
+                 14 ERR-FECHA-CURSE-DD PIC 99.
+              10 ERR-FECHA-VENC.
+                 14 ERR-FECHA-VENC-AA PIC 99.
+                 14 ERR-FECHA-VENC-AA PIC 99.
+                 14 ERR-FECHA-VENC-AA PIC 99.
+              10 ERR-MONTO-COLOC      PIC 9(13)V99 COMP-3.
+              10 ERR-FILLER           PIC XX.
+       FD  TAR-TARJETA
+           LABEL RECORD IS STANDARD
+           RECORD CONTAINS 80  CHARACTERS.
+       01  REG-TARJETA.
+           03  TAR-SUCUR                    PIC X(03).
+           03  TAR-FILLER                   PIC X(77).
+       FD  LISTADO
+           LABEL RECORD OMITTED
+           RECORD CONTAINS 133 CHARACTERS.
+
+       01  LINEA PIC X(133).
+       SD  SORTWK
+           LABEL RECORD STANDARD
+           RECORD CONTAINS 478 CHARACTERS.
+       01  REG-SORT.
+           05  REG-SORT1.
+000003         10  SOR-SUCURSAL                   PIC  9(03).
+000005         10  SOR-CODIGO-OPER.
+000006             14  SOR-COD-OPER               PIC  9(03).
+000007             14  SOR-SERIAL-OPER            PIC  9(05).
+000004         10  SOR-RUT-DD.
+000004             14  SOR-RUT-DD-DIG             PIC  9(09).
+000004             14  SOR-RUT-DD-VER             PIC  X(01).
+
+000004         10  SOR-RUT-DI.
+000004             14  SOR-RUT-DI-DIG             PIC  9(09).
+000004             14  SOR-RUT-DI-VER             PIC  X(01).
+
+000009         10  SOR-FECHA-PRIM-VCTO.
+000010             14  SOR-FECHA-PRIM-VCTO-AA     PIC  9(02).
+000011             14  SOR-FECHA-PRIM-VCTO-MM     PIC  9(02).
+000012             14  SOR-FECHA-PRIM-VCTO-DD     PIC  9(02).
+
+000013         10  SOR-IMPUTACION                 PIC  9(01).
+000013         10  SOR-MONTO-COLOC                PIC  9(12)V9999.
+000013         10  SOR-MONTO-CUOTA                PIC  9(10)V99.
+
+000009         10  SOR-FECHA-PAGARE.
+000010             14  SOR-FECHA-PAGARE-AA        PIC  9(02).
+000011             14  SOR-FECHA-PAGARE-MM        PIC  9(02).
+000012             14  SOR-FECHA-PAGARE-DD        PIC  9(02).
+
+000009         10  SOR-FECHA-DE-CURSE.
+000010             14  SOR-FECHA-DE-CURSE-AA      PIC  9(02).
+000011             14  SOR-FECHA-DE-CURSE-MM      PIC  9(02).
+000012             14  SOR-FECHA-DE-CURSE-DD      PIC  9(02).
+
+000013         10  SOR-COD-MONED                  PIC  9(01).
+000013         10  SOR-NRO-VCTOS                  PIC  9(03).
+000013         10  SOR-PERIODO-DE-GRACIA          PIC  9(02).
+000013         10  SOR-FORMA-DE-PAGO              PIC  9(01).
+000013         10  SOR-TASA-INTERES               PIC  9(02)V99.
+000013         10  SOR-COBRANZA                   PIC  9(01).
+000013         10  SOR-CODIGO-GARANTIA            PIC  9(01).
+000013         10  SOR-TIPO-INTERES               PIC  X(01).
+000013         10  SOR-CALID-COLOC                PIC  X(01).
+000013         10  SOR-RUT-EMPRESA                PIC  X(10).
+000013         10  SOR-CTA-CTE-ABONO              PIC  9(10).
+000013         10  SOR-IND-TIPO-CRED              PIC  9(02).
+
+000013         10  SOR-GASTO-NOTARIAL             PIC  9(05)V99.
+000014         10  SOR-MESES-DIFERIDO             PIC  X(03).
+000015         10  SOR-COD-DISTR                  PIC  X(02).
+000016         10  SOR-COD-ADICIONAL              PIC  X(08).
+000017         10  SOR-SEGURO-DEGRAVAMEN          PIC  9(08)V99.
+               10  SOR-DESTINO                    PIC  X(02).
+               10  SOR-OTRO-DEUDOR-DIR            PIC  9(01).
+               10  SOR-OTRO-DEUDOR-IND            PIC  9(01).
+               10  SOR-PERIODO-INTERES            PIC  9(01).
+000010         10  SOR-PERIODO-GRACIA-AMORT       PIC  9(02).
+000011         10  SOR-PERIODICIDAD-AMORT         PIC  9(01).
+000011         10  SOR-CLAVE-LINEA                PIC  X(11).
+000011         10  SOR-DIAS                       PIC  9(04).
+           05 REG-SORT2.
+              10 ERRORW OCCURS 7 TIMES.
+                 14 MENSA-WW   PIC X(41).
+                 14 RET-COD-WW PIC XXX.
+              10  SW-ERROR-W   PIC 9.
+              10  SW-MODIF-W   PIC 9.
+
+
+       WORKING-STORAGE SECTION.
+      *-----------------------
+       77  FS-MAECOLOC               PIC 9(2)            VALUE ZEROES.
+       77  FS-TABOPE                 PIC 9(2)            VALUE ZEROES.
+       77  FS-SUCURSAL               PIC 9(2)            VALUE ZEROES.
+       77  FS-CAMBIO                 PIC 9(2)            VALUE ZEROES.
+       77  FS-ERROR                  PIC 9(2)            VALUE ZEROES.
+       77  FS-CREM009                PIC 9(2)            VALUE ZEROES.
+       77  FS-CREV013                PIC 9(2)            VALUE ZEROES.
+       77  FS-CREDITO                PIC 9(2)            VALUE ZEROES.
+       77  LEIDOS-OPC                PIC 9(9)            VALUE 0.
+       77  LEIDOS-DLC                PIC 9(9)            VALUE 0.
+       77  LEIDOS-RDC                PIC 9(9)            VALUE 0.
+       77  LEIDOS-RDC1               PIC 9(9)            VALUE 0.
+       77  LEIDOS-VEN                PIC 9(9)            VALUE 0.
+       77  LEIDOS-ICG                PIC 9(9)            VALUE 0.
+       77  LEIDOS-CYA                PIC 9(9)            VALUE 0.
+       77  LEIDOS-EVC                PIC 9(9)            VALUE 0.
+       77  LEIDOS-BD                 PIC 9(9)            VALUE 0.
+       77  PROCESADOS-OPC            PIC 9(9)            VALUE 0.
+       77  PROCESADOS-DLC            PIC 9(9)            VALUE 0.
+       77  PROCESADOS-RDC            PIC 9(9)            VALUE 0.
+       77  PROCESADOS-RDC1           PIC 9(9)            VALUE 0.
+       77  PROCESADOS-VEN            PIC 9(9)            VALUE 0.
+       77  PROCESADOS-ICG            PIC 9(9)            VALUE 0.
+       77  PROCESADOS-CYA            PIC 9(9)            VALUE 0.
+       77  PROCESADOS-EVC            PIC 9(9)            VALUE 0.
+       77  PROCESADOS-CAMBIO         PIC 9(9)            VALUE 0.
+       77  GRABADOS                  PIC 9(9)            VALUE 0.
+       77  GRABADOS-CAMBIO           PIC 9(9)            VALUE 0.
+       77  REGRABADOS-CAMBIO         PIC 9(9)            VALUE 0.
+       77  CUOTAS-CREADAS            PIC 9(9)            VALUE 0.
+       77  GRABADOS-A1               PIC 9(9)            VALUE 0.
+       77  FEC-WS                    PIC X(8)            VALUE SPACES.
+       77  FECHA1-WS                 PIC X(8)            VALUE ZEROES.
+       77  FECHA2-WS                 PIC X(8)            VALUE ZEROES.
+       77  VALOR-WS                  PIC 9(12)           VALUE 0.
+       77  VALOR-WS1                 PIC 9(12)V9999      VALUE 0.
+       77  VALOR-WSX                 PIC 9(12)V99        VALUE 0.
+       77  VALOR-DL3475              PIC 9(12)V99        VALUE 0.
+       77  VALOR-WS9                 PIC 9(5)            VALUE 0.
+       77  VALOR-DIAS                PIC 9(5)            VALUE 0.
+       77  I                         PIC 99              VALUE 0.
+       77  I1                        PIC 99              VALUE 0.
+       77  J                         PIC 99              VALUE 0.
+       77  J1                        PIC 99              VALUE 0.
+       77  CL                        PIC 99              VALUE 70.
+       77  CP                        PIC 9(4)            VALUE 0.
+       77  SW-OPC                    PIC XXX             VALUE SPACES.
+       77  RUT-DD                    PIC X(8).
+       77  DV-DD                     PIC X.
+       77  RUT-DI                    PIC X(8).
+       77  DV-DI                     PIC X.
+       77  SW-DD                     PIC 9               VALUE 0.
+       77  SW-DI                     PIC 9               VALUE 0.
+       77  SW-ERROR                  PIC 9               VALUE 0.
+       77  SW-DLC                    PIC 9 VALUE 0.
+       77  SW-DLC1                   PIC 9 VALUE 0.
+       77  SW-RDC                    PIC 9 VALUE 0.
+       77  SW-RDC1                   PIC 9 VALUE 0.
+       77  SW-VEN                    PIC 9 VALUE 0.
+       77  SW-VEN1                   PIC 9 VALUE 0.
+       77  SW-VEN2                   PIC 9 VALUE 0.
+       77  SW-ICG                    PIC 9 VALUE 0.
+       77  SW-ICG1                   PIC 9 VALUE 0.
+       77  SW-CYA                    PIC 9 VALUE 0.
+       77  SW-CYA1                   PIC 9 VALUE 0.
+       77  SW-CYA9                   PIC 9 VALUE 0.
+       77  SW-EVC                    PIC 9 VALUE 0.
+       77  SW-EVC1                   PIC 9 VALUE 0.
+       77  SW-EVC2                   PIC 9 VALUE 0.
+       77  DLC-WS                    PIC X(15) VALUE SPACES.
+       77  VEN-WS                    PIC X(12) VALUE SPACES.
+       77  CYA-WS                    PIC X(16) VALUE SPACES.
+       77  EVC-WS                    PIC X(15) VALUE SPACES.
+       77  ICG-WS                    PIC X(15) VALUE SPACES.
+       77  EVC-NUM-SEVE-WS           PIC 9999  VALUE 0.
+       77  EVC-VAL-VENC-WS           PIC 9(11)V9999 VALUE 0.
+       77  EVC-IND-UTSV-WS           PIC X     VALUE SPACE.
+       77  EVC-MSC-TCVE-WS           PIC XX    VALUE SPACE.
+       77  EVC-NUM-VIGU-WS           PIC 999   VALUE 0.
+       77  EVC-NUM-VIGU-WS2          PIC 999   VALUE 0.
+       77  EVC-NUM-VIGU-ANT          PIC 999   VALUE 0.
+       77  EVC-IND-CAUT-WS           PIC X     VALUE SPACE.
+       77  EVC-NUM-VIGU-X            PIC 999   VALUE 0.
+       77  VEN-IND-CAUT-WS           PIC X     VALUE SPACE.
+       77  CYA-IIC-ICYA-WS           PIC X(8)  VALUE ZEROS.
+       77  SW-SEVE                   PIC 9     VALUE 0.
+       77  CONTA-VEN                 PIC 9(5)  VALUE 0.
+       77  DIAS-WS                   PIC 9(4)  VALUE 0.
+       77  DIAS-WSX                  PIC 9(4)  VALUE 0.
+       77  DIAS-A1-WS                PIC 9(5)  VALUE 0.
+       77  FP-WS                     PIC 9(5)  VALUE 0.
+       77  PER-GRACIA-WS             PIC 9(5)  VALUE 0.
+       77  PER-GRACIA-WS2            PIC 9(5)  VALUE 0.
+       77  MESES-WS                  PIC 999   VALUE 0.
+       77  RESTO-WS                  PIC 999   VALUE 0.
+       77  TASA-WS                   PIC 9(11)V9999 VALUE 0.
+       77  CYA-IIC-WS                PIC 9(8).
+       77  CYA-IND-WS                PIC X(4).
+       77  SW-UF                     PIC 9          VALUE 0.
+       77  TPV-WS                    PIC 9(11)V9999 VALUE 0.
+       77  TPA-WS                    PIC 99V99      VALUE 0.
+       77  AUX-I13                   PIC 9          VALUE 9.
+       77  SW-EVCX                   PIC 9          VALUE 0.
+       77  POS-WS                    PIC 999        VALUE 0.
+       77  POS-WS1                   PIC 999        VALUE 0.
+       77  POS-WS2                   PIC 999        VALUE 0.
+       77  POS-WSX                   PIC 999        VALUE 0.
+       77  DIAS-WS-EVC               PIC 9(5)       VALUE 0.
+       77  DIAS-WS-EVC-2             PIC 9(5)       VALUE 0.
+       77  DIAS-WS-EVC-1             PIC 9(5)       VALUE 0.
+       77  DIAS-EVC                  PIC 9(5)       VALUE 0.
+       77  RESTO-EVC                 PIC 999        VALUE 0.
+       77  SW-PER-GRACIA             PIC 9          VALUE 0.
+       77  CONTA-AMTZ                PIC 999        VALUE 0.
+       77  CONTA-AMTZ2               PIC 999        VALUE 0.
+       77  SW-01                     PIC 9          VALUE 0.
+       77  SW-1                      PIC 9          VALUE 0.
+       77  FIN-SORT                  PIC XXX        VALUE SPACES.
+       77  CONTA-SUC                 PIC 9(7)       VALUE 0.
+       77  CONTA-GEN                 PIC 9(7)       VALUE 0.
+       77  CREADOS-SUC               PIC 9(7)       VALUE 0.
+       77  ERRONEOS-SUC              PIC 9(7)       VALUE 0.
+       77  CREADOS-GEN               PIC 9(7)       VALUE 0.
+       77  ERRONEOS-GEN              PIC 9(7)       VALUE 0.
+       77  CONTA-GENERAL             PIC 9(7)       VALUE 0.
+       77  SUC-ANT                   PIC 999        VALUE 0.
+       77  SW-AMTZ                   PIC 9          VALUE 0.
+       77  SW-FOPA                   PIC 9          VALUE 0.
+       77  TOTAL-VCTOS-GRUPO-WS      PIC 9(7)       VALUE 0.
+       77  DIAS-PERIOD-WS            PIC 9(7)       VALUE 0.
+       77  CONTA-ERROR               PIC 9(9)       VALUE 0.
+       77  SW-EVC-VENC               PIC 9          VALUE 0.
+       77  SW-EVC2-VENC              PIC 9          VALUE 0.
+       77  SW-EVC3-VENC              PIC 9          VALUE 0.
+       77  CONTA-AMTZ-EVC            PIC 9(11)V9999 COMP-3 VALUE 0.
+       77  VALOR-WS-A1               PIC 9(11)V9999 COMP-3 VALUE 0.
+       77  OPC-VAL-SCRE-WS           PIC S9(11)V9999 COMP-3 VALUE 0.
+       77  DLC-VAL-IMPU-WS           PIC S9(11)V999  COMP-3 VALUE 0.
+       77  FORMA-DE-PAGO-WS          PIC 9          VALUE 0.
+       77  NRO-DE-VCTOS-WS           PIC 999        VALUE 0.
+       77  FS-TASAS                  PIC 9(2)            VALUE ZEROES.
+       77  SW-TABOPE                 PIC 9               VALUE 0.
+       77  SW-TASAS                  PIC 9               VALUE 0.
+       77  SUMA-TASAS                PIC S99V99          VALUE +0.
+       77  TIPO-TASA                 PIC X(6)            VALUE SPACES.
+       77  TASA-BASE                 PIC S99V99          VALUE +0.
+       77  SW-TMC                    PIC 9               VALUE 0.
+       77  SW-ERROR-TASA             PIC 9               VALUE 0.
+       77  WS-NRO-DIAS               PIC 9(8) COMP-3     VALUE 0.
+       77  NUM-DIA-DCX1              PIC S9(8) COMP-3    VALUE +0.
+       77  NUM-DIA-DCX3              PIC S9(8) COMP-3    VALUE +0.
+       77  WS-PERIODO                PIC 999             VALUE 0.
+       77  SW-PROCESO                PIC 9               VALUE 0.
+       77  ERR-FECH                  PIC 9               VALUE 0.
+       77  ANO-WS1                   PIC 9(4)            VALUE 0.
+       77  ANO-WS2                   PIC 9(4)            VALUE 0.
+       77  FECHA1-WS1                PIC 9(6)            VALUE 0.
+       77  TASA-CL                   PIC S99V9(10) COMP-3 VALUE +0.
+       77  SPREAD-WS                 PIC S999V9999 COMP-3 VALUE +0.
+       77  WS-TMC                    PIC S99V9(10) COMP-3 VALUE +0.
+       77  SW-999                    PIC 9                VALUE 0.
+       77  MUL-FP                    PIC 999              VALUE 0.
+       77  FECHA-ANTERIOR            PIC X(8) VALUE SPACES.
+       77  FIN-TAR                   PIC XX         VALUE SPACES.
+       77  SW-SUCURSAL               PIC 9          VALUE 0.
+       77  ICG-COD-CVTI-WS           PIC XXX        VALUE SPACES.
+       77  ICG-MSC-PBTI-WS           PIC X          VALUE SPACE.
+       77  ICG-SGV-SPRD-WS           PIC S999V9999 COMP-3 VALUE +0.
+       77  ICG-SGV-TINT-WS           PIC S999V9999 COMP-3 VALUE +0.
+       77  TASA-DL3475-WS            PIC S99V9     COMP-3 VALUE +0.
+       77  TIPO-PROCESO-WS           PIC X                VALUE SPACES.
+       77  CLAVE-OPC                 PIC X(12)            VALUE SPACES.
+
+
+
+
+
+       01  STATUS-DE-ARCH.
+           10  ST-CREV013            PIC 9(02)  VALUE 0.
+           10  ST-CREM004            PIC 9(02)  VALUE 0.
+           10  ST-CREM009            PIC 9(02)  VALUE 0.
+           10  ST-CREV089            PIC 9(02)  VALUE 0.
+           10  ST-CRET031            PIC 9(02)  VALUE 0.
+       01  DISPLAY-ERRORES.
+           10  DS-ARCHIVO            PIC X(14)   VALUE SPACES.
+           10  DS-PARRAFO            PIC X(14)   VALUE SPACES.
+           10  DS-STATUS             PIC X(02)   VALUE SPACES.
+           10  DS-COMANDO            PIC X(14)   VALUE SPACES.
+       01  INDICADORES-DE-PROCESO.
+            10  WS-SW-TABLAS        PIC X(02)   VALUE SPACES.
+            10  WS-FIN-CURSE        PIC X(02)   VALUE SPACES.
+       01  FECHAS.
+           05 FECHAS-DCX1.
+              10 DCX1.
+                 14 ANO-DCX1 PIC 99.
+                 14 MES-DCX1 PIC 99.
+                 14 DIA-DCX1 PIC 99.
+           05 FECHAS-DCX3.
+              10 DCX3.
+                 14 ANO-DCX3 PIC 99.
+                 14 MES-DCX3 PIC 99.
+                 14 DIA-DCX3 PIC 99.
+
+           05 FECHA-CARGA-RUTINA.
+              10 FEC-RUT.
+                 15 FR-DD        PIC X(02).
+                 15 FR-MM        PIC X(02).
+      ***********15 FILLER       PIC X(02)  VALUE '19'.
+                 15 FR-SS        PIC X(02).
+                 15 FR-AA        PIC X(02).
+
+000001******************************************************************
+000001*             DESCRIPCION DE REGISTRO (CVCIB076)
+000001*             ----------------------------------
+000001*
+000001*    ARCHIVO   : BCVO.COLOC.IBM
+000001*              : COLOCACIONES PARA CREDITOS POR CONVENIO
+000001*    FD        : CVCIB076
+000001*    PREFIJO   : 'CIB'
+000001*    LARGO REG.: 310
+000001*    ORGANIZAC.: VSAM-ESDS
+000001*    BLOQUEO   : NO
+000001*
+000001******************************************************************
+      *
+000002 01  CIB-COLOC-CONV-IBM-REG.
+
+000003     05  CIB-SUCURSAL                   PIC  9(03).
+000005     05  CIB-CODIGO-OPER.
+000006         10  CIB-COD-OPER               PIC  9(03).
+000007         10  CIB-SERIAL-OPER            PIC  9(05).
+000004     05  CIB-RUT-DD.
+000004         10  CIB-RUT-DD-DIG             PIC  9(09).
+000004         10  CIB-RUT-DD-VER             PIC  X(01).
+
+000004     05  CIB-RUT-DI.
+000004         10  CIB-RUT-DI-DIG             PIC  9(09).
+000004         10  CIB-RUT-DI-VER             PIC  X(01).
+
+000009     05  CIB-FECHA-PRIM-VCTO.
+000010         10  CIB-FECHA-PRIM-VCTO-AA     PIC  9(02).
+000011         10  CIB-FECHA-PRIM-VCTO-MM     PIC  9(02).
+000012         10  CIB-FECHA-PRIM-VCTO-DD     PIC  9(02).
+
+000013     05  CIB-IMPUTACION                 PIC  9(01).
+000013     05  CIB-MONTO-COLOC                PIC  9(12)V9999.
+000013     05  CIB-MONTO-CUOTA                PIC  9(10)V99.
+
+000009     05  CIB-FECHA-PAGARE.
+000010         10  CIB-FECHA-PAGARE-AA        PIC  9(02).
+000011         10  CIB-FECHA-PAGARE-MM        PIC  9(02).
+000012         10  CIB-FECHA-PAGARE-DD        PIC  9(02).
+
+000009     05  CIB-FECHA-DE-CURSE.
+000010         10  CIB-FECHA-DE-CURSE-AA      PIC  9(02).
+000011         10  CIB-FECHA-DE-CURSE-MM      PIC  9(02).
+000012         10  CIB-FECHA-DE-CURSE-DD      PIC  9(02).
+
+000013     05  CIB-COD-MONED                  PIC  9(01).
+000013     05  CIB-NRO-VCTOS                  PIC  9(03).
+000013     05  CIB-PERIODO-DE-GRACIA          PIC  9(02).
+000013     05  CIB-FORMA-DE-PAGO              PIC  9(01).
+000013     05  CIB-TASA-INTERES               PIC  9(02)V99.
+000013     05  CIB-COBRANZA                   PIC  9(01).
+000013     05  CIB-CODIGO-GARANTIA            PIC  9(01).
+000013     05  CIB-TIPO-INTERES               PIC  X(01).
+000013     05  CIB-CALID-COLOC                PIC  X(01).
+000013     05  CIB-RUT-EMPRESA                PIC  X(10).
+000013     05  CIB-CTA-CTE-ABONO              PIC  9(10).
+000013     05  CIB-IND-TIPO-CRED              PIC  9(02).
+
+000013     05  CIB-GASTO-NOTARIAL             PIC  9(05)V99.
+000014     05  CIB-MESES-DIFERIDO             PIC  X(03).
+000015     05  CIB-COD-DISTR                  PIC  X(02).
+000016     05  CIB-COD-ADICIONAL              PIC  X(08).
+000017     05  CIB-SEGURO-DEGRAVAMEN          PIC  9(08)V99.
+           05  CIB-DESTINO                    PIC  X(02).
+           05  CIB-OTRO-DEUDOR-DIR            PIC  9(01).
+           05  CIB-OTRO-DEUDOR-IND            PIC  9(01).
+           05  CIB-PERIODO-INTERES            PIC  9(01).
+000010     05  CIB-PERIODO-GRACIA-AMORT       PIC  9(02).
+000011     05  CIB-PERIODICIDAD-AMORT         PIC  9(01).
+000011     05  CIB-CLAVE-LINEA                PIC  X(11).
+000011     05  CIB-DIAS                       PIC  9(04).
+000025*
+000026******************************************************************
+           COPY CALEAREA.
+       COPY COLWGVEN.
+      *COPY GNSWGIFD.
+       COPY GNSWVIDD.
+       COPY GNSBRMSG.
+       COPY COLBROPC.
+       COPY COLBRRDC.
+       COPY COLBRCYA.
+       COPY SGCBRDBC.
+       COPY TABBRCAM.
+       COPY COLBRDCC.
+      ****************************************************************
+       COPY COLBRVEN.
+       COPY GNSBRTAB.
+       COPY GNSBRMSC.
+       COPY COLBRICG.
+       COPY COLBRTOC.
+       COPY COLBRDLC.
+       COPY COLBREVC.
+       COPY COLBRRCV.
+      **** COPY COLBRRCE.
+      ***********************************************************
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-OPC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-RDC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-CYA-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-DBC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-CAM-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-DCC-REQA==.
+      ***********************************************************
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-VEN-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-TAB-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-MSC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-ICG-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-TOC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-DLC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-EVC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-RCV-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-MSG-REQA==.
+      **** COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-RCE-REQA==.
+      ***************************************************************
+       COPY GNSWGFEC.
+       COPY GNSWGHOY.
+       COPY GNSWGSYS.
+       COPY GNSWCFIO.
+       COPY GNSWVFIO.
+       COPY GNSWGRQA.
+       COPY GNSWGELS.
+       COPY GNSWGUIB.
+       COPY COLWGINT.
+       COPY GNSWGCVI.
+       COPY GNSWGPES.
+       01  CALCULO-CLAVE-LINEA.
+           05 NUMERO.
+              07 SUC-NUMERO      PIC 9(3).
+              07 SERIAL-NUMERO   PIC 9(7).
+           05 FILLER REDEFINES NUMERO.
+              07 NUMEROS OCCURS 10 TIMES.
+                 10 NUM-CLAVE    PIC 9.
+           05 PONDERADORES       PIC X(20) VALUE '10070302090806050704'.
+           05 FILLER REDEFINES PONDERADORES.
+              07 PONDERADOR OCCURS 10 TIMES.
+                 10 PON-CLAVE    PIC 99.
+           05 DIGITO             PIC 9.
+           05 RESTO              PIC 99.
+           05 ITX                PIC 99.
+           05 CLAVE-OK           PIC 9 VALUE 0.
+           05 ACUMULADO          PIC 9(4) VALUE 0.
+           05 CLAVE-LINEA.
+              10 NUMERO-CLAVE    PIC 9(10).
+              10 DIGITO-CLAVE    PIC 9(01).
+      *
+       01  WS-AREAS-VARIAS.
+           05 MESDIA-VEN.
+              10 MES-VEN             PIC 9(02).
+              10 DIA-VEN             PIC 9(02).
+           05 MESDIA-CUR.
+              10 MES-CUR             PIC 9(02).
+              10 DIA-CUR             PIC 9(02).
+           05 WS-FECHA.
+              10 WS-ANOV             PIC 9(02).
+              10 WS-MESV             PIC 9(02).
+              10 WS-DIAV             PIC 9(02).
+           05 FECHA-WSS.
+              10 ANO1-WSS            PIC 99.
+              10 ANO2-WSS            PIC 9(02).
+              10 MES-WSS             PIC 9(02).
+              10 DIA-WSS             PIC 9(02).
+           05 FECHA-WSSX.
+              10 ANO1-WSSX           PIC 99.
+              10 ANO2-WSSX           PIC 9(02).
+              10 MES-WSSX            PIC 9(02).
+              10 DIA-WSSX            PIC 9(02).
+           05 ULT-FECHA-EVC.
+              10 ANO1-EVCX           PIC 99.
+              10 ANO2-EVCX           PIC 9(02).
+              10 MES-EVCX            PIC 9(02).
+              10 DIA-EVCX            PIC 9(02).
+           05 ULT-FECHA-EVC2.
+              10 ANO1-EVCX2          PIC 99.
+              10 ANO2-EVCX2          PIC 9(02).
+              10 MES-EVCX2           PIC 9(02).
+              10 DIA-EVCX2           PIC 9(02).
+           05 ULT-FECHA-EVC9.
+              10 ANO1-EVCX9          PIC 99.
+              10 ANO2-EVCX9          PIC 9(02).
+              10 MES-EVCX9           PIC 9(02).
+              10 DIA-EVCX9           PIC 9(02).
+           05 ULT-FECHA-EVC-X.
+              10 ANO1-EVC-X          PIC 99.
+              10 ANO2-EVC-X          PIC 9(02).
+              10 MES-EVC-X           PIC 9(02).
+              10 DIA-EVC-X           PIC 9(02).
+           05 ULT-FECHA-EVC-Y.
+              10 ANO1-EVC-Y          PIC 99.
+              10 ANO2-EVC-Y          PIC 9(02).
+              10 MES-EVC-Y           PIC 9(02).
+              10 DIA-EVC-Y           PIC 9(02).
+           05 FECHA-VEN-1.
+              10 ANO1-VEN-1          PIC 99.
+              10 ANO2-VEN-1          PIC 9(02).
+              10 MES-VEN-1           PIC 9(02).
+              10 DIA-VEN-1           PIC 9(02).
+           05 FECHA-VEN-2.
+              10 ANO1-VEN-2          PIC 99.
+              10 ANO2-VEN-2          PIC 9(02).
+              10 MES-VEN-2           PIC 9(02).
+              10 DIA-VEN-2           PIC 9(02).
+           05 AREA-RUT.
+              10 RUT-PASO            PIC X(8).
+              10 RUT-NUM REDEFINES RUT-PASO PIC 9(8).
+
+           05 RDC-WS.
+              10 RDC-A               PIC X(12).
+              10 RDC-B               PIC 999.
+           05 SOPC-WS.
+              10 SOPC-WS1            PIC XX.
+              10 SOPC-WS2            PIC X.
+           05 COLOCACION-WS.
+              10 OPERAC-WS           PIC XXX.
+              10 SERIAL-WS           PIC X(5).
+           05 IND-GARA-WS.
+              10 IND-GARA-WSS        PIC 9.
+              10 IND-GARA-WSSS       PIC 99.
+           05 IND-TCYA-WS.
+              10 IND-TCYA-WSS        PIC X.
+              10 IND-TCYA-WSSS       PIC XXXX.
+           05 IND-DEST-WS.
+              10 IND-DEST-WSS        PIC X.
+              10 IND-DEST-WSSS       PIC XX.
+           05 EVCWS-1.
+              10 EVCWS-2             PIC X.
+              10 EVCWS-3             PIC XX.
+           05 TABLA-FECHAS.
+              10 TAB-FEC OCCURS 10 TIMES.
+                 14 TF.
+                    18 ANO1-T PIC 99.
+                    18 TFP.
+                       20 ANO-T PIC 99.
+                       20 MES-T PIC 99.
+                       20 DIA-T PIC 99.
+
+
+       01  TARJETA.
+           05 FILLER            PIC X.
+           05 TIPO-PROCESO-TAR  PIC X.
+           05 FILLER            PIC X.
+           05 TAR-DATOS   OCCURS  10 TIMES.
+              10 FECHA-TAR      PIC X(6).
+              10 FILLER         PIC X.
+           05 FILLER         PIC X(01).
+           05 FECHA-RUT.
+              10 FP-DD          PIC X(02).
+              10 FP-MM          PIC X(02).
+              10 FP-AA          PIC X(02).
+           05 FECHA-RUT-R REDEFINES FECHA-RUT PIC X(06).
+
+       01  TABLAS-USADAS.
+           03  FIN-DATOS                   PIC X(02)  VALUE SPACES.
+           03  PIL-CONT                    PIC 9(06)  COMP-3 VALUE 0.
+           03 PILOTO OCCURS 100 TIMES
+              DEPENDING ON PIL-CONT INDEXED BY TCX.
+               05  PIL-SUCUR               PIC 9(03).
+
+       01  FECHAS-VARIAS.
+           05 FECHA-GEN.
+      *       10 FILLER      PIC XX VALUE '19'.
+              10 ANO-GEN     PIC 9999.
+              10 MES-GEN     PIC 99.
+              10 DIA-GEN     PIC 99.
+           05 FECHA-APERTURA PIC 9(6).
+           05 RFECHA-APERTURA REDEFINES FECHA-APERTURA.
+              10 ANO-APERTURA PIC 99.
+              10 MES-APERTURA PIC 99.
+              10 DIA-APERTURA PIC 99.
+       01  LLAVES.
+           05 CLAVE-LINEA-WS.
+              10 CLAVE-LINEA-WS1     PIC XXX.
+              10 CLAVE-LINEA-WS2     PIC X(8).
+           05 LLAVE-AUX.
+              10 LLAVE-1             PIC 999.
+              10 LLAVE-2             PIC 9(8).
+           05 LLAVE-A.
+              10 LLAVE-2A            PIC X(3).
+              10 LLAVE-1A            PIC X(8).
+           05 LLAVE-B.
+              10 LLAVE-2B            PIC X(3).
+              10 LLAVE-1B            PIC X(8).
+           05 FECHA-HOY.
+              10 DD-HOY PIC 99.
+              10 FILLER PIC X.
+              10 MM-HOY PIC 99.
+              10 FILLER PIC X.
+              10 AA-HOY PIC 99.
+           05 ERRORES.
+              10 ERROR9 OCCURS 50 TIMES.
+                 14 MENSA-WS   PIC X(41).
+                 14 RET-COD-WS PIC XXX.
+       01  TIT-1.
+           05 FILLER PIC X(46) VALUE 'BANCO DE CREDITO E INVERSIONES'.
+           05 FILLER PIC X(70) VALUE
+              ' GENERADOR MOVIMIENTOS DE CURSE'.
+           05 FILLER PIC X(7) VALUE 'FECHA:'.
+           05 T1-FECHA PIC X(8).
+       01  TIT-2.
+           05 FILLER PIC X(45) VALUE 'COLOCACIONES'.
+           05 FILLER PIC X(71) VALUE
+              '---------------------------------'.
+           05 FILLER PIC X(7) VALUE 'PAG  :'.
+           05 PAG-T1 PIC ZZZ9.
+       01  TIT-2A.
+           05 FILLER PIC X(50) VALUE SPACES.
+           05 FILLER PIC X(9)  VALUE 'SUCURSAL:'.
+           05 SUC-SALIDA PIC X(25)B(32).
+           05 FILLER PIC X(14)  VALUE 'PROGR:COLPB410'.
+       01  RAYA PIC X(132) VALUE ALL '-'.
+       01  ESPA PIC X(132) VALUE ALL SPACES.
+      *
+       01  TIT-3.
+           05 FILLER          PIC X(55)   VALUE
+           'SUC COLOCAC. RUT D.DIR. RUT D.IND. F.VCTO IMP MONTO OPE'.
+           05 FILLER          PIC X(56)  VALUE
+           'RACION    MONTO CUOTA        F.PGRE F.CURS CM NVTO PG '.
+           05 FILLER          PIC X(9)   VALUE 'T.BASE'.
+           05 FILLER          PIC X(7)   VALUE 'MENSAJE'.
+      *
+       01  TIT-4.
+           05 FILLER          PIC X(57)   VALUE
+           'FP T.INT COB CG TI CC RUT EMPRES CTA.ABONO  TC G.NOTARIA '.
+           05 FILLER          PIC X(60)  VALUE
+           'MES CD C.ADICIO SEGURO DESGRA DE DI IN PI PGA PA DIAS  TMC'.
+      *
+      *
+       01  DETA-01.
+           05 SUC-01          PIC 9(3)    VALUE 0.
+           05 FILLER          PIC X(1)    VALUE SPACES.
+           05 COLOCA-01       PIC 9(8)    VALUE 0.
+           05 FILLER          PIC X(1)    VALUE SPACES.
+           05 RUT-01          PIC X(10)   VALUE SPACES.
+           05 FILLER          PIC X       VALUE SPACES.
+           05 RUT2-01         PIC X(10)   VALUE SPACES.
+           05 FILLER          PIC X       VALUE SPACES.
+           05 FECHA-01        PIC 9(6)    VALUE 0.
+           05 FILLER          PIC X(2)    VALUE SPACES.
+           05 IMPUT-01        PIC 9(1)    VALUE 0.
+           05 FILLER          PIC X(2)    VALUE SPACES.
+           05 MONTO-01        PIC ZZZ.ZZZ.ZZZ.ZZ9,99.
+           05 FILLER          PIC X       VALUE SPACES.
+           05 MONTO2-01       PIC ZZZ.ZZZ.ZZZ.ZZ9,99.
+           05 FILLER          PIC X       VALUE SPACES.
+           05 FECHA2-01       PIC 9(6)    VALUE 0.
+           05 FILLER          PIC X(1)    VALUE SPACES.
+           05 FECHA3-01       PIC 9(6)    VALUE 0.
+           05 FILLER          PIC X       VALUE SPACES.
+           05 CM-01           PIC 9       VALUE 0.
+           05 FILLER          PIC XX      VALUE SPACES.
+           05 NRO-01          PIC 9(3)    VALUE 0.
+           05 FILLER          PIC XX      VALUE SPACES.
+           05 PG-01           PIC 99BBB.
+           05 T-BASE-01       PIC Z9,99BBB.
+           05 MENSAJE-01      PIC X(13).
+      *
+      *
+       01  DETA-02.
+           05 PAGO-02         PIC 9(1)    VALUE 0.
+           05 FILLER          PIC X(2)    VALUE SPACES.
+           05 TASA-02         PIC Z9,99.
+           05 FILLER          PIC X(2)    VALUE SPACES.
+           05 COBRA-02        PIC 9       VALUE 0.
+           05 FILLER          PIC X(2)    VALUE SPACES.
+           05 CODGAR-02       PIC 9       VALUE 0.
+           05 FILLER          PIC X(2)    VALUE SPACES.
+           05 TIPOIN-02       PIC X(1)    VALUE SPACES.
+           05 FILLER          PIC X(2)    VALUE SPACES.
+           05 CALID-02        PIC X(1)    VALUE SPACES.
+           05 FILLER          PIC X(2)    VALUE SPACES.
+           05 RUT-02          PIC X(10)   VALUE SPACES.
+           05 FILLER          PIC X(1)    VALUE SPACES.
+           05 CUENTA-02       PIC X(10)   VALUE SPACES.
+           05 FILLER          PIC X(1)    VALUE SPACES.
+           05 CRED-02         PIC 9(2)    VALUE 0.
+           05 FILLER          PIC X(1)    VALUE SPACES.
+           05 GASTO-02        PIC ZZ.ZZ9,99.
+           05 FILLER          PIC X(1)    VALUE SPACES.
+           05 MESES-02        PIC XXX     VALUE SPACES.
+           05 FILLER          PIC X(1)    VALUE SPACES.
+           05 DISTR-02        PIC XX      VALUE SPACES.
+           05 FILLER          PIC X(1)    VALUE SPACES.
+           05 ADIC-02         PIC X(8)    VALUE SPACES.
+           05 FILLER          PIC X(1)    VALUE SPACES.
+           05 SEGUR-02        PIC ZZ.ZZZ.ZZ9,99.
+           05 FILLER          PIC X(1)    VALUE SPACES.
+           05 DEST-02         PIC XX      VALUE SPACES.
+           05 FILLER          PIC X(1)    VALUE SPACES.
+           05 ODDIR-02        PIC 9(1)    VALUE 0.
+           05 FILLER          PIC X(2)    VALUE SPACES.
+           05 ODIND-02        PIC 9(1)    VALUE 0.
+           05 FILLER          PIC X(2)    VALUE SPACES.
+           05 PINT-02         PIC 9(1)    VALUE 0.
+           05 FILLER          PIC X(2)    VALUE SPACES.
+           05 PGA-02          PIC 99      VALUE 0.
+           05 FILLER          PIC X(02)   VALUE SPACES.
+           05 PA-02           PIC 9       VALUE 0.
+           05 FILLER          PIC XX      VALUE SPACES.
+           05 DIAS-02         PIC ZZZ9BBBB.
+           05 TMC-02          PIC Z9,99.
+      *
+      *
+       01  DETA-03.
+           05 AMOR1-03         PIC Z.ZZZ.ZZZ.ZZ9,99.
+           05 FILLER           PIC X(3)    VALUE SPACES.
+           05 AMOR2-03         PIC Z.ZZZ.ZZZ.ZZ9,99.
+           05 FILLER           PIC X(3)    VALUE SPACES.
+           05 AMOR3-03         PIC Z.ZZZ.ZZZ.ZZ9,99.
+           05 FILLER           PIC X(3)    VALUE SPACES.
+           05 AMOR4-03         PIC Z.ZZZ.ZZZ.ZZ9,99.
+           05 FILLER           PIC X(3)    VALUE SPACES.
+           05 AMOR5-03         PIC Z.ZZZ.ZZZ.ZZ9,99.
+           05 FILLER           PIC X(3)    VALUE SPACES.
+           05 AMOR6-03         PIC Z.ZZZ.ZZZ.ZZ9,99.
+           05 FILLER           PIC X(21)   VALUE SPACES.
+      *
+      *
+       01  DETA-04.
+           05 AMOR7-04         PIC Z.ZZZ.ZZZ.ZZ9,99.
+           05 FILLER           PIC X(3)    VALUE SPACES.
+           05 AMOR8-04         PIC Z.ZZZ.ZZZ.ZZ9,99.
+           05 FILLER           PIC X(3)    VALUE SPACES.
+           05 AMOR9-04         PIC Z.ZZZ.ZZZ.ZZ9,99.
+           05 FILLER           PIC X(3)    VALUE SPACES.
+           05 AMOR10-04        PIC Z.ZZZ.ZZZ.ZZ9,99.
+           05 FILLER           PIC X(3)    VALUE SPACES.
+           05 AMOR11-04        PIC Z.ZZZ.ZZZ.ZZ9,99.
+           05 FILLER           PIC X(3)    VALUE SPACES.
+           05 AMOR12-04        PIC Z.ZZZ.ZZZ.ZZ9,99.
+           05 FILLER           PIC X(21)   VALUE SPACES.
+      *
+      *
+      *
+       01  DETA-05.
+           05 FILLER           PIC X(81) VALUE SPACES.
+           05 OBS-5            PIC X(41).
+           05 FILLER           PIC X VALUE SPACE.
+           05 RET-COD-5        PIC X(6).
+       01  LTOTAL-SUC.
+           05 FILLER  PIC X(50) VALUE SPACES.
+           05 FIL-SUC PIC X(27).
+           05 T-SUC   PIC ZZZZ9.
+       01  LTOTAL-GEN.
+           05 FILLER  PIC X(50) VALUE SPACES.
+           05 FIL-GEN PIC X(27).
+           05 T-GEN   PIC ZZZZ9.
+
+      *****************************************************************
+      *          USER INFORMATION BLOCK
+      *****************************************************************
+       01  UIB.
+           05 FILLER                 PIC X(32) VALUE 'COLPB410'.
+      *****************************************************************
+      *           REQUEST AREA
+      *****************************************************************
+       01  REQ-AREA-OPC.
+           03 OPC-COMMAND         PIC X(5).
+           03 OPC-TABLE           PIC X(3)     VALUE 'OPC'.
+           03 OPC-KEY             PIC X(5).
+           03 OPC-RET-COD         PIC X(2)     VALUE SPACES.
+           03 OPC-INT-RC          PIC X(1).
+           03 OPC-DB-ID           PIC S9(4)    COMP VALUE +160.
+           03 OPC-REC-ID          PIC X(7).
+           03 FILLER              PIC X(25).
+           03 OPC-CONT-MAX        PIC S9(4)    COMP.
+           03 OPC-CONT-ID         PIC S9(4)    COMP.
+           03 FILLER              PIC X(22).
+           03 OPC-VALUE           PIC X(28).
+
+       01  REQ-AREA-DLC.
+           03 DLC-COMMAND         PIC X(5).
+           03 DLC-TABLE           PIC X(3)     VALUE 'DLC'.
+           03 DLC-KEY             PIC X(5).
+           03 DLC-RET-COD         PIC X(2)     VALUE SPACES.
+           03 DLC-INT-RC          PIC X(1).
+           03 DLC-DB-ID           PIC S9(4)    COMP VALUE +160.
+           03 DLC-REC-ID          PIC X(7).
+           03 FILLER              PIC X(25).
+           03 DLC-CONT-MAX        PIC S9(4)    COMP.
+           03 DLC-CONT-ID         PIC S9(4)    COMP.
+           03 FILLER              PIC X(22).
+           03 DLC-VALUE           PIC X(40).
+
+       01  REQ-AREA-RDC.
+           03 RDC-COMMAND         PIC X(5).
+           03 RDC-TABLE           PIC X(3)     VALUE 'RDC'.
+           03 RDC-KEY             PIC X(5).
+           03 RDC-RET-COD         PIC X(2)     VALUE SPACES.
+           03 RDC-INT-RC          PIC X(1).
+           03 RDC-DB-ID           PIC S9(4)    COMP VALUE +160.
+           03 RDC-REC-ID          PIC X(7).
+           03 FILLER              PIC X(25).
+           03 RDC-CONT-MAX        PIC S9(4)    COMP.
+           03 RDC-CONT-ID         PIC S9(4)    COMP.
+           03 FILLER              PIC X(22).
+           03 RDC-VALUE           PIC X(40).
+
+       01  REQ-AREA-VEN.
+           03 VEN-COMMAND         PIC X(5).
+           03 VEN-TABLE           PIC X(3)     VALUE 'VEN'.
+           03 VEN-KEY             PIC X(5).
+           03 VEN-RET-COD         PIC X(2)     VALUE SPACES.
+           03 VEN-INT-RC          PIC X(1).
+           03 VEN-DB-ID           PIC S9(4)    COMP VALUE +160.
+           03 VEN-REC-ID          PIC X(7).
+           03 FILLER              PIC X(25).
+           03 VEN-CONT-MAX        PIC S9(4)    COMP.
+           03 VEN-CONT-ID         PIC S9(4)    COMP.
+           03 FILLER              PIC X(22).
+           03 VEN-VALUE           PIC X(40).
+
+       01  REQ-AREA-ICG.
+           03 ICG-COMMAND         PIC X(5).
+           03 ICG-TABLE           PIC X(3)     VALUE 'ICG'.
+           03 ICG-KEY             PIC X(5).
+           03 ICG-RET-COD         PIC X(2)     VALUE SPACES.
+           03 ICG-INT-RC          PIC X(1).
+           03 ICG-DB-ID           PIC S9(4)    COMP VALUE +160.
+           03 ICG-REC-ID          PIC X(7).
+           03 FILLER              PIC X(25).
+           03 ICG-CONT-MAX        PIC S9(4)    COMP.
+           03 ICG-CONT-ID         PIC S9(4)    COMP.
+           03 FILLER              PIC X(22).
+           03 ICG-VALUE           PIC X(45).
+
+       01  REQ-AREA-EVC.
+           03 EVC-COMMAND         PIC X(5).
+           03 EVC-TABLE           PIC X(3)     VALUE 'EVC'.
+           03 EVC-KEY             PIC X(5).
+           03 EVC-RET-COD         PIC X(2)     VALUE SPACES.
+           03 EVC-INT-RC          PIC X(1).
+           03 EVC-DB-ID           PIC S9(4)    COMP VALUE +160.
+           03 EVC-REC-ID          PIC X(7).
+           03 FILLER              PIC X(25).
+           03 EVC-CONT-MAX        PIC S9(4)    COMP.
+           03 EVC-CONT-ID         PIC S9(4)    COMP.
+           03 FILLER              PIC X(22).
+           03 EVC-VALUE           PIC X(40).
+       01  REQ-AREA-CYA.
+           03 CYA-COMMAND         PIC X(5).
+           03 CYA-TABLE           PIC X(3)     VALUE 'CYA'.
+           03 CYA-KEY             PIC X(5).
+           03 CYA-RET-COD         PIC X(2)     VALUE SPACES.
+           03 CYA-INT-RC          PIC X(1).
+           03 CYA-DB-ID           PIC S9(4)    COMP VALUE +160.
+           03 CYA-REC-ID          PIC X(7).
+           03 FILLER              PIC X(25).
+           03 CYA-CONT-MAX        PIC S9(4)    COMP.
+           03 CYA-CONT-ID         PIC S9(4)    COMP.
+           03 FILLER              PIC X(22).
+           03 CYA-VALUE           PIC X(40).
+
+       01  REQ-AREA-DBC.
+           03 DBC-COMMAND         PIC X(5).
+           03 DBC-TABLE           PIC X(3)     VALUE 'DBC'.
+           03 DBC-KEY             PIC X(5).
+           03 DBC-RET-COD         PIC X(2)     VALUE SPACES.
+           03 DBC-INT-RC          PIC X(1).
+           03 DBC-DB-ID           PIC S9(4)    COMP VALUE +100.
+           03 DBC-REC-ID          PIC X(7).
+           03 FILLER              PIC X(25).
+           03 DBC-CONT-MAX        PIC S9(4)    COMP.
+           03 DBC-CONT-ID         PIC S9(4)    COMP.
+           03 FILLER              PIC X(22).
+           03 DBC-VALUE           PIC X(40).
+       01  REQ-AREA-CAM.
+           03 CAM-COMMAND         PIC X(5).
+           03 CAM-TABLE           PIC X(3)     VALUE 'CAM'.
+           03 CAM-KEY             PIC X(5).
+           03 CAM-RET-COD         PIC X(2)     VALUE SPACES.
+           03 CAM-INT-RC          PIC X(1).
+           03 CAM-DB-ID           PIC S9(4)    COMP VALUE +150.
+           03 CAM-REC-ID          PIC X(7).
+           03 FILLER              PIC X(25).
+           03 CAM-CONT-MAX        PIC S9(4)    COMP.
+           03 CAM-CONT-ID         PIC S9(4)    COMP.
+           03 FILLER              PIC X(22).
+           03 CAM-VALUE           PIC X(50).
+       01  REQ-AREA-TAB.
+           03 TAB-COMMAND         PIC X(5).
+           03 TAB-TABLE           PIC X(3)     VALUE 'TAB'.
+           03 TAB-KEY             PIC X(5).
+           03 TAB-RET-COD         PIC X(2)     VALUE SPACES.
+           03 TAB-INT-RC          PIC X(1).
+           03 TAB-DB-ID           PIC S9(4)    COMP VALUE +210.
+           03 TAB-REC-ID          PIC X(7).
+           03 FILLER              PIC X(25).
+           03 TAB-CONT-MAX        PIC S9(4)    COMP.
+           03 TAB-CONT-ID         PIC S9(4)    COMP.
+           03 FILLER              PIC X(22).
+           03 TAB-VALUE           PIC X(50).
+       01  REQ-AREA-DCC.
+           03 DCC-COMMAND         PIC X(5).
+           03 DCC-TABLE           PIC X(3)     VALUE 'DCC'.
+           03 DCC-KEY             PIC X(5).
+           03 DCC-RET-COD         PIC X(2)     VALUE SPACES.
+           03 DCC-INT-RC          PIC X(1).
+           03 DCC-DB-ID           PIC S9(4)    COMP VALUE +210.
+           03 DCC-REC-ID          PIC X(7).
+           03 FILLER              PIC X(25).
+           03 DCC-CONT-MAX        PIC S9(4)    COMP.
+           03 DCC-CONT-ID         PIC S9(4)    COMP.
+           03 FILLER              PIC X(22).
+           03 DCC-VALUE           PIC X(50).
+      *01  REQ-AREA-RCE.
+      *    03 RCE-COMMAND         PIC X(5).
+      *    03 RCE-TABLE           PIC X(3)     VALUE 'RCE'.
+      *    03 RCE-KEY             PIC X(5).
+      *    03 RCE-RET-COD         PIC X(2)     VALUE SPACES.
+      *    03 RCE-INT-RC          PIC X(1).
+      *    03 RCE-DB-ID           PIC S9(4)    COMP VALUE +210.
+      *    03 RCE-REC-ID          PIC X(7).
+      *    03 FILLER              PIC X(25).
+      *    03 RCE-CONT-MAX        PIC S9(4)    COMP.
+      *    03 RCE-CONT-ID         PIC S9(4)    COMP.
+      *    03 FILLER              PIC X(22).
+      *    03 RCE-VALUE           PIC X(50).
+       01  AREA-AUX.
+           05 FILLER              PIC X.
+           05 AUX-CIC-IOPC        PIC X(12).
+           05 FILLER              PIC X(487).
+
+      ****************************************************************
+      *                     WORK AREA
+      ****************************************************************
+
+      *01  REG-OPC.
+      *    COPYDD COL-R-OPC.COL-E-OPC00(PROD),01,D
+      *
+      *01  REG-DLC.
+      *    COPYDD COL-R-DLC.COL-E-DLC00(PROD),01,D
+
+      *01  REG-RDC.
+      *    COPYDD COL-R-RDC.COL-E-RDC00(PROD),01,D
+
+      *01  REG-VEN.
+      *    COPYDD COL-R-VEN.COL-E-VEN00(PROD),01,D
+
+      *01  REG-ICG.
+      *    COPYDD COL-R-ICG.COL-E-ICG00(PROD),01,D
+
+      *01  REG-EVC.
+      *    COPYDD COL-R-EVC.COL-E-EVC00(PROD),01,D
+
+      *01  REG-CYA.
+      *    COPYDD COL-R-CYA.COL-E-CYA00(PROD),01,D
+
+      *01  REG-DBC.
+      *    COPYDD DGC-R-DBC.DGC-E-DBC00(PROD),01,D
+
+      *01  REG-CAM.
+      *    COPYDD TAB-R-CAM.TAB-E-CAM00(PROD),01,D
+
+      *01  REG-TAB.
+      *    COPYDD TAB-R-TAB.TAB-E-TAB00(PROD),01,D
+
+      *01  REG-DCC.
+      *    COPYDD TCO-R-DCC.TCO-E-DCC00(PROD),01,D
+
+      ******************************************************************
+      *                     ELEMENT LIST
+      ******************************************************************
+
+
+       01  ELEM-LIST-OPC.
+           05 ELEM-1          PIC X(5) VALUE 'OPC00'.
+           05 ELEM-SEC        PIC X(1).
+           05 FILLER          PIC X(5) VALUE SPACES.
+       01  ELEM-LIST-DLC.
+           05 ELEM-1          PIC X(5) VALUE 'DLC00'.
+           05 ELEM-SEC        PIC X(1).
+           05 FILLER          PIC X(5) VALUE SPACES.
+       01  ELEM-LIST-RDC.
+           05 ELEM-1          PIC X(5) VALUE 'RDC00'.
+           05 ELEM-SEC        PIC X(1).
+           05 FILLER          PIC X(5) VALUE SPACES.
+       01  ELEM-LIST-VEN.
+           05 ELEM-1          PIC X(5) VALUE 'VEN00'.
+           05 ELEM-SEC        PIC X(1).
+           05 FILLER          PIC X(5) VALUE SPACES.
+       01  ELEM-LIST-ICG.
+           05 ELEM-1          PIC X(5) VALUE 'ICG00'.
+           05 ELEM-SEC        PIC X(1).
+           05 FILLER          PIC X(5) VALUE SPACES.
+       01  ELEM-LIST-EVC.
+           05 ELEM-1          PIC X(5) VALUE 'EVC00'.
+           05 ELEM-SEC        PIC X(1).
+           05 FILLER          PIC X(5) VALUE SPACES.
+       01  ELEM-LIST-CYA.
+           05 ELEM-1          PIC X(5) VALUE 'CYA00'.
+           05 ELEM-SEC        PIC X(1).
+           05 FILLER          PIC X(5) VALUE SPACES.
+       01  ELEM-LIST-DBC.
+           05 ELEM-1          PIC X(5) VALUE 'DBC00'.
+           05 ELEM-SEC        PIC X(1).
+           05 FILLER          PIC X(5) VALUE SPACES.
+       01  ELEM-LIST-CAM.
+           05 ELEM-1          PIC X(5) VALUE 'CAM00'.
+           05 ELEM-SEC        PIC X(1).
+           05 FILLER          PIC X(5) VALUE SPACES.
+       01  ELEM-LIST-TAB.
+           05 ELEM-1          PIC X(5) VALUE 'TAB00'.
+           05 ELEM-SEC        PIC X(1).
+           05 FILLER          PIC X(5) VALUE SPACES.
+       01  ELEM-LIST-DCC.
+           05 ELEM-1          PIC X(5) VALUE 'DCC00'.
+           05 ELEM-SEC        PIC X(1).
+           05 FILLER          PIC X(5) VALUE SPACES.
+      *01  ELEM-LIST-RCE.
+      *    05 ELEM-1          PIC X(5) VALUE 'RCE00'.
+      *    05 ELEM-SEC        PIC X(1).
+      *    05 FILLER          PIC X(5) VALUE SPACES.
+
+       77  LIT-50             PIC 9(2) VALUE 50.
+      *
+
+       01  LEGA-DATE-BLOCK.
+           05 COBOL-II-DATE.
+              10 COBOL-II-YEAR
+                         PIC XX.
+              10 COBOL-II-MONTH
+                         PIC XX.
+              10 COBOL-II-DAY
+                         PIC XX.
+           05 OSVS-CURRENT-DATE.
+              10 CURRENT-DATE-MONTH
+                         PIC XX.
+              10 FILLER  PIC X         VALUE '/'.
+              10 CURRENT-DATE-DAY
+                         PIC XX.
+              10 FILLER  PIC X         VALUE '/'.
+              10 CURRENT-DATE-YEAR
+                         PIC XX.
+
+           COPY RLOVR001.
+       77  Y2K-FEC-AVLD  PIC 9(2).
+       77  Y2K-LIT-50    PIC 9(2).
+       77  Y2K-FEC-AEC1  PIC 9(2).
+       77  Y2K-FEC-AEC2  PIC 9(2).
+
+
+
+
+
+
+
+       PROCEDURE DIVISION.
+      *------------------
+             ENTRY 'DBMSCBL'
+           MOVE 'COLPB410' TO FIO-PROG.
+      *    PERFORM BUS-FSIS.
+           PERFORM GNS-BUS-IDD.
+           PERFORM LEER-PARAMETROS.
+           PERFORM ABRIR-ARCHIVOS
+           PERFORM SUCURSALES-PILOTO.
+           PERFORM CARGAR-CALENDARIO.
+           SORT SORTWK ON ASCENDING KEY SOR-SUCURSAL SOR-CODIGO-OPER
+           INPUT PROCEDURE ENTRADA
+           OUTPUT PROCEDURE SALIDA
+           PERFORM CERRAR-ARCHIVOS.
+           PERFORM ESTADISTICAS.
+           GOBACK.
+
+
+      * CURSA HASTA 10 FECHA DE PROCESO INGRESADAS POR PARAMETROS
+       LEER-PARAMETROS.
+      *----------------
+             ACCEPT TARJETA.
+             IF TIPO-PROCESO-TAR = 'T' OR 'P'
+                THEN
+                 NEXT SENTENCE
+                ELSE
+                 DISPLAY 'TIPO PROCESO ERRONEO EN TARJETA DE CONTROL'
+                 MOVE 100 TO RETURN-CODE
+                 GOBACK.
+                 MOVE TIPO-PROCESO-TAR TO TIPO-PROCESO-WS
+             MOVE ZEROES TO TABLA-FECHAS.
+             PERFORM CICLO-TARJETA VARYING I FROM 1
+                                             BY   1
+                                             UNTIL I > 10.
+       CICLO-TARJETA.
+      *--------------
+             IF FECHA-TAR (I)  IS NUMERIC
+      **********MOVE 19            TO ANO1-T (I)
+                MOVE FECHA-TAR (I) TO TFP (I)
+                IF ANO-T (I) < ROLL-YY
+                  MOVE 20          TO ANO1-T (I)
+                ELSE
+                  MOVE 19          TO ANO1-T (I)
+                END-IF.
+
+       SUCURSALES-PILOTO.
+      *-------------------
+           PERFORM ACEPTA-PARAMETROS.
+           PERFORM LLENAR-TABLA UNTIL FIN-DATOS = 'SI'.
+
+       ACEPTA-PARAMETROS.
+      *-------------------
+            READ   TAR-TARJETA  AT END MOVE 'SI' TO FIN-DATOS.
+
+       LLENAR-TABLA.
+      *--------------
+            ADD      1            TO     PIL-CONT.
+            SET      TCX          TO     PIL-CONT.
+            MOVE     TAR-SUCUR    TO     PIL-SUCUR (TCX).
+            PERFORM ACEPTA-PARAMETROS.
+
+
+       DS-ERROR.
+      *---------
+           PERFORM ESTADISTICAS.
+           DISPLAY '*** SE CANCELA PROGRAMA ***'
+           DISPLAY '*** SE CANCELA PROGRAMA ***' UPON CONSOLE.
+           DISPLAY 'ARCHIVO:' DS-ARCHIVO.
+           DISPLAY 'PARRAFO:' DS-PARRAFO.
+           DISPLAY 'STATUS :' DS-STATUS.
+           DISPLAY 'COMANDO:' DS-COMANDO.
+           MOVE 100 TO RETURN-CODE
+           GOBACK.
+
+       ESTADISTICAS.
+      *-------------
+           DISPLAY 'ESTADISTICAS PROGRAMA COLPB410'
+           DISPLAY '------------------------------'
+           DISPLAY 'LEIDOS OPC           : ' LEIDOS-OPC
+           DISPLAY 'LEIDOS DLC           : ' LEIDOS-DLC
+           DISPLAY 'LEIDOS RDC           : ' LEIDOS-RDC
+           DISPLAY 'LEIDOS RDC1          : ' LEIDOS-RDC1
+           DISPLAY 'LEIDOS VEN           : ' LEIDOS-VEN
+           DISPLAY 'LEIDOS ICG           : ' LEIDOS-ICG
+           DISPLAY 'LEIDOS CYA           : ' LEIDOS-CYA
+           DISPLAY 'LEIDOS EVC           : ' LEIDOS-EVC
+           DISPLAY 'PROCESADOS OPC       : ' PROCESADOS-OPC
+           DISPLAY 'PROCESADOS DLC       : ' PROCESADOS-DLC
+           DISPLAY 'PROCESADOS RDC       : ' PROCESADOS-RDC
+           DISPLAY 'PROCESADOS RDC1      : ' PROCESADOS-RDC1
+           DISPLAY 'PROCESADOS VEN       : ' PROCESADOS-VEN
+           DISPLAY 'PROCESADOS ICG       : ' PROCESADOS-ICG
+           DISPLAY 'PROCESADOS CYA       : ' PROCESADOS-CYA
+           DISPLAY 'PROCESADOS EVC       : ' PROCESADOS-EVC
+           DISPLAY 'GRABADOS MAECOL      : ' GRABADOS.
+      *    DISPLAY 'PROCESADOS CAMBIO    : ' PROCESADOS-CAMBIO.
+      *    DISPLAY 'GRABADOS CAMBIO      : ' GRABADOS-CAMBIO.
+      *    DISPLAY 'REGRABADOS CAMBIO    : ' REGRABADOS-CAMBIO.
+           DISPLAY 'CUOTAS CREADAS       : ' CUOTAS-CREADAS.
+           DISPLAY 'GRABADOS A1          : ' GRABADOS-A1.
+
+       EJECT
+
+       CARGAR-CALENDARIO.
+      *-----------------
+           IF FECHA-RUT-R IS NUMERIC
+              MOVE FP-DD      TO FR-DD
+              MOVE FP-MM      TO FR-MM
+              MOVE FP-AA      TO FR-AA
+              IF FR-AA < ROLL-YY
+                 MOVE '20' TO FR-SS
+              ELSE
+                 MOVE '19' TO FR-SS
+              END-IF
+              MOVE FEC-RUT            TO CALEAREA-FECHA-1
+           ELSE
+              MOVE '01011990' TO CALEAREA-FECHA-1.
+           MOVE 'CARGAR'   TO CALEAREA-FUNCION
+           PERFORM CALL-CALENDAR.
+       CALL-CALENDAR.
+      *---------------
+             CALL 'RTNUCALE' USING CALEAREA
+             IF CALEAREA-COD-RET NOT = 0
+                THEN DISPLAY ' * ERROR EN CALENDARIO * '
+                     DISPLAY ' * PROCESO CONTINUA  * '
+                     DISPLAY ' ' CALEAREA
+                     DISPLAY 'LLAVE:' OPC-CIC-IOPC
+                     MOVE 'ERROR EN RTN-CALENDARIO' TO MENSA-WS (44)
+                     MOVE 'ERROR EN RTN-CALENDARIO' TO ERR-DESCRIP
+                     MOVE ZEROS TO ERR-CODIGO-OPER
+                     PERFORM GRABAR-ERROR
+                     MOVE CALEAREA-COD-RET TO RET-COD-WS (44)
+                     MOVE 1 TO SW-ERROR-W.
+
+       ABRIR-ARCHIVOS.
+      *---------------
+
+           OPEN OUTPUT LISTADO.
+           ACCEPT COBOL-II-DATE FROM DATE
+           MOVE COBOL-II-YEAR TO CURRENT-DATE-YEAR
+           MOVE COBOL-II-MONTH TO CURRENT-DATE-MONTH
+           MOVE COBOL-II-DAY TO CURRENT-DATE-DAY
+           MOVE OSVS-CURRENT-DATE TO T1-FECHA
+
+
+           OPEN INPUT TAR-TARJETA
+                      CREDITO
+                      TABLAOPE
+                      SUC-SUCURSAL.
+           OPEN I-O    A-CREM009
+           OPEN OUTPUT A-CREV013.
+           OPEN EXTEND ERR-ERROR.
+      *
+           IF FS-ERROR = 35
+           THEN CLOSE       ERR-ERROR
+                OPEN OUTPUT ERR-ERROR
+           END-IF.
+      *
+
+           IF FS-TABOPE  NOT = 0
+           THEN MOVE 'TABLA.OPERAC'    TO  DS-ARCHIVO
+                MOVE 'ABRIR ARCHIVO  ' TO  DS-PARRAFO
+                MOVE FS-TABOPE         TO  DS-STATUS
+                MOVE 'OPEN'            TO  DS-COMANDO
+                PERFORM DS-ERROR.
+
+           IF FS-CREDITO  NOT = 0
+           THEN MOVE 'M.CREDITOS'      TO  DS-ARCHIVO
+                MOVE 'ABRIR ARCHIVO  ' TO  DS-PARRAFO
+                MOVE FS-CREDITO        TO  DS-STATUS
+                MOVE 'OPEN'            TO  DS-COMANDO
+                PERFORM DS-ERROR.
+           IF FS-SUCURSAL NOT = 0
+           THEN MOVE 'ARCH. SUCURSAL'    TO  DS-ARCHIVO
+                MOVE 'ABRIR ARCHIVO  '   TO  DS-PARRAFO
+                MOVE FS-SUCURSAL         TO  DS-STATUS
+                MOVE 'OPEN'              TO  DS-COMANDO
+                PERFORM DS-ERROR.
+           IF FS-ERROR NOT = 0
+           THEN MOVE 'ARCH. ERROR   '    TO  DS-ARCHIVO
+                MOVE 'ABRIR ARCHIVO  '   TO  DS-PARRAFO
+                MOVE FS-ERROR            TO  DS-STATUS
+                MOVE 'OPEN'              TO  DS-COMANDO
+                PERFORM DS-ERROR.
+
+           IF FS-CREV013  NOT = 0
+           THEN MOVE 'CREV013 ARC-A1 ' TO   DS-ARCHIVO
+                MOVE 'ABRIR ARCHIVO  ' TO   DS-PARRAFO
+                MOVE FS-CREV013        TO   DS-STATUS
+                MOVE 'OPEN'            TO   DS-COMANDO
+                PERFORM DS-ERROR.
+           IF FS-CREM009  NOT = 0
+           THEN MOVE 'CREM009     A1 ' TO   DS-ARCHIVO
+                MOVE 'ABRIR ARCHIVO  ' TO   DS-PARRAFO
+                MOVE FS-CREM009        TO   DS-STATUS
+                MOVE 'OPEN'            TO   DS-COMANDO
+                PERFORM DS-ERROR.
+       CERRAR-ARCHIVOS.
+      *----------------
+           CLOSE TAR-TARJETA
+           CLOSE TABLAOPE
+                 LISTADO
+                 SUC-SUCURSAL
+                 ERR-ERROR
+                 CREDITO
+                 A-CREV013
+                 A-CREM009.
+
+       ENTRADA SECTION.
+      *----------------
+       PROCESO-ENTRADA.
+      *-----------------
+           PERFORM PROCESO-OPC VARYING J1 FROM 1 BY 1 UNTIL J1 > 10.
+       SALIDA SECTION.
+      *----------------
+       PROC-SALIDA.
+      *-------------
+       PROCESO-PRINCIPAL.
+      *-------------------
+             RETURN SORTWK AT END MOVE 'FIN' TO FIN-SORT.
+             PERFORM IMPRIMIR UNTIL FIN-SORT =  'FIN'.
+             MOVE CREADOS-SUC TO T-SUC
+             MOVE 'TOTAL CREADOS            :' TO FIL-SUC
+             WRITE LINEA FROM LTOTAL-SUC AFTER 2
+             MOVE 0 TO CREADOS-SUC
+             MOVE ERRONEOS-SUC TO T-SUC
+             MOVE 'TOTAL ERRONEOS           :' TO FIL-SUC
+             WRITE LINEA FROM LTOTAL-SUC AFTER 1
+             MOVE 0 TO ERRONEOS-SUC
+             MOVE CONTA-SUC TO T-SUC
+             MOVE 'TOTAL SUCURSAL           :' TO FIL-SUC
+             WRITE LINEA FROM LTOTAL-SUC AFTER 1
+             MOVE CREADOS-GEN TO T-GEN
+             MOVE 'TOTAL GENERAL CREADOS    :' TO FIL-GEN
+             WRITE LINEA FROM LTOTAL-GEN AFTER 5
+             MOVE 0 TO CREADOS-GEN
+             MOVE ERRONEOS-GEN TO T-GEN
+             MOVE 'TOTAL GENERAL ERRONEOS   :' TO FIL-GEN
+             WRITE LINEA FROM LTOTAL-GEN AFTER 1
+             MOVE 0 TO ERRONEOS-GEN
+             MOVE CONTA-GEN TO T-GEN
+             MOVE 'TOTAL GENERAL PROCESADOS :' TO FIL-GEN
+             WRITE LINEA FROM LTOTAL-GEN AFTER 1.
+       VARIOS SECTION.
+      *---------------
+       PROCESO-OPC.
+      *-------------
+
+           MOVE SPACES                       TO OPC-VALUE
+           MOVE TF (J1)                      TO OPC-VALUE
+           MOVE 'LOCKY'                      TO OPC-COMMAND
+           MOVE 'OPC03'                      TO OPC-KEY
+           CALL 'DBNTRY' USING UIB REQ-AREA-OPC OPC ELEM-LIST-OPC
+           IF OPC-RET-COD = SPACES
+              MOVE 'REDLE'                   TO OPC-COMMAND
+              MOVE 'OPC03'                   TO OPC-KEY
+              CALL 'DBNTRY' USING UIB REQ-AREA-OPC OPC ELEM-LIST-OPC
+              IF OPC-RET-COD NOT = SPACES
+                 DISPLAY 'ERROR EN REDLE :' OPC-RET-COD
+                 MOVE 100 TO RETURN-CODE
+                 GOBACK
+              ELSE
+                 NEXT SENTENCE
+           ELSE
+              DISPLAY 'ERROR EN LOCKY :' OPC-RET-COD
+              MOVE 100 TO RETURN-CODE
+              GOBACK.
+           ADD 1 TO LEIDOS-OPC
+           MOVE OPC-COD-COPC              TO LLAVE-2B
+           MOVE OPC-IIC-IOPC              TO LLAVE-1B.
+           MOVE OPC-FEC-FINP              TO FEC-WS
+           MOVE SPACES                    TO SW-OPC
+           IF TF (J1) = FEC-WS
+              PERFORM PROCESO UNTIL SW-OPC = 'FIN'.
+       LEER-OPC.
+      *----------
+           MOVE SPACES                   TO OPC-VALUE
+           MOVE TF (J1)                  TO OPC-VALUE
+           MOVE 'REDNX'                  TO OPC-COMMAND
+           MOVE 'OPC03'                  TO OPC-KEY
+           CALL 'DBNTRY' USING UIB REQ-AREA-OPC OPC ELEM-LIST-OPC.
+           IF OPC-RET-COD NOT = SPACES AND NOT = '14'
+              THEN
+               DISPLAY 'ERROR EN REDNX:' OPC-RET-COD ' O P C'
+               MOVE HIGH-VALUES TO LLAVE-B
+               MOVE 'FIN' TO SW-OPC
+              ELSE
+               IF OPC-RET-COD  = '14'
+                  THEN
+                   MOVE HIGH-VALUES TO LLAVE-B
+                   MOVE 'FIN' TO SW-OPC
+                  ELSE
+                   IF OPC-RET-COD = SPACES
+                      THEN
+                       ADD 1 TO LEIDOS-OPC
+                       MOVE OPC-COD-COPC TO LLAVE-2B
+                       MOVE OPC-IIC-IOPC TO LLAVE-1B
+                       MOVE OPC-FEC-FINP TO FEC-WS
+                       IF FEC-WS = TF (J1)
+                          THEN
+                           NEXT SENTENCE
+                          ELSE
+                           MOVE 'FIN' TO SW-OPC
+                      ELSE
+                       MOVE HIGH-VALUES TO LLAVE-B
+                       MOVE 'FIN' TO SW-OPC.
+       PROCESO.
+      *---------
+      *    DISPLAY 'EN PROCESO '.
+      **** MOVE OPC-FEC-FINP TO FEC-WS.
+           MOVE ZEROS TO REG-SORT1
+           MOVE SPACES TO REG-SORT2
+           MOVE 0 TO SW-ERROR-W SW-MODIF-W
+           MOVE ZEROES TO FECHA1-WS FECHA2-WS
+           MOVE ZEROES TO CIB-COLOC-CONV-IBM-REG
+           MOVE SPACES TO ERRORES
+           MOVE SPACES TO ERR-PARTE-COMUN
+      **** IF ((FEC-WS = TF (1)) OR (FEC-WS = TF (2))  OR
+      ****     (FEC-WS = TF (3)) OR (FEC-WS = TF (4))  OR
+      ****     (FEC-WS = TF (5)) OR (FEC-WS = TF (6))  OR
+      ****     (FEC-WS = TF (7)) OR (FEC-WS = TF (8))  OR
+      ****     (FEC-WS = TF (9)) OR (FEC-WS = TF (10)))
+      ****     THEN
+           IF OPC-MSC-STAT = 'A'
+              THEN
+               IF OPC-COD-TOPC = 'D'
+                  THEN
+                   IF OPC-VAL-SCRE > 0
+                      THEN
+                       MOVE 0 TO SW-SUCURSAL
+                       PERFORM PROCESO-SUCURSAL
+                       IF SW-SUCURSAL = 0
+                          THEN
+                       DISPLAY 'OPC-KEY-IOPC :' OPC-KEY-IOPC
+                           PERFORM LEER-TABLAS
+                           ADD 1 TO PROCESADOS-OPC
+      *                  DISPLAY '***********************************'
+      *                DISPLAY 'OPC-FEC-FINP :' OPC-FEC-FINP
+                          PERFORM MOVER-CAMPOS
+                          MOVE 0 TO J
+                          MOVE CIB-COLOC-CONV-IBM-REG TO REG-SORT1
+                          PERFORM MOVER-ERROR VARYING I FROM 1 BY 1
+                          UNTIL I > 50
+                          IF SW-ERROR-W = 0
+                             THEN
+                               PERFORM GENERAR-ARCHIVO-SALIDA
+                              MOVE CIB-COLOC-CONV-IBM-REG TO REG-SORT1
+                              RELEASE REG-SORT
+                             ELSE
+                             RELEASE REG-SORT.
+
+                 PERFORM LEER-OPC.
+       PROCESO-SUCURSAL.
+      *------------------
+           IF TIPO-PROCESO-WS = 'T'
+              THEN
+               NEXT SENTENCE
+              ELSE
+               PERFORM SUCURSAL-A-INCLUIR.
+       GENERAR-ARCHIVO-SALIDA.
+      *------------------------
+                   PERFORM GET-VEN.
+                   IF SW-ERROR-W = 0
+                      THEN
+                       PERFORM GENERAR-A1
+                      ELSE
+                       PERFORM MOVER-ERROR VARYING I FROM 1 BY 1
+                       UNTIL I > 50.
+
+       SUCURSAL-A-INCLUIR.
+      *--------------------
+           SET TCX                     TO  1.
+           SEARCH PILOTO  AT END
+                               MOVE 1 TO SW-SUCURSAL
+                          WHEN PIL-SUCUR (TCX) = OPC-COD-COPC
+                               MOVE 0 TO SW-SUCURSAL.
+
+
+
+
+
+
+       LEER-TABLAS.
+      *-------------
+           PERFORM LEER-DLC
+           PERFORM LEER-RDC-DD
+           PERFORM LEER-RDC-DI
+           PERFORM LEER-DCC
+           PERFORM LEER-TABLA-OPE
+           PERFORM LEER-ICG.
+           PERFORM LEER-CYA.
+       LEER-DLC.
+      *---------
+           MOVE ZEROS           TO RUT-DD
+           MOVE '0'             TO DV-DD
+           MOVE 0               TO PER-GRACIA-WS
+           MOVE 0               TO SW-PER-GRACIA
+           MOVE 0               TO CONTA-AMTZ
+           MOVE 0               TO CONTA-AMTZ2
+           MOVE 0               TO SW-01
+           MOVE 0               TO SW-DLC
+           MOVE 0               TO SW-DLC1
+           MOVE SPACES          TO DLC-VALUE
+           MOVE OPC-KEY-IOPC    TO DLC-CIC-IOPC
+           MOVE 001             TO DLC-NUM-IDLC
+           MOVE DLC-KEY-IDLC    TO DLC-VALUE
+           MOVE DLC-KEY-IDLC    TO DLC-WS
+           MOVE 'LOCKY'         TO DLC-COMMAND
+           MOVE 'DLC00'         TO DLC-KEY
+           CALL 'DBNTRY' USING UIB REQ-AREA-DLC DLC ELEM-LIST-DLC.
+           IF DLC-RET-COD = SPACES
+              THEN
+               MOVE 'REDLE'       TO DLC-COMMAND
+               MOVE 'DLC00'       TO DLC-KEY
+               CALL 'DBNTRY' USING UIB REQ-AREA-DLC DLC ELEM-LIST-DLC
+               IF DLC-RET-COD NOT = SPACES
+                  THEN DISPLAY 'ERROR EN REDLE (DLC) :' DLC-RET-COD
+                  ELSE
+                   IF OPC-CIC-IOPC = DLC-CIC-IOPC
+                      THEN ADD 1 TO LEIDOS-DLC
+                           ADD 1 TO PROCESADOS-DLC
+                           IF DLC-IND-SCTB = 'MUL'
+                              THEN
+                               MOVE SPACES TO DLC-IND-SCTB
+                              ELSE
+                               NEXT SENTENCE
+                      ELSE
+                       MOVE 1 TO SW-ERROR-W
+                       MOVE 'NO ENCONTRO REG. DLC V/S OPC'
+                                 TO MENSA-WS (2)
+                       MOVE 'NO ENCONTRO REG. DLC V/S OPC'
+                       TO ERR-DESCRIP
+                       MOVE OPC-IIC-IOPC TO ERR-CODIGO-OPER
+                       PERFORM GRABAR-ERROR
+              ELSE
+               MOVE 1 TO SW-ERROR-W
+               MOVE 'NO ENCONTRO REG. DLC V/S OPC (LOCKY)'
+                                 TO MENSA-WS (2)
+                       MOVE 'NO ENCONTRO REG. DLC (LOCKY)'
+                       TO ERR-DESCRIP
+                       MOVE OPC-IIC-IOPC TO ERR-CODIGO-OPER
+                       PERFORM GRABAR-ERROR.
+
+
+       LEER-RDC-DD.
+      *------------
+           MOVE 0               TO SW-RDC
+           MOVE 0               TO SW-RDC1
+           MOVE SPACES          TO RDC-VALUE
+           MOVE OPC-KEY-IOPC    TO RDC-A
+           MOVE 000             TO RDC-B
+           MOVE RDC-WS          TO RDC-VALUE
+           MOVE 'LOCKY'         TO RDC-COMMAND
+           MOVE 'RDC01'         TO RDC-KEY
+           CALL 'DBNTRY' USING UIB REQ-AREA-RDC RDC ELEM-LIST-RDC.
+           IF RDC-RET-COD = SPACES
+              THEN
+               MOVE 'REDLE'       TO RDC-COMMAND
+               MOVE 'RDC01'       TO RDC-KEY
+               CALL 'DBNTRY' USING UIB REQ-AREA-RDC RDC ELEM-LIST-RDC
+               IF RDC-RET-COD NOT = SPACES
+                  THEN DISPLAY 'ERROR EN REDLE (RDC) :' RDC-RET-COD
+                  ELSE
+                   IF RDC-WS = RDC-KEY-IDLC
+                      THEN ADD 1 TO LEIDOS-RDC
+                           ADD 1 TO PROCESADOS-RDC
+                           MOVE SPACES           TO DBC-VALUE
+                           MOVE RDC-CIC-ICLI     TO DBC-VALUE
+                           MOVE 'REDKY'          TO DBC-COMMAND
+                           MOVE 'DBC00'          TO DBC-KEY
+                           CALL 'DBNTRY' USING UIB REQ-AREA-DBC DBC
+                                  ELEM-LIST-DBC
+                           IF DBC-RET-COD NOT = SPACES
+                              THEN DISPLAY 'ERROR EN REDKY (DBC):'
+                                 DBC-RET-COD ' ' DBC-VALUE ' ' RDC-VALUE
+                               DISPLAY 'CLAVE:' DBC-KEY
+                               MOVE 1 TO SW-ERROR-W
+                               MOVE 'ERROR EN REDKY (DBC)'
+                                 TO MENSA-WS (3)
+                               MOVE DBC-RET-COD TO RET-COD-WS (3)
+                               MOVE 'ERROR EN REDKY (DBC)'
+                               TO ERR-DESCRIP
+                               MOVE OPC-IIC-IOPC TO ERR-CODIGO-OPER
+                               PERFORM GRABAR-ERROR
+                               MOVE 1 TO SW-DI
+                               MOVE ZEROS    TO RUT-DD
+                               MOVE '0'      TO DV-DD
+                              ELSE
+                               MOVE DBC-NUM-ICLI TO RUT-DD
+                               MOVE DBC-VRF-ICLI TO DV-DD
+                     ELSE
+                      MOVE ZEROS TO RUT-DD
+                      MOVE '0'   TO DV-DD
+                      MOVE 1 TO SW-ERROR-W
+                      MOVE 'NO ENCONTRO REG. RDC V/S OPC'
+                                 TO MENSA-WS (5)
+                       MOVE 'NO ENCONTRO REG. RDC V/S OPC'
+                       TO ERR-DESCRIP
+                       MOVE OPC-IIC-IOPC TO ERR-CODIGO-OPER
+                       PERFORM GRABAR-ERROR
+              ELSE
+               MOVE ZEROS TO RUT-DD
+               MOVE '0'   TO DV-DD
+               MOVE 1 TO SW-ERROR-W
+               MOVE 'NO ENCONTRO REG. RDC V/S OPC D.D.(LOCKY)'
+                                 TO MENSA-WS (5)
+                       MOVE 'NO ENCONTRO REG. RDC (LOCKY)'
+                       TO ERR-DESCRIP
+                       MOVE OPC-IIC-IOPC TO ERR-CODIGO-OPER
+                       PERFORM GRABAR-ERROR.
+
+
+
+
+
+
+       LEER-RDC-DI.
+      *-------------
+              MOVE 0 TO SW-RDC
+              MOVE 0 TO SW-RDC1
+              MOVE SPACES        TO RDC-VALUE
+              MOVE OPC-KEY-IOPC  TO RDC-A
+              MOVE 001           TO RDC-B
+              MOVE RDC-WS        TO RDC-VALUE
+           MOVE 'LOCKY'         TO RDC-COMMAND
+           MOVE 'RDC01'         TO RDC-KEY
+           CALL 'DBNTRY' USING UIB REQ-AREA-RDC RDC ELEM-LIST-RDC.
+           IF RDC-RET-COD = SPACES
+              THEN
+               MOVE 'REDLE'       TO RDC-COMMAND
+               MOVE 'RDC01'       TO RDC-KEY
+               CALL 'DBNTRY' USING UIB REQ-AREA-RDC RDC ELEM-LIST-RDC
+               IF RDC-RET-COD NOT = SPACES
+                  THEN DISPLAY 'ERROR EN REDLE (RDC1) :' RDC-RET-COD
+                  ELSE
+                   IF RDC-WS = RDC-KEY-IDLC
+                      THEN ADD 1 TO LEIDOS-RDC1
+                           ADD 1 TO PROCESADOS-RDC1
+                           MOVE SPACES           TO DBC-VALUE
+                           MOVE RDC-CIC-ICLI     TO DBC-VALUE
+                           MOVE 'REDKY'          TO DBC-COMMAND
+                           MOVE 'DBC00'          TO DBC-KEY
+                           CALL 'DBNTRY' USING UIB REQ-AREA-DBC DBC
+                                  ELEM-LIST-DBC
+                           IF DBC-RET-COD NOT = SPACES
+                              THEN DISPLAY 'ERROR EN REDKY (DBC):'
+                                 DBC-RET-COD ' ' DBC-VALUE ' ' RDC-VALUE
+                               DISPLAY 'CLAVE:' DBC-KEY
+                               MOVE 1 TO SW-ERROR-W
+                               MOVE 'ERROR EN REDKY (DBC)'
+                                 TO MENSA-WS (6)
+                               MOVE DBC-RET-COD TO RET-COD-WS (6)
+                              MOVE 'ERROR EN REDKY (DBC)'
+                              TO ERR-DESCRIP
+                              MOVE OPC-IIC-IOPC TO ERR-CODIGO-OPER
+                               PERFORM GRABAR-ERROR
+                               MOVE 1 TO SW-DI
+                               MOVE ZEROS    TO RUT-DI
+                               MOVE '0'      TO DV-DI
+                              ELSE
+                               MOVE DBC-NUM-ICLI TO RUT-DI
+                               MOVE DBC-VRF-ICLI TO DV-DI
+                     ELSE
+                      MOVE ZEROS TO RUT-DI
+                      MOVE '0'   TO DV-DI
+                      DISPLAY 'NO TIENE D.INDIRECTO : ' RDC-VALUE
+              ELSE DISPLAY 'ERROR EN LOCKY (RDC1) :' DLC-RET-COD
+               MOVE ZEROS TO RUT-DI
+               MOVE '0'   TO DV-DI.
+
+
+
+       LEER-DCC.
+      *----------
+              MOVE ZEROES           TO WS-ANOV
+              MOVE ZEROES           TO WS-MESV
+              MOVE ZEROES           TO WS-DIAV
+
+      *******************************************************
+
+              MOVE ZEROES          TO COLOCACION-WS
+              MOVE 'DCC'           TO DCC-COD-TTAB.
+              MOVE 'CAP'           TO DCC-MSC-TCCT.
+              MOVE SPACES          TO DCC-VALUE
+              MOVE OPC-COD-VCOC    TO DCC-COD-VCAM
+              MOVE OPC-COD-TOOC    TO DCC-COD-TOCR
+              MOVE OPC-COD-AOOC    TO DCC-COD-AOCR
+              MOVE DLC-COD-PLZO    TO DCC-COD-PLZO
+              MOVE DLC-IND-SCRT    TO DCC-IND-SCRT
+              MOVE DLC-IND-SCTB    TO DCC-IND-SCTB
+              MOVE DLC-IND-SCBZ    TO DCC-IND-SCBZ
+              MOVE DCC-COD-TABL    TO DCC-VALUE
+              MOVE 'REDKY'         TO DCC-COMMAND
+              MOVE 'DCC00'         TO DCC-KEY
+              CALL 'DBNTRY' USING UIB REQ-AREA-DCC DCC ELEM-LIST-DCC.
+              IF DCC-RET-COD = SPACES
+                 THEN
+                  MOVE DCC-CIC-TCCT TO OPERAC-WS
+                  MOVE OPC-GLS-NOPC TO SERIAL-WS
+                 ELSE
+                  MOVE 1 TO SW-ERROR-W
+                  MOVE OPC-IIC-IOPC TO COLOCACION-WS
+                  MOVE 'NO ACCESO TABLA DCC   ' TO MENSA-WS (33)
+                  MOVE DCC-RET-COD TO RET-COD-WS (33)
+                  MOVE DCC-VALUE   TO MENSA-WS (35)
+                              MOVE 'NO ACCESO TABLA DCC'
+                              TO ERR-DESCRIP
+                              MOVE OPC-IIC-IOPC  TO ERR-CODIGO-OPER
+                              PERFORM GRABAR-ERROR.
+
+      ******************************************************************
+      ******************************************************************
+           MOVE OPC-COD-SOPC TO SOPC-WS1
+           MOVE OPC-IND-SOPC TO SOPC-WS2
+
+           MOVE 0 TO SW-999
+           IF SOPC-WS = '999'
+              MOVE 1 TO SW-999.
+
+
+           IF OPC-COD-COPC NOT = OPC-COD-OFOC
+              MOVE 1 TO SW-ERROR-W
+              MOVE 'DEBE ING.SUC.EN C.ASIG'
+              TO MENSA-WS (25)
+              MOVE OPC-COD-COPC TO RET-COD-WS (25)
+              MOVE 'DEBE ING.SUC.EN C.ASIG'
+              TO ERR-DESCRIP
+              MOVE OPC-IIC-IOPC TO ERR-CODIGO-OPER
+              PERFORM GRABAR-ERROR.
+
+       LEER-TABLA-OPE.
+      ******************************************************************
+
+             MOVE 0 TO SW-UF
+             MOVE 9 TO AUX-I13
+             MOVE OPERAC-WS TO OPESC-CODI-OPE
+             READ TABLAOPE.
+             IF FS-TABOPE NOT = 0
+                THEN
+                 MOVE 1 TO SW-ERROR-W SW-UF
+                 MOVE 'NO ACCESO TABLA OPERAC' TO MENSA-WS (20)
+                 MOVE FS-TABOPE TO RET-COD-WS (20)
+                 MOVE 'NO ACCESO TABLA OPERAC'
+                 TO ERR-DESCRIP
+                 MOVE OPC-IIC-IOPC  TO ERR-CODIGO-OPER
+                 PERFORM GRABAR-ERROR
+      *          DISPLAY 'NO ACCESO TABLA OPERAC : ' FS-TABOPE
+      *          DISPLAY 'OPERAC-WS:' OPERAC-WS ' ' OPESC-CODI-OPE
+                ELSE
+                 MOVE OPESC-I14 TO CIB-IND-TIPO-CRED
+                 MOVE OPESC-I13 TO AUX-I13.
+
+      *********************************************************
+
+       LEER-ICG.
+      *---------
+           MOVE 0               TO SW-ICG
+           MOVE 0               TO SW-ICG1
+           MOVE SPACES          TO ICG-VALUE
+           MOVE OPC-KEY-IOPC    TO ICG-CIC-IOPC
+           MOVE 000             TO ICG-NUM-ICAN
+      *
+      *
+           MOVE SPACES          TO ICG-CIC-IOPV
+           MOVE 0               TO ICG-NUM-IVCT
+           MOVE 'INT'           TO ICG-IND-TTAS
+           MOVE SPACES          TO ICG-FEC-FINI
+      *
+           MOVE ICG-KEY-IICG    TO ICG-VALUE
+      *    MOVE ICG-KEY-ICAN    TO ICG-VALUE
+           MOVE ICG-KEY-ICAN    TO ICG-WS
+           MOVE 'LOCKY'         TO ICG-COMMAND
+           MOVE 'ICG00'         TO ICG-KEY
+           CALL 'DBNTRY' USING UIB REQ-AREA-ICG ICG ELEM-LIST-ICG.
+           IF ICG-RET-COD = SPACES
+              THEN
+               MOVE 'REDLE'       TO ICG-COMMAND
+               MOVE 'ICG00'       TO ICG-KEY
+               CALL 'DBNTRY' USING UIB REQ-AREA-ICG ICG ELEM-LIST-ICG
+               IF ICG-RET-COD NOT = SPACES
+                  THEN DISPLAY 'ERROR EN REDLE (ICG) :' ICG-RET-COD
+                  ELSE
+                   IF ICG-WS = ICG-KEY-ICAN
+                      THEN ADD 1 TO LEIDOS-ICG
+                           ADD 1 TO PROCESADOS-ICG
+                           MOVE ICG-COD-CVTI TO ICG-COD-CVTI-WS
+                           MOVE ICG-MSC-PBTI TO ICG-MSC-PBTI-WS
+                           MOVE ICG-SGV-SPRD TO ICG-SGV-SPRD-WS
+                           MOVE ICG-SGV-TINT TO ICG-SGV-TINT-WS
+                      ELSE
+                       MOVE 1 TO SW-ERROR-W
+                       MOVE 'NO ENCONTRO REG. ICG V/S OPC'
+                                 TO MENSA-WS (12)
+                      MOVE 'NO ACCESO REG. ICG'
+                      TO ERR-DESCRIP
+                      MOVE OPC-IIC-IOPC  TO ERR-CODIGO-OPER
+                      PERFORM GRABAR-ERROR
+              ELSE
+                       MOVE 1 TO SW-ERROR-W
+                       MOVE 'NO ENCONTRO REG. ICG V/S OPC (LOCKY)'
+                                 TO MENSA-WS (12)
+                      MOVE 'NO ACCESO REG. ICG (LOCKY)'
+                      TO ERR-DESCRIP
+                      MOVE OPC-IIC-IOPC  TO ERR-CODIGO-OPER
+                      PERFORM GRABAR-ERROR.
+
+
+       LEER-CYA.
+      *---------
+           MOVE 0               TO SW-CYA
+           MOVE 0               TO SW-CYA9
+           MOVE SPACES          TO CYA-VALUE
+           MOVE OPC-KEY-IOPC    TO CYA-CIC-IOPC
+           MOVE '000'           TO CYA-NUM-ICAN
+           MOVE 1               TO CYA-NUM-ICYA
+           MOVE CYA-KEY-ICYA    TO CYA-VALUE
+           MOVE CYA-KEY-ICYA    TO CYA-WS
+           MOVE 'LOCKY'         TO CYA-COMMAND
+           MOVE 'CYA00'         TO CYA-KEY
+           CALL 'DBNTRY' USING UIB REQ-AREA-CYA CYA ELEM-LIST-CYA.
+           IF CYA-RET-COD = SPACES
+              THEN
+               MOVE 'REDLE'       TO CYA-COMMAND
+               MOVE 'CYA00'       TO CYA-KEY
+               CALL 'DBNTRY' USING UIB REQ-AREA-CYA CYA ELEM-LIST-CYA
+               IF CYA-RET-COD NOT = SPACES
+                  THEN DISPLAY 'ERROR EN REDLE (CYA) :' CYA-RET-COD
+                  ELSE
+                   IF OPC-CIC-IOPC = CYA-CIC-IOPC
+                      THEN ADD 1 TO LEIDOS-CYA
+                           ADD 1 TO PROCESADOS-CYA
+                           MOVE 1 TO SW-CYA9
+                      ELSE
+                       NEXT SENTENCE
+      ****             MOVE 1 TO SW-ERROR-W
+      ****             MOVE 'NO ENCONTRO REG. CYA V/S OPC'
+      ****                           TO MENSA-WS (14)
+      ****            MOVE 'NO ACCESO REG. CYA'
+      ****            TO ERR-DESCRIP
+      ******          MOVE OPC-IIC-IOPC  TO ERR-CODIGO-OPER
+      *****           PERFORM GRABAR-ERROR
+              ELSE
+               NEXT SENTENCE.
+      *****            MOVE 1 TO SW-ERROR-W
+      ****             MOVE 'NO ENCONTRO REG. CYA V/S OPC (LOCKY)'
+      ****                       TO MENSA-WS (14)
+      ****            MOVE 'NO ACCESO REG. CYA (LOCKY)'
+      ****            TO ERR-DESCRIP
+      ******          MOVE OPC-IIC-IOPC  TO ERR-CODIGO-OPER
+      ****            PERFORM GRABAR-ERROR.
+
+
+
+
+
+
+       FIN-LEER-BD.
+      *------------
+       MOVER-CAMPOS.
+      *--------------
+      *****  MOVE ZEROS TO CIB-COLOC-CONV-IBM-REG
+             MOVE OPC-COD-OFOC TO CIB-SUCURSAL
+             IF OPC-COD-OFOC = '001'
+                THEN
+                 MOVE 1 TO SW-ERROR-W
+                 MOVE 'SUCURSAL ERRONEA' TO MENSA-WS (49)
+                 MOVE SPACES  TO RET-COD-WS (49)
+                      MOVE 'SUCURSAL ERRONEA'
+                      TO ERR-DESCRIP
+                      MOVE OPC-IIC-IOPC  TO ERR-CODIGO-OPER
+                      PERFORM GRABAR-ERROR.
+
+             MOVE RUT-DD  TO RUT-PASO
+             MOVE RUT-NUM TO CIB-RUT-DD-DIG
+             MOVE DV-DD   TO CIB-RUT-DD-VER
+
+              MOVE RUT-DI  TO RUT-PASO
+              MOVE RUT-NUM TO CIB-RUT-DI-DIG
+              MOVE DV-DI   TO CIB-RUT-DI-VER
+      *      DISPLAY 'RUT-DI:' RUT-DI ' ' CIB-RUT-DI-DIG
+             IF CIB-RUT-DI-DIG = 0
+                MOVE CIB-RUT-DD-DIG TO CIB-RUT-DI-DIG
+                MOVE CIB-RUT-DD-VER TO CIB-RUT-DI-VER.
+
+
+
+
+                    MOVE 0 TO CIB-CTA-CTE-ABONO
+
+      *             MOVE 0 TO CIB-IMPUTACION.
+
+      *      IF OPC-COD-TOOC = 'BGT'
+      ****      MOVE 3 TO CIB-IMPUTACION.
+
+
+                      MOVE COLOCACION-WS TO CIB-CODIGO-OPER
+             PERFORM ACCESAR-CREDITO.
+
+
+             MOVE DLC-VAL-IMPU TO DLC-VAL-IMPU-WS
+             IF OPC-COD-CVOC = '998'
+                THEN
+                 IF SW-UF = 0
+                    THEN
+                     PERFORM CONVERTIR-UF
+                    ELSE
+                     NEXT SENTENCE
+                ELSE
+                 MOVE OPC-VAL-CRED TO VALOR-DL3475
+                 MOVE OPC-VAL-CRED TO VALOR-WSX
+                 MOVE OPC-VAL-CRED TO CIB-MONTO-COLOC.
+
+
+              MOVE 0 TO CIB-MONTO-CUOTA
+
+              MOVE OPC-FEC-FCOL TO FECHA-WSS
+              MOVE ANO2-WSS  TO CIB-FECHA-PAGARE-AA
+              MOVE MES-WSS   TO CIB-FECHA-PAGARE-MM
+              MOVE DIA-WSS   TO CIB-FECHA-PAGARE-DD.
+
+              MOVE ANO2-WSS  TO CIB-FECHA-DE-CURSE-AA
+              MOVE MES-WSS   TO CIB-FECHA-DE-CURSE-MM
+              MOVE DIA-WSS   TO CIB-FECHA-DE-CURSE-DD
+
+      ****    DISPLAY '****************************'
+      ****    DISPLAY 'CLAVE 1 : ' OPC-CIC-IOPC
+      ****    DISPLAY 'INDICAD : ' OPC-IND-RENO
+           IF (OPC-IND-RENO = 'PRO' AND
+              (DLC-CIC-IOCO NOT = OPC-CIC-IOPC)
+              AND (DLC-CIC-IOCO NOT = SPACES))
+                 PERFORM ACCESAR-OPC-DLC.
+
+
+              IF OPC-COD-CVOC = '998'
+                 THEN
+                  MOVE 2 TO CIB-COD-MONED
+                 ELSE
+                  MOVE 1 TO CIB-COD-MONED.
+
+                  MOVE OPC-NUM-VCOR TO CIB-NRO-VCTOS.
+
+              IF CIB-IND-TIPO-CRED = 05
+                 THEN
+                  MOVE 0 TO CIB-NRO-VCTOS
+                  MOVE 0 TO CIB-FECHA-PRIM-VCTO-AA
+                  MOVE 0 TO CIB-FECHA-PRIM-VCTO-MM
+                  MOVE 0 TO CIB-FECHA-PRIM-VCTO-DD
+                 ELSE
+                  NEXT SENTENCE.
+
+
+              MOVE 0             TO CIB-PERIODO-DE-GRACIA
+
+
+
+
+             MOVE OPC-IND-GARA      TO IND-GARA-WS
+             MOVE IND-GARA-WSS      TO CIB-CODIGO-GARANTIA
+
+              MOVE ICG-MSC-BCTI    TO CIB-TIPO-INTERES
+
+      ****    IF OPERAC-WS = '107'
+      ****       THEN
+      ****        IF AUX-I13 = 0
+      ****           THEN
+      ****            MOVE 'V' TO CIB-TIPO-INTERES
+      ****           ELSE
+
+              IF AUX-I13 = 1
+                 THEN
+                  MOVE 'A' TO CIB-TIPO-INTERES
+                 ELSE
+                  MOVE 'V' TO CIB-TIPO-INTERES.
+
+      ****                NEXT SENTENCE
+      ****       ELSE NEXT SENTENCE.
+
+              MOVE SPACES          TO CIB-CALID-COLOC
+              MOVE ZEROES          TO CIB-RUT-EMPRESA
+              MOVE DLC-VAL-GNOT    TO CIB-GASTO-NOTARIAL
+              MOVE ZEROES          TO CIB-MESES-DIFERIDO
+              MOVE ZEROES          TO CIB-COD-DISTR
+              MOVE ZEROES          TO CIB-COD-ADICIONAL
+              MOVE OPC-VAL-SEGD    TO CIB-SEGURO-DEGRAVAMEN
+
+                  MOVE OPC-COD-CDOC  TO IND-DEST-WS
+                  MOVE IND-DEST-WSSS TO CIB-DESTINO
+
+             MOVE 0 TO CIB-OTRO-DEUDOR-DIR
+             MOVE 0 TO CIB-OTRO-DEUDOR-IND
+                 MOVE 0 TO CIB-PERIODO-INTERES.
+                 IF SW-UF = 0
+                    THEN
+                     IF OPESC-I14 = 08 OR 13
+                        MOVE 1 TO CIB-PERIODO-INTERES.
+                 IF SW-UF = 0
+                    THEN
+                     IF (OPESC-I16 = 64 OR 65)
+                        THEN IF OPESC-I14 = 08
+                         MOVE 1 TO CIB-PERIODO-INTERES.
+
+             MOVE 0             TO CIB-PERIODO-GRACIA-AMORT
+             MOVE 0             TO CIB-PERIODICIDAD-AMORT
+
+             MOVE 0 TO CLAVE-OK
+      ****   PERFORM BDA-GENERA-CLAVE-LINEA UNTIL CLAVE-OK = 1.
+      ****   MOVE CLAVE-LINEA TO CIB-CLAVE-LINEA
+      ****   PERFORM LEER-RCE
+      ****   MOVE RCE-KEY-SAFE           TO CIB-CLAVE-LINEA
+             MOVE DLC-COD-COCO           TO CLAVE-LINEA-WS1
+             MOVE DLC-IIC-IOCO           TO CLAVE-LINEA-WS2
+             MOVE CLAVE-LINEA-WS         TO CIB-CLAVE-LINEA
+
+
+              IF CIB-IND-TIPO-CRED NOT = 05
+                 THEN
+                  MOVE 0 TO CIB-DIAS.
+
+             IF CIB-CODIGO-GARANTIA = 2
+                THEN
+                 IF CIB-RUT-DI NOT = CIB-RUT-DD
+                    THEN
+                     IF CIB-RUT-DI-DIG NOT = ZEROS
+                        THEN
+                         NEXT SENTENCE
+                        ELSE
+                         MOVE 1 TO SW-ERROR-W
+                         MOVE 'DEBE INFORMARSE AVAL' TO MENSA-WS (7)
+                         MOVE 'DEBE INFORMARSE AVAL' TO ERR-DESCRIP
+                         MOVE OPC-IIC-IOPC  TO ERR-CODIGO-OPER
+                         PERFORM GRABAR-ERROR
+                    ELSE
+                     MOVE 1 TO SW-ERROR-W
+                     MOVE 'DEBE INFORMARSE AVAL' TO MENSA-WS (7)
+                     MOVE 'DEBE INFORMARSE AVAL' TO ERR-DESCRIP
+                     MOVE OPC-IIC-IOPC  TO ERR-CODIGO-OPER
+                     PERFORM GRABAR-ERROR
+                ELSE
+                 NEXT SENTENCE.
+
+               MOVE 1 TO CIB-COBRANZA.
+
+             IF SW-CYA9 = 1
+                THEN
+                 PERFORM RUTINA-CYA
+                ELSE
+                 MOVE 3 TO CIB-IMPUTACION.
+      ****   IF OPC-COD-TOOC = 'BGT'
+      ****      MOVE 3 TO CIB-IMPUTACION.
+      ****
+      ****   IF SW-999 = 1
+      ****      MOVE 3 TO CIB-IMPUTACION.
+
+       FIN-MOVER-CAMPOS.
+      *-----------------
+       ACCESAR-OPC-DLC.
+      *----------------
+              MOVE OPC-CIC-IOPC    TO CLAVE-OPC
+              MOVE SPACES          TO OPC-VALUE
+              MOVE DLC-CIC-IOCO    TO OPC-CIC-IOPC
+              MOVE OPC-CIC-IOPC    TO OPC-VALUE
+              MOVE 'REDKY'         TO OPC-COMMAND
+              MOVE 'OPC00'         TO OPC-KEY
+              CALL 'DBNTRY' USING UIB REQ-AREA-OPC OPC ELEM-LIST-OPC.
+              IF OPC-RET-COD = SPACES
+                 THEN
+                  NEXT SENTENCE
+                 ELSE
+                  MOVE ZEROS TO OPC-FEC-FCOL
+                  MOVE 1 TO SW-ERROR-W
+                  MOVE 'NO ACCESO OPC CON CRED.ORIG' TO MENSA-WS (46)
+                  MOVE OPC-RET-COD  TO RET-COD-WS (46)
+                  MOVE DLC-CIC-IOCO TO MENSA-WS (47)
+                  MOVE 'NO ACCESO OPC CON CRED.ORIG' TO ERR-DESCRIP
+                  MOVE OPC-IIC-IOPC  TO ERR-CODIGO-OPER
+                  PERFORM GRABAR-ERROR.
+      ****    DISPLAY 'CLAVE 2 : ' OPC-CIC-IOPC
+      ****    DISPLAY 'FECHA 2 : ' OPC-FEC-FCOL
+
+
+
+              MOVE OPC-FEC-FCOL TO FECHA-WSS
+              MOVE ANO2-WSS  TO CIB-FECHA-PAGARE-AA
+              MOVE MES-WSS   TO CIB-FECHA-PAGARE-MM
+              MOVE DIA-WSS   TO CIB-FECHA-PAGARE-DD.
+
+              MOVE ANO2-WSS  TO CIB-FECHA-DE-CURSE-AA
+              MOVE MES-WSS   TO CIB-FECHA-DE-CURSE-MM
+              MOVE DIA-WSS   TO CIB-FECHA-DE-CURSE-DD
+
+              MOVE SPACES          TO OPC-VALUE
+              MOVE CLAVE-OPC       TO OPC-CIC-IOPC
+              MOVE OPC-CIC-IOPC    TO OPC-VALUE
+              MOVE 'REDKY'         TO OPC-COMMAND
+              MOVE 'OPC00'         TO OPC-KEY
+              CALL 'DBNTRY' USING UIB REQ-AREA-OPC OPC ELEM-LIST-OPC.
+              IF OPC-RET-COD = SPACES
+                 THEN
+                  NEXT SENTENCE
+                 ELSE
+                  MOVE ZEROS TO OPC-FEC-FCOL
+                  MOVE 1 TO SW-ERROR-W
+                  MOVE 'NO ACCESO OPC ORIGINAL' TO MENSA-WS (23)
+                  MOVE OPC-RET-COD  TO RET-COD-WS (23)
+                  MOVE CLAVE-OPC    TO MENSA-WS (24)
+                  MOVE 'NO ACCESO OPC ORIGINAL' TO ERR-DESCRIP
+                  MOVE OPC-IIC-IOPC  TO ERR-CODIGO-OPER
+                  PERFORM GRABAR-ERROR.
+      ****    DISPLAY 'CLAVE 3 : ' OPC-CIC-IOPC
+      ****    DISPLAY 'FECHA 3 : ' OPC-FEC-FCOL
+              MOVE OPC-FEC-FCOL TO FECHA-WSS
+              MOVE ANO2-WSS  TO A1-FECHA-VENC-ANT-AA
+              MOVE MES-WSS   TO A1-FECHA-VENC-ANT-MM
+              MOVE DIA-WSS   TO A1-FECHA-VENC-ANT-DD.
+       RUTINA-CYA.
+      *-----------
+                    MOVE CYA-IND-TCYA TO CYA-IND-WS
+                    IF (CYA-IND-WS = 'CCMA' OR 'CCMM' OR 'CCOA'
+                                  OR 'CCOM')
+                       THEN
+                        MOVE 1 TO CIB-IMPUTACION
+                       ELSE
+                        IF CYA-IND-WS = 'VVTA'
+                           THEN
+                            MOVE 2 TO CIB-IMPUTACION
+                           ELSE
+                            IF CYA-IND-WS = 'CTBL'
+                               THEN
+                                MOVE 3 TO CIB-IMPUTACION
+                               ELSE
+                                MOVE 4 TO CIB-IMPUTACION.
+
+       ACCESAR-CREDITO.
+      *----------------
+             MOVE CIB-SUCURSAL    TO CRE-SUCURSAL
+             MOVE CIB-CODIGO-OPER TO CRE-CODIGO-OPER
+             MOVE CIB-RUT-DD-DIG  TO CRE-RUT-DD-NUM
+             MOVE CIB-RUT-DD-VER  TO CRE-RUT-DD-VER
+             READ CREDITO.
+             IF FS-CREDITO = 0
+                THEN
+                 MOVE 1 TO SW-ERROR-W
+                 MOVE 'CREDITO YA EXISTE ' TO MENSA-WS (31)
+                 MOVE 'CREDITO YA EXISTE ' TO ERR-DESCRIP
+                 MOVE CRE-CLAVE            TO MENSA-WS (32)
+                 MOVE OPC-IIC-IOPC         TO ERR-CODIGO-OPER
+                 PERFORM GRABAR-ERROR.
+
+      *BDA-GENERA-CLAVE-LINEA.
+      *------------------------
+
+      *    MOVE 0 TO ACUMULADO
+      *    MOVE 999 TO SUC-CLAVE
+      *    MOVE OPC-COD-OFOC TO SUC-NUMERO
+      *    PERFORM BDB-LEE-SERIAL
+      *    EXHIBIT NAMED SUC-SERIAL SUC-CLAVE
+      *    MOVE SUC-SERIAL TO SERIAL-NUMERO
+      *    ADD 1 TO SUC-SERIAL
+      *    EXHIBIT NAMED NUMERO
+      *    PERFORM BDC-RESCRIBE-SERIAL
+      *    PERFORM BDD-CALCULA-CLAVE VARYING ITX FROM 1 BY 1
+      *                              UNTIL ITX  > 10
+      *    DIVIDE ACUMULADO BY 11 GIVING ACUMULADO
+      *                           REMAINDER RESTO
+      *    IF RESTO > 1
+      *      MOVE 1 TO CLAVE-OK
+      *      COMPUTE DIGITO = 11 - RESTO
+      *      EXHIBIT NAMED NUMERO DIGITO
+      *      MOVE DIGITO TO DIGITO-CLAVE
+      *      MOVE NUMERO TO NUMERO-CLAVE.
+      *
+      *BDB-LEE-SERIAL.
+      *--------------
+      *    READ SUC-SUCURSAL
+      *    IF FS-SUCURSAL NOT = 0
+      *      DISPLAY 'ERROR AL LEER SUCURSAL STATUS = '
+      *               FS-SUCURSAL
+      *      DISPLAY 'ERROR AL LEER SUCURSAL COLPB010 CANCELADO'
+      *               UPON CONSOLE
+      *      GOBACK.
+      *BDC-RESCRIBE-SERIAL.
+      *---------------------
+      *    REWRITE REG-SUC.
+      *    IF FS-SUCURSAL NOT = 0
+      *      DISPLAY 'ERROR AL REESCRIBIR SUCURSAL STATUS = '
+      *               FS-SUCURSAL
+      *      DISPLAY 'ERROR AL REESCRIBIR SUCURSAL COLPB010 CANCELADO'
+      *               UPON CONSOLE
+      *      GOBACK.
+      *BDD-CALCULA-CLAVE.
+      *-----------------
+      *     COMPUTE ACUMULADO = ACUMULADO + (NUM-CLAVE (ITX) *
+      *                                      PON-CLAVE (ITX)).
+      *
+
+       CONVERTIR-UF.
+      *--------------
+      *                     ACCESO CON CODIGO ANTIGUO PENDIENTE
+                 IF OPESC-I9 = 1
+                    THEN
+                     PERFORM LEER-UF
+                     COMPUTE VALOR-WS ROUNDED = OPC-VAL-CRED * VALOR-WS1
+                     MOVE VALOR-WS  TO CIB-MONTO-COLOC
+                     MOVE VALOR-WS  TO VALOR-DL3475
+                    ELSE
+                     IF OPESC-I9 = 2
+                        THEN
+                         PERFORM LEER-UF
+                         COMPUTE VALOR-WSX ROUNDED = OPC-VAL-CRED *
+                                                     VALOR-WS1
+                         MOVE OPC-VAL-CRED TO CIB-MONTO-COLOC
+                         MOVE OPC-VAL-CRED TO VALOR-DL3475
+      *****            COMPUTE DLC-VAL-IMPU-WS ROUNDED = DLC-VAL-IMPU-WS
+      *****               / VALOR-WS1
+                        ELSE
+                         NEXT SENTENCE.
+       LEER-UF.
+      *---------
+           MOVE 0               TO VALOR-WS1
+           MOVE OPC-FEC-FCOL    TO CAM-FEC-FCAM (1)
+           MOVE OPC-FEC-FCOL    TO CAM-FEC-FCAM (2)
+           MOVE 0               TO CAM-MSC-TVAL (1)
+           MOVE 0               TO CAM-MSC-TVAL (2)
+           MOVE SPACES          TO CAM-VALUE
+           MOVE SPACES          TO CAM-COD-TCAM (1)
+           MOVE SPACES          TO CAM-COD-TCAM (2)
+           MOVE '998'           TO CAM-COD-CVAL (1)
+           MOVE '999'           TO CAM-COD-CVAL (2)
+           MOVE CAM-KEY-CAMB    TO CAM-VALUE
+           MOVE 'REDKY'         TO CAM-COMMAND
+           MOVE 'CAM00'         TO CAM-KEY
+           CALL 'DBNTRY' USING UIB REQ-AREA-CAM CAM ELEM-LIST-CAM.
+           IF CAM-RET-COD NOT = SPACES
+              THEN
+                  DISPLAY '------------------------'
+                  DISPLAY 'NO ACCESO CAM  COD.RET :' CAM-RET-COD
+                  DISPLAY '------------------------'
+                  DISPLAY 'REQ. AREA :' REQ-AREA-CAM
+                  DISPLAY 'CAM-VALUE:' CAM-VALUE
+                  MOVE 1 TO SW-ERROR-W
+                  MOVE 'NO ACCESO REG. TABLA CAM (REDKY)'
+                        TO MENSA-WS (22)
+                  MOVE CAM-RET-COD TO RET-COD-WS (22)
+                      MOVE 'NO ACCESO TABLA CAM'
+                      TO ERR-DESCRIP
+                      MOVE OPC-IIC-IOPC         TO ERR-CODIGO-OPER
+                      PERFORM GRABAR-ERROR
+              ELSE
+               MOVE CAM-SGV-VCAM IN CAM TO VALOR-WS1.
+
+
+       IMPRIMIR.
+      *----------
+           PERFORM RTN-IMPRESION.
+           RETURN SORTWK AT END MOVE 'FIN' TO FIN-SORT.
+       RTN-IMPRESION.
+      *---------------
+           PERFORM IMPRIME-LINEA-BASE-DATOS
+           MOVE SPACES      TO LINEA
+           WRITE LINEA      AFTER 1
+           ADD 1 TO CL.
+
+       ENCABEZADO.
+      *------------
+           PERFORM LEER-SUCURSAL.
+           ADD 1   TO CP.
+           MOVE CP TO PAG-T1
+           WRITE LINEA FROM TIT-1 AFTER CANAL-1
+           WRITE LINEA FROM TIT-2 AFTER 1
+           WRITE LINEA FROM TIT-2A AFTER 1
+           WRITE LINEA FROM RAYA  AFTER 2
+           WRITE LINEA FROM TIT-3 AFTER 2
+           WRITE LINEA FROM TIT-4 AFTER 2
+           WRITE LINEA FROM RAYA  AFTER 1
+           MOVE 11 TO CL.
+
+       LEER-SUCURSAL.
+      *---------------
+             MOVE SOR-SUCURSAL TO SUC-CLAVE
+             READ SUC-SUCURSAL
+             IF FS-SUCURSAL NOT = 0
+                THEN
+                 DISPLAY 'ERROR AL LEER SUCURSAL:' FS-SUCURSAL
+                 DISPLAY 'CLAVE:' SUC-CLAVE
+                 MOVE SPACES TO SUC-SALIDA
+                ELSE
+                 MOVE SUC-NOMBRE TO SUC-SALIDA.
+       IMPRIME-LINEA-BASE-DATOS.
+      *-------------------------
+           IF CL > 60
+              PERFORM ENCABEZADO.
+           MOVE SOR-SUCURSAL             TO SUC-01.
+           MOVE SOR-CODIGO-OPER          TO COLOCA-01.
+           MOVE SOR-RUT-DD               TO RUT-01.
+           MOVE SOR-RUT-DI               TO RUT2-01.
+           MOVE SOR-FECHA-PRIM-VCTO      TO FECHA-01.
+           MOVE SOR-IMPUTACION           TO IMPUT-01.
+           MOVE SOR-MONTO-COLOC          TO MONTO-01.
+           MOVE SOR-MONTO-CUOTA          TO MONTO2-01.
+           MOVE SOR-FECHA-PAGARE         TO FECHA2-01.
+           MOVE SOR-FECHA-DE-CURSE       TO FECHA3-01.
+           MOVE SOR-COD-MONED            TO CM-01.
+           MOVE SOR-NRO-VCTOS            TO NRO-01.
+           MOVE SOR-PERIODO-DE-GRACIA    TO PG-01.
+           MOVE 0                        TO T-BASE-01.
+           MOVE SOR-FORMA-DE-PAGO        TO PAGO-02.
+           MOVE SOR-TASA-INTERES         TO TASA-02.
+           MOVE SOR-COBRANZA             TO COBRA-02.
+           MOVE SOR-CODIGO-GARANTIA      TO CODGAR-02.
+           MOVE SOR-TIPO-INTERES         TO TIPOIN-02.
+           MOVE SOR-CALID-COLOC          TO CALID-02.
+           MOVE SOR-RUT-EMPRESA          TO RUT-02.
+           MOVE SOR-CTA-CTE-ABONO        TO CUENTA-02.
+           MOVE SOR-IND-TIPO-CRED        TO CRED-02.
+           MOVE SOR-GASTO-NOTARIAL       TO GASTO-02.
+           MOVE SOR-MESES-DIFERIDO       TO MESES-02.
+           MOVE SOR-COD-DISTR            TO DISTR-02.
+           MOVE SOR-COD-ADICIONAL        TO ADIC-02.
+           MOVE SOR-SEGURO-DEGRAVAMEN    TO SEGUR-02.
+           MOVE SOR-DESTINO              TO DEST-02.
+           MOVE SOR-OTRO-DEUDOR-DIR      TO ODDIR-02.
+           MOVE SOR-OTRO-DEUDOR-IND      TO ODIND-02.
+           MOVE SOR-PERIODO-INTERES      TO PINT-02.
+           MOVE SOR-PERIODO-GRACIA-AMORT TO PGA-02.
+           MOVE SOR-PERIODICIDAD-AMORT   TO PA-02.
+           MOVE SOR-DIAS                 TO DIAS-02.
+      *
+
+           IF SW-1 = 0
+              MOVE 1 TO SW-1
+              MOVE SOR-SUCURSAL TO SUC-ANT.
+
+           IF SOR-SUCURSAL NOT = SUC-ANT
+              MOVE CREADOS-SUC TO T-SUC
+              MOVE 'TOTAL CREADOS            :' TO FIL-SUC
+              WRITE LINEA FROM LTOTAL-SUC AFTER 2
+              MOVE 0 TO CREADOS-SUC
+              MOVE ERRONEOS-SUC TO T-SUC
+              MOVE 'TOTAL ERRONEOS           :' TO FIL-SUC
+              WRITE LINEA FROM LTOTAL-SUC AFTER 2
+              MOVE 0 TO ERRONEOS-SUC
+              MOVE CONTA-SUC TO T-SUC
+              MOVE 'TOTAL SUCURSAL           :' TO FIL-SUC
+              WRITE LINEA FROM LTOTAL-SUC AFTER 2
+              MOVE 0 TO CONTA-SUC
+              PERFORM ENCABEZADO.
+      *    DISPLAY 'REG-SORT:' REG-SORT.
+
+           IF SW-ERROR-W = 0
+              THEN
+               MOVE 'CREADO'          TO MENSAJE-01
+               WRITE LINEA FROM DETA-01   AFTER 1
+               WRITE LINEA FROM DETA-02   AFTER 1
+               ADD 2 TO CL
+              ELSE
+               MOVE 'ERROR'           TO MENSAJE-01
+               WRITE LINEA FROM DETA-01   AFTER 1
+               WRITE LINEA FROM DETA-02   AFTER 1
+               ADD 2 TO CL
+               PERFORM IMPRIMIR-ERROR VARYING I FROM 1 BY 1
+                   UNTIL I > 7.
+              ADD 1 TO CONTA-SUC
+              ADD 1 TO CONTA-GEN
+              MOVE SOR-SUCURSAL TO SUC-ANT.
+           IF SW-ERROR-W = 0
+              THEN
+               ADD 1 TO CREADOS-SUC
+               ADD 1 TO CREADOS-GEN
+              ELSE
+               ADD 1 TO ERRONEOS-SUC
+               ADD 1 TO ERRONEOS-GEN.
+       IMPRIMIR-ERROR.
+      *----------------
+             IF MENSA-WW (I) NOT = SPACES
+                THEN
+                 MOVE MENSA-WW (I)   TO OBS-5
+                 MOVE RET-COD-WW (I) TO RET-COD-5
+                 WRITE LINEA FROM DETA-05   AFTER 1
+                 ADD 1 TO CL
+                ELSE
+                  NEXT SENTENCE.
+
+       MOVER-ERROR.
+      *--------------
+             IF MENSA-WS (I) NOT = SPACES
+                THEN
+                 ADD 1 TO J
+                 IF J < 8
+                    THEN
+                     MOVE MENSA-WS (I)   TO MENSA-WW (J)
+                     MOVE RET-COD-WS (I) TO RET-COD-WW (J)
+                    ELSE
+                     NEXT SENTENCE
+                ELSE
+                  NEXT SENTENCE.
+
+       GENERAR-A1.
+      *-----------
+           MOVE CIB-SUCURSAL           TO A1-SUCURSAL.
+           MOVE CIB-CODIGO-OPER        TO A1-CODIGO-OPER.
+           MOVE CIB-RUT-DD             TO A1-RUT-DD.
+           MOVE CIB-RUT-DI             TO A1-RUT-DI.
+           MOVE CIB-FECHA-PRIM-VCTO-DD TO A1-FECHA-VCTO-DD
+           MOVE CIB-FECHA-PRIM-VCTO-MM TO A1-FECHA-VCTO-MM
+           MOVE CIB-FECHA-PRIM-VCTO-AA TO A1-FECHA-VCTO-AA
+           MOVE CIB-IMPUTACION         TO A1-IMPUTACION
+           IF OPESC-I9 = 3
+              THEN
+               MOVE CIB-MONTO-COLOC        TO A1-MONTO-COLOC
+              ELSE
+               MOVE CIB-MONTO-COLOC        TO A1-MONTO-UF.
+           MOVE  ZEROS                 TO A1-AGENTE.
+           MOVE CIB-TASA-INTERES       TO A1-TASA-INTERES.
+           MOVE CIB-DIAS               TO A1-DIAS.
+           MOVE DLC-VAL-IMPU-WS        TO A1-MONTO-DL3475.
+           IF (DLC-VAL-IMPU-WS IS NOT NUMERIC
+                 OR
+                (CIB-MONTO-COLOC IS NOT NUMERIC OR CIB-MONTO-COLOC
+                = ZEROS))
+              THEN
+      ****      DISPLAY 'SUC:' CIB-SUCURSAL '  OPE:' CIB-CODIGO-OPER
+      ****      DISPLAY 'DLC-VAL-IMPU-WS :' DLC-VAL-IMPU-WS
+      ****      DISPLAY 'CIB-MONTO-COLOC :' CIB-MONTO-COLOC
+                MOVE ZEROS TO TASA-DL3475-WS
+              ELSE
+           COMPUTE TASA-DL3475-WS ROUNDED = ((DLC-VAL-IMPU-WS * 100) /
+               VALOR-WSX).
+           MOVE TASA-DL3475-WS         TO A1-TASA-DL3475.
+      **** MOVE ZEROS                  TO A1-INTERES-COLOC.
+           MOVE ZEROS                  TO A1-ABONOS-CTA-CTE.
+           MOVE CIB-FECHA-DE-CURSE-DD  TO A1-FECHA-CURSE-DD
+           MOVE CIB-FECHA-DE-CURSE-MM  TO A1-FECHA-CURSE-MM
+           MOVE CIB-TIPO-INTERES       TO A1-TIPO-INTERES
+           MOVE CIB-FECHA-DE-CURSE-AA  TO A1-FECHA-CURSE-AA
+           MOVE CIB-CODIGO-GARANTIA    TO A1-COD-GARANTIA.
+           MOVE CIB-NRO-VCTOS          TO A1-NRO-CUOTAS.
+           MOVE 0                      TO A1-PERIODO-GRACIA.
+           MOVE ZEROS                  TO A1-NRO-CTA-CTE.
+           MOVE CIB-CALID-COLOC        TO A1-CAL-COLOC.
+           MOVE CIB-COD-MONED          TO A1-PESOS-UF-DOLAR.
+           MOVE CIB-FORMA-DE-PAGO      TO A1-PERIODICIDAD.
+           MOVE CIB-RUT-EMPRESA        TO A1-RUT-EMPRESA.
+           MOVE CIB-COBRANZA           TO A1-COBRANZA.
+           MOVE SPACES                 TO A1-PLAZO.
+           MOVE ZEROS                  TO A1-VALOR-PRES-COLOC.
+           MOVE ZEROS                  TO A1-AJUSTE.
+           MOVE CIB-GASTO-NOTARIAL     TO A1-GASTO-NOTARIAL.
+           MOVE CIB-FECHA-PAGARE-DD    TO A1-FECHA-PAGARE-DD
+           MOVE CIB-FECHA-PAGARE-MM    TO A1-FECHA-PAGARE-MM
+           MOVE CIB-FECHA-PAGARE-AA    TO A1-FECHA-PAGARE-AA
+           MOVE CIB-COD-DISTR          TO A1-COD-DISTR
+           MOVE CIB-MONTO-CUOTA        TO A1-CUOTA-BASE
+           MOVE CIB-MESES-DIFERIDO     TO A1-MES-DIFERIDO
+           MOVE CIB-COD-ADICIONAL      TO A1-COD-ADICIONAL
+           MOVE CIB-DESTINO            TO A1-DESTINO
+           MOVE CIB-OTRO-DEUDOR-DIR    TO A1-OTRO-DEUD-DIR
+           MOVE CIB-OTRO-DEUDOR-IND    TO A1-OTRO-DEUD-IND
+     ** PRP. DICIEMBRE 96
+     ****  IF OPESC-I13 = 1 OR (OPC-COD-TOOC = 'DDE' OR 'AHO')
+           IF OPESC-I13 = 1 OR (OPC-COD-TOOC = 'AHO')
+              THEN
+               MOVE ZEROS              TO A1-TASA-SPREAD
+           ELSE
+           IF ICG-COD-CVTI-WS = SPACES
+              THEN
+               MOVE ZEROS              TO A1-TASA-SPREAD
+               MOVE ICG-SGV-TINT-WS    TO A1-TASA-INTERES
+      ***PRP INI-JUNIO-95
+               IF ICG-MSC-PBTI-WS = 'X' OR
+                  ICG-MSC-PBTI-WS = 'A'
+                  COMPUTE A1-TASA-INTERES = A1-TASA-INTERES / 12
+               ELSE
+                  NEXT SENTENCE
+      ***PRP FIN-JUNIO-95
+              ELSE
+               IF ICG-MSC-PBTI-WS = 'X'
+               OR ICG-MSC-PBTI-WS = 'A'
+                  THEN
+                   COMPUTE SPREAD-WS = ICG-SGV-SPRD-WS / 12
+                   MOVE SPREAD-WS      TO A1-TASA-SPREAD
+                   IF OPESC-I14 = 13
+                   THEN MOVE SPREAD-WS  TO A1-TASA-INTERES
+                   ELSE NEXT SENTENCE
+                  ELSE
+                   MOVE ICG-SGV-SPRD-WS TO A1-TASA-SPREAD
+                   IF OPESC-I14 = 13
+                   THEN MOVE ICG-SGV-SPRD-WS TO A1-TASA-INTERES
+                   ELSE NEXT SENTENCE.
+      **** DISPLAY 'A1-CLAVE-CRE : ' A1-CLAVE-CRE
+      **** DISPLAY 'ICG-COD-CVTI :' ICG-COD-CVTI-WS
+      **** DISPLAY 'ICG-MSC-PBTI :' ICG-MSC-PBTI-WS
+      **** DISPLAY 'A1-TASA-SPREAD:' ICG-SGV-SPRD-WS
+      **** DISPLAY '*************************************************'
+           MOVE CIB-PERIODO-INTERES    TO A1-PERIODIC-INTERES
+
+           MOVE CIB-CLAVE-LINEA        TO A1-CLAVE-LINEA
+           IF OPC-IND-RENO NOT = 'PRO'
+              MOVE ZEROS               TO A1-FECH-PR-VCTO-AMORT.
+           MOVE ZEROS                  TO A1-FECH-PR-VCTO-INTER
+           MOVE ZEROS                  TO A1-TASA-2
+           MOVE ZEROS                  TO A1-TASA-3
+           MOVE 0                      TO A1-TIPO-CUOTA
+           MOVE SPACES                 TO A1-TASA-MAX-CONV
+           MOVE SPACES                 TO A1-CLASIF-RIESGO
+           MOVE SPACES                 TO A1-IND-RENO.
+
+      **** DISPLAY 'FECHA 4 : ' A1-FECHA-VENC-ANT
+      *PRP. DICIEMBRE 96
+           IF (OPC-COD-TOOC = 'DDE')
+               MOVE ICG-SGV-TINT      TO A1-TASA-INTERES
+                                         CIB-TASA-INTERES
+               MOVE VEN-VAL-SCAP      TO A1-MONTO-COLOC
+                                         CIB-MONTO-COLOC.
+
+           WRITE REGISTRO-MOVIMIENTOS
+           IF FS-CREV013 = 0
+              THEN
+               ADD 1 TO GRABADOS-A1
+              ELSE
+               DISPLAY 'ERROR AL GRABAR ARCH. A1 : ' FS-CREV013.
+      *LEER-RCE.
+      *----------
+      *       MOVE SPACES          TO RCE-VALUE
+      *       MOVE OPC-CIC-IOPC    TO RCE-CIC-IOPC
+      *       MOVE 001             TO RCE-NUM-IDLC
+      *       MOVE RCE-KEY-IDLC    TO RCE-VALUE
+      *       MOVE 'REDKY'         TO RCE-COMMAND
+      *       MOVE 'RCE00'         TO RCE-KEY
+      *       CALL 'DBNTRY' USING UIB REQ-AREA-RCE RCE ELEM-LIST-RCE.
+      *       IF RCE-RET-COD = SPACES
+      *          THEN
+      *           NEXT SENTENCE
+      *          ELSE
+      *           MOVE 1 TO SW-ERROR-W
+      *           MOVE OPC-IIC-IOPC TO COLOCACION-WS
+      *           MOVE 'NO ACCESO TABLA RCE   ' TO MENSA-WS (15)
+      *           MOVE RCE-RET-COD TO RET-COD-WS (15)
+      *           MOVE RCE-VALUE   TO MENSA-WS (16)
+      *                       MOVE 'NO ACCESO TABLA RCE'
+      *                       TO ERR-DESCRIP
+      *                       MOVE OPC-IIC-IOPC  TO ERR-CODIGO-OPER
+      *                       PERFORM GRABAR-ERROR.
+       GRABAR-ERROR.
+      *--------------
+             MOVE OPC-COD-COPC TO ERR-SUCURSAL
+             MOVE RUT-DD       TO RUT-PASO
+             MOVE RUT-NUM      TO ERR-RUT-DD-NUM
+             MOVE DV-DD        TO ERR-RUT-DD-VER
+             MOVE 'C'          TO ERR-INDICADOR
+             MOVE OPC-NUM-VCOR TO ERR-N-CUOTAS
+             MOVE 'COLP410'    TO ERR-DESCRIP-PGMA
+             MOVE OPC-NUM-AINP TO ERR-FECHA-CURSE-AA
+             MOVE OPC-NUM-MINP TO ERR-FECHA-CURSE-MM
+             MOVE OPC-NUM-DINP TO ERR-FECHA-CURSE-DD
+             MOVE ZEROES       TO ERR-FECHA-VENC
+             MOVE OPC-VAL-CRED TO ERR-MONTO-COLOC
+             WRITE ERR-REG
+             IF FS-ERROR NOT = 0
+                THEN
+                 DISPLAY 'ERROR AL GRABAR ARCH. ERRORES'
+                 DISPLAY 'STATUS:' FS-ERROR
+                 DISPLAY "ERR-REG = " ERR-REG
+                ELSE
+                 ADD 1 TO CONTA-ERROR.
+
+
+
+
+       FIN-PROGRAMA.
+      *COPY GNSBGIFD.
+       COPY GNSBGIDD.
+       COPY COLBFVEN.
+       COPY GNSBFTAB.
+       COPY GNSBFMSC.
+       COPY COLBFICG.
+       COPY COLBFTOC.
+       COPY COLBFDLC.
+       COPY COLBFEVC.
+       COPY COLBFRCV.
+      *********************************************************
+       COPY GNSBGFEC.
+       COPY GNSBGHOY.
+       COPY GNSBBSYS.
+       COPY COLBGINT.
+       COPY GNSBGCVI.
+       COPY GNSBGDTC.
+       COPY GNSBTABT.
+       COPY GNSBGABT.
+       COPY COLBGVEN.
+       COPY GNSBBMSG.
+       COPY TABBFCAM.
+       COPY GNSBFMSG.
+       COPY GNSBGPES.
+       COPY GNSBPFEC.
+       GET-VEN SECTION.
+           MOVE OPC-CIC-IOPC IN OPC TO VEN-CIC-IOPC IN VEN
+           MOVE 0                   TO VEN-NUM-IVEN IN VEN
+
+           MOVE ZEROS TO FECHA-VEN-1 FECHA-VEN-2
+           MOVE OPC-FEC-FCOL TO FECHA-ANTERIOR
+
+           MOVE FIO-GET-NLS         TO FIO-CMND.
+       LUP-GET-VEN.
+           IF OPC-IND-VSTR = 'S'
+              THEN
+               PERFORM COL-OBT-VEN
+               IF NOT(VEN-STAT-OKS OR VEN-STAT-TVX)
+                  THEN
+                   GO TO STT-GET-VEN
+                  ELSE
+                   NEXT SENTENCE
+              ELSE
+               PERFORM COL-FIO-VEN
+               IF NOT(FIO-STAT-OKS
+               AND  OPC-CIC-IOPC = VEN-CIC-IOPC IN VEN)
+                  THEN
+                   GO TO STT-GET-VEN
+                  ELSE
+                   NEXT SENTENCE.
+           PERFORM CREAR-CUOTA
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           GO TO LUP-GET-VEN.
+       STT-GET-VEN.
+           IF VEN-STAT-EOF
+              THEN
+               NEXT SENTENCE
+           ELSE DISPLAY 'ERROR ' VEN-STAT.
+       FIN-GET-VEN.
+       VARIOS2 SECTION.
+      *----------------
+       CREAR-CUOTA.
+      *-----------
+           IF (VEN-NUM-IVEN IN VEN = 001)
+              MOVE VEN-NUM-AVEN IN VEN TO CIB-FECHA-PRIM-VCTO-AA
+              MOVE VEN-NUM-MVEN IN VEN TO CIB-FECHA-PRIM-VCTO-MM
+              MOVE VEN-NUM-DVEN IN VEN TO CIB-FECHA-PRIM-VCTO-DD
+              MOVE VEN-FEC-FVEN IN VEN TO FECHA-VEN-1.
+           IF VEN-NUM-IVEN IN VEN = 002
+              MOVE VEN-FEC-FVEN IN VEN TO FECHA-VEN-2.
+              PERFORM AGREGAR-CUOTA.
+              MOVE VEN-FEC-FVEN IN VEN TO FECHA-ANTERIOR.
+       ANALIZA-FECHA.
+      *--------------
+              MOVE FECHA-ANTERIOR TO  FECHA-WSS
+              MOVE ANO1-WSS  TO CALEAREA-FECHA-1-AM
+              MOVE ANO2-WSS  TO CALEAREA-FECHA-1-AA
+              MOVE MES-WSS   TO CALEAREA-FECHA-1-M
+              MOVE DIA-WSS   TO CALEAREA-FECHA-1-D
+      *       DISPLAY 'VEN-FEC-FVEN :' VEN-FEC-FVEN
+              MOVE VEN-FEC-FVEN IN VEN  TO  FECHA-WSS
+              MOVE ANO1-WSS  TO CALEAREA-FECHA-2-AM
+              MOVE ANO2-WSS  TO CALEAREA-FECHA-2-AA
+              MOVE MES-WSS   TO CALEAREA-FECHA-2-M
+              MOVE DIA-WSS   TO CALEAREA-FECHA-2-D
+
+              MOVE 'CDCEF'   TO CALEAREA-FUNCION
+              PERFORM CALL-CALENDAR
+              MOVE CALEAREA-NUM-DIA TO DIAS-A1-WS.
+      *       DISPLAY 'DIAS-A1-WS :' DIAS-A1-WS.
+              IF VEN-NUM-IVEN IN VEN = 002
+                 COMPUTE FP-WS = DIAS-A1-WS / 30
+                 MOVE FP-WS TO CIB-FORMA-DE-PAGO
+      *          DISPLAY 'FP-WS : ' FP-WS
+                 IF FP-WS = 12
+                    MOVE 9 TO CIB-FORMA-DE-PAGO.
+
+       AGREGAR-CUOTA.
+      *---------------
+            MOVE CIB-RUT-DD            TO  CUO-RUT-DD
+            MOVE CIB-CODIGO-OPER       TO  CUO-CODIGO-OPER
+            MOVE VEN-NUM-IVCT          TO  CUO-NUM-ABONO
+            MOVE CIB-SEGURO-DEGRAVAMEN TO CUO-SEGURO-DESGRAV
+            MOVE VEN-NUM-AVEN          TO CUO-FECHA-VENC-AA
+            MOVE VEN-NUM-MVEN          TO CUO-FECHA-VENC-MM
+            MOVE VEN-NUM-DVEN          TO CUO-FECHA-VENC-DD
+            MOVE CIB-SUCURSAL          TO CUO-SUCURSAL
+            IF (OPESC-I16 = 26 AND VEN-NUM-IVEN = OPC-NUM-VCOR)
+               THEN
+                MOVE VEN-NUM-AVEN IN VEN TO CIB-FECHA-PRIM-VCTO-AA
+                MOVE VEN-NUM-MVEN IN VEN TO CIB-FECHA-PRIM-VCTO-MM
+                MOVE VEN-NUM-DVEN IN VEN TO CIB-FECHA-PRIM-VCTO-DD
+                MOVE VEN-VAL-FINA      TO CUO-INTERES
+                MOVE VEN-VAL-FINA      TO VALOR-WS-A1
+                MOVE VEN-VAL-CAPI      TO CUO-AMORTIZACION
+                COMPUTE CUO-CUOTA = CUO-AMORTIZACION + CUO-INTERES
+               ELSE
+                MOVE VEN-VAL-FINA      TO CUO-CUOTA
+                MOVE VEN-VAL-CAPI      TO CUO-AMORTIZACION
+                COMPUTE VALOR-WS-A1 = VEN-VAL-FINA - VEN-VAL-CAPI
+                MOVE VALOR-WS-A1       TO CUO-INTERES.
+            MOVE OPC-VAL-SCRE TO OPC-VAL-SCRE-WS.
+            IF OPC-COD-CVOC = '998'
+               PERFORM CONVERTIR-UF-VEN.
+            IF OPESC-I14 NOT = 8
+               THEN
+                MOVE 3 TO CUO-INDIC-DE-CUOTA
+               ELSE
+                IF CUO-AMORTIZACION > ZEROS AND CUO-INTERES > ZEROS
+                   THEN
+                    MOVE 3 TO CUO-INDIC-DE-CUOTA
+                   ELSE
+                    IF CUO-INTERES > ZEROS
+                       THEN
+                        MOVE 1 TO CUO-INDIC-DE-CUOTA
+                       ELSE
+                        MOVE 2 TO CUO-INDIC-DE-CUOTA.
+            PERFORM ANALIZA-FECHA
+            MOVE DIAS-A1-WS TO CUO-DIAS-ENTRE-VCTOS.
+
+           IF (VEN-NUM-IVEN IN VEN = 001
+               AND  VEN-VAL-CAPI  IN VEN  > 0)
+            IF OPESC-I16 = 26
+             IF OPESC-I14 = 05
+              MOVE VEN-NUM-MVEN TO MES-VEN
+              MOVE VEN-NUM-DVEN TO DIA-VEN
+              MOVE OPC-NUM-MCOL TO MES-CUR
+              MOVE OPC-NUM-DCOL TO DIA-CUR
+              IF   (((MESDIA-VEN NOT < 0101 AND MESDIA-VEN NOT > 0331)
+               AND   (MESDIA-CUR NOT < 0101 AND MESDIA-CUR NOT > 0331))
+                OR  ((MESDIA-VEN NOT < 0401 AND MESDIA-VEN NOT > 0630)
+               AND   (MESDIA-CUR NOT < 0401 AND MESDIA-CUR NOT > 0630))
+                OR  ((MESDIA-VEN NOT < 0701 AND MESDIA-VEN NOT > 0930)
+               AND   (MESDIA-CUR NOT < 0701 AND MESDIA-CUR NOT > 0930))
+                OR  ((MESDIA-VEN NOT < 1001 AND MESDIA-VEN NOT > 1231)
+               AND   (MESDIA-CUR NOT < 1001 AND MESDIA-CUR NOT > 1231)))
+                       THEN
+                        NEXT SENTENCE
+                       ELSE
+                        MOVE 1 TO SW-ERROR-W
+                        MOVE 'FECHA VENC. ERRONEA.' TO MENSA-WS (28)
+                        MOVE 'FECHA VENC. ERRONEA.' TO ERR-DESCRIP
+                        MOVE OPC-IIC-IOPC  TO ERR-CODIGO-OPER
+                        PERFORM GRABAR-ERROR.
+
+           IF (VEN-NUM-IVEN IN VEN = 001
+               AND  VEN-VAL-CAPI  IN VEN  = 0)
+              IF OPESC-I16 = 26
+                 IF OPESC-I14 = 05
+                    MOVE VEN-NUM-MVEN TO MES-VEN
+                    MOVE VEN-NUM-DVEN TO DIA-VEN
+                    IF   (MESDIA-VEN = 0331 OR MESDIA-VEN = 0630
+                       OR MESDIA-VEN = 0930 OR MESDIA-VEN = 1231)
+                       THEN
+                        NEXT SENTENCE
+                       ELSE
+                        MOVE 1 TO SW-ERROR-W
+                        MOVE 'FECHA VENC. ERRONEA' TO MENSA-WS (28)
+                        MOVE 'FECHA VENC. ERRONEA' TO ERR-DESCRIP
+                        MOVE OPC-IIC-IOPC  TO ERR-CODIGO-OPER
+                        PERFORM GRABAR-ERROR.
+           IF VEN-NUM-IVEN IN VEN = 001
+              THEN
+               MOVE ZEROS TO A1-INTERES-COLOC
+               MOVE 0 TO CIB-TASA-INTERES
+               IF DIAS-A1-WS = 0
+                  THEN
+                       MOVE 0 TO CIB-TASA-INTERES
+                       MOVE 0 TO CIB-DIAS
+                  ELSE
+                   MOVE DIAS-A1-WS TO CIB-DIAS
+                   COMPUTE VALOR-WS-A1 = CUO-CUOTA - CUO-AMORTIZACION
+                   MOVE VALOR-WS-A1 TO A1-INTERES-COLOC
+                   COMPUTE TPA-WS ROUNDED = ((VALOR-WS-A1 * 3000) /
+                    (OPC-VAL-SCRE-WS * DIAS-A1-WS))
+                   MOVE TPA-WS TO CIB-TASA-INTERES
+      *PRP.DIC.96  IF OPESC-I13 = 1 OR (OPC-COD-TOOC = 'DDE' OR 'AHO')
+                   IF OPESC-I13 = 1 OR (OPC-COD-TOOC = 'AHO')
+                      THEN
+                      COMPUTE TPA-WS ROUNDED = ((VALOR-WS-A1 * 100) /
+                      (OPC-VAL-SCRE-WS))
+                       MOVE TPA-WS TO CIB-TASA-INTERES
+                      ELSE
+                       NEXT SENTENCE
+            ELSE NEXT SENTENCE.
+
+
+
+
+
+
+
+
+      ****         IF OPE-I13 = 1
+      ****            THEN
+      ****            COMPUTE TPA-WS ROUNDED = ((VALOR-WS-A1 * 3000) /
+      ****            (DIAS-A1-WS * (OPC-VAL-SCRE-WS - VALOR-WS-A1)))
+      ****             MOVE TPA-WS TO CIB-TASA-INTERES
+      ****            ELSE NEXT SENTENCE
+
+
+            MOVE ZEROS   TO CUO-DIFEREN-INTERES
+            MOVE ZEROS   TO CUO-COMISION
+            MOVE ZEROS   TO CUO-SEGURO-INCENDIO
+            IF VEN-IND-SCTB NOT = SPACES
+               THEN
+                MOVE 2 TO CUO-CODIGO-CUOTA
+               ELSE
+                MOVE ZEROS   TO CUO-CODIGO-CUOTA.
+            MOVE SPACES  TO CUO-ESTADO-PRO
+            IF ICG-COD-CVTI-WS NOT = SPACES
+               IF CUO-CUOTA = ZEROS
+                  MOVE ZEROS TO CUO-INTERES.
+
+            IF OPESC-I14 NOT = 05
+            PERFORM GRABAR-CUOTA.
+       CONVERTIR-UF-VEN.
+      *------------------
+      *
+                 IF OPESC-I9 = 1
+                    THEN
+                     PERFORM LEER-UF-VEN
+                     COMPUTE OPC-VAL-SCRE-WS = OPC-VAL-SCRE * VALOR-WS1
+                     COMPUTE VALOR-WS ROUNDED = VEN-VAL-FINA * VALOR-WS1
+                     MOVE VALOR-WS  TO CUO-CUOTA
+                     COMPUTE VALOR-WS ROUNDED = VEN-VAL-CAPI * VALOR-WS1
+                     MOVE VALOR-WS  TO CUO-AMORTIZACION
+                     COMPUTE VALOR-WS ROUNDED = CUO-CUOTA -
+                     CUO-AMORTIZACION
+                     MOVE VALOR-WS  TO CUO-INTERES
+                    ELSE
+                         NEXT SENTENCE.
+       LEER-UF-VEN.
+      *-------------
+           MOVE 0               TO VALOR-WS1
+           MOVE OPC-FEC-FCOL    TO CAM-FEC-FCAM (1)
+           MOVE OPC-FEC-FCOL    TO CAM-FEC-FCAM (2)
+           MOVE 0               TO CAM-MSC-TVAL (1)
+           MOVE 0               TO CAM-MSC-TVAL (2)
+           MOVE SPACES          TO CAM-VALUE
+           MOVE SPACES          TO CAM-COD-TCAM (1)
+           MOVE SPACES          TO CAM-COD-TCAM (2)
+           MOVE '998'           TO CAM-COD-CVAL (1)
+           MOVE '999'           TO CAM-COD-CVAL (2)
+           MOVE CAM-KEY-CAMB    TO CAM-VALUE
+           MOVE 'REDKY'         TO CAM-COMMAND
+           MOVE 'CAM00'         TO CAM-KEY
+           CALL 'DBNTRY' USING UIB REQ-AREA-CAM CAM ELEM-LIST-CAM.
+           IF CAM-RET-COD NOT = SPACES
+              THEN
+                  DISPLAY '------------------------'
+                  DISPLAY 'NO ACCESO CAM  COD.RET :' CAM-RET-COD
+                  DISPLAY '------------------------'
+                  DISPLAY 'REQ. AREA :' REQ-AREA-CAM
+                  DISPLAY 'CAM-VALUE:' CAM-VALUE
+                  MOVE 1 TO SW-ERROR-W
+                  MOVE 'NO ACCESO REG. TABLA CAM (REDKY)'
+                        TO MENSA-WS (22)
+                  MOVE CAM-RET-COD TO RET-COD-WS (22)
+                      MOVE 'NO ACCESO TABLA CAM'
+                      TO ERR-DESCRIP
+                      MOVE OPC-IIC-IOPC  TO ERR-CODIGO-OPER
+                      PERFORM GRABAR-ERROR
+              ELSE
+               MOVE CAM-SGV-VCAM IN CAM TO VALOR-WS1.
+
+
+       GRABAR-CUOTA.
+      *--------------
+      *     DISPLAY 'CUO AGREG : ' CUO-CLAVE
+            WRITE CUO-CUOTAS-REG.
+            IF FS-CREM009 > 0
+            THEN  DISPLAY 'ERROR AL GRABAR CUOTA :' FS-CREM009
+                  DISPLAY 'CUOTA : ' CUO-CLAVE
+            ELSE
+             ADD 1 TO CUOTAS-CREADAS.
+      *
+       FIN-GRABAR-CUOTA.
+      *------------------
+

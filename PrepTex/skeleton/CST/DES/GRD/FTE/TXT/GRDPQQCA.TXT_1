@@ -1,0 +1,284 @@
+*%! Codigo adicional para archivo GRDPQQCA
+*% IF SETTAG
+*% FNCPQ = "COBRJUDICIAL"
+*% VSNPQ = "05.11.22.1"
+*% END
+*% LARGO_MI_COMMAREA = 20
+*% PGM_PTC = TRUE
+*% IF MI_QCAMAREA
+      *<<<< MI_COMMAREA
+           03 CMA-VARI.
+              05 SCR-IMAX      COMP                   PIC S9(04).
+              05 SCR-I         COMP                   PIC S9(04).
+      *>>>>
+*% END
+*% IF WSS
+      *<<<< WSS
+       COPY GRDWGQCA.
+       COPY GNSBRMSC.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-MSC-REQA==.
+       COPY GNSWGPES.
+       COPY TABBRCAM.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-CAM-REQA==.
+    
+       01  WSS-VARI.
+           03  WSS-I                              PIC 9(02).
+      *>>>>
+*% END
+*% IF INI_FIO
+      *<<<< INI_FIO                                                     
+           IF SCR-OFRM-SRV                                              
+              MOVE TSK-TERM-ALF TO QCA-COD-TERM                         
+              MOVE TSK-TERM-ALF TO QCA-COD-TERM-MAS                     
+                                                                        
+           ELSE                                                         
+              MOVE EIBTRMID     TO QCA-COD-TERM                         
+              MOVE EIBTRMID     TO QCA-COD-TERM-MAS.                    
+      *>>>>                                                             
+*% END
+*% IF PFS_SCR_ACC
+      *<<<< PFS_SCR_ACC
+           IF FRM-FFLD = FRM-FFLD-PF6
+                    OR   FRM-FFLD-PF5
+               PERFORM VAL-NUM-KEY-QCA
+               PERFORM VAL-NUM-FLD-QCA
+               PERFORM RST-STAT
+               PERFORM FND-SCR-KEY THRU FIN-SCR-KEY
+               IF SCR-STAT NOT = SCR-STAT-ABT
+                   PERFORM SCR-TRL
+               ELSE
+                   PERFORM DESSCRTRL
+                   GO TO FIN-SCR-ACC.
+      *>>>>
+*% END
+*% IF INI_FND_KEY
+      *<<<< INI_FND_KEY
+           MOVE SPACES TO FRM-MEN1.
+           IF FRM-FFLD = FRM-FFLD-PF5
+               MOVE PGM-SNUL TO PGM-STAT-RRO
+               SUBTRACT 1 FROM SCR-I GIVING QCA-I
+               IF QCA-I NOT > ZEROES
+                   MOVE 'QCA RROPRV' TO MSG-COD-MENS
+                   GO TO ERR-FND-KEY
+               ELSE
+                   GO TO CARGA-QCA
+           ELSE
+           IF FRM-FFLD = FRM-FFLD-PF6
+               MOVE PGM-SNUL TO PGM-STAT-RRO
+               ADD 1 SCR-I GIVING QCA-I
+               IF QCA-I > SCR-IMAX
+                   MOVE 'QCA RRONXT' TO MSG-COD-MENS
+                   GO TO ERR-FND-KEY
+               ELSE
+                   GO TO CARGA-QCA.
+           GO TO CON-FND-KEY.
+
+      *>>>>
+*% END
+*% IF FIN_FND_KEY
+      *<<<< FIN_FND_KEY
+           IF NOT FIO-STAT-OKS
+               GO TO FIN-FND-KEY.
+       CON-FND-KEY.
+      *
+           MOVE ZEROES TO SCR-IMAX.
+           MOVE 1 TO SCR-I.
+           MOVE '00' TO FIO-STAT.
+           PERFORM OBT-DAT-TS.
+           MOVE 1 TO SCR-I.
+           MOVE SCR-I TO QCA-I.
+       CARGA-QCA.
+           MOVE SPACES TO MSG-COD-MENS.
+           IF NOT SCR-OFRM-SRV
+           PERFORM PUT-TAB-QCA.
+           MOVE '00' TO FIO-STAT.
+           GO TO FIN-FND-KEY.
+      *
+       ERR-FND-KEY.
+           MOVE SCR-STAT-CON TO SCR-STAT.
+     
+           MOVE 'GRD' TO MSG-COD-SIST.
+           PERFORM GET-MSG.
+           MOVE MSG-GLS-DESC TO FRM-MEN1.
+           MOVE '00' TO FIO-STAT.
+           GO TO FIN-FND-KEY.
+      *>>>>
+*% END
+*% IF PFS_GET_CON OR PFS_GET_ACC
+      *<<<< PFS_GET_CON OR PFS_GET_ACC
+           IF NOT (FRM-FFLD = FRM-FFLD-PF6
+                         OR   FRM-FFLD-PF5)
+      *>>>>
+*% END
+*% IF EOF
+      *<<<< EOF
+       COPY GNSBFMSC.
+       COPY GNSBGPES.
+       COPY TABBFCAM.
+
+       CAR-MOV-QCA SECTION.
+       INI-CAR-MOV-QCA.
+       FIN-CAR-MOV-QCA.
+           EXIT.
+
+   
+       OBT-DAT-TS SECTION.
+       INI-OBT-DAT-TS.
+           EXEC CICS HANDLE CONDITION QIDERR(CON-OBT-DAT-TS)
+                                     ITEMERR(CON-OBT-DAT-TS)
+           END-EXEC.
+
+      *     EXEC CICS DELETEQ TS QUEUE(QCA-NAME-QUE)
+      *     END-EXEC.
+      *<<<<
+           MOVE QCA-NOM-TSQCA     TO QUE-COLA.
+           MOVE QUE-DEL           TO QUE-CMND.
+           PERFORM GNS-PRO-QUE.
+      *>>>>
+       CON-OBT-DAT-TS.
+           MOVE QCA-SI-IMP TO QCA-IMP.
+           PERFORM CLR-VEC-TS VARYING QCA-I FROM 1 BY 1 UNTIL
+                   QCA-I > QCA-IMAX-MTX.
+           MOVE 1 TO QCA-I.
+           PERFORM CAR-MOV-QCA.
+      
+       NXT-OBT-DAT-TS.
+           IF QCA-IMP = QCA-SI-IMP
+               PERFORM WRT-TS.
+       FIN-OBT-DAT-TS.
+           EXIT.
+
+       PUT-TAB-QCA SECTION.
+       INI-PUT-TAB-QCA.
+           PERFORM RED-TS.
+           PERFORM LLE-DAT-PNT VARYING QCA-I FROM 1 BY 1
+                   UNTIL QCA-I > QCA-IMAX.
+       FIN-PUT-TAB-QCA.
+           EXIT.
+
+       LLE-DAT-PNT SECTION.
+       INI-LLE-DAT-PNT.
+           MOVE QCA-GLS-IOPC(QCA-I) TO FRM-GLS-IOPC IN QCA-FLD(QCA-I).
+           MOVE QCA-COD-PROD(QCA-I) TO FRM-COD-PROD IN QCA-FLD(QCA-I).
+           MOVE QCA-IND-AVAL(QCA-I) TO FRM-IND-AVAL IN QCA-FLD(QCA-I).
+           MOVE QCA-COD-VCOC(QCA-I) TO FRM-COD-VCOC IN QCA-FLD(QCA-I).
+           MOVE QCA-FEC-FMOR(QCA-I) TO FRM-FEC-FMOR IN QCA-FLD(QCA-I).
+           MOVE QCA-NUM-CUOT(QCA-I) TO FRM-NUM-CUOT IN QCA-FLD(QCA-I).
+           MOVE QCA-NUM-DIAS(QCA-I) TO FRM-NUM-DIAS IN QCA-FLD(QCA-I).
+           MOVE QCA-SGV-CAPI(QCA-I) TO FRM-SGV-CAPI IN QCA-FLD(QCA-I).
+           MOVE QCA-SGV-ICTE(QCA-I) TO FRM-SGV-ICTE IN QCA-FLD(QCA-I).
+           MOVE QCA-SGV-IMOR(QCA-I) TO FRM-SGV-IMOR IN QCA-FLD(QCA-I).
+           MOVE QCA-SGV-HONO(QCA-I) TO FRM-SGV-HONO IN QCA-FLD(QCA-I).
+           MOVE QCA-SGV-SINS(QCA-I) TO FRM-SGV-SINS IN QCA-FLD(QCA-I).
+           MOVE QCA-FEC-FTRN(QCA-I) TO FRM-FEC-FTRN IN QCA-FLD(QCA-I).
+           MOVE QCA-CIC-ILIQ(QCA-I) TO FRM-CIC-ILIQ IN QCA-FLD(QCA-I).
+           MOVE QCA-FEC-FINI(QCA-I) TO FRM-FEC-FINI IN QCA-FLD(QCA-I).
+           MOVE QCA-COD-ABOG(QCA-I) TO FRM-COD-ABOG IN QCA-FLD(QCA-I).
+           MOVE QCA-COD-ESTA(QCA-I) TO FRM-COD-ESTA IN QCA-FLD(QCA-I).
+           MOVE QCA-COD-ORIG(QCA-I) TO FRM-COD-ORIG IN QCA-FLD(QCA-I).
+           MOVE QCA-IND-OASO(QCA-I) TO FRM-IND-OASO IN QCA-FLD(QCA-I).
+           MOVE QCA-FEC-FTER(QCA-I) TO FRM-FEC-FTER IN QCA-FLD(QCA-I).
+       FIN-LLE-DAT-PNT.
+           EXIT.
+
+       INC-REG-TS SECTION.
+       INI-INC-REG-TS.
+            MOVE QCA-SI-IMP TO QCA-IMP.
+            IF SCR-OFRM-SRV
+              MOVE QCA-SGV-CAPI(QCA-I) TO QCA-VAL-CPTO-EDT
+              MOVE QCA-VAL-CPTO-EDT TO QCA-SGV-CAPI-ALF(QCA-I)
+              MOVE QCA-SGV-ICTE(QCA-I) TO QCA-VAL-CPTO-EDT
+              MOVE QCA-VAL-CPTO-EDT TO QCA-SGV-ICTE-ALF(QCA-I)
+              MOVE QCA-SGV-IMOR(QCA-I) TO QCA-VAL-CPTO-EDT
+              MOVE QCA-VAL-CPTO-EDT TO QCA-SGV-IMOR-ALF(QCA-I)
+              MOVE QCA-SGV-HONO(QCA-I) TO QCA-VAL-CPTO-EDT
+              MOVE QCA-VAL-CPTO-EDT TO QCA-SGV-HONO-ALF(QCA-I)
+              MOVE QCA-SGV-SINS(QCA-I) TO QCA-VAL-CPTO-EDT
+              MOVE QCA-VAL-CPTO-EDT TO QCA-SGV-SINS-ALF(QCA-I).
+           ADD 1 TO QCA-I.
+           IF QCA-I > QCA-IMAX
+               PERFORM WRT-TS
+               PERFORM CLR-VEC-TS VARYING QCA-I FROM 1 BY 1
+                                     UNTIL QCA-I > QCA-IMAX
+               MOVE 1 TO QCA-I
+               MOVE QCA-NO-IMP TO QCA-IMP.
+       FIN-INC-REG-TS.
+           EXIT.
+
+      *<<<<
+      *>>>>
+
+       WRT-TS SECTION.
+       INI-WRT-TS.
+           ADD 1 TO SCR-IMAX.
+      *     EXEC CICS WRITEQ TS QUEUE(QCA-NAME-QUE)
+      *                         FROM(QCA-TS)
+      *                         LENGTH(QCA-LONG-TS)
+      *     END-EXEC.
+      *<<<<
+           MOVE QCA-NOM-TSQCA  TO QUE-COLA.
+           MOVE QCA-TS         TO QUE-ITEM.
+           MOVE QCA-LEN-TSQCA  TO QUE-LITM.
+           MOVE QUE-PUT        TO QUE-CMND.
+           PERFORM GNS-PRO-QUE.
+      *>>>>
+       FIN-WRT-TS.
+           EXIT.
+
+       RED-TS SECTION.
+       INI-RED-TS.
+           MOVE QCA-I TO SCR-I.
+           EXEC CICS HANDLE CONDITION QIDERR(FIN-RED-TS)
+                                     ITEMERR(FIN-RED-TS)
+           END-EXEC.
+      *     EXEC CICS READQ TS QUEUE(DEC-NAME-QUE)
+      *                         INTO(DEC-TS)
+      *                          LENGTH(DEC-LONG-TS)
+      *                         ITEM(DEC-I)
+      *     END-EXEC.
+      *<<<<
+           MOVE QCA-NOM-TSQCA      TO QUE-COLA.
+           MOVE QCA-TS             TO QUE-ITEM.
+           MOVE QCA-LEN-TSQCA      TO QUE-LITM.
+           MOVE QCA-I              TO QUE-NITM.
+           MOVE QUE-GET            TO QUE-CMND.
+           PERFORM GNS-PRO-QUE.
+           MOVE QUE-ITEM          TO QCA-TS.
+      *>>>>
+       FIN-RED-TS.
+           EXIT.
+
+       CLR-VEC-TS SECTION.
+       INI-CLR-VEC-TS.
+           MOVE SPACES TO QCA-GLS-IOPC(QCA-I). 
+           MOVE SPACES TO QCA-COD-PROD(QCA-I). 
+           MOVE SPACES TO QCA-IND-AVAL(QCA-I). 
+           MOVE SPACES TO QCA-COD-VCOC(QCA-I). 
+           MOVE ZEROES TO QCA-FEC-FMOR(QCA-I). 
+           MOVE ZEROES TO QCA-NUM-CUOT(QCA-I). 
+           MOVE ZEROES TO QCA-NUM-DIAS(QCA-I). 
+           MOVE ZEROES TO QCA-SGV-CAPI(QCA-I). 
+           MOVE ZEROES TO QCA-SGV-ICTE(QCA-I). 
+           MOVE ZEROES TO QCA-SGV-IMOR(QCA-I). 
+           MOVE ZEROES TO QCA-SGV-HONO(QCA-I). 
+           MOVE ZEROES TO QCA-SGV-SINS(QCA-I). 
+           MOVE ZEROES TO QCA-FEC-FTRN(QCA-I).
+           MOVE SPACES TO QCA-CIC-ILIQ(QCA-I).
+           MOVE ZEROES TO QCA-FEC-FINI(QCA-I).
+           MOVE SPACES TO QCA-COD-ABOG(QCA-I).
+           MOVE SPACES TO QCA-COD-ESTA(QCA-I).
+           MOVE SPACES TO QCA-COD-ORIG(QCA-I).
+           MOVE SPACES TO QCA-IND-OASO(QCA-I).
+           MOVE ZEROES TO QCA-FEC-FTER(QCA-I).
+       FIN-CLR-VEC-TS.
+           EXIT.
+
+       RST-STAT SECTION.
+       INI-RST-STAT.
+           MOVE SCR-STPP     TO SCR-STAT.
+           MOVE SCR-MFLD-NOT TO SCR-MFLD.
+       FIN-RST-STAT.
+           EXIT.
+
+      *>>>>
+*% END

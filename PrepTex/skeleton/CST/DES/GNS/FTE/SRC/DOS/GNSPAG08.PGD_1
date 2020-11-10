@@ -1,0 +1,316 @@
+       IDENTIFICATION DIVISION.
+      *========================
+       PROGRAM-ID. GNSPAG08.
+       AUTHOR. BEE-TEAM.
+       DATE-WRITTEN.  29-MAR-1993.
+
+      * DESENGANCHA UN CAMPO DE HELP
+
+       ENVIRONMENT DIVISION.
+      *=====================
+       CONFIGURATION SECTION.
+       SPECIAL-NAMES.
+                     DECIMAL-POINT IS COMMA.
+
+       DATA DIVISION.
+      *==============
+
+       WORKING-STORAGE SECTION.
+      *------------------------
+       COPY GNSWVSCR.
+       COPY GNSWCSCR.
+       COPY GNSWCFIO.
+       COPY GNSWVFIO.
+       COPY GNSWGHOY.
+       COPY GNSWGFRM.
+       COPY GNSWGSYS.
+       COPY DFHBMSCA.
+       01  G08-FLD.
+
+           02  FILLER PIC X(12).
+
+           02  G08-FEC-FECH-LEN    COMP  PIC  S9(04).
+           02  G08-FEC-FECH-ATR          PIC   X(01).
+           02  G08-FEC-FECH              PIC   X(10).
+
+           02  G08-COD-MAPA-LEN    COMP  PIC  S9(04).
+           02  G08-COD-MAPA-ATR          PIC   X(01).
+           02  G08-COD-MAPA              PIC   X(07).
+
+           02  G08-COD-MSET-LEN    COMP  PIC  S9(04).
+           02  G08-COD-MSET-ATR          PIC   X(01).
+           02  G08-COD-MSET              PIC   X(07).
+
+           02  G08-GLS-MENS-LEN    COMP  PIC  S9(04).
+           02  G08-GLS-MENS-ATR          PIC   X(01).
+           02  G08-GLS-MENS              PIC   X(60).
+
+       COPY GNSWIMSG.
+
+       01  VARIABLES.
+      * INSTANCIAS DEL PROGRAMA
+      * IDENTIFICA EL MAPA
+           02 IDN-MAP                        PIC 9(01) VALUE 1.
+      * POSICIONA EL CURSOR
+           02 PSN-CUR                        PIC 9(01) VALUE 2.
+      * DESACTIVA HELP
+           02 DCH-HLP                        PIC 9(01) VALUE 3.
+      * FECHA PARA PANTALLA
+           02 WSS-FEC-FHOY.
+              05 WSS-NUM-DHOY                PIC 9(02).
+              05 FILLER                      PIC X(01) VALUE '/'.
+              05 WSS-NUM-MHOY                PIC 9(02).
+              05 FILLER                      PIC X(01) VALUE '/'.
+              05 WSS-NUM-SHOY                PIC 9(02).
+              05 WSS-NUM-AHOY                PIC 9(02).
+
+           02 L-MEN            PIC S9(4) COMP VALUE +50.
+           02 WS-MAPA          PIC X(7).
+           02 WS-MSET          PIC X(7).
+       01  L-CMA         PIC S9(4) COMP VALUE +34.
+       01  CMA.
+           02 CMA-COD-STAT           PIC X(01).
+           02 CMA-COD-INST           PIC 9(01).
+           02 CMA-COD-MAPA           PIC X(07).
+           02 CMA-COD-MSET           PIC X(07).
+           02 CMA-NUM-POSI           PIC 9(04).
+           02 CMA-COD-MAP8           PIC X(07).
+           02 CMA-COD-SET8           PIC X(07).
+
+       COPY GNSBRHLP.
+       01  WSS-VARI.
+           03  WSS-CCOD        VALUE SPACES PIC X(05).
+               88 WSS-CCOD-APCT    VALUE 'APCT'.
+               88 WSS-CCOD-ABM0    VALUE 'ABM0'.
+
+       LINKAGE SECTION.
+      *----------------
+       01  DFHCOMMAREA.
+           02 FILLER           PIC X(34).
+       COPY GNSLGFIO.
+
+       PROCEDURE DIVISION.
+      *===================
+           MOVE LOW-VALUES TO G08-FLD.
+           PERFORM GNS-HDL-VSM.
+           EXEC CICS HANDLE AID
+             CLEAR(TERMINAR)
+           END-EXEC.
+           EXEC CICS HANDLE ABEND
+             LABEL (CMN-ERR-ABN)
+           END-EXEC.
+           IF EIBCALEN = 0
+                PERFORM PRIMERA-VEZ
+           ELSE
+                MOVE DFHCOMMAREA TO CMA
+                PERFORM VEZ-SIGUIENTE.
+
+       PRIMERA-VEZ.
+      *------------
+           MOVE SPACES TO CMA.
+           MOVE ZEROES TO CMA-NUM-POSI.
+           PERFORM PUT-FHOY.
+           MOVE SPACES TO G08-COD-MAPA
+                          G08-COD-MSET.
+           MOVE 'INGRESE NOMBRE DEL MAPA Y MAPSET' TO G08-GLS-MENS.
+           MOVE -1 TO G08-COD-MAPA-LEN.
+           MOVE 'GNSFG08'      TO WS-MAPA CMA-COD-MAP8.
+           MOVE 'GNSAG08'      TO WS-MSET CMA-COD-SET8.
+           MOVE IDN-MAP        TO CMA-COD-INST.
+           PERFORM ENVIAR-MAPA-COMPLETO.
+           PERFORM AUTO-INVOC.
+
+       ENVIAR-MAPA-COMPLETO.
+      *---------------------
+           EXEC CICS SEND      MAP(WS-MAPA)
+                               MAPSET(WS-MSET)
+                               FROM(G08-FLD) CURSOR
+                               ERASE
+           END-EXEC.
+
+       ENVIAR-MAPA-DATOS.
+      *------------------
+           EXEC CICS SEND      MAP(WS-MAPA)
+                               MAPSET(WS-MSET)
+                               FROM(G08-FLD) CURSOR
+                               DATAONLY
+           END-EXEC.
+
+       AUTO-INVOC.
+      *-----------
+           EXEC CICS RETURN    TRANSID('GA08')
+                               COMMAREA(CMA)
+                               LENGTH(L-CMA)
+           END-EXEC.
+
+       RECIBIR-MAPA.
+      *-------------
+           EXEC CICS RECEIVE   MAP(CMA-COD-MAP8) MAPSET(CMA-COD-SET8)
+                               INTO(G08-FLD)
+           END-EXEC.
+
+       VEZ-SIGUIENTE.
+      *--------------
+           PERFORM RECIBIR-MAPA.
+           IF EIBAID = FRM-FFLD-PF3 OR FRM-FFLD-PFC
+                PERFORM TERMINAR.
+           IF EIBAID = FRM-FFLD-PF12 OR FRM-FFLD-PFL
+                PERFORM PRIMERA-VEZ.
+           GO TO VAL-MAP RCV-CUR ELI-HLP
+                 DEPENDING ON CMA-COD-INST.
+       VAL-MAP.
+      *--------
+           MOVE '*'            TO CMA-COD-STAT.
+           MOVE SPACES         TO G08-GLS-MENS.
+           IF G08-COD-MAPA NOT > SPACES
+                MOVE 'INGRESE NOMBRE MAPA' TO G08-GLS-MENS
+                MOVE 'I'           TO CMA-COD-STAT G08-COD-MAPA-ATR
+                MOVE -1 TO                    G08-COD-MAPA-LEN
+           ELSE
+           IF G08-COD-MSET NOT > SPACES
+                MOVE 'I'       TO CMA-COD-STAT       G08-COD-MSET-ATR
+                MOVE -1 TO                      G08-COD-MSET-LEN
+                MOVE 'INGRESE NOMBRE MAPSET' TO G08-GLS-MENS.
+
+           IF CMA-COD-STAT NOT = '*'
+                MOVE  CMA-COD-MAP8 TO WS-MAPA
+                MOVE  CMA-COD-SET8 TO WS-MSET
+                PERFORM ENVIAR-MAPA-DATOS THRU AUTO-INVOC.
+
+           MOVE G08-COD-MAPA        TO WS-MAPA CMA-COD-MAPA.
+           MOVE G08-COD-MSET        TO WS-MSET CMA-COD-MSET.
+           MOVE LOW-VALUES TO G08-FLD.
+           MOVE PSN-CUR             TO CMA-COD-INST.
+           PERFORM ENVIAR-SOLO-MAPA.
+           MOVE 'POSICIONE CURSOR SOBRE EL CAMPO Y ENTER' TO
+                MSG-GLS-MENS.
+           EXEC CICS SEND
+                 MAP      ('GNSFMSG')
+                 MAPSET   ('GNSAMSG')
+                 FROM     (MSG-FLD)
+           END-EXEC.
+           PERFORM AUTO-INVOC.
+
+       ENVIAR-SOLO-MAPA.
+      *-----------------
+           EXEC CICS SEND      MAP(WS-MAPA)
+                               MAPSET(WS-MSET)
+                               MAPONLY 
+                               ERASE
+           END-EXEC.
+       NO-MAPA.
+      *--------
+           MOVE LOW-VALUES     TO G08-FLD.
+           PERFORM PUT-FHOY.
+           MOVE -1 TO G08-COD-MAPA-LEN.
+           MOVE 'NOMBRE DE MAPSET O MAPA INCORRECTOS' TO G08-GLS-MENS.
+           MOVE 'GNSFG08'      TO WS-MAPA CMA-COD-MAP8.
+           MOVE 'GNSAG08'      TO WS-MSET CMA-COD-SET8.
+           MOVE IDN-MAP        TO CMA-COD-INST.
+           PERFORM ENVIAR-MAPA-COMPLETO.
+           PERFORM AUTO-INVOC.
+
+       RCV-CUR.
+      *---------
+           MOVE EIBCPOSN       TO CMA-NUM-POSI.
+           MOVE 'GNSFG08'      TO WS-MAPA CMA-COD-MAP8.
+           MOVE 'GNSAG08'      TO WS-MSET CMA-COD-SET8.
+           MOVE LOW-VALUES     TO G08-FLD.
+           PERFORM PUT-FHOY.
+           MOVE CMA-COD-MAPA        TO G08-COD-MAPA.
+           MOVE CMA-COD-MSET        TO G08-COD-MSET.
+           MOVE 'PRESIONE  PF10  PARA CONFIRMAR BORRADO' TO G08-GLS-MENS.
+           MOVE DCH-HLP        TO CMA-COD-INST.
+           PERFORM ENVIAR-MAPA-COMPLETO.
+           PERFORM AUTO-INVOC.
+
+       ELI-HLP.
+      *---------
+           IF (G08-COD-MAPA NOT = CMA-COD-MAPA) OR
+              (G08-COD-MSET NOT = CMA-COD-MSET)
+                               GO TO VAL-MAP.
+           IF EIBAID = FRM-FFLD-PF10 OR FRM-FFLD-PFJ
+               PERFORM CONFIRMAR.
+
+           MOVE 'PRESIONE PF10 PARA CONFIRMAR' TO G08-GLS-MENS.
+           PERFORM ENVIAR-MAPA-DATOS THRU AUTO-INVOC.
+
+       CONFIRMAR.
+      *----------
+           MOVE CMA-COD-MAPA        TO HLP-COD-MAPA.
+           MOVE CMA-NUM-POSI        TO HLP-NUM-POSI.
+           PERFORM LEER-POSI THRU F-LPOS.
+           IF FIO-STAT-OKS
+                 PERFORM BORRAR
+                 IF FIO-STAT-OKS
+                     PERFORM PRIMERA-VEZ
+                 ELSE
+                     MOVE 'ERROR AL BORRAR' TO G08-GLS-MENS
+                     PERFORM ENVIAR-MAPA-DATOS THRU AUTO-INVOC
+           ELSE
+                     MOVE 'NO EXISTE CAMPO EN HELP' TO G08-GLS-MENS
+                     MOVE  CMA-COD-MAP8 TO WS-MAPA
+                     MOVE  CMA-COD-SET8 TO WS-MSET
+
+                     PERFORM ENVIAR-MAPA-DATOS THRU AUTO-INVOC.
+
+       LEER-POSI.
+      *----------
+           MOVE FIO-GET-KEY-UPD TO FIO-CMND.
+           PERFORM GNS-FIO-HLP.
+       F-LPOS.
+      *-------
+       BORRAR.
+      *-------
+           MOVE FIO-DEL TO FIO-CMND.
+           PERFORM GNS-FIO-HLP.
+       F-BORR.
+      *-------
+       TERMINAR.
+      *---------
+           PERFORM GNS-RET-FUN.
+       CANCELAR.
+      *---------
+           EXEC CICS SEND      FROM(G08-GLS-MENS) LENGTH(L-MEN) ERASE
+           END-EXEC
+       COPY GNSBGGBK.
+       CMN-ERR-ABN.
+           EXEC CICS ASSIGN
+                     ABCODE(WSS-CCOD)
+           END-EXEC.
+           IF WSS-CCOD-APCT OR WSS-CCOD-ABM0
+               IF WSS-CCOD-APCT
+                  MOVE -1 TO G08-COD-MSET-LEN
+                  MOVE 'MAPSET INVALIDO ' TO G08-GLS-MENS
+               ELSE
+                  MOVE -1 TO G08-COD-MAPA-LEN
+                  MOVE 'MAPA   INVALIDO ' TO G08-GLS-MENS
+           ELSE
+               MOVE -1 TO G08-COD-MAPA-LEN
+               MOVE 'ERROR DESCONOCIDO EN MAPA ' TO G08-GLS-MENS.
+           MOVE 'GNSFG08'      TO WS-MAPA CMA-COD-MAP8.
+           MOVE 'GNSAG08'      TO WS-MSET CMA-COD-SET8.
+           MOVE IDN-MAP        TO CMA-COD-INST.
+           PERFORM ENVIAR-MAPA-DATOS.
+           PERFORM AUTO-INVOC.
+
+       COPY GNSBGHOY.
+
+       PUT-FHOY SECTION.
+       INI-PUT-FHOY.
+           PERFORM GET-FHOY.
+           MOVE HOY-DHOY     TO WSS-NUM-DHOY.
+           MOVE HOY-MHOY     TO WSS-NUM-MHOY.
+           MOVE HOY-SHOY     TO WSS-NUM-SHOY.
+           MOVE HOY-AHOY     TO WSS-NUM-AHOY.
+           MOVE WSS-FEC-FHOY TO G08-FEC-FECH.
+       FIN-PUT-FHOY.
+           EXIT.
+
+       COPY GNSBGSYS.
+       COPY GNSBIABT.
+       COPY GNSBFHLP.
+       COPY GNSBGVSM.
+       COPY GNSBHVSM.
+       COPY GNSBGRFN.
+

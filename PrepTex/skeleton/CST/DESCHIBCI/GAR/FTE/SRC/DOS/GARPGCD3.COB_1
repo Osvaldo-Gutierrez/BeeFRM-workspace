@@ -1,0 +1,306 @@
+       IDENTIFICATION DIVISION.
+      *
+       PROGRAM-ID.     GARPGCD3.
+       AUTHOR.         G. URETA Q.
+       DATE-WRITTEN.   21-SEP-1987.
+       DATE-COMPILED.
+      ******************************************************************
+      *  INTERSOFT                                                     *
+      *  MIGRACION A COBOL OS/390                                      *
+      *  FECHA: 15 DE ABRIL DE 1998                                    *
+      ******************************************************************
+      *         PROGRAMA COBOL + DATACOM/DB
+      *         QUE TIENE POR OBJETIVO TRASPASAR
+      *         LOS REGISTROS DE LA TABLA D03 A
+      *         CINTA MAGNETICA.
+      *
+      *         SE USA DE INPUT LA TABLA:
+      *             - D03
+      *
+      *===============================================================
+      * MODIFICACIONES  :
+      * - SE AGREGA EL CAMPO GAR-UMD-SUP-TER-CIND03 AL REG. DE SALIDA.
+      *   POR REQUERIMIENTO DE SUPERBANCOS.
+      *----------------------------------------- S.NUNEZ 28/11/88
+      *
+      * - SE MODIFICA EL FORMATO DE LA CINTA, SEGUN CIRCULAR SUPER
+      *   N. 21/89 DEL 29 DIC. 1989.
+      *   EL REG. QUEDA DE LARGO 183. (NO SE MODIFICARA LA TABLA D03).
+      *----------------------------------------- S.NUNEZ 30/01/90
+      *
+      * - SE SELECCIONAN LOS D03 CON GAR-IND-MAY-DDR = 'R' , 'N' ,
+      *   'S' O 'T'.
+      *
+      *    GAR-IND-MAY-DDR   = 'R' : SOLO RELACIONADO
+      *                      = 'M' : SOLO MAYOR DEUDOR
+      *                      = 'N' : MAYOR DEUDOR Y RELACIONADO
+      *                      = 'S' : DEUDA COMERCIAL > 20.000 UF.
+      *                      = 'T' : DEUDA COMERCIAL > 20.000 UF Y
+      *                              RELACIONADO.
+      *
+      *----------------------------------------- S.NUNEZ 08/03/90
+      *  SE MODIFICA FACTOR DE BLOQUEO DE LA CINTA
+      *  A  CERO (0)  RECORDS.       PHJH 31/05/90
+      *--------------------------------------------
+      *
+      *--------------------------------------------------------
+      *  SE MODIFICA LARGO DE CINTA D03 DE 183 A 202 CARACTERES
+      *     CAMBIO CAMPO GAR-COD-CLV-ESP-CIND03  DE LARGO 12 A 30
+      *     SE AGREGA FILLER PIC X AL FINAL.
+      *--------------------------------------------C. HERRERA 31/07/90
+      *  SE MODIFICA REGISTRO DE CINTA D03
+      *     SE CAMBIA CAMPO GAR-FILLER-CIND03 POR
+      *               GAR-TIP-TSN
+      *--------------------------------------------ODONOSO ENE/91
+      *--------------------------------------------S.NUNEZ ENE/91
+      *
+      *  - SE CONVIERTE A SISTEMA CONSIST
+      *    FIO'S
+      *    TABLAS Y PARAMETROS GENERALES
+      *----------------------------------F. LIZANA JUL 1991
+      ******************************************************************
+      *      MANTENCIONES.
+      *      ==============
+      *
+      *      PROGRAMADOR : FORMAT 2000 INC.
+      *      FECHA       : 20.02.1998
+      *      CAMBIO      : SE APLICA TECNICA WINDOWING PARA CONVERSION
+      *                      2000 COMPLIANT.
+      ******************************************************************
+       ENVIRONMENT DIVISION.
+      *=====================
+       CONFIGURATION SECTION.
+      *----------------------
+       SPECIAL-NAMES.
+             DECIMAL-POINT IS COMMA.
+      *
+       DATA DIVISION.
+      *==============
+      *
+       WORKING-STORAGE SECTION.
+      *------------------------
+
+       77  CONT-D03-LEIDOS                 PIC 9(05) VALUE 0.
+       77  CONT-D03-GRABADOS               PIC 9(05) VALUE 0.
+
+       01  WK-FEC.
+           03 FEC-SS     PIC X(2).
+           03 FEC-AA     PIC X(2).
+           03 FEC-MM     PIC X(2).
+           03 FEC-DD     PIC X(2).
+
+       01  WA-IDENTIFICACION.
+           03 COD-OFIC   PIC 9(3) VALUE 016.
+           03 IDE-ARCH   PIC X(3) VALUE 'D03'.
+           03 FECHA-IDE.
+              05 ANO-IDE PIC X(2).
+              05 MES-IDE PIC X(2).
+           03 FILLER     PIC X(192) VALUE SPACES.
+
+       COPY GNSWVFIO.
+       COPY GNSWCFIO.
+       COPY GNSWVIDD.
+       COPY GNSWGHOY.
+       COPY GNSWGSYS.
+       COPY GNSWGRQA.
+       COPY GNSWGUIB.
+       COPY GNSWGELS.
+       COPY GNSBRMSG.
+       COPY GNSBRTAB.
+       COPY GNSBRERR.
+
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-D03-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-TAB-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-MSG-REQA==.
+
+       COPY GARBRD03.
+       COPY GARBRCD3.
+      *
+       COPY RLOVR001.
+
+      *------------------------------------------------------------*
+      *                                                            *
+      *                   PROGRAMA PRINCIPAL                       *
+      *                                                            *
+      *------------------------------------------------------------*
+
+       PROCEDURE DIVISION.
+       MAIN SECTION.
+       INI-MAIN.
+       COPY GNSBGEDB.
+           PERFORM INI.
+           IF NOT FIO-STAT-OKS
+               GO TO FIN-MAIN.
+
+           PERFORM PROCESO-PRINC UNTIL NOT FIO-STAT-OKS.
+
+       FIN-MAIN.
+           MOVE FIO-CLO TO FIO-CMND.
+           PERFORM GAR-FIO-CD3.
+           MOVE FIO-CLO TO FIO-CMND.
+           PERFORM GAR-FIO-D03.
+
+           DISPLAY ' '.
+           DISPLAY 'GARPGCD3 : '.
+           DISPLAY ' '.
+           DISPLAY '    FIN NORMAL .... '.
+           DISPLAY ' '.
+           DISPLAY '    REGISTROS LEIDOS  : ' CONT-D03-LEIDOS.
+           DISPLAY '              GRABADOS: ' CONT-D03-GRABADOS.
+           DISPLAY ' '.
+       COPY GNSBGGBK.
+
+       INI SECTION.
+       INI-INI.
+           MOVE 'GARPGCD3' TO FIO-PROG.
+           PERFORM GNS-BUS-IDD.
+           MOVE ERR-TERR-LGC IN ERR-VARI TO ERR-COD-TERR IN ERR.
+           MOVE 'GARPGCD3'               TO ERR-COD-ATRN IN ERR.
+           MOVE ERR-TTRN-BAT IN ERR-VARI TO ERR-MSC-TTRN IN ERR.
+           MOVE ERR-SVRT-FAT IN ERR-VARI TO ERR-IND-SVRT IN ERR.
+           MOVE 'M' TO ERR-MSC-TACC IN ERR.
+
+           MOVE FIO-ACCS-UPD TO FIO-ACCS.
+           MOVE FIO-ACC      TO FIO-CMND.
+           MOVE 'GNS'        TO FIO-SIST.
+           PERFORM GNS-FIO-TAB.
+           MOVE FIO-INP TO FIO-CMND.
+           PERFORM GNS-FIO-TAB.
+
+           MOVE FIO-ACCS-UPD TO FIO-ACCS.
+           MOVE FIO-ACC      TO FIO-CMND.
+           MOVE 'GAR'        TO FIO-SIST.
+           PERFORM GNS-FIO-TAB.
+           MOVE FIO-INP TO FIO-CMND.
+           PERFORM GNS-FIO-TAB.
+
+           MOVE FIO-INP TO FIO-CMND.
+           PERFORM GAR-FIO-D03.
+           IF NOT FIO-STAT-OKS
+               PERFORM PRO-ERR
+               PERFORM PRG-ABT.
+
+           MOVE 'GAR'   TO FIO-SIST.
+           MOVE FIO-OUT TO FIO-CMND.
+           PERFORM GAR-FIO-CD3.
+           IF NOT FIO-STAT-OKS
+               PERFORM PRO-ERR
+
+      * BUS-TAB TABLA DE FECHAS DE PROCESO
+           MOVE 'GAR' TO TAB-COD-SIST.
+           MOVE 'GAR' TO FIO-SIST.
+           MOVE 'TFP' TO TAB-COD-TTAB IN TAB.
+           MOVE '20'  TO TAB-COD-CTAB IN TAB.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM GNS-FIO-TAB.
+           IF FIO-STAT-OKS
+               MOVE TAB-GLS-DAT1 TO WK-FEC
+           ELSE
+              MOVE 'TABTFPNEX'  TO ERR-COD-MENS IN ERR
+              MOVE TAB-COD-CTAB TO ERR-COD-CMPO IN ERR
+              MOVE SPACES       TO ADR-REQA
+              PERFORM PRO-ERR
+              PERFORM PRG-ABT.
+
+           DISPLAY ' '.
+           DISPLAY 'GARPGCD3 : '.
+           DISPLAY ' '.
+           DISPLAY '    FECHA DE PROCESO  : ' WK-FEC
+           DISPLAY ' '.
+
+           MOVE FIO-GET-FST TO FIO-CMND.
+           PERFORM GAR-FIO-D03.
+           IF NOT FIO-STAT-OKS
+               MOVE ERR-SVRT-ADV IN ERR-VARI TO ERR-IND-SVRT IN ERR
+               MOVE 'D03    NEX'    TO ERR-COD-MENS IN ERR
+               MOVE SPACES          TO ERR-COD-CMPO IN ERR
+               MOVE SPACES          TO ADR-REQA
+               PERFORM PRO-ERR
+               PERFORM PRG-ABT.
+
+           MOVE FEC-AA  TO ANO-IDE.
+           MOVE FEC-MM  TO MES-IDE.
+           MOVE WA-IDENTIFICACION TO CD3.
+           MOVE FIO-PUT TO FIO-CMND.
+           PERFORM GAR-FIO-CD3.
+           ADD 1        TO CONT-D03-GRABADOS.
+
+       FIN-INI.
+           EXIT.
+
+       PROCESO-PRINC SECTION.
+      *----------------------
+       INI-PROCESO-PRINC.
+
+           ADD 1                 TO CONT-D03-LEIDOS.
+           IF (GAR-IND-MAY-DDR = 'R' OR 'N' OR 'S' OR 'T') AND
+              (GAR-TIP-REA-NRE = 'R')
+              PERFORM VALIDO-RUT
+              MOVE GAR-ID-SUP-DDR  IN D03 TO GAR-ID-SUP-DDR IN CD3
+              MOVE GAR-RSO-DDR     IN D03 TO GAR-RSO-DDR IN CD3
+              MOVE GAR-VAL-GAR-REA IN D03 TO GAR-VAL-GAR-REA IN CD3
+              MOVE GAR-ID          IN D03 TO GAR-ID IN CD3
+              MOVE GAR-ID-SUP-GNT  IN D03 TO GAR-ID-SUP-GNT IN CD3
+              MOVE GAR-RSO-GNT     IN D03 TO GAR-RSO-GNT IN CD3
+              MOVE GAR-COD-LIM     IN D03 TO GAR-COD-LIM IN CD3
+              MOVE GAR-COD-CLV-ESP IN D03 TO GAR-COD-CLV-ESP IN CD3
+              MOVE GAR-TIP-OPE     IN D03 TO GAR-TIP-OPE IN CD3
+              MOVE GAR-STP-OPE     IN D03 TO GAR-STP-OPE IN CD3
+              MOVE GAR-VAL-LIQ-TSN IN D03 TO GAR-VAL-LIQ-TSN IN CD3
+              MOVE GAR-FEC-TSN     IN D03 TO GAR-FEC-TSN IN CD3
+              MOVE GAR-COD-MON-SUP IN D03 TO GAR-COD-MON-SUP IN CD3
+              MOVE GAR-VAL-ULT-CON IN D03 TO GAR-VAL-ULT-CON IN CD3
+              MOVE GAR-FEC-VTO     IN D03 TO GAR-FEC-VTO IN CD3
+              MOVE GAR-COD-GRA     IN D03 TO GAR-COD-GRA IN CD3
+              MOVE GAR-TIP-TSN     IN D03 TO GAR-TIP-TSN IN CD3
+              MOVE FIO-PUT TO FIO-CMND
+              PERFORM GAR-FIO-CD3
+              ADD 1                TO CONT-D03-GRABADOS.
+
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM GAR-FIO-D03.
+       FIN-PROCESO-PRINC.
+           EXIT.
+
+       VALIDO-RUT SECTION.
+      *-------------------
+       INI-VALIDO-RUT.
+
+           IF GAR-IRT-DDR = '1'
+              MOVE '0000000027' TO GAR-ID-SUP-DDR IN D03.
+           IF GAR-IRT-DDR = '2'
+              MOVE '0000000019' TO GAR-ID-SUP-DDR IN D03.
+
+           IF GAR-IRT-GNT = '1'
+              MOVE '0000000027' TO GAR-ID-SUP-GNT IN D03.
+           IF GAR-IRT-GNT = '2'
+              MOVE '0000000019' TO GAR-ID-SUP-GNT IN D03.
+
+           IF GAR-IRT-AP1 = '1'
+              MOVE '0000000027' TO GAR-ID-SUP-AP1 IN D03.
+           IF GAR-IRT-AP1 = '2'
+              MOVE '0000000019' TO GAR-ID-SUP-AP1 IN D03.
+
+           IF GAR-IRT-AP2 = '1'
+              MOVE '0000000027' TO GAR-ID-SUP-AP2 IN D03.
+           IF GAR-IRT-AP2 = '2'
+              MOVE '0000000019' TO GAR-ID-SUP-AP2 IN D03.
+
+       FIN-VALIDO-RUT.
+           EXIT.
+
+       COPY GARBFD03.
+       COPY GARBFCD3.
+
+       COPY GNSBBMSG.
+       COPY GNSBFMSG.
+       COPY GNSBFTAB.
+      *COPY GNSBFERR.
+       COPY GNSBGERR REPLACING ==FIO-STAT IN FIO-VARI== BY ==FIO-STAT==.
+       COPY GNSBGDTC.
+       COPY GNSBGIDD.
+       COPY GNSBTABT.
+       COPY GNSBGABT.
+       COPY GNSBBSYS.
+       COPY GNSBGHOY.
+

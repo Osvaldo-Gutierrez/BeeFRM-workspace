@@ -1,0 +1,184 @@
+       IDENTIFICATION DIVISION.
+      *=======================
+       PROGRAM-ID.      COLPGCGA.
+       AUTHOR.          BEE (ALD).
+       DATE-WRITTEN.    18-NOV-1998.
+      *PROGRAMA CORRECTOR DE OPERACIONES, DEBIDO A REVERSAS MAL
+      *EFECTUADAS:
+      *             *******NO REPROCESABLE ********
+      *           VALIDA :
+      *                   - OPC ACTIVADA
+      *                   - OPC 1 VCTO
+      *                   - OPC SALDO EN CERO
+      *                   - ULTIMA CANCELACION ES REVERSA
+      *           ENTRAD :
+      *                     NUMEROS DE OPERACIONES
+      *                     ( FIN DE PARAMETROS = * )
+      *           SALIDA :
+      *                    MOD TABLA OPC
+      *                    MOD TABLA DLC
+      *                    MOD TABLA VEN
+       ENVIRONMENT DIVISION.
+      *====================
+       DATA DIVISION.
+      *=============
+       WORKING-STORAGE SECTION.
+      *-----------------------
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-OPC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-CAN-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-DLC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-VEN-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-RCV-REQA==.
+       COPY COLBROPC.
+       COPY COLBRCAN.
+       COPY COLBRDLC.
+       COPY COLBRVEN.
+       COPY COLBRRCV.
+       COPY GNSWGRQA.
+       COPY GNSWGUIB.
+       COPY GNSWGELS.
+       COPY GNSWVIDD.
+       COPY GNSWCFIO.
+       COPY GNSWVFIO.
+       01  WSS-VARI.
+           03  WSS-CIC-IOPC.
+               05  WSS-NUM-TOPC                     PIC X(01).
+               05  WSS-RESTO                        PIC X(11).
+           03  WSS-NUM-ROPC         VALUE ZEROES    PIC 9(06).
+           03  WSS-NUM-RDLC         VALUE ZEROES    PIC 9(06).
+           03  WSS-NUM-RVEN         VALUE ZEROES    PIC 9(06).
+           03  WSS-RCV-SGV-CAPI     VALUE ZEROES    PIC 9(11)V9(04).
+           03  WSS-RCV-SGV-FINA     VALUE ZEROES    PIC 9(11)V9(04).
+       PROCEDURE DIVISION.
+      *==================
+       MAIN SECTION.
+      *------------
+        INI-MAIN.
+           COPY GNSBGEDB.
+           MOVE 'COLPGCGA' TO FIO-PROG.
+           PERFORM GNS-BUS-IDD.
+           PERFORM ARR-CGDA.
+       FIN-MAIN.
+           PERFORM GNS-PRO-END.
+       COPY GNSBTABT.
+       COPY GNSBGDTC.
+       COPY GNSBGIDD.
+       COPY GNSBGEND.
+       COPY COLBFOPC.
+       COPY COLBFCAN.
+       COPY COLBFDLC.
+       COPY COLBFVEN.
+       COPY COLBFRCV.
+       ARR-CGDA SECTION.
+       INI-ARR-CGDA.
+           ACCEPT WSS-CIC-IOPC.
+           IF WSS-NUM-TOPC = '*'
+               GO TO IMP-ESTA.
+           MOVE WSS-CIC-IOPC IN WSS-VARI TO OPC-CIC-IOPC IN OPC.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM COL-FIO-OPC.
+           IF NOT FIO-STAT-OKS
+               DISPLAY 'OPERACION NO EXISTE ' OPC-CIC-IOPC IN OPC
+               GO TO FIN-ARR-CGDA.
+           IF OPC-NUM-VCOR IN OPC NOT = 1
+               DISPLAY 'OPERACION NO 1 VCTO ' OPC-CIC-IOPC IN OPC
+               GO TO FIN-ARR-CGDA.
+           IF OPC-MSC-STAT IN OPC NOT = 'A'
+               DISPLAY 'OPERACION NO ACTIVADA ' OPC-CIC-IOPC IN OPC
+               GO TO FIN-ARR-CGDA.
+           IF OPC-VAL-SCRE IN OPC > ZEROES
+               DISPLAY 'SALDO OPERACION > ZEROES ' OPC-CIC-IOPC IN OPC
+               GO TO FIN-ARR-CGDA.
+      *BUSCAR-ULTIMA-CAN.
+           MOVE OPC-CIC-IOPC IN OPC TO CAN-CIC-IOPC IN CAN.
+           MOVE 999                 TO CAN-NUM-ICAN IN CAN.
+           MOVE FIO-GET-LEQ TO FIO-CMND.
+           PERFORM COL-FIO-CAN.
+           IF NOT ( FIO-STAT-OKS AND
+              CAN-CIC-IOPC IN CAN = OPC-CIC-IOPC IN OPC )
+               DISPLAY 'OPERACION SIN CAN ' OPC-CIC-IOPC IN OPC
+               GO TO FIN-ARR-CGDA.
+           IF ( CAN-SGV-TPAG IN CAN > ZEROES OR
+              CAN-SGV-TREN IN CAN > ZEROES ) AND
+              ( CAN-MSC-STAT IN CAN = 'A' )
+                 DISPLAY 'ULT CAN NO ES REVERSA ' OPC-CIC-IOPC IN OPC
+                 GO TO FIN-ARR-CGDA.
+      *BUSCAR-RCV-ASOCIADA.
+           MOVE CAN-CIC-IOPC IN CAN TO RCV-CIC-IOPC IN RCV.
+           MOVE CAN-NUM-ICAN IN CAN TO RCV-NUM-ICAN IN RCV.
+           MOVE SPACES              TO RCV-CIC-IOPV IN RCV.
+           MOVE ZEROES              TO RCV-NUM-IVCT IN RCV.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM COL-FIO-RCV
+           IF NOT (FIO-STAT-OKS AND
+                  CAN-CIC-IOPC IN CAN = RCV-CIC-IOPC IN RCV AND
+                  CAN-NUM-ICAN IN CAN = RCV-NUM-ICAN IN RCV )
+                   DISPLAY 'CAN SIN RCV ' OPC-CIC-IOPC IN OPC
+                   GO TO FIN-ARR-CGDA.
+           MOVE RCV-SGV-CAPI IN RCV TO WSS-RCV-SGV-CAPI.
+           MOVE WSS-RCV-SGV-CAPI    TO RCV-SGV-CAPI IN RCV.
+           MOVE RCV-SGV-FINA IN RCV TO WSS-RCV-SGV-FINA.
+           MOVE WSS-RCV-SGV-FINA    TO RCV-SGV-FINA IN RCV.
+           PERFORM ARR-OPC.
+           PERFORM ARR-DLC.
+           PERFORM ARR-VEN.
+       FIN-ARR-CGDA.
+           GO TO INI-ARR-CGDA.
+       IMP-ESTA.
+           DISPLAY 'OPC MODIFICADAS : ' WSS-NUM-ROPC.
+           DISPLAY 'DLC MODIFICADAS : ' WSS-NUM-RDLC.
+           DISPLAY 'VEN MODIFICADAS : ' WSS-NUM-RVEN.
+       EXT-ARR-CGDA.
+           EXIT.
+       ARR-OPC SECTION.
+       INI-ARR-OPC.
+           MOVE WSS-CIC-IOPC IN WSS-VARI TO OPC-CIC-IOPC IN OPC.
+           MOVE FIO-GET-KEY-UPD TO FIO-CMND.
+           PERFORM COL-FIO-OPC.
+           IF NOT FIO-STAT-OKS
+               GO TO FIN-ARR-OPC.
+           MOVE      1 TO OPC-NUM-IVEN IN OPC.
+           MOVE      1 TO OPC-NUM-VCVG IN OPC.
+           MOVE ZEROES TO OPC-NUM-VCCM IN OPC
+                          OPC-NUM-VCCO IN OPC
+                          OPC-NUM-VCCV IN OPC
+                          OPC-NUM-TVCC IN OPC.
+           ADD RCV-SGV-CAPI IN RCV TO OPC-VAL-SCRE IN OPC.
+           MOVE FIO-MOD TO FIO-CMND.
+           PERFORM COL-FIO-OPC.
+           ADD 1 TO WSS-NUM-ROPC.
+       FIN-ARR-OPC.
+           EXIT.
+       ARR-DLC SECTION.
+       INI-ARR-DLC.
+           MOVE WSS-CIC-IOPC IN WSS-VARI TO DLC-CIC-IOPC IN DLC.
+           MOVE 1                        TO DLC-NUM-IDLC IN DLC.
+           MOVE FIO-GET-KEY-UPD TO FIO-CMND.
+           PERFORM COL-FIO-DLC.
+           IF NOT FIO-STAT-OKS
+               GO TO FIN-ARR-DLC.
+           MOVE OPC-FEC-FCOL IN OPC TO DLC-FEC-FDEV IN DLC.
+           MOVE 'MULT' TO DLC-IND-SCTB IN DLC.
+           MOVE OPC-VAL-SCRE IN OPC TO DLC-VAL-SDLC IN DLC.
+           MOVE FIO-MOD TO FIO-CMND.
+           PERFORM COL-FIO-DLC.
+           ADD 1 TO WSS-NUM-RDLC.
+       FIN-ARR-DLC.
+           EXIT.
+       ARR-VEN SECTION.
+       INI-ARR-VEN.
+           MOVE WSS-CIC-IOPC IN WSS-VARI TO VEN-CIC-IOPC IN VEN.
+           MOVE 1                        TO VEN-NUM-IVEN IN VEN.
+           MOVE FIO-GET-KEY-UPD TO FIO-CMND.
+           PERFORM COL-FIO-VEN.
+           IF NOT FIO-STAT-OKS
+               GO TO FIN-ARR-VEN.
+           ADD RCV-SGV-CAPI IN RCV TO VEN-VAL-SCAP IN VEN.
+           ADD RCV-SGV-FINA IN RCV TO VEN-VAL-SFIN IN VEN.
+           MOVE 'MOR' TO VEN-IND-SCTB IN VEN.
+           MOVE FIO-MOD TO FIO-CMND.
+           PERFORM COL-FIO-VEN.
+
+           ADD 1 TO WSS-NUM-RVEN.
+       FIN-ARR-VEN.
+           EXIT.

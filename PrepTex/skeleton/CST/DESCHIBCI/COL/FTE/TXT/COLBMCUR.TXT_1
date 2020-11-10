@@ -1,0 +1,511 @@
+*% IF LDA_NUM_SIS
+      *<<<
+           IF (LDA-NUM-SIS IN CUR-FLD > SPACES)
+               MOVE LDA-NUM-SIS IN CUR-FLD  TO WR-NUM-SIS
+               IF (WR-NUM-SIS-L NOT = 'L')
+                   MOVE FRM-SUAR-MAL        TO FRM-SUAR
+                   MOVE 'COL'               TO MSG-COD-SIST
+                   MOVE 'LDASISINV'         TO MSG-COD-MENS
+                   PERFORM GET-MSG
+                   MOVE MSG-GLS-DESC        TO FRM-MENS
+                   MOVE -1                  TO LDA-NUM-SIS-LEN
+                   GO TO FIN-VAL-LDA-NUM-SIS.
+      *>>>
+*% END
+*% IF LDA_COD_CRR
+      *<<<
+           IF (LDA-NUM-SIS IN CUR-FLD > SPACES)
+               IF (LDA-COD-CRR IN CUR-FLD = ZEROES)
+                   PERFORM ERR-GLS
+                   MOVE FRM-SUAR-MAL        TO FRM-SUAR
+                   MOVE -1                  TO LDA-COD-CRR-LEN
+                   GO TO FIN-VAL-LDA-COD-CRR.
+      *>>>
+*% END
+*% IF INI_LDA_FEC_VTO_LIN
+      *<<<
+           MOVE FEC-FBLK-N  TO FEC-FBLK.                                
+           MOVE FEC-CHOY-GE TO FEC-CHOY.
+      *>>>
+*% END
+*% IF INI_LDA_FEC_CUR_REA
+      *<<<<
+           MOVE FEC-FBLK-N  TO FEC-FBLK.                                
+      *>>>>
+*% END
+*% IF FRM_VRF_ICLI
+      *<<< valida existencia cliente por rut
+           IF (FRM-SUAR = FRM-SUAR-MAL OR FRM-SUAR = FRM-SUAR-CLR OR
+               FRM-VRF-ICLI IN CUR-FLD NOT > SPACES)
+               GO TO FIN-VAL-FRM-VRF-ICLI.
+
+           MOVE 'DBC-IDC-ICLI'               TO FIO-AKEY
+           PERFORM BUS-CLIENTE
+           IF (NOT ADR-STAT-OKS IN ADR-DBC-REQA)
+               MOVE FRM-SUAR-MAL             TO FRM-SUAR
+               GO TO FIN-VAL-FRM-VRF-ICLI.
+
+           MOVE LDA-NUM-SIS IN CUR-FLD       TO WR-NUM-SIS
+           IF LDA-COD-OFI IN CUR-FLD NOT = WR-COD-OFI AND
+              SCR-CMND NOT = 'CON'
+               MOVE 'COL'                    TO MSG-COD-SIST
+               MOVE 'LDANONOFI'              TO MSG-COD-MENS
+               PERFORM GET-MSG
+               MOVE MSG-GLS-DESC             TO FRM-MENS
+               MOVE -1                       TO FRM-NUM-ICLI-LEN
+               MOVE FRM-SUAR-MAL             TO FRM-SUAR
+               GO TO FIN-VAL-FRM-VRF-ICLI.
+      *>>>
+*% END
+*% IF FRM_COD_CRR
+           IF FRM-COD-CRR IN CUR-FLD = ZEROES                           
+                PERFORM ERR-GLS                                         
+                GO TO FIN-VAL-FRM-COD-CRR.                              
+
+      *<<< Valida cuenta corriente.
+           IF (FRM-COD-CRR IN CUR-FLD NOT < 99000000)
+               MOVE 'COL'                    TO MSG-COD-SIST
+               MOVE 'LDANOCCTE'              TO MSG-COD-MENS
+               PERFORM GET-MSG
+               MOVE MSG-GLS-DESC             TO FRM-MENS
+               MOVE -1                       TO FRM-COD-CRR-LEN
+               MOVE FRM-SUAR-MAL             TO FRM-SUAR
+               GO TO FIN-VAL-FRM-COD-CRR.
+               
+           MOVE SCR-CIC-ICLI                TO RCO-CIC-ICLI.
+           MOVE '0000'                      TO RCO-CAI-IOPE.
+           MOVE FRM-COD-CRR IN CUR-FLD      TO RCO-IIC-IOPE.
+           MOVE 'RCO-KEY-IRCO'              TO FIO-AKEY 
+           MOVE FIO-GET-KEY                 TO FIO-CMND.
+           PERFORM SGC-FIO-RCO.
+           IF (NOT FIO-STAT-OKS)
+               MOVE 'COL'                    TO MSG-COD-SIST
+               MOVE 'LDANEXCTA'              TO MSG-COD-MENS
+               PERFORM GET-MSG
+               MOVE MSG-GLS-DESC             TO FRM-MENS
+               MOVE -1                       TO FRM-COD-CRR-LEN
+               MOVE FRM-SUAR-MAL             TO FRM-SUAR
+               GO TO FIN-VAL-FRM-COD-CRR.
+
+           IF (RCO-COD-STAT = 'ELI')
+               MOVE 'COL'                    TO MSG-COD-SIST
+               MOVE 'LDACTACER'              TO MSG-COD-MENS
+               PERFORM GET-MSG
+               MOVE MSG-GLS-DESC             TO FRM-MENS
+               MOVE -1                       TO FRM-COD-CRR-LEN
+               MOVE FRM-SUAR-MAL             TO FRM-SUAR
+               GO TO FIN-VAL-FRM-COD-CRR.
+      *>>>
+*% END
+*% IF VAL_CON_FLD_CUR
+      *<<< Valida consistencia de campos
+      *<<< Valida codigo de estado segun comando
+      * Estados : "ING" "NCU" "ACA" "NVG"
+      *
+      * Cambios : CMD=ING      inicial     ==> "ING" 
+      *           CMD=EST      "ING","NCU" ==> "ACA"
+      *                        "ACA"       ==> "NVG","NCU"
+      *                        "NCU"       ==> "NVG"
+      *
+           IF (SCR-CMND = 'ING')
+               IF (LDA-COD-EST IN CUR-FLD NOT = 'ING')
+                   MOVE FRM-SUAR-MAL           TO FRM-SUAR
+               ELSE
+                   NEXT SENTENCE
+           ELSE
+           IF (SCR-COD-EST = LDA-COD-EST IN CUR-FLD)
+                   NEXT SENTENCE
+           ELSE
+           IF (SCR-CMND = 'EST')
+               IF ((SCR-COD-EST = 'ING' OR = 'NCU') AND 
+                    LDA-COD-EST IN CUR-FLD = 'ACA')    
+                    OR
+                   (SCR-COD-EST = 'ACA'             AND
+                   (LDA-COD-EST IN CUR-FLD = 'NCU' OR = 'NVG'))
+                    OR
+                   (SCR-COD-EST = 'NCU'             AND
+                    LDA-COD-EST IN CUR-FLD = 'NVG')
+                    NEXT SENTENCE
+               ELSE
+                 MOVE FRM-SUAR-MAL           TO FRM-SUAR.
+
+            IF (FRM-SUAR-MAL = FRM-SUAR)
+               MOVE 'COL'                    TO MSG-COD-SIST
+               MOVE 'LDAESTINV'              TO MSG-COD-MENS
+               PERFORM GET-MSG
+               MOVE MSG-GLS-DESC             TO FRM-MENS
+               MOVE -1                       TO LDA-COD-EST-LEN
+               MOVE FRM-SUAR-MAL             TO FRM-SUAR
+               GO TO FIN-VAL-CON-FLD-CUR.
+
+           IF (SCR-CMND = 'EST' AND 
+               SCR-COD-EST = LDA-COD-EST IN CUR-FLD)
+               MOVE 'COL'                    TO MSG-COD-SIST
+               MOVE 'LDAESTIGU'              TO MSG-COD-MENS
+               PERFORM GET-MSG
+               MOVE MSG-GLS-DESC             TO FRM-MENS
+               MOVE -1                       TO LDA-COD-EST-LEN
+               MOVE FRM-SUAR-MAL             TO FRM-SUAR
+               GO TO FIN-VAL-CON-FLD-CUR.
+
+           IF (SCR-CMND = 'EST' AND
+              (SCR-COD-EST = 'ING' OR = 'NCU') AND 
+               LDA-COD-EST IN CUR-FLD = 'ACA')    
+               PERFORM GET-FHOY
+               MOVE HOY-FHOY         TO LDA-FEC-ING-CMP IN LDA
+               MOVE CORR LDA-FEC-ING-CMP IN LDA 
+                                     TO LDA-FEC-ING-CMP IN CUR-FLD.
+
+           MOVE LDA-FD-CUR-REA IN CUR-FLD    TO WR-DIA-AUX1
+           MOVE LDA-FM-CUR-REA IN CUR-FLD    TO WR-MES-AUX1
+           MOVE LDA-FA-CUR-REA IN CUR-FLD    TO WR-ANO-AUX1.
+
+           MOVE LDA-FD-VTO-LIN IN CUR-FLD    TO WR-DIA-AUX2
+           MOVE LDA-FM-VTO-LIN IN CUR-FLD    TO WR-MES-AUX2
+           MOVE LDA-FA-VTO-LIN IN CUR-FLD    TO WR-ANO-AUX2
+           IF (WR-FECHA-AUX2 NOT > WR-FECHA-AUX1)
+               MOVE 'COL'                    TO MSG-COD-SIST
+               MOVE 'LDAVENMEN'              TO MSG-COD-MENS
+               PERFORM GET-MSG
+               MOVE MSG-GLS-DESC             TO FRM-MENS
+               MOVE FRM-SUAR-MAL             TO FRM-SUAR
+               MOVE '1'                      TO FRM-UCUR
+               MOVE -1                       TO LDA-FEC-VTO-LIN-LEN
+               GO TO FIN-VAL-CON-FLD-CUR.
+
+           ADD 1                             TO WR-ANO-AUX1
+           IF (WR-FECHA-AUX2 NOT < WR-FECHA-AUX1)
+               MOVE 'COL'                    TO MSG-COD-SIST
+               MOVE 'LDAVENCUR'              TO MSG-COD-MENS
+               PERFORM GET-MSG
+               MOVE MSG-GLS-DESC             TO FRM-MENS
+               MOVE '1'                      TO FRM-UCUR
+               MOVE FRM-SUAR-MAL             TO FRM-SUAR 
+               MOVE -1                       TO LDA-FEC-VTO-LIN-LEN
+               GO TO FIN-VAL-CON-FLD-CUR.
+
+      *Valida consistencia de estado "NVG"
+           IF (LDA-COD-EST IN CUR-FLD = 'NVG')
+               MOVE LDA-NUM-SIS IN CUR-FLD   TO WR-NUM-SIS
+               MOVE LDA-COD-CRR IN CUR-FLD   TO WR-COD-CRR
+               MOVE WR-COP                   TO LDA-CLV-RLO-1 IN RLO
+               MOVE 'LDA-CLV-RLO-1'          TO FIO-AKEY
+               MOVE FIO-GET-NLS              TO FIO-CMND
+               MOVE 0                        TO WR-MTO-DEUDA
+               PERFORM COL-FIO-RLO
+               PERFORM REC-RLO-OPC
+                UNTIL (NOT FIO-STAT-OKS OR WR-COP NOT = LDA-COP IN RLO)
+               IF (WR-MTO-DEUDA = 0)
+                  NEXT SENTENCE
+               ELSE
+                  MOVE 'COL'                    TO MSG-COD-SIST
+                  MOVE 'LDAEXIDEU'              TO MSG-COD-MENS
+                  PERFORM GET-MSG
+                  MOVE MSG-GLS-DESC             TO FRM-MEN2
+                  GO TO FIN-VAL-CON-FLD-CUR.
+      *>>>
+*% END
+*% IF FIN_PUT_LDA_CUR
+      *<< LLeno campo cic y estado para ser usado por validacion
+           MOVE LDA-COD-EST IN LDA       TO SCR-COD-EST 
+           MOVE CLI-CIC IN LDA           TO SCR-CIC-ICLI
+           MOVE 'DBC-KEY-IDBC'           TO FIO-AKEY
+           PERFORM BUS-CLIENTE.
+           MOVE CCT-COD-CRR IN LDA       TO FRM-COD-CRR IN CUR-FLD.
+
+           IF (PGM-STAT-LDA-OKS)
+               IF (SCR-CMND = 'ELI')
+                   IF (LDA-COD-EST IN LDA = 'ING')
+                       NEXT SENTENCE
+                   ELSE 
+                       MOVE FRM-SUAR-MAL       TO FRM-SUAR
+               ELSE
+               IF (SCR-CMND = 'MOD')
+                   IF (LDA-COD-EST IN LDA = 'ING')
+                       NEXT SENTENCE
+                   ELSE 
+                       MOVE FRM-SUAR-MAL       TO FRM-SUAR
+               ELSE
+               IF (SCR-CMND = 'EST')
+                   IF (LDA-COD-EST IN LDA = 'ING' OR = 'NCU' OR = 'ACA')
+                       NEXT SENTENCE
+                   ELSE 
+                       MOVE FRM-SUAR-MAL       TO FRM-SUAR.
+
+           IF (FRM-SUAR = FRM-SUAR-MAL)
+               MOVE 'COL'                  TO MSG-COD-SIST
+               MOVE 'LDAESTACC'            TO MSG-COD-MENS
+               PERFORM GET-MSG
+               MOVE MSG-GLS-DESC           TO FRM-MENS
+               MOVE PGM-SRNF               TO PGM-STAT-LDA
+               MOVE FRM-SUAR-MAL           TO FRM-SUAR
+               MOVE SCR-STAT-CON           TO SCR-STAT
+               GO TO FIN-PUT-LDA-CUR.
+      *>>>
+*% END
+*% IF FIN_UNP_FLD_CUR
+      *<<< Proteger campos segun comandos especiales
+           IF (SCR-CMND = 'ING' OR = 'MOD')
+               MOVE FRM-CPIM-AEY            TO LDA-COD-EST-ATR
+           ELSE
+           IF (SCR-CMND = 'EST')
+               MOVE FRM-CPIM-AEY            TO FRM-NUM-ICLI-ATR
+               MOVE FRM-CPIM-AEY            TO FRM-VRF-ICLI-ATR
+               MOVE FRM-CPIM-AEY            TO FRM-COD-CRR-ATR
+               MOVE FRM-CPIM-AEY            TO LDA-VAL-AUT-ATR
+               MOVE FRM-CPIM-AEY            TO LDA-FEC-CUR-REA-ATR
+               MOVE FRM-CPIM-AEY            TO LDA-FEC-VTO-LIN-ATR.
+
+           IF (NOT PGM-STAT-LDA-OKS AND SCR-CMND = 'ING' AND
+               SCR-INST = SCR-INST-GFL)
+                   MOVE 'ING'            TO LDA-COD-EST IN CUR-FLD
+                   PERFORM VAL-LDA-COD-EST
+                   PERFORM GET-FHOY
+                   MOVE HOY-FHOY         TO LDA-FEC-ING-CMP IN LDA
+                   MOVE CORR LDA-FEC-ING-CMP IN LDA 
+                                         TO LDA-FEC-ING-CMP IN CUR-FLD
+                   IF (LDA-FEC-CUR-REA IN CUR-FLD NOT > SPACES)
+                       MOVE LDA-FEC-ING-CMP IN CUR-FLD
+                                         TO LDA-FEC-CUR-REA IN CUR-FLD.
+      *>>>
+*% END
+*% IF FIN_UNP_MKY_CUR
+      *<<<
+           MOVE FRM-CPIM-UBY TO FRM-NUM-ICLI-ATR.                       
+           MOVE FRM-CPIM-UBY TO FRM-VRF-ICLI-ATR.                       
+           IF (SCR-CMND NOT = 'CON' AND SCR-INST = SCR-INST-GKY)
+               MOVE FRM-CPIM-AEY TO FRM-NUM-ICLI-ATR
+               MOVE FRM-CPIM-AEY TO FRM-VRF-ICLI-ATR.
+      *>>>
+*% END
+*% IF INI_FST_FLD_CUR
+      *<<< 
+           IF (SCR-CMND = 'EST')
+               MOVE -1 TO LDA-COD-EST-LEN
+           ELSE
+               MOVE -1 TO FRM-NUM-ICLI-LEN IN CUR-FLD.                      
+           GO TO FIN-FST-FLD-CUR.
+      *>>>
+*% END
+*% IF EOF
+      *<<<
+       BUS-CLIENTE SECTION.
+       INI-BUS-CLTE.
+      *Lee DBC y puebla datos pantalla 
+           IF (FIO-AKEY = 'DBC-IDC-ICLI')
+               MOVE FRM-NUM-ICLI IN CUR-FLD TO DBC-NUM-ICLI IN DBC
+               MOVE SPACES                  TO DBC-IND-ICLI IN DBC
+               MOVE SPACES                  TO DBC-GLS-ICLI IN DBC
+               MOVE FIO-GET-NLS             TO FIO-CMND
+           ELSE
+               MOVE SCR-CIC-ICLI            TO DBC-CIC-ICLI IN DBC
+               MOVE FIO-GET-KEY             TO FIO-CMND.
+
+           PERFORM SGC-FIO-DBC.
+
+           IF NOT FIO-STAT-OKS OR 
+                 (FIO-STAT-OKS AND FRM-NUM-ICLI NOT = DBC-NUM-ICLI AND
+                  SCR-CIC-ICLI NOT = DBC-CIC-ICLI IN DBC)
+                  MOVE '23'                  TO ADR-STAT IN ADR-DBC-REQA
+                  MOVE 'SGC'                 TO MSG-COD-SIST
+                  MOVE 'CLI    NEX'          TO MSG-COD-MENS
+                  PERFORM GET-MSG
+                  MOVE MSG-GLS-DESC          TO FRM-MENS
+                  MOVE '00'                  TO FIO-STAT
+                  MOVE SPACES                TO LDA-COD-EJE IN CUR-FLD
+                  MOVE SPACES                TO LDA-COD-OFI IN CUR-FLD
+                  MOVE SPACES                TO FRM-GLS-NOMC IN CUR-FLD
+                  MOVE SPACES                TO SCR-CIC-ICLI
+                  MOVE SPACES                TO FRM-GLS-OFI IN CUR-FLD
+                  MOVE FRM-SUAR-MAL          TO FRM-SUAR
+                  MOVE -1                    TO FRM-NUM-ICLI-LEN
+              ELSE
+                  MOVE SPACES                TO FRM-MENS
+                  MOVE DBC-GLS-NOMC IN DBC   TO CPT-STRN
+                  PERFORM CPT-BLKS
+                  MOVE CPT-STRN              TO FRM-GLS-NOMC IN CUR-FLD
+                  MOVE DBC-COD-EJEC IN DBC   TO LDA-COD-EJE IN CUR-FLD
+                  MOVE DBC-COD-OFIC IN DBC   TO LDA-COD-OFI IN CUR-FLD
+                  MOVE DBC-NUM-ICLI IN DBC   TO FRM-NUM-ICLI IN CUR-FLD
+                  MOVE DBC-VRF-ICLI IN DBC   TO FRM-VRF-ICLI IN CUR-FLD
+                  MOVE DBC-CIC-ICLI IN DBC   TO SCR-CIC-ICLI
+                  MOVE DBC-COD-OFIC IN DBC   TO OFI-COD-OFIC IN OFI
+                  PERFORM BUS-OFI
+                  MOVE OFI-GLS-DESC IN OFI   TO FRM-GLS-OFI IN CUR-FLD.
+       FIN-BUS-CLTE.
+           EXIT.
+      *>>>
+*% END
+*% IF FIN_CLR_KEY_CUR
+      *<<<<
+           MOVE ZEROES TO FRM-NUM-ICLI IN CUR-FLD.                      
+           MOVE SPACES TO FRM-VRF-ICLI IN CUR-FLD.                      
+      *>>>>
+*% END
+*% IF INI_FST_KEY_CUR
+      *<<<<
+           MOVE -1 TO LDA-NUM-SIS-LEN IN CUR-FLD.                       
+           GO TO FIN-FST-KEY-CUR.
+      *>>>>
+*% END
+*% IF INI_PRO_KEY_CUR
+      *<<<<
+           MOVE FRM-CPIM-AEY TO FRM-VRF-ICLI-ATR IN CUR-FLD.            
+      *>>>>
+*% END
+*% IF INI_PRO_MKY_CUR
+      *<<<<
+           MOVE FRM-CPIM-AEY TO FRM-NUM-ICLI-ATR IN CUR-FLD.            
+           MOVE FRM-CPIM-AEY TO FRM-VRF-ICLI-ATR IN CUR-FLD.            
+      *>>>> 
+*% END
+*% IF INI_VAL_NUM_MKY_CUR
+       VAL-NUM-FRM-NUM-ICLI.                                            
+           MOVE FRM-NUM-ICLI-ALF IN CUR-FLD TO NUM-NUME.                
+           MOVE NUM-ZERO-S TO NUM-ZERO.                                 
+           MOVE NUM-SGNO-N TO NUM-SGNO.                                 
+           MOVE 8 TO NUM-NENT.                                          
+           MOVE 0 TO NUM-NDCM.                                          
+           PERFORM VAL-NUM.                                             
+           IF NUM-STAT-OKS                                              
+               MOVE NUM-NN9N TO FRM-NUM-ICLI IN CUR-FLD                 
+           ELSE                                                         
+               MOVE NUM-MENS     TO FRM-MENS                            
+               MOVE FRM-SUAR-MAL TO FRM-SUAR                            
+               MOVE -9 TO FRM-NUM-ICLI-LEN IN CUR-FLD                   
+                GO TO FIN-VAL-NUM-MKY-CUR.                              
+*% END
+*% IF INI_VAL_MKY_CUR
+      *<<<<
+           PERFORM VAL-FRM-NUM-ICLI.                                    
+           IF FRM-SUAR = FRM-SUAR-MAL OR FRM-SUAR = FRM-SUAR-CLR        
+                MOVE -1 TO FRM-NUM-ICLI-LEN IN CUR-FLD                  
+                GO TO FIN-VAL-MKY-CUR.                                  
+           PERFORM VAL-FRM-VRF-ICLI.                                    
+           IF FRM-SUAR = FRM-SUAR-MAL OR FRM-SUAR = FRM-SUAR-CLR        
+                MOVE -1 TO FRM-VRF-ICLI-LEN IN CUR-FLD                  
+                GO TO FIN-VAL-MKY-CUR.                                  
+      *>>>>
+*% END
+*% IF INI_EDT_MKY_CUR
+           IF FRM-NUM-ICLI-LEN IN CUR-FLD = -9                          
+                MOVE -1 TO FRM-NUM-ICLI-LEN IN CUR-FLD                  
+                GO TO FIN-EDT-MKY-CUR.                                  
+           MOVE FRM-NUM-ICLI IN CUR-FLD TO FRM-NUM-ICLI-EDT IN CUR-EDT. 
+           MOVE FRM-NUM-ICLI-EDT IN CUR-EDT TO                          
+                FRM-NUM-ICLI-ALF IN CUR-FLD.                             
+*% END
+*% IF INI_PRO_LDA_CUR
+      *<<<<
+           MOVE FRM-CPIM-AEY TO LDA-VAL-AUT-ATR IN CUR-FLD.             
+           MOVE FRM-CPIM-AEY TO LDA-FEC-CUR-REA-ATR IN CUR-FLD.         
+           MOVE FRM-CPIM-AEY TO LDA-FEC-VTO-LIN-ATR IN CUR-FLD.         
+           MOVE FRM-CPIM-AEY TO LDA-COD-EST-ATR IN CUR-FLD.
+           GO TO FIN-PRO-LDA-CUR.             
+      *>>>>  
+*% END
+*% IF INI_UNP_KEY_CUR
+      *<<<<
+           MOVE FRM-CPIM-UBY TO FRM-VRF-ICLI-ATR IN CUR-FLD.            
+      *>>>>
+*% END
+*% IF INI_UNP_IKY_CUR
+      *<<<<
+           MOVE FRM-CPIM-UBY TO LDA-NUM-SIS-ATR.                        
+           MOVE FRM-CPIM-UBY TO LDA-COD-CRR-ATR.                        
+           GO TO FIN-UNP-IKY-CUR.
+      *>>>>
+*% END
+*% IF INI_UNP_LDA_CUR
+      *<<<<
+           MOVE FRM-CPIM-UBY TO LDA-VAL-AUT-ATR IN CUR-FLD.             
+           MOVE FRM-CPIM-UBY TO LDA-FEC-CUR-REA-ATR IN CUR-FLD.         
+           MOVE FRM-CPIM-UBY TO LDA-FEC-VTO-LIN-ATR IN CUR-FLD.         
+           MOVE FRM-CPIM-UBY TO LDA-COD-EST-ATR IN CUR-FLD.             
+           GO TO FIN-UNP-LDA-CUR.
+      *>>>>
+*% END
+*% IF INI_LDA_COD_EST
+      *<<<<
+           IF LDA-COD-EST IN CUR-FLD NOT > SPACES                       
+                PERFORM ERR-GLS                                         
+                GO TO FIN-VAL-LDA-COD-EST.                              
+      *>>>>
+*% END
+*% IF EDT_MKY_CUR
+      *<<<<
+           IF FRM-NUM-ICLI-LEN IN CUR-FLD = -9                          
+                MOVE -1 TO FRM-NUM-ICLI-LEN IN CUR-FLD                  
+                GO TO FIN-EDT-MKY-CUR.                                  
+           MOVE FRM-NUM-ICLI IN CUR-FLD TO FRM-NUM-ICLI-EDT IN CUR-EDT. 
+           MOVE FRM-NUM-ICLI-EDT IN CUR-EDT TO                          
+                FRM-NUM-ICLI-ALF IN CUR-FLD.                            
+      *>>>>
+*% END
+*% IF INI_VAL_CON_IKY_CUR
+      *<<<<
+           IF     LDA-NUM-SIS IN CUR-FLD NOT > SPACES                   
+              AND LDA-COD-CRR IN CUR-FLD NOT > ZEROES                   
+                PERFORM ERR-KEY                                         
+                PERFORM FST-KEY-CUR.
+           GO TO FIN-VAL-CON-IKY-CUR.                                    
+      *>>>>
+*% END
+*% IF INI_VAL_CON_KEY_CUR
+      *<<<<
+           IF     LDA-NUM-SIS IN CUR-FLD NOT > SPACES                   
+              AND LDA-COD-CRR IN CUR-FLD NOT > ZEROES                   
+              AND FRM-NUM-ICLI IN CUR-FLD NOT > ZEROES                  
+              AND FRM-VRF-ICLI IN CUR-FLD NOT > SPACES                  
+                PERFORM ERR-KEY                                         
+                PERFORM FST-KEY-CUR.
+           GO TO FIN-VAL-CON-KEY-CUR.                                    
+      *>>>>
+*% END
+*% IF LDA_VAL_AUT
+      *<<<<
+           IF LDA-VAL-AUT IN CUR-FLD = ZEROES                           
+                PERFORM ERR-GLS                                         
+                GO TO FIN-VAL-LDA-VAL-AUT.                              
+      *>>>>
+*% END
+*% IF EOF
+      *<<<< EOF
+       VAL-FRM-VRF-ICLI SECTION.                                        
+       INI-VAL-FRM-VRF-ICLI.                                            
+           IF FRM-VRF-ICLI IN CUR-FLD NOT > SPACES                      
+              MOVE SPACES TO FRM-VRF-ICLI IN CUR-FLD.                   
+      *VAL-VRF Valida Verificador                                       
+           MOVE VRF-VAL TO VRF-CMND.                                    
+           MOVE VRF-SVRF-K TO VRF-SVRF.                                 
+           MOVE VRF-ZERO-S TO VRF-ZERO.                                 
+           MOVE FRM-NUM-ICLI IN CUR-FLD TO VRF-NUME.                    
+           MOVE FRM-VRF-ICLI IN CUR-FLD TO VRF-DVRF.                    
+           MOVE 7 TO VRF-LMAX.                                          
+           PERFORM PRO-VRF.                                             
+      *<<< valida existencia cliente por rut                            
+           IF (FRM-SUAR = FRM-SUAR-MAL OR FRM-SUAR = FRM-SUAR-CLR OR    
+               FRM-VRF-ICLI IN CUR-FLD NOT > SPACES)                    
+               GO TO FIN-VAL-FRM-VRF-ICLI.                              
+                                                                        
+           MOVE 'DBC-IDC-ICLI'               TO FIO-AKEY                
+           PERFORM BUS-CLIENTE                                          
+           IF (NOT ADR-STAT-OKS IN ADR-DBC-REQA)                        
+               MOVE FRM-SUAR-MAL             TO FRM-SUAR                
+               GO TO FIN-VAL-FRM-VRF-ICLI.                              
+                                                                        
+           MOVE LDA-NUM-SIS IN CUR-FLD       TO WR-NUM-SIS              
+           IF LDA-COD-OFI IN CUR-FLD NOT = WR-COD-OFI AND               
+              SCR-CMND NOT = 'CON'                                      
+               MOVE 'COL'                    TO MSG-COD-SIST            
+               MOVE 'LDANONOFI'              TO MSG-COD-MENS            
+               PERFORM GET-MSG                                          
+               MOVE MSG-GLS-DESC             TO FRM-MENS                
+               MOVE -1                       TO FRM-NUM-ICLI-LEN        
+               MOVE FRM-SUAR-MAL             TO FRM-SUAR                
+               GO TO FIN-VAL-FRM-VRF-ICLI.                              
+      *>>>                                                              
+       FIN-VAL-FRM-VRF-ICLI.                                            
+           EXIT.               
+      *>>>>
+*% END

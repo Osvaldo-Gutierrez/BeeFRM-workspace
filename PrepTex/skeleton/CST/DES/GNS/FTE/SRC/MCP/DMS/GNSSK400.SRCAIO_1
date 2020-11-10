@@ -1,0 +1,440 @@
+000000400[ DATABASE BDCST;]
+000000400%
+000000400%
+000000400  PROCEDURE {SIS}XF{REG} (FIO_VARI,{REG})     ;
+000000400    EBCDIC ARRAY FIO_VARI [0]           ;
+000000400    EBCDIC ARRAY {REG}      [0]           ;
+000000400%
+000000400%
+000000400    BEGIN
+000000400
+000000400      POINTER       PCMND               ;
+000000400  REAL          DMSTATUS;
+000000400%
+000000400  STRING        WSS_AKEY                ,
+000000400                PASO                    ,
+000000400                WSS_IND_DABT            ,
+000000400                WSS_IND_BGTN            ,
+000000400                WSS_FIO_PROG            ,
+000000400                WSS_FIO_CMND            ;
+000000400
+000000400  STRING        FIO_AKEY                ,
+000000400                FIO_STAT_LNK            ,
+000000400                FIO_BTRN                ,
+000000400                VAR                     ;
+000000400  ARRAY         FIO_CMND [0:3]          ;
+000000400
+000000400
+000000400%
+000000400  INTEGER       Y                       ;
+000000400%
+000000400%
+*% FOR I = 0 TO {NKA}
+*% J = {KL{I}} - 1
+000000400  EBCDIC ARRAY KEY{REG}0{I}  [0:{J}]         ;
+*% NEXT I
+000000400%
+000000400      PROCEDURE DMS_DSP;
+000000400        BEGIN
+000000400          DISPLAY ("ABORTO EN PROGRAMA " !! WSS_FIO_PROG !!
+000000400                   " COMANDO " !! WSS_FIO_CMND);
+000000400          DISPLAY ("DMSTATUS(DMSTRUCTURE)   : " !!
+000000400                    STRING(DMSTATUS.DMSTRUCTURE,*));
+000000400          DISPLAY ("DMSTATUS(DMERROR)    : " !!
+000000400                    STRING(DMSTATUS.DMERROR,*));
+000000400        END;
+000000400
+000000400      PROCEDURE SET_STAT;
+000000400        BEGIN
+000000400          WSS_IND_DABT := "N";
+000000400          IF DMSTATUS.DMERROR = NOTFOUND
+000000400             THEN REPLACE FIO_VARI[32] BY "23"
+000000400          ELSE
+000000400          IF DMSTATUS.DMERROR = DUPLICATES
+000000400             THEN REPLACE FIO_VARI[32] BY "22"
+000000400          ELSE
+000000400          IF DMSTATUS.DMERROR = DEADLOCK
+000000400             THEN REPLACE FIO_VARI[32] BY "44"
+000000400          ELSE
+000000400          IF ( DMSTATUS.DMERROR = OPENERROR ) AND
+000000400             ( DMSTATUS.DMERRORTYPE = 3 )
+000000400            THEN REPLACE FIO_VARI[32] BY "00"
+000000400          ELSE
+000000400          IF ( DMSTATUS.DMERROR = AUDITERROR ) AND
+000000400             ( DMSTATUS.DMERRORTYPE = 1 )
+000000400             THEN BEGIN
+000000400                  DMS_DSP;
+000000400                  WSS_IND_DABT := "S";
+000000400                  WSS_IND_BGTN := "S";
+000000400             END
+000000400          ELSE BEGIN
+000000400                  WSS_IND_DABT := "S";
+000000400                  DMS_DSP;
+000000400               END;
+000000400          IF WSS_IND_BGTN = "S"
+000000400             THEN BEGIN
+000000400                  ENDTRANSACTION NOAUDIT AUDITAREA:DMSTATUS;
+000000400                  IF BOOLEAN(DMSTATUS)
+000000400                     THEN BEGIN
+000000400                          DMS_DSP;
+000000400                          DMTERMINATE(DMSTATUS);
+000000400                     END;
+000000400             END;
+000000400          IF WSS_IND_DABT = "S"
+000000400             THEN DMTERMINATE(DMSTATUS);
+000000400        END;
+000000400
+000000400      PROCEDURE ERR_ALT;
+000000400        BEGIN
+000000400        END;
+000000400
+000000400      PROCEDURE INI_BCK_OUT;
+000000400        BEGIN
+000000400        IF FIO_BTRN = "S" THEN
+000000400            BEGIN
+000000400            ABORTTRANSACTION AUDITAREA : DMSTATUS;
+000000400            IF BOOLEAN(DMSTATUS) THEN
+000000400                BEGIN
+000000400                DMS_DSP;
+000000400                DMTERMINATE(DMSTATUS);
+000000400                END
+000000400            ELSE
+000000400                BEGIN
+000000400                REPLACE FIO_VARI[57] BY "N";
+000000400                END;
+000000400            END;
+000000400        END;
+000000400
+000000400
+000000400      PROCEDURE INI_BEG_TRAN;
+000000400        BEGIN
+000000400        IF FIO_BTRN = "N" THEN
+000000400            BEGIN
+000000400            BEGINTRANSACTION AUDIT AUDITAREA : DMSTATUS;
+000000400            IF BOOLEAN(DMSTATUS) THEN
+000000400                BEGIN
+000000400                DMS_DSP;
+000000400                DMTERMINATE(DMSTATUS);
+000000400                END
+000000400             ELSE
+000000400                BEGIN
+000000400                REPLACE FIO_VARI[57] BY "S";
+000000400                END;
+000000400             END;
+000000400        END;
+000000400
+000000400      PROCEDURE INI_CHK_PNT;
+000000400        BEGIN
+000000400        IF FIO_BTRN = "S" THEN
+000000400            BEGIN
+000000400            ENDTRANSACTION AUDIT AUDITAREA : DMSTATUS;
+000000400            IF BOOLEAN(DMSTATUS) THEN
+000000400                BEGIN
+000000400                DMS_DSP;
+000000400                DMTERMINATE(DMSTATUS);
+000000400                END
+000000400             ELSE 
+000000400                BEGIN
+000000400                REPLACE FIO_VARI[57] BY "N";
+000000400                END;
+000000400             END;
+000000400        END;
+000000400
+000000400      PROCEDURE MOV_REG;
+000000400        BEGIN
+000000400          IF FIO_STAT_LNK = "00" THEN
+000000400                  GET {SIS}{REG} ( {REG}[0] := {SIS}{REG}-REG );
+000000400        END;
+000000400
+000000400      PROCEDURE MOV_REG_LOCK;
+000000400        BEGIN
+000000400          IF FIO_STAT_LNK = "00" THEN
+000000400                  GET {SIS}{REG} ( {REG}[0] := {SIS}{REG}-REG );
+000000400        END OF MOV_REG_LOCK;
+000000400
+000000400      PROCEDURE MOV_BDD;
+000000400        BEGIN
+000000400          PUT {SIS}{REG} ( {SIS}{REG}-REG := {REG}[0]);
+000000400          STORE {SIS}{REG} : DMSTATUS;
+000000400          IF BOOLEAN(DMSTATUS) THEN SET_STAT;
+000000400        END;
+000000400
+000000400      PROCEDURE LOCK_BDD;
+000000400        BEGIN
+*% FOR I = 0 TO {NKA}
+000000400          IF ( WSS_AKEY EQL "{KY{I}}                    " )
+*% IF I = 0 THEN
+000000400                             OR
+000000400             ( WSS_AKEY LEQ "                                " )
+*% END
+000000400             THEN BEGIN
+000000400                  REPLACE KEY{REG}0{I} BY {REG}[{PS{I}}] FOR {KL{I}};
+000000400                  LOCK FIRST {SIS}{REG}0{I} OF {SIS}{REG}
+000000400                             WHERE {SIS}{KY{I}} = KEY{REG}0{I}
+000000400                       : DMSTATUS;
+000000400                  IF BOOLEAN(DMSTATUS) THEN SET_STAT;
+000000400             END
+000000400          ELSE
+*% NEXT I
+000000400             ERR_ALT;
+000000400        END;
+000000400      PROCEDURE INI_GET_KEY;
+000000400        BEGIN
+*% FOR I = 0 TO {NKA}
+000000400          IF ( WSS_AKEY EQL "{KY{I}}                    " )
+*% IF I = 0 THEN
+000000400                             OR
+000000400             ( WSS_AKEY LEQ "                                " )
+*% END
+000000400             THEN BEGIN
+000000400                  REPLACE KEY{REG}0{I} BY {REG}[{PS{I}}] FOR {KL{I}};
+000000400                  FIND FIRST {SIS}{REG}0{I} OF {SIS}{REG}
+000000400                             WHERE {SIS}{KY{I}} = KEY{REG}0{I}
+000000400                       : DMSTATUS;
+000000400                  IF BOOLEAN(DMSTATUS) THEN SET_STAT
+000000400                                       ELSE MOV_REG;
+000000400             END
+000000400          ELSE
+*% NEXT I
+000000400             ERR_ALT;
+000000400        END;
+000000400
+000000400      PROCEDURE INI_GET_KEY_UPD;
+000000400        BEGIN
+*% FOR I = 0 TO {NKA}
+000000400          IF ( WSS_AKEY EQL "{KY{I}}                    " )
+*% IF I = 0 THEN
+000000400                             OR
+000000400             ( WSS_AKEY LEQ "                                " )
+*% END
+000000400             THEN BEGIN
+000000400                    REPLACE KEY{REG}0{I} BY {REG}[{PS{I}}] FOR {KL{I}};
+000000400                    LOCK FIRST {SIS}{REG}0{I} OF {SIS}{REG}
+000000400                               WHERE {SIS}{KY{I}} = KEY{REG}0{I}
+000000400                         : DMSTATUS;
+000000400                    IF BOOLEAN(DMSTATUS) THEN SET_STAT
+000000400                                         ELSE MOV_REG;
+000000400                  END
+000000400          ELSE
+*% NEXT I
+000000400             ERR_ALT;
+000000400        END;
+000000400
+000000400      PROCEDURE INI_GET_NXT;
+000000400        BEGIN
+*% FOR I = 0 TO {NKA}
+000000400          IF ( WSS_AKEY EQL "{KY{I}}                    " )
+*% IF I = 0 THEN
+000000400                             OR
+000000400             ( WSS_AKEY LEQ "                                " )
+*% END
+000000400             THEN BEGIN
+000000400                  FIND NEXT {SIS}{REG}0{I} OF {SIS}{REG} : DMSTATUS ;
+000000400                  IF BOOLEAN(DMSTATUS) THEN SET_STAT
+000000400                                       ELSE MOV_REG;
+000000400             END
+000000400          ELSE
+*% NEXT I
+000000400             ERR_ALT;
+000000400        END;
+000000400
+000000400      PROCEDURE INI_GET_FST;
+000000400        BEGIN
+*% FOR I = 0 TO {NKA}
+000000400          IF ( WSS_AKEY EQL "{KY{I}}                    " )
+*% IF I = 0 THEN
+000000400                             OR
+000000400             ( WSS_AKEY LEQ "                                " )
+*% END
+000000400             THEN BEGIN
+000000400                  FIND FIRST {SIS}{REG}0{I} OF {SIS}{REG} : DMSTATUS;
+000000400                  IF BOOLEAN(DMSTATUS) THEN SET_STAT
+000000400                                       ELSE MOV_REG;
+000000400             END
+000000400          ELSE
+*% NEXT I
+000000400             ERR_ALT;
+000000400        END;
+000000400
+000000400      PROCEDURE INI_GET_NLS;
+000000400        BEGIN
+*% FOR I = 0 TO {NKA}
+000000400          IF ( WSS_AKEY EQL "{KY{I}}                    " )
+*% IF I = 0 THEN
+000000400                             OR
+000000400             ( WSS_AKEY LEQ "                                " )
+*% END
+000000400             THEN BEGIN
+000000400                  REPLACE KEY{REG}0{I} BY {REG}[{PS{I}}] FOR {KL{I}};
+000000400                  FIND FIRST {SIS}{REG}0{I} OF {SIS}{REG}
+000000400                             WHERE {SIS}{KY{I}} GEQ KEY{REG}0{I}
+000000400                       : DMSTATUS;
+000000400                  IF BOOLEAN(DMSTATUS) THEN SET_STAT
+000000400                                       ELSE MOV_REG;
+000000400             END
+000000400          ELSE
+*% NEXT I
+000000400             ERR_ALT;
+000000400        END;
+000000400
+000000400      PROCEDURE INI_GET_GRT;
+000000400        BEGIN
+*% FOR I = 0 TO {NKA}
+000000400          IF ( WSS_AKEY EQL "{KY{I}}                    " )
+*% IF I = 0 THEN
+000000400                             OR
+000000400             ( WSS_AKEY LEQ "                                " )
+*% END
+000000400             THEN BEGIN
+000000400                  REPLACE KEY{REG}0{I} BY {REG}[{PS{I}}] FOR {KL{I}};
+000000400                  FIND FIRST {SIS}{REG}0{I} OF {SIS}{REG}
+000000400                             WHERE {SIS}{KY{I}} GTR KEY{REG}0{I}
+000000400                       : DMSTATUS;
+000000400                  IF BOOLEAN(DMSTATUS) THEN SET_STAT
+000000400                                       ELSE MOV_REG;
+000000400             END
+000000400          ELSE
+*% NEXT I
+000000400             ERR_ALT;
+000000400        END;
+000000400
+000000400      PROCEDURE INI_PUT_FIL;
+000000400        BEGIN
+000000400          CREATE {SIS}{REG} : DMSTATUS;
+000000400          IF BOOLEAN(DMSTATUS)
+000000400             THEN SET_STAT;
+000000400          IF FIO_STAT_LNK = "00"
+000000400             THEN MOV_BDD;
+000000400        END;
+000000400
+000000400      PROCEDURE INI_MOD_FIL;
+000000400        BEGIN
+000000400          MOV_BDD;
+000000400        END;
+000000400
+000000400      PROCEDURE INI_DEL_FIL;
+000000400        BEGIN
+000000400          DELETE {SIS}{REG} : DMSTATUS;
+000000400          IF BOOLEAN(DMSTATUS) THEN SET_STAT;
+000000400        END;
+000000400
+000000400      PROCEDURE INI_INP_FIL;
+000000400        BEGIN
+000000400          OPEN INQUIRY BDCST : DMSTATUS;
+000000400          IF BOOLEAN(DMSTATUS) THEN SET_STAT;
+000000400        END;
+000000400
+000000400      PROCEDURE INI_UPD_FIL;
+000000400        BEGIN
+000000400%         DISPLAY ("ABRIENDO BASE");
+000000400          OPEN UPDATE BDCST : DMSTATUS;
+000000400          IF BOOLEAN(DMSTATUS) THEN SET_STAT;
+000000400        END;
+000000400
+000000400      PROCEDURE INI_CLO_FIL;
+000000400        BEGIN
+000000400          CLOSE BDCST : DMSTATUS;
+000000400          IF BOOLEAN(DMSTATUS) THEN SET_STAT;
+000000400        END;
+000000400
+000000400      PROCEDURE INI_FND_FST;
+000000400        BEGIN
+*% FOR I = 0 TO {NKA}
+000000400          IF ( WSS_AKEY EQL "{KY{I}}                    " )
+*% IF I = 0 THEN
+000000400                             OR
+000000400             ( WSS_AKEY LEQ "                                " )
+*% END
+000000400             THEN SET {SIS}{REG}0{I} OF {SIS}{REG} TO BEGINNING
+000000400          ELSE
+*% NEXT I
+000000400             ERR_ALT;
+000000400        END;
+000000400
+000000400      PROCEDURE INI_ULK_REC;
+000000400        BEGIN
+000000400          FREE {SIS}{REG};
+000000400        END;
+000000400
+000000400      PROCEDURE INI_GET_LEQ;
+000000400        BEGIN
+*% FOR I = 0 TO {NKA}
+000000400          IF ( WSS_AKEY EQL "{KY{I}}                    " )
+*% IF I = 0 THEN
+000000400                             OR
+000000400             ( WSS_AKEY LEQ "                                " )
+*% END
+000000400             THEN BEGIN
+000000400                    REPLACE KEY{REG}0{I} BY {REG}[{PS{I}}] FOR {KL{I}};
+000000400                    FIND LAST {SIS}{REG}0{I} OF {SIS}{REG}
+000000400                              WHERE {SIS}{KY{I}} LEQ KEY{REG}0{I}
+000000400                         : DMSTATUS;
+000000400                    IF BOOLEAN(DMSTATUS) THEN SET_STAT
+000000400                                         ELSE MOV_REG;
+000000400                  END
+000000400          ELSE
+*% NEXT I
+000000400             ERR_ALT;
+000000400        END;
+000000400
+000000400      PROCEDURE INI_GET_PRV;
+000000400        BEGIN
+*% FOR I = 0 TO {NKA}
+000000400          IF ( WSS_AKEY EQL "{KY{I}}                    " )
+*% IF I = 0 THEN
+000000400                             OR
+000000400             ( WSS_AKEY LEQ "                                " )
+*% END
+000000400             THEN BEGIN
+000000400                    FIND PRIOR {SIS}{REG}0{I} OF {SIS}{REG} : DMSTATUS;
+000000400                    IF BOOLEAN(DMSTATUS) THEN SET_STAT
+000000400                                         ELSE MOV_REG;
+000000400                  END
+000000400          ELSE
+*% NEXT I
+000000400             ERR_ALT;
+000000400        END;
+000000400
+000000400      FIO_AKEY     := STRING(FIO_VARI[00],32);
+000000400      FIO_STAT_LNK := STRING(FIO_VARI[32],02);
+000000400      FIO_BTRN     := STRING(FIO_VARI[57],01);
+000000400      FIO_STAT_LNK := "00";
+000000400%     DISPLAY (FIO_AKEY);
+000000400%     DISPLAY (FIO_STAT_LNK);
+000000400      WSS_IND_BGTN := "N";
+000000400      IF FIO_AKEY GTR "                                "
+000000400         THEN WSS_AKEY := FIO_AKEY
+000000400         ELSE WSS_AKEY := "                                ";
+000000400      REPLACE FIO_VARI[00] BY "                                ";
+000000400      REPLACE FIO_VARI[32] BY "00";
+000000400      PCMND := POINTER(FIO_CMND);
+000000400      REPLACE PCMND BY FIO_VARI[39] FOR 4;
+000000400%     DISPLAY (PCMND);
+000000400      Y := INTEGER(PCMND,4);
+000000400      CASE Y OF
+000000400       BEGIN
+000000400         01      : INI_GET_KEY;
+000000400         02      : INI_GET_NXT;
+000000400         03      : INI_GET_FST;
+000000400         04      : INI_GET_NLS;
+000000400         05      : INI_GET_GRT;
+000000400         06      : INI_PUT_FIL;
+000000400         07      : INI_MOD_FIL;
+000000400         08      : INI_DEL_FIL;
+000000400         10      : INI_INP_FIL;
+000000400         12      : INI_UPD_FIL;
+000000400         13      : INI_CLO_FIL;
+000000400         15      : INI_FND_FST;
+000000400         18      : INI_ULK_REC;
+000000400         36      : INI_GET_KEY_UPD;
+000000400         37:42:43: REPLACE FIO_VARI[32] BY "00";
+000000400         38      : INI_BCK_OUT;
+000000400         39      : INI_GET_LEQ;
+000000400         40      : INI_GET_PRV;
+000000400         41      : INI_CHK_PNT;
+000000400         44      : INI_BEG_TRAN;
+000000400         ELSE    : DISPLAY ("CODIGO " !! STRING(Y,4));
+000000400                   DISPLAY ("INVALIDO EN {SIS}XF{REG} PARA ARCHIVO {SIS}{REG}"
+000000400                           !! " : ABORTO");
+000000400       END;
+000000400  END;

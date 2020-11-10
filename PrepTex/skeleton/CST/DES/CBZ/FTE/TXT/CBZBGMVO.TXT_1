@@ -1,0 +1,335 @@
+       GEN-CAR-ABN SECTION.
+       INI-GEN-CAR-ABN.
+           MOVE SPACES TO MVO-ABNO.
+           MOVE SPACES TO MVO-CMSG.
+      * Verifica Interfase automatica Cta. Cte.
+           MOVE 'CBZ'        TO FIO-SIST.
+           MOVE 'VSN'        TO TAB-COD-TTAB IN TAB.
+           MOVE 'IACC'       TO TAB-COD-CTAB IN TAB.
+           MOVE FIO-GET-KEY  TO FIO-CMND.
+           PERFORM GNS-FIO-TAB.
+           IF NOT ( FIO-STAT-OKS AND TAB-MSC-STAT IN TAB = 'S' )
+               GO TO FIN-GEN-CAR-ABN.
+      * Obtiene Nombre del programa
+           IF TAB-GLS-DCOR IN TAB > SPACES
+               MOVE TAB-GLS-DCOR IN TAB TO MVO-PGM-ABN
+           ELSE
+               MOVE 'MVOIACCPGMNX'      TO MVO-CMSG
+               GO TO FIN-GEN-CAR-ABN.
+      * Lee registros CYZ segun Num. de cancelacion recibido y, si
+      * corresponde, invoca Interfase automatica Cta. Cte.
+           MOVE MVO-CIC-IOPC TO CYZ-CIC-IOPC IN CYZ.
+           MOVE MVO-NUM-ICAN TO CYZ-NUM-ICAN IN CYZ.
+           MOVE 1            TO CYZ-NUM-ICYA IN CYZ.
+           MOVE FIO-GET-NLS  TO FIO-CMND.
+       LUP-GEN-CAR-ABN.
+           PERFORM CBZ-FIO-CYZ.
+           IF NOT ( FIO-STAT-OKS AND
+                    CYZ-CIC-IOPC IN CYZ = MVO-CIC-IOPC AND
+                    CYZ-NUM-ICAN IN CYZ = MVO-NUM-ICAN )
+               GO TO FIN-GEN-CAR-ABN.
+      * Si valor del Cargo/Abono es cero, lee siguiente CYZ
+           IF CYZ-SGV-LIQU IN CYZ = ZEROES
+               GO TO NXT-GEN-CAR-ABN.
+      * Inicializa variables de CMMA
+           MOVE SPACES       TO MVO-CMMA.
+           MOVE ZEROES       TO MVO-CTA-CTE.
+           MOVE ZEROES       TO MVO-VAL-IMPO.
+           MOVE ZEROES       TO MVO-FEC-VALU.
+           IF MVO-ACCI = 'EXT'
+               MOVE 'EXT'               TO MVO-COD-CAUS
+               MOVE CYZ-NUM-OPER IN CYZ TO MVO-NUM-OPEX
+           ELSE
+               MOVE 'CST'               TO MVO-COD-CAUS
+               MOVE ZEROES              TO MVO-NUM-OPEX.
+           MOVE ZEROES       TO MVO-NUM-OPER.
+           MOVE ZEROES       TO MVO-COD-RETO.
+           MOVE ZEROES       TO MVO-COD-EIBRESP.
+           MOVE ZEROES       TO MVO-FEC-FHOY.
+           MOVE CYZ-CAI-ICYA IN CYZ TO OPE-CAI-IOPE IN OPE.
+           MOVE CYZ-IIC-ICYA IN CYZ TO OPE-IIC-IOPE IN OPE.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM SGC-FIO-OPE.
+           IF NOT FIO-STAT-OKS
+               MOVE 'MVOIOPENEX'        TO MVO-CMSG
+               MOVE OPE-CIC-IOPE IN OPE TO FRM-MEN2
+               GO TO FIN-GEN-CAR-ABN.
+      * TRANSFORMA A LA MONEDA DE LA CUENTA
+           PERFORM MVO-TRANS-A-MONE-CTA.
+           IF MVO-CMSG > SPACES
+               GO TO FIN-GEN-CAR-ABN.
+      * Carga Num. de Cuenta en variables MVO
+           MOVE CYZ-CAI-ICYA IN CYZ TO MVO-CAI-ICYA.
+           MOVE CYZ-IIC-ICYA IN CYZ TO MVO-IIC-ICYA.
+      *
+      * Identifica si es Cargo o Abono, segun MVO-COD-ORIG
+           IF CYZ-SGV-LIQU IN CYZ > ZEROES
+               MOVE CYZ-SGV-LIQU IN CYZ TO MVO-VAL-IMPO
+               IF MVO-COD-ORIG = 'O'
+                   MOVE 'A' TO MVO-CAR-ABN
+               ELSE
+                   MOVE 'C' TO MVO-CAR-ABN
+           ELSE
+               COMPUTE MVO-VAL-IMPO = CYZ-SGV-LIQU IN CYZ * -1
+               IF MVO-COD-ORIG = 'O'
+                   MOVE 'C' TO MVO-CAR-ABN
+               ELSE
+                   MOVE 'A' TO MVO-CAR-ABN.
+      *
+      * Busca CIC del Cod. de moneda del registro OPE y setea variable
+      * MVO-PESO-DOLAR
+           PERFORM MVO-BUS-CIC-VCOP
+           IF MVO-CMSG > SPACES
+               GO TO FIN-GEN-CAR-ABN.
+      *
+      * Busca parametro MVO-IND-TCTA
+           PERFORM MVO-BUS-IND-TCTA
+           IF MVO-CMSG > SPACES
+               GO TO FIN-GEN-CAR-ABN.
+      *
+      * Carga variables en CMMA dependiendo del Tipo de Cuenta
+           IF MVO-IND-TCTA = 'CC'
+              PERFORM CAR-VAR-CTA-CTE
+           ELSE
+              PERFORM CAR-VAR-CTA-AHO.
+      *
+      * Carga variables en CMMA independiente del Tipo de Cuenta
+           IF MVO-ES-PESO
+               MOVE '00'         TO MVO-COD-MONE
+           ELSE
+           IF MVO-ES-DOLAR
+               MOVE '01'         TO MVO-COD-MONE.
+      *
+      * Carga variables MVO-TETI y MVO-COD-OPER desde tabla TOU
+           MOVE 'TAB'               TO TAB-COD-SIST FIO-SIST.
+           MOVE 'TOU'               TO TAB-COD-TTAB IN TAB.
+           MOVE SCR-USER            TO TAB-COD-CTAB IN TAB.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM GNS-FIO-TAB.
+           IF NOT FIO-STAT-OKS
+               MOVE 'MVOTETINEX'        TO MVO-CMSG
+               MOVE TAB-COD-CTAB IN TAB TO FRM-MEN2
+               GO TO FIN-GEN-CAR-ABN
+           ELSE
+               IF TAB-MSC-STAT IN TAB NOT = 'S'
+                   MOVE 'MVOTETINVG'        TO MVO-CMSG
+                   MOVE TAB-COD-CTAB IN TAB TO FRM-MEN2
+                   GO TO FIN-GEN-CAR-ABN.
+           MOVE TAB-GLS-DAT1 IN TAB TO MVO-GLS-DAT1.
+
+           MOVE MVO-GLS-TETI TO MVO-TETI.
+           MOVE MVO-GLS-OPER TO MVO-COD-OPER.
+      *
+      * LLamado a Programa que efectua el movimiento
+           MOVE MVO-CMMA    TO SYS-CMMA
+           MOVE SYS-LINK    TO SYS-CMND
+           MOVE MVO-PGM-ABN TO SYS-PROG
+           MOVE MVO-TCMA    TO SYS-TCMA
+           PERFORM GNS-PRO-SYS
+           MOVE SYS-CMMA    TO MVO-CMMA
+           IF NOT MVO-STAT-OKS
+               IF MVO-COD-ORIG NOT = 'O' AND
+                  MVO-CAR-ABN = 'A'
+                   MOVE 'ABONNOOKMVO' TO MVO-ABNO
+               ELSE
+                   MOVE 'MVOSTAT'     TO MVO-NMSG
+                   MOVE MVO-COD-RETO  TO MVO-TMSG
+                   MOVE MVO-GLS-ABEND TO FRM-MEN2
+                   GO TO FIN-GEN-CAR-ABN.
+           IF MVO-ACCI = 'EXT'
+               GO TO NXT-GEN-CAR-ABN.
+      *
+      * Actualiza CYZ
+           MOVE FIO-GET-KEY-UPD TO FIO-CMND.
+           PERFORM CBZ-FIO-CYZ.
+           IF NOT FIO-STAT-OKS
+               MOVE 'MVOICYZNOGKU' TO MVO-CMSG
+               GO TO FIN-GEN-CAR-ABN.
+           MOVE MVO-NUM-OPER TO CYZ-NUM-OPER IN CYZ.
+           MOVE FIO-MOD TO FIO-CMND.
+           PERFORM CBZ-FIO-CYZ.
+           IF NOT FIO-STAT-OKS
+               MOVE 'MVOICYZNOMOD' TO MVO-CMSG
+               GO TO FIN-GEN-CAR-ABN.
+           ADD 1 TO CYZ-NUM-ICYA IN CYZ
+           MOVE FIO-GET-NLS TO FIO-CMND
+           GO TO LUP-GEN-CAR-ABN.
+       NXT-GEN-CAR-ABN.
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           GO TO LUP-GEN-CAR-ABN.
+       FIN-GEN-CAR-ABN.
+           MOVE SPACES TO MVO-COD-ORIG.
+           MOVE SPACES TO MVO-CAI-IOPC.
+           MOVE ZEROES TO MVO-IIC-IOPC.
+           MOVE ZEROES TO MVO-NUM-ICAN.
+           MOVE SPACES TO MVO-ACCI.
+       EXT-GEN-CAR-ABN.
+           EXIT.
+
+       MVO-BUS-CIC-VCOP SECTION.
+       INI-MVO-BUS-CIC-VCOP.
+           MOVE 'TAB'               TO TAB-COD-SIST FIO-SIST.
+           MOVE 'VLR'               TO TAB-COD-TTAB IN TAB.
+           MOVE OPE-COD-VCOP IN OPE TO TAB-COD-CTAB IN TAB.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM GNS-FIO-TAB.
+           IF FIO-STAT-OKS
+               IF TAB-CIC-CTAB IN TAB = '0999'
+                   MOVE '0' TO MVO-PESO-DOLAR
+               ELSE
+               IF TAB-CIC-CTAB IN TAB = '1013'
+                   MOVE '1' TO MVO-PESO-DOLAR
+               ELSE
+                   MOVE 'MVOVCOPINVIA'      TO MVO-CMSG
+                   MOVE OPE-COD-VCOP IN OPE TO FRM-MEN2
+           ELSE
+               MOVE 'MVOVCOPNEX  '      TO MVO-CMSG
+               MOVE OPE-COD-VCOP IN OPE TO FRM-MEN2.
+       FIN-MVO-BUS-CIC-VCOP.
+           EXIT.
+
+       MVO-BUS-IND-TCTA SECTION.
+       INI-MVO-BUS-IND-TCTA.
+           MOVE 'TAB' TO FIO-SIST
+           MOVE 'TCYA'              TO MSC-COD-TMSC IN MSC
+           MOVE CYZ-IND-TCYA IN CYZ TO MSC-COD-CMSC IN MSC
+           MOVE FIO-GET-KEY TO FIO-CMND
+           PERFORM GNS-FIO-MSC
+           IF FIO-STAT-OKS
+               IF MSC-CIC-CMSC IN MSC = 'CC' OR 'AH'
+                   MOVE MSC-CIC-CMSC IN MSC TO MVO-IND-TCTA
+               ELSE
+                   MOVE 'MVOTCYACCLB?'      TO MVO-CMSG
+                   MOVE MSC-COD-CMSC IN MSC TO FRM-MEN2
+           ELSE
+               MOVE 'MVOCMSCNEX  '      TO MVO-CMSG
+               MOVE MSC-COD-CMSC IN MSC TO FRM-MEN2.
+       FIN-BUS-TCYA-LOB.
+           EXIT.
+
+       CAR-VAR-CTA-CTE SECTION.
+       INI-CAR-VAR-CTA-CTE.
+           MOVE MVO-CAI-ICYA-NUM TO MVO-SUC-CTA-CTE.
+           MOVE MVO-IIC-ICYA-NUM TO MVO-COD-CTA-CTE.
+           IF MVO-ES-PESO
+               MOVE '0'        TO MVO-SUF-CTA-CTE
+               IF MVO-ES-CARGO
+                   MOVE 'CARG' TO MVO-COD-TOPE
+               ELSE
+                   MOVE 'ABON' TO MVO-COD-TOPE
+           ELSE
+           IF MVO-ES-DOLAR
+               MOVE '1'        TO MVO-SUF-CTA-CTE
+               IF MVO-ES-CARGO
+                   MOVE 'CAMX' TO MVO-COD-TOPE
+               ELSE
+                   MOVE 'ABMX' TO MVO-COD-TOPE.
+           IF MVO-ACCI = 'EXT'
+               MOVE '129'          TO MVO-NUM-REFE
+           ELSE
+               PERFORM OBT-COD-REFE.
+       FIN-CAR-VAR-CTA-CTE.
+           EXIT.
+
+       CAR-VAR-CTA-AHO SECTION.
+       INI-CAR-VAR-CTA-AHO.
+           MOVE MVO-CAI-ICYA-NUM TO MVO-SUC-CTA-AHO.
+           MOVE MVO-IIC-ICYA-NUM TO MVO-COD-CTA-AHO.
+           IF MVO-ES-PESO
+               IF MVO-ES-CARGO
+                   MOVE 'REAH' TO MVO-COD-TOPE
+               ELSE
+                   MOVE 'DEAH' TO MVO-COD-TOPE
+           ELSE
+           IF MVO-ES-DOLAR
+               IF MVO-ES-CARGO
+                   MOVE 'REAX' TO MVO-COD-TOPE
+               ELSE
+                   MOVE 'DEPX' TO MVO-COD-TOPE.
+           IF MVO-ES-CARGO
+               IF MVO-ACCI = 'EXT'
+                   MOVE '426'      TO MVO-NUM-REFE
+               ELSE
+                   PERFORM OBT-COD-REFE
+           ELSE
+               IF MVO-ACCI = 'EXT'
+                   MOVE '411'      TO MVO-NUM-REFE
+               ELSE
+                   PERFORM OBT-COD-REFE.
+       FIN-CAR-VAR-CTA-AHO.
+           EXIT.
+       MVO-TRANS-A-MONE-CTA SECTION.
+       INI-MVO-TRANS-A-MONE-CTA.
+           MOVE CYZ-SGV-LIQU IN CYZ TO TVC-VALO.
+           MOVE MVO-COD-VCOC        TO TVC-MON1.
+           PERFORM BUS-COD-MON1.
+           MOVE OPE-COD-VCOP IN OPE TO TVC-MON2.
+           MOVE MVO-NUM-DMOV        TO TVC-DCAM.
+           MOVE MVO-NUM-MMOV        TO TVC-MCAM.
+           MOVE MVO-NUM-SMOV        TO TVC-SCAM.
+           MOVE MVO-NUM-AMOV        TO TVC-ACAM.
+           PERFORM TAB-PRO-TVC.
+           IF TVC-CMSG > SPACES
+              MOVE TVC-CMSG TO MVO-CMSG
+              MOVE CAM-KEY-CAMB IN CAM TO FRM-MEN2
+           ELSE
+              MOVE TVC-VALO TO CYZ-SGV-LIQU IN CYZ.
+       FIN-MVO-TRANS-A-MONE-CTA.
+           EXIT.
+       OBT-COD-REFE SECTION.
+      * Obtengo Codigo de Referencia por TIO, TIO+AUX o general
+       INI-OBT-COD-REFE.
+           MOVE 'TAB'                            TO FIO-SIST.
+           MOVE 'RCA'                            TO TAB-COD-TTAB IN TAB.
+           MOVE OPZ-COD-COOC IN OPZ              TO TAB-COD-CTAB IN TAB.
+           MOVE SPACES                           TO TAB-GLS-DATA IN TAB.
+           MOVE FIO-GET-KEY    TO FIO-CMND.
+           PERFORM GNS-FIO-TAB.
+           IF NOT ( FIO-STAT-OKS AND TAB-MSC-STAT IN TAB = 'S')
+              MOVE 'TAB'                          TO FIO-SIST
+              MOVE 'RCA'                          TO TAB-COD-TTAB IN TAB
+              MOVE OPZ-COD-TOOC IN OPZ            TO TAB-COD-CTAB IN TAB
+              MOVE FIO-GET-KEY    TO FIO-CMND
+              PERFORM GNS-FIO-TAB
+              IF NOT ( FIO-STAT-OKS AND TAB-MSC-STAT IN TAB = 'S')
+                 MOVE 'TAB'                       TO FIO-SIST
+                 MOVE 'RCA'                       TO TAB-COD-TTAB IN TAB
+                 MOVE SPACES                      TO TAB-COD-CTAB IN TAB
+                 MOVE FIO-GET-KEY    TO FIO-CMND
+                 PERFORM GNS-FIO-TAB
+                 IF NOT ( FIO-STAT-OKS AND TAB-MSC-STAT IN TAB = 'S')
+                    MOVE 'TABRCA NEX'        TO MVO-CMSG
+                    GO TO FIN-OBT-COD-REFE.
+           MOVE TAB-GLS-DATA IN TAB TO WSS-NUM-REFE IN WSS-VARI.
+           IF MVO-ES-CARGO
+               MOVE WSS-NUM-CARGO   TO MVO-NUM-REFE IN MVO-VARI
+           ELSE
+               MOVE WSS-NUM-ABONO   TO MVO-NUM-REFE IN MVO-VARI.
+       FIN-OBT-COD-REFE.
+           EXIT.
+
+       BUS-COD-MON1 SECTION.
+       INI-BUS-COD-MON1.
+           MOVE 'TAB'    TO FIO-SIST.
+           MOVE 'VLR'    TO TAB-COD-TTAB IN TAB.
+           MOVE TVC-MON1 TO TAB-COD-CTAB IN TAB.
+           MOVE FIO-GET-KEY    TO FIO-CMND.
+           PERFORM GNS-FIO-TAB.
+           IF NOT FIO-STAT-OKS
+               GO TO FIN-BUS-COD-MON1.
+           IF TAB-CIC-CTAB NOT = '0998'
+               GO TO FIN-BUS-COD-MON1.
+           IF TVC-MNAC NOT > SPACES
+               MOVE 'TAB'  TO FIO-SIST
+               MOVE 'VLR'  TO TAB-CIC-TTAB IN TAB
+               MOVE '0999' TO TAB-CIC-CTAB IN TAB
+               MOVE 'TAB-CIC-TABL' TO FIO-AKEY
+               MOVE FIO-GET-KEY    TO FIO-CMND
+               PERFORM GNS-FIO-TAB
+               IF NOT FIO-STAT-OKS
+                   GO TO FIN-BUS-COD-MON1
+               ELSE
+                   MOVE TAB-COD-CTAB IN TAB TO TVC-MNAC.
+           MOVE TVC-MNAC TO TVC-MON1.
+       FIN-BUS-COD-MON1.
+           EXIT.

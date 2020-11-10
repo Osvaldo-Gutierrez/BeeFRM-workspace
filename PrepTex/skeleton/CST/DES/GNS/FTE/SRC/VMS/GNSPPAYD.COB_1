@@ -1,0 +1,388 @@
+       IDENTIFICATION DIVISION.
+      *=======================
+       PROGRAM-ID.    GNSPPAYD.
+       AUTHOR.        JSS.
+
+      * Procesador generico de ayuda
+
+       ENVIRONMENT DIVISION.
+      *====================
+       CONFIGURATION SECTION.
+      *----------------------
+       SPECIAL-NAMES.
+               DECIMAL-POINT IS COMMA.
+
+       DATA DIVISION.
+      *=============
+       WORKING-STORAGE SECTION.
+
+       COPY GNSBRTAB.
+       COPY GNSBRAYD.
+       COPY GNSWCFIO.
+       COPY GNSWVFIO.
+       COPY GNSWIAYD.
+
+       01  WSS-VARI.
+           03 WSS-IVEZ                      VALUE 0   PIC 9(01).
+              88 PRIMERA-VEZ                VALUE 0.
+           03 WSS-IOPE                      VALUE 0   PIC 9(01).
+              88 CERRADO-AYD                VALUE 0.
+           03 WSS-FWSP                                PIC 9(01).
+           03 WSS-NLIB                                PIC X(06).
+           03 WSS-CLIB           COMP                 PIC 9(09).
+           03 WSS-NAME                                PIC X(06).
+           03 WSS-PLIN           COMP                 PIC 9(09).
+           03 WSS-SINI                                PIC 9(01).
+           03 WSS-I                                   PIC 9(02).
+           03 WSS-DATA.
+              05  WSS-CTAB                            PIC X(12).
+              05  FILLER                              PIC X(03).
+              05  WSS-DESC                            PIC X(40).
+              05  FILLER                              PIC X(03).
+              05  WSS-DCOR                            PIC X(12).
+              05  FILLER                              PIC X(03).
+              05  WSS-ABRV                            PIC X(05).
+           03 WSS-BACK.
+              05  WSS-VBAK                  OCCURS 50 PIC X(12).
+           03 WSS-BACK-1 REDEFINES WSS-BACK.
+              05 FILLER                               PIC X(12).
+              05 WSS-2A50                             PIC X(588).
+           03 WSS-FORW                                PIC X(12).
+           03 WSS-PANT                                PIC 9(02).
+      *Sistema al que se debe accesar
+           03 WSS-SIST                   PIC X(03).
+      *Tipo de archivo por ahora solo asume TAB
+           03 WSS-TIPO                   PIC X(03).
+      *Tabla a la que se quiere accesar
+           03 WSS-TABL                   PIC X(03).
+      *Sub-Tabla a la que se quiere accesar, solo en caso
+      *que WSS-TABL sea = MSC
+           03 WSS-STAB                   PIC X(03).
+
+       01 AYD-VARI.
+      *    Tamano Espacio de trabajo FMS.
+           03 AYD-TWSP	COMP			PIC S9(9).
+           03 AYD-NLIB				PIC X(06).
+           03 AYD-CLIB	COMP			PIC 9(09).
+           03 AYD-PLIN	COMP			PIC 9(09).
+           03 AYD-VFLD                          PIC X(80).
+           03 AYD-NCPO				PIC X(31).
+           03 AYD-FFLD	COMP			PIC 9(09).
+           03 AYD-IFLD	COMP			PIC 9(09).
+           03 AYD-MENS				PIC X(80).
+           03 AYD-FFLD-RET COMP	VALUE 0	        PIC 9(09).
+           03 AYD-FFLD-PF3 COMP	VALUE 106       PIC 9(09).
+           03 AYD-FFLD-PF4 COMP	VALUE 106       PIC 9(09).
+           03 AYD-FFLD-PF7 COMP	VALUE 50        PIC 9(09).
+           03 AYD-FFLD-PF8 COMP	VALUE 51        PIC 9(09).
+           
+       LINKAGE SECTION.
+      *---------------
+       01  LNK-IAYD                             PIC X(31).
+
+       PROCEDURE DIVISION USING LNK-IAYD.
+      *==================================
+
+       MAIN SECTION.
+       INI-MAIN.
+           IF CERRADO-AYD
+               MOVE FIO-ACCS-UPD TO FIO-ACCS
+               MOVE FIO-ACC      TO FIO-CMND
+               PERFORM GNS-FIO-AYD
+               MOVE FIO-IFNF-PGM TO FIO-IFNF
+               MOVE FIO-FNF TO FIO-CMND
+               PERFORM GNS-FIO-AYD
+               MOVE FIO-INP  TO FIO-CMND
+               PERFORM GNS-FIO-AYD
+               IF FIO-STAT-OKS
+                   MOVE 1 TO WSS-IOPE
+               ELSE
+                   GO TO FIN-MAIN.
+           MOVE LNK-IAYD TO AYD-COD-IAYD IN AYD.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM GNS-FIO-AYD.
+           IF NOT FIO-STAT-OKS
+               GO TO FIN-MAIN.
+           MOVE AYD-COD-SIST TO WSS-SIST.
+           MOVE AYD-COD-TTAB TO WSS-TABL.
+           MOVE AYD-COD-STAB TO WSS-STAB.
+           MOVE 0 TO WSS-I.
+           MOVE 0 TO WSS-PANT.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           MOVE SPACES   TO TAB-COD-CTAB IN TAB.
+           MOVE WSS-TABL TO TAB-COD-TTAB IN TAB.
+       LUP-MAIN.
+           MOVE WSS-SIST    TO FIO-SIST.
+           PERFORM GNS-FIO-TAB.
+           IF NOT ( FIO-STAT-OKS AND TAB-COD-TTAB IN TAB = WSS-TABL )
+               GO TO CHK-MAIN.
+           IF TAB-COD-CTAB IN TAB NOT > SPACES
+               STRING 'TABLA ' WSS-TABL ': ' TAB-GLS-DESC IN TAB
+                      DELIMITED BY SIZE INTO FRM-GLS-TITU IN AYD-FLD
+               MOVE FIO-GET-NXT TO FIO-CMND
+               GO TO LUP-MAIN.
+
+           ADD 1 TO WSS-I.
+           IF WSS-I = 1
+               IF WSS-PANT < 50
+                   ADD 1 TO WSS-PANT
+                   MOVE TAB-COD-CTAB IN TAB TO WSS-VBAK(WSS-PANT)
+               ELSE
+                   MOVE WSS-2A50 TO WSS-BACK
+                   MOVE TAB-COD-CTAB IN TAB TO WSS-VBAK(WSS-PANT).
+           MOVE SPACES TO WSS-DATA.
+           MOVE TAB-COD-CTAB IN TAB TO WSS-CTAB.
+           MOVE TAB-GLS-DESC IN TAB TO WSS-DESC.
+           MOVE TAB-GLS-DCOR IN TAB TO WSS-DCOR.
+           MOVE TAB-GLS-ABRV IN TAB TO WSS-ABRV.
+           MOVE WSS-DATA TO FRM-GLS-TABL IN AYD-FLD(WSS-I).
+           MOVE TAB-COD-CTAB IN TAB TO WSS-FORW.
+           IF WSS-I < 13
+               MOVE FIO-GET-NXT TO FIO-CMND
+               GO TO LUP-MAIN.
+       CHK-MAIN.
+           IF WSS-I = 0
+               STRING 'NO EXISTEN CODIGOS EN TABLA : ' WSS-TABL
+                       DELIMITED BY SIZE INTO FRM-GLS-MSJE IN AYD-FLD
+           ELSE
+               MOVE SPACES TO FRM-GLS-MSJE IN AYD-FLD.
+           PERFORM CLR-TABL.
+      *Inicializa pantalla
+           IF PRIMERA-VEZ
+               MOVE 1 TO WSS-IVEZ
+               PERFORM SCR-AWKSP
+               MOVE 'GNSFMS' TO AYD-NLIB
+      *        MOVE 92       TO AYD-CLIB
+               MOVE 99       TO AYD-CLIB
+               MOVE 'AYD'    TO AYD-NAME
+               MOVE 0        TO AYD-PLIN
+               PERFORM AYD-FRM-INI
+               PERFORM AYD-FRM-PUTAL
+           ELSE
+               PERFORM SCR-SWKSP
+               PERFORM AYD-FRM-PUTAL.
+       KEY-MAIN.
+           MOVE FRM-GLS-TECL-N TO AYD-NCPO.
+           PERFORM AYD-FRM-GET.
+           IF NOT ( AYD-FFLD = AYD-FFLD-PF7 OR AYD-FFLD-PF8 OR
+                               AYD-FFLD-RET OR AYD-FFLD-PF3 OR
+                               AYD-FFLD-PF4 )
+               MOVE 'TECLA INVALIDA EN ESTE CONTEXTO' TO AYD-MENS
+               GO TO ERR-MAIN.
+           IF AYD-FFLD = AYD-FFLD-PF7
+               PERFORM PRO-PF7
+           ELSE
+           IF AYD-FFLD = AYD-FFLD-PF8
+               PERFORM PRO-PF8
+           ELSE
+           IF AYD-FFLD = AYD-FFLD-RET
+               PERFORM PRO-PF8
+           ELSE
+               GO TO FIN-MAIN.
+           GO TO KEY-MAIN.
+       ERR-MAIN.
+           PERFORM AYD-FRM-BELL.
+           PERFORM AYD-FRM-MSG-CLR.
+           GO TO KEY-MAIN.
+       FIN-MAIN.
+           EXIT PROGRAM.
+
+       PRO-PF7 SECTION.
+       INI-PRO-PF7.
+           MOVE 0 TO WSS-I.
+           IF WSS-PANT = 1
+               GO TO CHK-PRO-PF7.
+           SUBTRACT 1 FROM WSS-PANT.
+           MOVE WSS-SIST TO FIO-SIST.
+           MOVE WSS-TABL           TO TAB-COD-TTAB IN TAB.
+           MOVE WSS-VBAK(WSS-PANT) TO TAB-COD-CTAB IN TAB.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+       LUP-PRO-PF7.
+           PERFORM GNS-FIO-TAB.
+           IF NOT ( FIO-STAT-OKS AND
+                    TAB-COD-TTAB IN TAB = WSS-TABL )
+               GO TO CHK-PRO-PF7.
+           ADD 1 TO WSS-I.
+           MOVE SPACES TO WSS-DATA.
+           MOVE TAB-COD-CTAB IN TAB TO WSS-CTAB.
+           MOVE TAB-GLS-DESC IN TAB TO WSS-DESC.
+           MOVE TAB-GLS-DCOR IN TAB TO WSS-DCOR.
+           MOVE TAB-GLS-ABRV IN TAB TO WSS-ABRV.
+           MOVE WSS-DATA TO FRM-GLS-TABL IN AYD-FLD(WSS-I).
+           MOVE TAB-COD-CTAB IN TAB TO WSS-FORW.
+           IF WSS-I < 13
+               MOVE FIO-GET-NXT TO FIO-CMND
+               GO TO LUP-PRO-PF7.
+       CHK-PRO-PF7.
+           IF WSS-I = 0
+               MOVE 'NO PUEDO RETROCEDER MAS PANTALLAS ' TO
+                    FRM-GLS-MSJE IN AYD-FLD
+           ELSE
+               MOVE SPACES TO FRM-GLS-MSJE IN AYD-FLD
+               PERFORM CLR-TABL.
+       PUT-PRO-PF7.
+           PERFORM AYD-FRM-PUTAL.
+       FIN-PRO-PF7.
+           EXIT.
+
+       PRO-PF8 SECTION.
+       INI-PRO-PF8.
+           MOVE 0 TO WSS-I.
+           IF FRM-GLS-TABL IN AYD-FLD(13) NOT > SPACES
+               GO TO CHK-PRO-PF8.
+           MOVE WSS-SIST TO FIO-SIST.
+           MOVE WSS-TABL TO TAB-COD-TTAB IN TAB.
+           MOVE WSS-FORW TO TAB-COD-CTAB IN TAB.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM GNS-FIO-TAB.
+           IF NOT FIO-STAT-OKS
+               GO TO CHK-PRO-PF8.
+       LUP-PRO-PF8.
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM GNS-FIO-TAB.
+           IF NOT ( FIO-STAT-OKS AND
+                    TAB-COD-TTAB IN TAB = WSS-TABL )
+               GO TO CHK-PRO-PF8.
+           ADD 1 TO WSS-I.
+           IF WSS-I = 1
+               IF WSS-PANT < 50
+                   ADD 1 TO WSS-PANT
+                   MOVE TAB-COD-CTAB IN TAB TO WSS-VBAK(WSS-PANT)
+               ELSE
+                   MOVE WSS-2A50 TO WSS-BACK
+                   MOVE TAB-COD-CTAB IN TAB TO WSS-VBAK(WSS-PANT).
+           MOVE SPACES TO WSS-DATA.
+           MOVE TAB-COD-CTAB IN TAB TO WSS-CTAB.
+           MOVE TAB-GLS-DESC IN TAB TO WSS-DESC.
+           MOVE TAB-GLS-DCOR IN TAB TO WSS-DCOR.
+           MOVE TAB-GLS-ABRV IN TAB TO WSS-ABRV.
+           MOVE WSS-DATA TO FRM-GLS-TABL IN AYD-FLD(WSS-I).
+           MOVE TAB-COD-CTAB IN TAB TO WSS-FORW.
+           IF WSS-I < 13
+               GO TO LUP-PRO-PF8.
+       CHK-PRO-PF8.
+           IF WSS-I = 0
+               STRING 'NO EXISTEN MAS CODIGOS EN TABLA : ' WSS-TABL
+                       DELIMITED BY SIZE INTO FRM-GLS-MSJE IN AYD-FLD
+           ELSE
+               MOVE SPACES TO FRM-GLS-MSJE IN AYD-FLD
+               PERFORM CLR-TABL.
+       PUT-PRO-PF8.
+           PERFORM AYD-FRM-PUTAL.
+       FIN-PRO-PF8.
+           EXIT.
+
+       CLR-TABL SECTION.
+       INI-CLR-TABL.
+            ADD 1 TO WSS-I.
+            IF WSS-I NOT > 13
+                MOVE SPACES TO FRM-GLS-TABL IN AYD-FLD(WSS-I)
+                GO TO INI-CLR-TABL.
+       FIN-CLR-TABL.
+           EXIT.
+
+       SCR-AWKSP SECTION.
+      *-----------------
+       INI-SCR-AWKSP.
+           CALL 'FDV$AWKSP' USING
+                      BY DESCRIPTOR AYD-RWSP
+                      BY REFERENCE  AYD-TWSP.
+       FIN-SCR-AWKSP.
+           EXIT.
+
+       SCR-SWKSP SECTION.
+      *-----------------
+       INI-SCR-SWKSP.
+           CALL 'FDV$SWKSP' USING
+                      BY DESCRIPTOR AYD-RWSP.
+       FIN-SCR-SWKSP.
+           EXIT.
+
+      *INI------------------------------------------------------
+
+       AYD-FRM-INI SECTION.
+       INI-AYD-FRM-INI.
+           PERFORM DRV-LOPE.
+           PERFORM DRV-DISP.
+       FIN-AYD-FRM-INI.
+           EXIT.
+
+       DRV-LOPE SECTION.
+       INI-DRV-LOPE.
+           CALL 'FDV$LOPEN' USING
+               BY DESCRIPTOR AYD-NLIB
+               BY REFERENCE  AYD-CLIB.
+       FIN-DRV-LOPE.
+           EXIT.
+
+       DRV-DISP SECTION.
+       INI-DRV-DISP.
+           CALL 'FDV$DISP' USING
+               BY DESCRIPTOR AYD-NAME
+               BY REFERENCE  AYD-PLIN.
+       FIN-DRV-DISP.
+           EXIT.
+
+      *PUTAL------------------------------------------------------
+
+       AYD-FRM-PUTAL SECTION.
+       INI-AYD-FRM-PUTAL.
+           CALL 'FDV$PUTAL' USING
+               BY DESCRIPTOR AYD-DFLD.
+       FIN-AYD-FRM-PUTAL.
+           EXIT.
+
+      *GET------------------------------------------
+
+       AYD-FRM-GET SECTION.
+       INI-AYD-FRM-GET.
+           CALL 'FDV$GET' USING
+               BY DESCRIPTOR AYD-VFLD
+               BY REFERENCE  AYD-FFLD
+               BY DESCRIPTOR AYD-NCPO
+               BY REFERENCE  AYD-IFLD.
+       INI-AYD-FRM-GET.
+           EXIT.
+
+      *BELL-----------------------------------
+
+       AYD-FRM-BELL SECTION.
+       INI-AYD-FRM-BELL.
+           CALL 'FDV$BELL'.
+       INI-AYD-FRM-BELL.
+           EXIT.
+
+      *MSG-CLR------------------------------
+
+       AYD-FRM-MSG-CLR SECTION.
+       INI-AYD-FRM-MSG-CLR.
+           PERFORM FMS-MSGD.
+           PERFORM DRV-PUTD.
+       FIN-AYD-FRM-MSG-CLR.
+           EXIT.
+
+       FMS-MSGD SECTION.
+       INI-FMS-MSGD.
+           MOVE 0 TO AYD-PLIN.
+           PERFORM DRV-PUTL.
+       FIN-FMS-MSGD.
+           EXIT.
+
+       DRV-PUTL SECTION.
+       INI-DRV-PUTL.
+           CALL 'FDV$PUTL' USING
+               BY DESCRIPTOR AYD-MENS
+               BY REFERENCE  AYD-PLIN.
+       FIN-DRV-PUTL.
+           EXIT.
+
+       DRV-PUTD SECTION.
+       INI-DRV-PUTD.
+           CALL 'FDV$PUTD' USING
+               BY DESCRIPTOR AYD-NCPO
+               BY REFERENCE  AYD-IFLD.
+       FIN-DRV-PUTD.
+           EXIT.
+
+       COPY GNSBFTAB.
+       COPY GNSBFAYD.

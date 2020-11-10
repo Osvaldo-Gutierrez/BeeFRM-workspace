@@ -1,0 +1,2869 @@
+       IDENTIFICATION DIVISION.
+      *========================
+       PROGRAM-ID. SGCP310.
+      *AUTHOR.     RENE MAHMUD V.
+      *COMPILED.   16.06.98.
+      ******************************************************************
+      *  INTERSOFT                                                     *
+      *  MIGRACION A COBOL OS/390                                      *
+      *  FECHA: 30 DE MARZO DE 1998                                    *
+      ******************************************************************
+      ******************************************************************
+      *                                                                *
+      *  OBJETIVO :                                                    *
+      *           - ACTUALIZAR LAS TABLAS RCO Y OPE CON LOS            *
+      *             MOVIMIENTO DE CUENTAS CORRIENTES DESDE EL TANDEM.  *
+      *                SI CREACION     ===> CREA EN RCO Y OPE.         *
+      *                SI MODIFICACION ===> MODIFICA EN RCO Y OPE.     *
+      *                SI ELIMINACION  ===> ELIMINA LOGICAMENTE        *
+      *                SI MODIFICA DIRE===> MODIFICA SOLO RCO.         *
+      *                                                                *
+      *  CARACTERISTICAS :                                             *
+      *           - SI MODIFICACION Y NO EXISTE SE RECHAZA EL          *
+      *             EL REGISTRO. IDEM CASO ELIMINACION.                *
+      *           - SI VIENEN 2 O MAS CREACIONES PARA LA MISMA CUENTA  *
+      *             IMPLICA CUENTA MULTIPERSONAL.                      *
+      *                                                                *
+      *  INPUT    :                                                    *
+      *             MTOCTE  - ARCHIVO MVTOS. ACTUALIZACION CTAS. CTES. *
+      *             CCTTNFO - ARCHIVO RANGOS DE CTAS.CTES.             *
+      *  I - O    :                                                    *
+      *             RCO     - TABLA RELACION CLIENTE OPERACION         *
+      *             OPE     - TABLA OPERACIONES                        *
+      *                                                                *
+      *  SORT     :                                                    *
+      *             SRTCTE  - ARCHIVO SORT DE MVTOS. DE ENTRADA.       *
+      *                                                                *
+      *  OUTPUT   :                                                    *
+      *             LSTREC  - LISTADO DE RECHAZOS A LA ACTUALIZACION.  *
+      *                                                                *
+      *  FECHA    : SET/94.                                            *
+      *                                                                *
+      ******************************************************************
+      *  MANTENCION   NOV/94   RENE MAHMUD V.                          *
+      *  SE AUMENTA A 1000 EL NUMERO DE OCURRENCIAS DE TABLAS DE       *
+      *  SUCURSALES.                                                   *
+      *                                                                *
+      *  MANTENCION   JUNIO/95 RENE MAHMUD V.                          *
+      *  SE ASIGNA EL TIPO DE COMISION A LA CUENTA CORRIENTE DE CARGO  *
+      *  CUANDO ESTA SE INFORMA EN EL ARCHIVO.                         *
+      *                                                                *
+      *  MANTENCION   JULIO/96 RENE MAHMUD V.                          *
+      *  SE PROCESAN LOS TIPOS DE OPERACION CVA Y CPL.                 *
+      *                                                                *
+      *  MANTENCION   OCTUBRE/96 BRUNILDA PARDO G.                     *
+      *  SE LEE REGISTRO TOTALES TIP REG = '4' PARA CUADRAR CON        *
+      *  LOS REGISTROS ENVIADOS DESDE TANDEM.                          *
+      *                                                                *
+      *  MANTENCION   NOVIEMBRE/96 BRUNILDA PARDO G.                   *
+      *  SI SE ACTUALIZA EL TIPO DE COMISION DE UNA CUENTA PRIMA,      *
+      *  NO SE DEBE ACTUALIZAR LA CTA DE CARGO.                        *
+      *                                                                *
+      *  MANTENCION   14-NOV/96 BRUNILDA PARDO G.                      *
+      *  - REGISTRO DE TOTALES SE MODIFICA PARA SER TIP-REG = '5'      *
+      *  - SI ES MODIFICACION DIRECCION SE ACTUALIZA SOLO LA RCO.      *
+      *                                                                *
+      *  MANTENCION   27-DIC/96 BRUNILDA PARDO G.                      *
+      *  - CUANDO LA CUENTA ES UNA CUENTA PRIMA Y LA CTA DE CARGO ES   *
+      *    NUMERICA, SE VALIDAN LOS PRIMEROS 4 BYTES DEL NRO CTACARGO  *
+      *    SI ESTE ES = '0009' SE MOFIFICARAN A '0000'.                *
+      *                                                                *
+      *  MANTENCION   02-MAY/97 G. URETA Q.                            *
+      *  - SE ELIMINA TABLA DE SUCURSALES. ESTA NO SE UTILIZABA.       *
+      *                                                                *
+      *  MANTENCION  12-MAY/97 V.CORREA A.                             *
+      * - SE AGREGA ARCHIVO DE ERRORES PARA LA CREACION DE REG.        *
+      * - SE CARGA EL SUBTIPO DE OPERACION EN LA TABLA OPE Y RCO PARA  *
+      *   MODIFICACION.                                                *
+      ******************************************************************
+
+       ENVIRONMENT DIVISION.
+      *=====================
+           SKIP1
+       CONFIGURATION SECTION.
+      *----------------------
+       SPECIAL-NAMES.
+           C01 IS CANAL-1
+           DECIMAL-POINT IS COMMA.
+           SKIP1
+      *
+       INPUT-OUTPUT SECTION.
+      *=====================
+       FILE-CONTROL.
+           SELECT MTOCTE         ASSIGN TO   MTOCTE
+                                 FILE STATUS IS FS-MTOCTE.
+
+      *    SELECT SUCUR          ASSIGN TO DA-S-CCTTNFO.
+
+           SELECT SRTCTE         ASSIGN TO DA-S-SORTWK1.
+
+      ** V.C.A 12.5.97 **
+           SELECT ARCHERR        ASSIGN TO   ARCHERR
+                                 FILE STATUS IS FS-ARCHERR.
+
+           SELECT SGCJCC         ASSIGN TO  SGCJCC
+                                 FILE STATUS IS FS-SGCJCC.
+
+           SELECT SGCBCT         ASSIGN TO  SGCBCT
+                                 FILE STATUS IS FS-SGCBCT.
+      *
+           SELECT LSTREC         ASSIGN TO LSTREC.
+
+           SELECT ARCHACP        ASSIGN TO ARCHACP
+                                 FILE STATUS IS FS-ARCHACP.
+       DATA DIVISION.
+      *==============
+      *
+       FILE SECTION.
+      *=============
+
+       FD  MTOCTE
+           LABEL RECORD STANDARD
+           RECORD CONTAINS 119 CHARACTERS
+           BLOCK CONTAINS   0 RECORDS.
+
+       01  REG-MTOCTE                   PIC X(107).
+
+       SD  SRTCTE.
+
+       01  REG-SRTCTE.
+           02 SCTE-TIP-MOV              PIC X(01).
+           02 SCTE-CIC-IOPE.
+              05 SCTE-CAI-IOPE          PIC X(04).
+              05 SCTE-IIC-IOPE          PIC X(08).
+           02 SCTE-CIC-ICLI.
+              05 SCTE-CAI-ICLI          PIC X(04).
+              05 SCTE-IIC-ICLI          PIC X(08).
+           02 SCTE-SUC                  PIC X(03).
+           02 SCTE-TIP-OPE              PIC X(03).
+           02 SCTE-STP-OPE              PIC X(03).
+           02 SCTE-NUM-DIRE             PIC X(02).
+           02 SCTE-FEC-CIER             PIC X(10).
+           02 SCTE-MOT-CIER             PIC X(02).
+           02 SCTE-FEC-CREA             PIC X(10).
+           02 SCTE-COD-EJEC             PIC X(12).
+           02 SCTE-CIC-ICAR.
+              05 SCTE-CAI-ICAR          PIC X(04).
+              05 SCTE-IIC-ICAR          PIC X(08).
+           02 SCTE-COD-TCOM             PIC X(02).
+           02 SCTE-COD-EXEN             PIC X(02).
+           02 SCTE-VAL-PRCO             PIC X(09).
+           02 SCTE-TIP-CARG             PIC X(12).
+           02 SCTE-IDC-EMP.
+              05 SCTE-IDC-NUM           PIC X(08).
+              05 SCTE-EXT-NUM           PIC X(04).
+
+       01  SCTE-FTP-REG.
+           02 FTP-CTRL                  PIC X.
+           02 FTP-APERT                 PIC 9(08).
+           02 FTP-CIERRE                PIC 9(08).
+           02 FTP-MODIF-DIRE            PIC 9(08).
+           02 FTP-MODIF                 PIC 9(08).
+           02 FTP-OTROS                 PIC 9(08).
+           02 FILLER                    PIC X(66).
+      *
+      *FD  SUCUR
+      *                       RECORD CONTAINS 80 CHARACTERS
+      *                       BLOCK CONTAINS 0 RECORDS
+      *                       LABEL RECORD STANDARD.
+      *
+      *01  REG-SUCUR.
+      *    05 SUCUR-TIPO      PIC X.
+      *    05 SUCUR-FILLER1   PIC X.
+      *    05 SUCUR-SUC       PIC S9(3) COMP-3.
+      *    05 SUCUR-FILLER2   PIC X.
+      *    05 SUCUR-CTA       PIC X(8).
+      *    05 SUCUR-FILLER3   PIC X(67).
+
+      ** V.C.A. 12.05.97 *
+       FD  ARCHERR
+           LABEL RECORD STANDARD
+           RECORD CONTAINS 113 CHARACTERS
+           BLOCK CONTAINS   0 RECORDS.
+       01  REG-ERR.
+           05 ERR-SISTEMA    PIC X(03).
+           05 ERR-NOM-PGM    PIC X(10).
+           05 ERR-FECHA.
+              07 ERR-FEC-SS  PIC 9(02).
+              07 ERR-FEC-AA  PIC 9(02).
+              07 ERR-PAL-1   PIC X(01).
+              07 ERR-FEC-MM  PIC 9(02).
+              07 ERR-PAL-2   PIC X(01).
+              07 ERR-FEC-DD  PIC 9(02).
+           05 ERR-HORA       PIC X(08).
+           05 ERR-TIPO       PIC X(03).
+           05 ERR-TABLA-PROG PIC X(08).
+           05 ERR-SENTENCIA  PIC X(10).
+           05 ERR-SQLCODE    PIC S9(08).
+           05 ERR-KEY        PIC X(24).
+           05 ERR-ERRCODE    PIC X(04).
+           05 ERR-GLOSA      PIC X(25).
+      *
+       FD  SGCJCC
+           LABEL RECORD STANDARD
+           RECORD CONTAINS 198 CHARACTERS
+           BLOCK CONTAINS   0 RECORDS.
+
+       COPY SGCBRJCC.
+
+       FD  SGCBCT
+           LABEL RECORD STANDARD
+           RECORD CONTAINS 035 CHARACTERS
+           BLOCK CONTAINS   0 RECORDS.
+       01  REG-BCT.
+           03 BCT-IIC-IOPE      PIC X(08).
+           03 BCT-COD-OFOP      PIC X(03).
+           03 BCT-COD-EJOP      PIC X(12).
+           03 BCT-IDC-EMP       PIC X(12).
+      *
+       FD  ARCHACP
+           LABEL RECORD STANDARD
+           RECORD CONTAINS 198 CHARACTERS
+           BLOCK CONTAINS   0 RECORDS.
+       01  REG-ARCHACP.
+           02 ACP-RUT-CLI               PIC X(08).
+           02 ACP-DIG-CLI               PIC X(01).
+           02 ACP-GLS-NOM               PIC X(75).
+           02 ACP-FEC-NAC.
+              05 ACP-DIA-NAC            PIC X(02).
+              05 ACP-DIA-MES            PIC X(02).
+              05 ACP-DIA-SIG            PIC X(02).
+              05 ACP-DIA-ANO            PIC X(02).
+           02 ACP-SEX                   PIC X(01).
+           02 ACP-EST-CIV               PIC X(03).
+           02 ACP-COD-COM               PIC X(03).
+           02 ACP-CIC-IOP               PIC X(12).
+           02 ACP-GLS-DIR               PIC X(60).
+           02 ACP-COD-EJE               PIC X(12).
+           02 ACP-COD-SUC               PIC X(03).
+           02 ACP-GLS-OFI               PIC X(12).
+*
+       FD  LSTREC
+           LABEL RECORD OMITTED.
+       01  REG-LSTREC.
+           02 FILLER                    PIC X(133).
+
+       WORKING-STORAGE SECTION.
+      *========================
+
+       01  WS-CONTADORES.
+           03 WS-LEI-SUCUR           PIC 9(06) VALUE 0.
+           03 WS-LEI-SCTE            PIC 9(06) VALUE 0.
+           03 WS-LEI-TIP1            PIC 9(06) VALUE 0.
+           03 WS-LEI-TIP2            PIC 9(06) VALUE 0.
+           03 WS-LEI-TIP3            PIC 9(06) VALUE 0.
+           03 WS-LEI-TIP4            PIC 9(06) VALUE 0.
+           03 WS-LEI-TIP5            PIC 9(06) VALUE 0.
+           03 WS-LEI-TIPX            PIC 9(06) VALUE 0.
+           03 WS-LEI-DBC             PIC 9(06) VALUE 0.
+           03 WS-NEX-DBC             PIC 9(06) VALUE 0.
+           03 WS-GRA-RCO             PIC 9(06) VALUE 0.
+           03 WS-GRA-OPE             PIC 9(06) VALUE 0.
+           03 WS-MOD-RCO             PIC 9(06) VALUE 0.
+           03 WS-MOD-RCO-DIRE        PIC 9(06) VALUE 0.
+           03 WS-MOD-OPE             PIC 9(06) VALUE 0.
+           03 WS-ELI-RCO             PIC 9(06) VALUE 0.
+           03 WS-ELI-OPE             PIC 9(06) VALUE 0.
+           03 WS-EXI-RCO             PIC 9(06) VALUE 0.
+           03 WS-EXI-OPE             PIC 9(06) VALUE 0.
+           03 WS-NEL-RCO             PIC 9(06) VALUE 0.
+           03 WS-NEL-OPE             PIC 9(06) VALUE 0.
+           03 WS-CAR-OPE             PIC 9(06) VALUE 0.
+           03 WS-NCA-OPE             PIC 9(06) VALUE 0.
+           03 WS-ERR-VAL             PIC 9(06) VALUE 0.
+           03 WS-LIN-GRA-LREC        PIC 9(06) VALUE 0.
+           03 WS-LIN-LREC            PIC 9(02) VALUE 99.
+           03 WS-PAG-LREC            PIC 9(02) VALUE 0.
+           03 WS-CANT-APERT          PIC 9(08) VALUE 0.
+           03 WS-CANT-MODIF          PIC 9(08) VALUE 0.
+           03 WS-CANT-MODIF-DIRE     PIC 9(08) VALUE 0.
+           03 WS-CANT-CIERRES        PIC 9(08) VALUE 0.
+           03 WS-CANT-OTROS          PIC 9(08) VALUE 0.
+           03 WS-GRA-ERR             PIC 9(08) VALUE 0.
+
+       01  WS-VARIABLES.
+      *    03 EOF-SUCUR              PIC 9(01) VALUE 0.
+           03 FLAG-ERR               PIC 9(01) VALUE 0.
+           03 WS-REQ-AREA-OPE        PIC X(101).
+           03 WS-IND-RECH            PIC X(02).
+           03 WS-DBC-RETURN-CODE     PIC X(02).
+           03 WS-IND-MCLI            PIC X(02).
+           03 WS-IIC-IOPE            PIC X(08).
+           03 BLANCO                 PIC X(12) VALUE SPACES.
+           03 FS-MTOCTE              PIC 9(02).
+           03 FS-ARCHERR             PIC 9(02).
+           03 FS-SGCJCC              PIC 9(02).
+           03 FS-SGCBCT              PIC 9(02).
+           03 FS-ARCHACP             PIC 9(02).
+           03 FS-SRTCTE              PIC 9(02) VALUE 0.
+           03 WS-OPE                 PIC X(117).
+           03 WS-FEC-FDAT.
+              05 WS-NUM-SDAT         PIC 9(02) VALUE 19.
+              05 WS-NUM-ADAT         PIC 9(02).
+              05 WS-NUM-MDAT         PIC 9(02).
+              05 WS-NUM-DDAT         PIC 9(02).
+           03 WS-FEC-FPRO            PIC X(10).
+           03 R-WS-FEC-FPRO REDEFINES WS-FEC-FPRO.
+              05 WS-NUM-SPRO         PIC X(02).
+              05 WS-NUM-APRO         PIC X(02).
+              05 FILLER              PIC X(01).
+              05 WS-NUM-MPRO         PIC X(02).
+              05 FILLER              PIC X(01).
+              05 WS-NUM-DPRO         PIC X(02).
+           03 WS-HORA                PIC 9(08).
+           03 R-WS-HORA REDEFINES WS-HORA.
+              05 WS-HRA.
+                 07 WS-HH            PIC 9(02).
+                 07 WS-MM            PIC 9(02).
+                 07 WS-SS            PIC 9(02).
+              05 FILLER              PIC X(02).
+           03 WS-HORA-TND.
+              05 WS-HRA-HH           PIC 9(02).
+              05 FILLER              PIC X(01) VALUE ':'.
+              05 WS-HRA-MM           PIC 9(02).
+              05 FILLER              PIC X(01) VALUE ':'.
+              05 WS-HRA-SS           PIC 9(02).
+           03 COD-ERR-SQL            PIC X(02).
+           03 R-COD-ERR-SQL   REDEFINES  COD-ERR-SQL PIC 9(02).
+
+      *
+       01 WS-SWITCHES-CONTROL.
+      *-----------------------
+          05  WS-REG-CONTROL         PIC X(02).
+              88 REG-CONTROL                  VALUE 'SI'.
+      *01  TABLA-DE-SUCURSALES.
+      *    05 TABLA-SUCUR     OCCURS 0 TO 2000 TIMES DEPENDING ON
+      *          WS-LEI-SUCUR INDEXED BY IND-SUC.
+      *       10 TB-SUC       PIC S9(3) COMP-3.
+      *       10 TB-CTA       PIC X(8).
+
+       01  TARJETA-PARAMETRO.
+           03 TPAR-FEC-FPRO.
+              05 TPAR-NUM-DPRO       PIC X(02).
+              05 FILLER              PIC X(01).
+              05 TPAR-NUM-MPRO       PIC X(02).
+              05 FILLER              PIC X(01).
+              05 TPAR-NUM-APRO       PIC X(02).
+
+       01  LREC-T01.
+           02 FILLER                 PIC X(94) VALUE
+              'BANCO DE CREDITO E INVERSIONES'.
+           02 FILLER                 PIC X(22) VALUE 'P.SGCP310'.
+           02 FILLER                 PIC X(08) VALUE 'FECHA :'.
+           02 LREC-T01-FEC-PROC      PIC X(08).
+
+       01  LREC-T02.
+           02 FILLER                 PIC X(44) VALUE
+              'BANCA EMPRESAS'.
+           02 FILLER                 PIC X(76) VALUE
+              'INFORMACION A VERIFICAR EN EL SISTEMA S.G.C. POR'.
+           02 FILLER                 PIC X(09) VALUE 'PAGINA :'.
+           02 LREC-T02-PAG           PIC ZZ9.
+
+       01  LREC-T03.
+           02 FILLER                 PIC X(46) VALUE SPACES.
+           02 FILLER                 PIC X(76) VALUE
+              'ACTUALIZACIONES EN SISTEMA DE CUENTAS TANDEM'.
+
+       01  LREC-T05.
+           02 FILLER                 PIC X(57) VALUE
+           'T  CUENTA    CIC           OFI  TIP  NUM FECHA       MOT '.
+           02 FILLER                 PIC X(55) VALUE
+           'FECHA       CODIGO        CUENTA    TIP COD PORCENTAJ'.
+           02 FILLER                 PIC X(21) VALUE
+           'OBSERVACIONES'.
+
+       01  LREC-T06.
+           02 FILLER                 PIC X(57) VALUE
+           'M  CORRIENTE CLIENTE            OPE  DIR CIERRE      CIE '.
+           02 FILLER                 PIC X(53) VALUE
+           'APERTURA    EJECUTIVO     CARGO     CMS EXN          '.
+
+
+       01  LREC-TLI.
+           02 FILLER                 PIC X(132) VALUE ALL '-'.
+
+       01  LREC-DET.
+           02 LREC-DET-TIPO-MOV      PIC X(01).
+           02 FILLER                 PIC X(02) VALUE SPACES.
+           02 LREC-DET-IIC-IOPE      PIC X(08).
+           02 FILLER                 PIC X(02) VALUE SPACES.
+           02 LREC-DET-CIC-ICLI      PIC X(12).
+           02 FILLER                 PIC X(02) VALUE SPACES.
+           02 LREC-DET-SUC           PIC Z99.
+           02 FILLER                 PIC X(02) VALUE SPACES.
+           02 LREC-DET-TIP-OPE       PIC X(03).
+           02 FILLER                 PIC X(02) VALUE SPACES.
+           02 LREC-DET-NUM-DIRE      PIC X(02).
+           02 FILLER                 PIC X(02) VALUE SPACES.
+           02 LREC-DET-FEC-CIER      PIC X(10).
+           02 FILLER                 PIC X(02) VALUE SPACES.
+           02 LREC-DET-MOT-CIER      PIC X(02).
+           02 FILLER                 PIC X(02) VALUE SPACES.
+           02 LREC-DET-FEC-CREA      PIC X(10).
+           02 FILLER                 PIC X(02) VALUE SPACES.
+           02 LREC-DET-COD-EJEC      PIC X(12).
+           02 FILLER                 PIC X(02) VALUE SPACES.
+           02 LREC-DET-IIC-ICAR      PIC X(08).
+           02 FILLER                 PIC X(02) VALUE SPACES.
+           02 LREC-DET-COD-TCOM      PIC X(02).
+           02 FILLER                 PIC X(02) VALUE SPACES.
+           02 LREC-DET-COD-EXEN      PIC X(02).
+           02 FILLER                 PIC X(02) VALUE SPACES.
+           02 LREC-DET-VAL-PRCO      PIC X(09).
+           02 FILLER                 PIC X(02) VALUE SPACES.
+           02 LREC-DET-RECH          PIC X(19).
+
+      ******************************************************************
+      *      USER INFORMATION BLOCK                                    *
+      ******************************************************************
+      *
+       01  UIB.
+           05 FILLER                 PIC X(32) VALUE 'SGCP310'.
+      *
+      ******************************************************************
+      *      REQUEST AREA                                              *
+      ******************************************************************
+      *
+       01  REQ-AREA.
+           02 REQ-CMD              PIC X(5).
+           02 REQ-TBLNM            PIC X(3).
+           02 REQ-KEYNM            PIC X(5).
+           02 REQ-RETURN-CODE      PIC X(2) VALUE SPACES.
+           02 REQ-INT-RTN-CD       PIC X(1).
+           02 REQ-DBID             PIC S9(4) COMP VALUE +100.
+           02 REQ-TBLID            PIC X(7).
+           02 FILLER               PIC X(25).
+           02 REQ-COUNT-MAX        PIC S9(4) COMP.
+           02 REQ-IO-COUNT         PIC S9(4) COMP.
+           02 FILLER               PIC X(22).
+           02 REQ-KEY-VALUE        PIC X(24).
+           02 REQ-DBC-KEY-VALUE REDEFINES REQ-KEY-VALUE.
+              03 REQ-DBC-CIC-ICLI  PIC X(12).
+              03 FILLER            PIC X(12).
+           02 REQ-RCO-KEY-VALUE REDEFINES REQ-KEY-VALUE.
+              03 REQ-RCO-CIC-ICLI  PIC X(12).
+              03 REQ-RCO-CIC-IOPE.
+                 04 REQ-RCO-CAI-IOPE PIC X(04).
+                 04 REQ-RCO-IIC-IOPE PIC X(08).
+           02 REQ-OPE-KEY-VALUE REDEFINES REQ-KEY-VALUE.
+              03 REQ-OPE-CIC-IOPE.
+                 04 REQ-OPE-CAI-IOPE PIC X(04).
+                 04 REQ-OPE-IIC-IOPE PIC X(08).
+              03 FILLER            PIC X(12).
+           02 REQ-RCO-KEY-IOPE  REDEFINES REQ-KEY-VALUE.
+              03 REQ-RCO-KEY-CAI   PIC X(04).
+              03 REQ-RCO-KEY-IIC   PIC X(08).
+              03 FILLER            PIC X(12).
+           02 REQ-DCP-KEY-DCP   REDEFINES REQ-KEY-VALUE.
+              03 REQ-DCP-KEY-CIC   PIC X(12).
+              03 FILLER            PIC X(12).
+
+       01  REQ-CCARGO-AREA.
+           02 REQ-CCARGO-CMD       PIC X(5).
+           02 REQ-CCARGO-TBLNM     PIC X(3) VALUE 'OPE'.
+           02 REQ-CCARGO-KEYNM     PIC X(5) VALUE 'OPE00'.
+           02 REQ-CCARGO-RETURN-CODE PIC X(2) VALUE SPACES.
+           02 REQ-CCARGO-INT-RTN-CD  PIC X(1).
+           02 REQ-CCARGO-DBID      PIC S9(4) COMP VALUE +100.
+           02 REQ-CCARGO-TBLID     PIC X(7).
+           02 FILLER               PIC X(25).
+           02 REQ-CCARGO-COUNT-MAX PIC S9(4) COMP.
+           02 REQ-CCARGO-IO-COUNT  PIC S9(4) COMP.
+           02 FILLER               PIC X(22).
+           02 REQ-CCARGO-KEY-VALUE.
+              05 REQ-CCARGO-CAI-ICAR PIC X(04).
+              05 REQ-CCARGO-IIC-ICAR PIC X(08).
+      *
+       01  REQ-AREA-TAB.
+           02 TAB-COMMAND          PIC X(5).
+           02 TAB-TABLE            PIC X(3)  VALUE 'TAB'.
+           02 TAB-KEY              PIC X(5)  VALUE 'TAB00'.
+           02 TAB-RET-COD          PIC X(2)  VALUE SPACES.
+           02 TAB-INT-RC           PIC X(1).
+           02 TAB-DB-IDE           PIC S9(4)  COMP VALUE +150.
+           02 TAB-REC-ID           PIC X(7).
+           02 FILLER               PIC X(25).
+           02 TAB-CONT-MAX         PIC S9(4)  COMP.
+           02 TAB-CONT-ID          PIC S9(4)  COMP.
+           02 FILLER               PIC X(22).
+           02 TAB-VALUE.
+              05 REQ-COD-TAB       PIC X(03).
+              05 REQ-COM-TAB       PIC X(12).
+      *
+       01  REQ-AREA-RCD.
+           02 RCD-COMMAND          PIC X(5).
+           02 RCD-TABLE            PIC X(3)  VALUE 'RCD'.
+           02 RCD-KEY              PIC X(5)  VALUE 'RCD00'.
+           02 RCD-RET-COD          PIC X(2)  VALUE SPACES.
+           02 RCD-INT-RC           PIC X(1).
+           02 RCD-DB-IDE           PIC S9(4)  COMP VALUE +100.
+           02 RCD-REC-ID           PIC X(7).
+           02 FILLER               PIC X(25).
+           02 RCD-CONT-MAX         PIC S9(4)  COMP.
+           02 RCD-CONT-ID          PIC S9(4)  COMP.
+           02 FILLER               PIC X(22).
+           02 RCD-VALUE.
+              03 REQ-RCD-KEY-CIC   PIC X(12).
+              03 REQ-RCD-KEY-NUMD  PIC 9(02).
+      *
+      ******************************************************************
+      *                   WORK AREA                                    *
+      ******************************************************************
+      *
+       01  REG-DBC.
+      *    COPYDD DGC-R-DBC.DGC-E-DBC00(PROD),01,D
+      *                             EQUIVALENTE AL REGISTRO DBC
+           02  DGC-E-DBC00.
+      *                             DATOS BASICOS DEL CLIENTE
+               03  DBC.
+      *                             FILLER COMPATIBILIDAD VSAM/MVS
+                   04  DBC-GLS-FLAG PICTURE X(1).
+      *                             KEY CLAVE PRIMARIA REGISTRO
+                   04  DBC-KEY-IREG.
+      *                             IDENTIFICACION DATOS BASICOS CLIENTE
+                       05  DBC-KEY-IDBC.
+      *                             COD. INT. COMP. CLIENTE
+                       06  DBC-CIC-ICLI.
+      *                             CENTRO ASIGNACION IDENTIFICACION
+                       07  DBC-CAI-ICLI.
+                       08  DBC-COD-TCLI
+                                    PICTURE X(1).
+                       08  DBC-COD-CCLI
+                                    PICTURE X(3).
+      *                             IDENT. INTERNA COMPUTACIONAL
+                       07  DBC-IIC-ICLI
+                                    PICTURE X(8).
+      *                             TIME STAMP TRANSACCION
+                       05  DBC-STP-ITRN.
+      *                             FECHA TRANSACCION
+                       06  DBC-FEC-FTRN.
+                       07  DBC-NUM-STRN
+                                    PICTURE 9(2).
+                       07  DBC-NUM-ATRN
+                                    PICTURE 9(2).
+                       07  DBC-NUM-MTRN
+                                    PICTURE 9(2).
+                       07  DBC-NUM-DTRN
+                                    PICTURE 9(2).
+      *                             HORA TRANSACCION
+                       06  DBC-HRA-HRTR.
+                       07  DBC-NUM-HHTR
+                                    PICTURE 9(2).
+                       07  DBC-NUM-MMTR
+                                    PICTURE 9(2).
+                       07  DBC-NUM-SSTR
+                                    PICTURE 9(2).
+      *                             INDICADOR TIPO ACCION
+                   04  DBC-MSC-TACC PICTURE X(1).
+      *                             INDICADOR STATUS
+                   04  DBC-MSC-STAT PICTURE X(1).
+      *                             CODIGO ORIGEN TRANSACCION
+                   04  DBC-COD-OTRN.
+      *                             INDICADOR TIPO ORIGEN
+                       05  DBC-MSC-TTRN
+                                    PICTURE X(1).
+      *                             CODIGO TIPO ORIGEN
+                       05  DBC-COD-TTRN
+                                    PICTURE X(3).
+      *                             AUTOR TRANSACCION
+                   04  DBC-COD-ATRN PICTURE X(12).
+      *                             KEY RUT CLIENTE + INDICADOR O CALIFI
+                   04  DBC-IDC-ICLI.
+      *                             RUT CLIENTE
+                       05  DBC-NUM-ICLI
+                                    PICTURE X(8).
+      *                             INDICADOR TIPO RUT
+                       05  DBC-IND-ICLI
+                                    PICTURE X(1).
+      *                             EXTENSION DEL RUT
+                       05  DBC-GLS-ICLI
+                                    PICTURE X(3).
+      *                             KEY DIGITO VERIFICADOR DEL RUT
+                   04  DBC-VRF-ICLI PICTURE X(1).
+      *                             KEY NOMBRE CLIENTE GENERICO (PERSONA
+                   04  DBC-GLS-NOMC.
+                       05  DBC-GLS-APAT
+                                    PICTURE X(25).
+                       05  DBC-GLS-AMAT
+                                    PICTURE X(25).
+                       05  DBC-GLS-NOMB
+                                    PICTURE X(25).
+      *                             SOUNDEX DEL NOMBRE DE CLIENTE
+                   04  DBC-SNX-NOMC.
+                       05  DBC-SNX-APAT
+                                    PICTURE X(3).
+                       05  DBC-SNX-AMAT
+                                    PICTURE X(3).
+                       05  DBC-SNX-NOMB
+                                    PICTURE X(3).
+      *                             NUMERO DE DIRECCION DE ENVIO CORRESP
+                   04  DBC-NUM-DCOR PICTURE 9(2).
+      *                             OPR IND TIPO CLIENTE ( PERSONA O EMP
+                   04  DBC-IND-TICL PICTURE X(1).
+      *                             TIPO CLIENTE (POTENCIAL,NO CLIENTE,G
+                   04  DBC-COD-TICL PICTURE X(2).
+      *                             CODIGO CLASIFICACION COMERCIAL
+                   04  DBC-COD-CLCM PICTURE X(2).
+      *                             RCM CODIGO DEL EJECUTIVO ENCARGADO D
+                   04  DBC-COD-EJEC PICTURE X(12).
+      *                             OPR CODIGO DE OFICINA DONDE OPERA EL
+                   04  DBC-COD-OFIC PICTURE X(3).
+      *                             RCM INDICADOR SI OPERA EN OTRA OFICI
+                   04  DBC-IND-OOFI PICTURE X(1).
+      *                             EXT CODIGO ACTIVIDAD ECONOMICA
+                   04  DBC-COD-ACTI PICTURE X(9).
+      *                             EXT ORIGEN Y DESTINO SECT (COMP.INST
+                   04  DBC-COD-ODSE PICTURE X(3).
+      *                             INF FECHA INGRESO AL PLAN
+                   04  DBC-FEC-FPLN.
+                       05  DBC-NUM-SPLN
+                                    PICTURE 9(2).
+                       05  DBC-NUM-APLN
+                                    PICTURE 9(2).
+                       05  DBC-NUM-MPLN
+                                    PICTURE 9(2).
+                       05  DBC-NUM-DPLN
+                                    PICTURE 9(2).
+      *                             CODIGO DE SEGMENTO
+                   04  DBC-COD-SETO PICTURE X(5).
+      *                             PERIODO DE SEGMENTO (SSAAMM)
+                   04  DBC-PDO-SETO PICTURE X(6).
+      *                             INF INDICADOR DE MULTAS BANCO CENTRA
+                   04  DBC-IND-MUBC PICTURE X(1).
+      *                             INF INDICADOR DE JUICIOS BANCO CENTR
+                   04  DBC-IND-JUBC PICTURE X(1).
+      *                             EXT CODIGO ESTADO CLIENTE ( COMO DEU
+                   04  DBC-MSC-SCLI PICTURE X(1).
+      *                             FECHA ESTADO CLIENTE
+                   04  DBC-FEC-FSCL.
+                       05  DBC-NUM-SSCL
+                                    PICTURE 9(2).
+                       05  DBC-NUM-ASCL
+                                    PICTURE 9(2).
+                       05  DBC-NUM-MSCL
+                                    PICTURE 9(2).
+                       05  DBC-NUM-DSCL
+                                    PICTURE 9(2).
+      *                             CODIGO DE BLOQUEO DEL CLIENTE
+                   04  DBC-COD-BLOC PICTURE X(2).
+      *                             NUMERO TOTAL DE DIRECCIONES
+                   04  DBC-NUM-TDIR PICTURE 9(2).
+      *                             NUMERO TOTAL DE COMENTARIOS
+                   04  DBC-NUM-TCMT PICTURE 9(3).
+      *                             FECHA INICIO OPERACION
+                   04  DBC-FEC-FIOP.
+                       05  DBC-NUM-SIOP
+                                    PICTURE 9(2).
+                       05  DBC-NUM-AIOP
+                                    PICTURE 9(2).
+                       05  DBC-NUM-MIOP
+                                    PICTURE 9(2).
+                       05  DBC-NUM-DIOP
+                                    PICTURE 9(2).
+      *                             FECHA TERMINO OPERACION
+                   04  DBC-FEC-FTOP.
+                       05  DBC-NUM-STOP
+                                    PICTURE 9(2).
+                       05  DBC-NUM-ATOP
+                                    PICTURE 9(2).
+                       05  DBC-NUM-MTOP
+                                    PICTURE 9(2).
+                       05  DBC-NUM-DTOP
+                                    PICTURE 9(2).
+      *                             NUMERO OPERACIONES FECHA TERMINO NUL
+                   04  DBC-NUM-OFTN PICTURE 9(3).
+      *                             FECHA INGRESO DE DATOS A LA BASE DE
+                   04  DBC-FEC-FINP.
+                       05  DBC-NUM-SINP
+                                    PICTURE 9(2).
+                       05  DBC-NUM-AINP
+                                    PICTURE 9(2).
+                       05  DBC-NUM-MINP
+                                    PICTURE 9(2).
+                       05  DBC-NUM-DINP
+                                    PICTURE 9(2).
+
+       01  REG-OPE.
+      *    COPYDD DGC-R-OPE.DGC-E-OPE00(PROD),01,D
+      *                             EQUIVALENTE AL REGISTRO OPE
+           02  DGC-E-OPE00.
+      *                             OPERACIONES
+               03  OPE.
+      *                             FILLER COMPATIBILIDAD VSAM/MVS
+                   04  OPE-GLS-FLAG PICTURE X(1).
+      *                             KEY CLAVE PRIMARIA REGISTRO
+                   04  OPE-KEY-IREG.
+      *                             IDENTIFICACION OPERACION
+                       05  OPE-KEY-IOPE.
+      *                             COD. INT. COMP. OPERACION
+                       06  OPE-CIC-IOPE.
+      *                             CENTRO ASIGNACION IDENTIFICACION
+                       07  OPE-CAI-IOPE.
+                       08  OPE-COD-TOPE
+                                    PICTURE X(1).
+                       08  OPE-COD-COPE
+                                    PICTURE X(3).
+      *                             IDENT. INTERNA COMPUTACIONAL
+                       07  OPE-IIC-IOPE.
+                       08  OPE-COD-OOPE.
+                       09  OPE-COD-SOPE
+                                    PICTURE X(2).
+                       09  OPE-IND-SOPE
+                                    PICTURE X(1).
+                       08  OPE-GLS-NOPE
+                                    PICTURE X(5).
+      *                             TIME STAMP TRANSACCION
+                       05  OPE-STP-ITRN.
+      *                             FECHA TRANSACCION
+                       06  OPE-FEC-FTRN.
+                       07  OPE-NUM-STRN
+                                    PICTURE 9(2).
+                       07  OPE-NUM-ATRN
+                                    PICTURE 9(2).
+                       07  OPE-NUM-MTRN
+                                    PICTURE 9(2).
+                       07  OPE-NUM-DTRN
+                                    PICTURE 9(2).
+      *                             HORA TRANSACCION
+                       06  OPE-HRA-HRTR.
+                       07  OPE-NUM-HHTR
+                                    PICTURE 9(2).
+                       07  OPE-NUM-MMTR
+                                    PICTURE 9(2).
+                       07  OPE-NUM-SSTR
+                                    PICTURE 9(2).
+      *                             INDICADOR TIPO ACCION
+                   04  OPE-MSC-TACC PICTURE X(1).
+      *                             INDICADOR STATUS
+                   04  OPE-MSC-STAT PICTURE X(1).
+      *                             CODIGO ORIGEN TRANSACCION
+                   04  OPE-COD-OTRN.
+      *                             INDICADOR TIPO ORIGEN
+                       05  OPE-MSC-TTRN
+                                    PICTURE X(1).
+      *                             CODIGO TIPO ORIGEN
+                       05  OPE-COD-TTRN
+                                    PICTURE X(3).
+      *                             AUTOR TRANSACCION
+                   04  OPE-COD-ATRN PICTURE X(12).
+      *                             CODIGO STATUS
+                   04  OPE-COD-STAT PICTURE X(3).
+      *                             VALOR DE CAMBIO OPERACION
+                   04  OPE-COD-VCOP.
+      *                             MISCELANEO TIPO VALOR
+                       05  OPE-MSC-TVOP
+                                    PICTURE X(1).
+      *                             CODIGO VALOR
+                       05  OPE-COD-CVOP
+                                    PICTURE X(3).
+      *                             CODIGO TIPO CAMBIO
+                       05  OPE-COD-TCOP
+                                    PICTURE X(2).
+      *                             CODIGO CLASE OPERACION
+                   04  OPE-COD-COPR.
+      *                             CODIGO TIPO OPERACION
+                       05  OPE-COD-TOPR
+                                    PICTURE X(3).
+      *                             CODIGO AUXILIAR OPERACION
+                       05  OPE-COD-AOPR
+                                    PICTURE X(3).
+      *                             CODIGO OFICINA
+                   04  OPE-COD-OFOP PICTURE X(3).
+      *                             EJECUTIVO
+                   04  OPE-COD-EJOP PICTURE X(12).
+      *                             FECHA INICIO OPERACION
+                   04  OPE-FEC-FIOP.
+                       05  OPE-NUM-SIOP
+                                    PICTURE 9(2).
+                       05  OPE-NUM-AIOP
+                                    PICTURE 9(2).
+                       05  OPE-NUM-MIOP
+                                    PICTURE 9(2).
+                       05  OPE-NUM-DIOP
+                                    PICTURE 9(2).
+      *                             FECHA TERMINO OPERACION
+                   04  OPE-FEC-FTOP.
+                       05  OPE-NUM-STOP
+                                    PICTURE 9(2).
+                       05  OPE-NUM-ATOP
+                                    PICTURE 9(2).
+                       05  OPE-NUM-MTOP
+                                    PICTURE 9(2).
+                       05  OPE-NUM-DTOP
+                                    PICTURE 9(2).
+      *                             MOTIVO TERMINO OPERACION
+                   04  OPE-COD-MOTT PICTURE X(2).
+      *                             FECHA REAPERTURA OPERACION
+                   04  OPE-FEC-FROP.
+                       05  OPE-NUM-SROP
+                                    PICTURE 9(2).
+                       05  OPE-NUM-AROP
+                                    PICTURE 9(2).
+                       05  OPE-NUM-MROP
+                                    PICTURE 9(2).
+                       05  OPE-NUM-DROP
+                                    PICTURE 9(2).
+      *                             IND MULTIPLES CLIENTES ( Y, O, ETC)
+                   04  OPE-IND-MCLI PICTURE X(2).
+      *                             CODIGO TIPO DE COMISION
+                   04  OPE-COD-TCOM PICTURE X(2).
+      *                             COD. INT. COMP. OPERACION DE CARGO
+                   04  OPE-CIC-ICAR.
+      *                             CENTRO ASIGNACION OPERACION CARGO
+                       05  OPE-CAI-ICAR
+                                    PICTURE X(4).
+      *                             IDENT. INT. COMP. OPERACION CARGO
+                       05  OPE-IIC-ICAR
+                                    PICTURE X(8).
+
+       01  REG-RCO.
+      *    COPYDD DGC-R-RCO.DGC-E-RCO00(PROD),01,D
+      *                             EQUIVALENTE AL REGISTRO RCO
+           02  DGC-E-RCO00.
+      *                             RELACION CLIENTE OPERACION
+               03  RCO.
+      *                             FILLER COMPATIBILIDAD VSAM/MVS
+                   04  RCO-GLS-FLAG PICTURE X(1).
+      *                             KEY CLAVE PRIMARIA REGISTRO
+                   04  RCO-KEY-IREG.
+      *                             IDENTIFICACION RELACION CLIENTE OPER
+                       05  RCO-KEY-IRCO.
+      *                             COD. INT. COMP. CLIENTE
+                       06  RCO-CIC-ICLI.
+      *                             CENTRO ASIGNACION IDENTIFICACION
+                       07  RCO-CAI-ICLI.
+                       08  RCO-COD-TCLI
+                                    PICTURE X(1).
+                       08  RCO-COD-CCLI
+                                    PICTURE X(3).
+      *                             IDENT. INTERNA COMPUTACIONAL
+                       07  RCO-IIC-ICLI
+                                    PICTURE X(8).
+      *                             IDENTIFICACION OPERACION RELACION
+                       06  RCO-KEY-IOPE.
+      *                             COD. INT. COMP. OPERACION
+                       07  RCO-CIC-IOPE.
+      *                             CENTRO ASIGNACION IDENTIFICACION
+                       08  RCO-CAI-IOPE.
+                       09  RCO-COD-TOPE
+                                    PICTURE X(1).
+                       09  RCO-COD-COPE
+                                    PICTURE X(3).
+      *                             IDENT. INTERNA COMPUTACIONAL
+                       08  RCO-IIC-IOPE.
+                       09  RCO-COD-OOPE.
+                       10  RCO-COD-SOPE
+                                    PICTURE X(2).
+                       10  RCO-IND-SOPE
+                                    PICTURE X(1).
+                       09  RCO-GLS-NOPE
+                                    PICTURE X(5).
+      *                             TIME STAMP TRANSACCION
+                       05  RCO-STP-ITRN.
+      *                             FECHA TRANSACCION
+                       06  RCO-FEC-FTRN.
+                       07  RCO-NUM-STRN
+                                    PICTURE 9(2).
+                       07  RCO-NUM-ATRN
+                                    PICTURE 9(2).
+                       07  RCO-NUM-MTRN
+                                    PICTURE 9(2).
+                       07  RCO-NUM-DTRN
+                                    PICTURE 9(2).
+      *                             HORA TRANSACCION
+                       06  RCO-HRA-HRTR.
+                       07  RCO-NUM-HHTR
+                                    PICTURE 9(2).
+                       07  RCO-NUM-MMTR
+                                    PICTURE 9(2).
+                       07  RCO-NUM-SSTR
+                                    PICTURE 9(2).
+      *                             INDICADOR TIPO ACCION
+                   04  RCO-MSC-TACC PICTURE X(1).
+      *                             INDICADOR STATUS
+                   04  RCO-MSC-STAT PICTURE X(1).
+      *                             CODIGO ORIGEN TRANSACCION
+                   04  RCO-COD-OTRN.
+      *                             INDICADOR TIPO ORIGEN
+                       05  RCO-MSC-TTRN
+                                    PICTURE X(1).
+      *                             CODIGO TIPO ORIGEN
+                       05  RCO-COD-TTRN
+                                    PICTURE X(3).
+      *                             AUTOR TRANSACCION
+                   04  RCO-COD-ATRN PICTURE X(12).
+      *                             CODIGO STATUS
+                   04  RCO-COD-STAT PICTURE X(3).
+      *                             COD RELACION CLIENTE OPERACION
+                   04  RCO-COD-RCOP PICTURE X(3).
+      *                             NUMERO DE DIRECCION
+                   04  RCO-NUM-DIRE PICTURE 9(2).
+      *                             PORCENTAJE RELACION
+                   04  RCO-VAL-PRCO PICTURE 9(3)V9(6)
+                                        COMPUTATIONAL.
+      *                             CODIGO CLASE OPERACION
+                   04  RCO-COD-COPR.
+      *                             CODIGO TIPO OPERACION
+                       05  RCO-COD-TOPR
+                                    PICTURE X(3).
+      *                             CODIGO AUXILIAR OPERACION
+                       05  RCO-COD-AOPR
+                                    PICTURE X(3).
+      *                             DISPONIBLE
+                   04  RCO-GLS-DISP PICTURE X(17).
+
+       01  REG-DCP.
+      *    COPYDD DGC-R-DCP.DGC-E-DCP00(PROD),01,D
+      *                             EQUIVALENTE AL REGISTRO DCP
+           02  DGC-E-DCP00.
+      *                             DATOS COMPLEMENTARIOS PERSONAS
+               03  DCP.
+      *                             FILLER COMPATIBILIDAD VSAM/MVS
+                   04  DCP-GLS-FLAG PICTURE X(1).
+      *                             KEY CLAVE PRIMARIA REGISTRO
+                   04  DCP-KEY-IREG.
+      *                             ID DATOS COMPLEMENTARIOS PERSONAS
+                       05  DCP-KEY-IDCP.
+      *                             COD. INT. COMP. CLIENTE
+                       06  DCP-CIC-ICLI.
+      *                             CENTRO ASIGNACION IDENTIFICACION
+                       07  DCP-CAI-ICLI.
+                       08  DCP-COD-TCLI
+                                    PICTURE X(1).
+                       08  DCP-COD-CCLI
+                                    PICTURE X(3).
+      *                             IDENT. INTERNA COMPUTACIONAL
+                       07  DCP-IIC-ICLI
+                                    PICTURE X(8).
+      *                             TIME STAMP TRANSACCION
+                       05  DCP-STP-ITRN.
+      *                             FECHA TRANSACCION
+                       06  DCP-FEC-FTRN.
+                       07  DCP-NUM-STRN
+                                    PICTURE 9(2).
+                       07  DCP-NUM-ATRN
+                                    PICTURE 9(2).
+                       07  DCP-NUM-MTRN
+                                    PICTURE 9(2).
+                       07  DCP-NUM-DTRN
+                                    PICTURE 9(2).
+      *                             HORA TRANSACCION
+                       06  DCP-HRA-HRTR.
+                       07  DCP-NUM-HHTR
+                                    PICTURE 9(2).
+                       07  DCP-NUM-MMTR
+                                    PICTURE 9(2).
+                       07  DCP-NUM-SSTR
+                                    PICTURE 9(2).
+      *                             INDICADOR TIPO ACCION
+                   04  DCP-MSC-TACC PICTURE X(1).
+      *                             INDICADOR STATUS
+                   04  DCP-MSC-STAT PICTURE X(1).
+      *                             CODIGO ORIGEN TRANSACCION
+                   04  DCP-COD-OTRN.
+      *                             INDICADOR TIPO ORIGEN
+                       05  DCP-MSC-TTRN
+                                    PICTURE X(1).
+      *                             CODIGO TIPO ORIGEN
+                       05  DCP-COD-TTRN
+                                    PICTURE X(3).
+      *                             AUTOR TRANSACCION
+                   04  DCP-COD-ATRN PICTURE X(12).
+      *                             FECHA DE NACIMIENTO
+                   04  DCP-FEC-FNAC.
+                       05  DCP-NUM-SNAC
+                                    PICTURE 9(2).
+                       05  DCP-NUM-ANAC
+                                    PICTURE 9(2).
+                       05  DCP-NUM-MNAC
+                                    PICTURE 9(2).
+                       05  DCP-NUM-DNAC
+                                    PICTURE 9(2).
+      *                             CODIGO DEL PAIS DE LA NACIONALIDAD
+                   04  DCP-COD-PNAC PICTURE X(3).
+      *                             INDICADOR DE SEXO
+                   04  DCP-IND-SEXO PICTURE X(1).
+      *                             INDICADOR DE ESTADO CIVIL
+                   04  DCP-IND-ECIV PICTURE X(3).
+      *                             CEDULA DE IDENTIDAD
+                   04  DCP-NUM-CIDE PICTURE X(8).
+      *                             DIGITO VERIFICADOR CEDULA IDENTIDAD
+                   04  DCP-VRF-CIDE PICTURE X(1).
+      *                             GABINETE CEDULA DE IDENTIDAD
+                   04  DCP-GLS-GABI PICTURE X(12).
+      *                             CODIGO TIPO BANCA
+                   04  DCP-COD-TBAN PICTURE X(3).
+      *                             INDICADOR NIVEL EDUCACIONAL
+                   04  DCP-IND-NEDU PICTURE X(3).
+      *                             CODIGO DE ACTIVIDAD SECUNDARIA
+                   04  DCP-COD-ACTS PICTURE X(9).
+      *                             CODIGO DE PROFESION
+                   04  DCP-COD-PROF PICTURE X(5).
+      *                             INDICADOR DE SITUACION LABORAL
+                   04  DCP-IND-SLAB PICTURE X(3).
+      *                             CODIGO CATEGORIA SOCIOECONOMICA
+                   04  DCP-COD-CSEC PICTURE X(2).
+      *                             INDICADOR SITUACION CASA
+                   04  DCP-IND-CASA PICTURE X(5).
+      *                             # MSJ ASOC A NOMBRE DE PILA (SBT)
+                   04  DCP-NUM-NMSG PICTURE 9(4).
+      *                             INDICADOR REGIMEN CONYUGAL
+                   04  DCP-IND-RCNY PICTURE X(1).
+      *                             TIPO PLAN
+                   04  DCP-COD-TPLN PICTURE X(1).
+       01  REG-RCD.
+      *    COPYDD DGC-R-RCD.DGC-E-RCD00(PROD),01,D
+      *                             EQUIVALENTE AL REGISTRO RCD
+           02  DGC-E-RCD00.
+      *                             RELACION CLIENTE DIRECCIONES
+               03  RCD.
+      *                             FILLER COMPATIBILIDAD VSAM/MVS
+                   04  RCD-GLS-FLAG PICTURE X(1).
+      *                             KEY CLAVE PRIMARIA REGISTRO
+                   04  RCD-KEY-IREG.
+      *                             IDENTIFICACION RELACION CLIENTE DIRE
+                       05  RCD-KEY-IRCD.
+      *                             COD. INT. COMP. CLIENTE
+                       06  RCD-CIC-ICLI.
+      *                             CENTRO ASIGNACION IDENTIFICACION
+                       07  RCD-CAI-ICLI.
+                       08  RCD-COD-TCLI
+                                    PICTURE X(1).
+                       08  RCD-COD-CCLI
+                                    PICTURE X(3).
+      *                             IDENT. INTERNA COMPUTACIONAL
+                       07  RCD-IIC-ICLI
+                                    PICTURE X(8).
+      *                             NUMERO DIRECCION
+                       06  RCD-NUM-DIRE
+                                    PICTURE 9(2).
+      *                             TIME STAMP TRANSACCION
+                       05  RCD-STP-ITRN.
+      *                             FECHA TRANSACCION
+                       06  RCD-FEC-FTRN.
+                       07  RCD-NUM-STRN
+                                    PICTURE 9(2).
+                       07  RCD-NUM-ATRN
+                                    PICTURE 9(2).
+                       07  RCD-NUM-MTRN
+                                    PICTURE 9(2).
+                       07  RCD-NUM-DTRN
+                                    PICTURE 9(2).
+      *                             HORA TRANSACCION
+                       06  RCD-HRA-HRTR.
+                       07  RCD-NUM-HHTR
+                                    PICTURE 9(2).
+                       07  RCD-NUM-MMTR
+                                    PICTURE 9(2).
+                       07  RCD-NUM-SSTR
+                                    PICTURE 9(2).
+      *                             INDICADOR TIPO ACCION
+                   04  RCD-MSC-TACC PICTURE X(1).
+      *                             INDICADOR STATUS
+                   04  RCD-MSC-STAT PICTURE X(1).
+      *                             CODIGO ORIGEN TRANSACCION
+                   04  RCD-COD-OTRN.
+      *                             INDICADOR TIPO ORIGEN
+                       05  RCD-MSC-TTRN
+                                    PICTURE X(1).
+      *                             CODIGO TIPO ORIGEN
+                       05  RCD-COD-TTRN
+                                    PICTURE X(3).
+      *                             AUTOR TRANSACCION
+                   04  RCD-COD-ATRN PICTURE X(12).
+      *                             TIPO DIRECCION
+                   04  RCD-MSC-TDIR PICTURE X(1).
+      *                             ESTADO DIRECCION ( MALA, VERIFICADA,
+                   04  RCD-MSC-SDIR PICTURE X(1).
+      *                             FECHA DE VERIFICACION
+                   04  RCD-FEC-FVRF.
+                       05  RCD-NUM-SVRF
+                                    PICTURE 9(2).
+                       05  RCD-NUM-AVRF
+                                    PICTURE 9(2).
+                       05  RCD-NUM-MVRF
+                                    PICTURE 9(2).
+                       05  RCD-NUM-DVRF
+                                    PICTURE 9(2).
+      *                             RCM DESCRIPCION DE LA DIRECCION
+                   04  RCD-GLS-DIRE PICTURE X(60).
+      *                             RCM CODIGO DE LUGAR
+                   04  RCD-COD-LUGA PICTURE X(4).
+      *                             TELEFONO DE LA DIRECCION
+                   04  RCD-GLS-FONO.
+                       05  RCD-NUM-FONO
+                                    PICTURE X(8).
+                       05  RCD-NUM-ANXO
+                                    PICTURE X(4).
+      *                             CODIGO POSTAL
+                   04  RCD-COD-POST PICTURE X(7).
+      *                             DISPONIBLE
+                   04  RCD-GLS-DISP PICTURE X(18).
+       01  REG-TAB.
+      *    COPYDD TAB-R-TAB.TAB-E-TAB00(PROD),01,D
+      *                             EQUIVALENTE AL REGISTRO TAB
+           02  TAB-E-TAB00.
+      *                             REGISTRO GENERICO DE TABLAS
+               03  TAB.
+      *                             FILLER COMPATIBILIDAD VSAM/MVS
+                   04  TAB-GLS-FLAG PICTURE X(1).
+      *                             CLAVE PRIMARIA REGISTRO
+                   04  TAB-KEY-IREG.
+      *                             KEY     TIPO + CODIGO ( LLAVE PRIMAR
+                       05  TAB-COD-TABL.
+      *                             CODIGO TIPO TABLA
+                       06  TAB-COD-TTAB
+                                    PICTURE X(3).
+      *                             CODIGO TABLA
+                       06  TAB-COD-CTAB
+                                    PICTURE X(12).
+      *                             TIME STAMP TRANSACCION
+                       05  TAB-STP-ITRN.
+      *                             FECHA TRANSACCION
+                       06  TAB-FEC-FTRN.
+                       07  TAB-NUM-STRN
+                                    PICTURE 9(2).
+                       07  TAB-NUM-ATRN
+                                    PICTURE 9(2).
+                       07  TAB-NUM-MTRN
+                                    PICTURE 9(2).
+                       07  TAB-NUM-DTRN
+                                    PICTURE 9(2).
+      *                             HORA TRANSACCION
+                       06  TAB-HRA-HRTR.
+                       07  TAB-NUM-HHTR
+                                    PICTURE 9(2).
+                       07  TAB-NUM-MMTR
+                                    PICTURE 9(2).
+                       07  TAB-NUM-SSTR
+                                    PICTURE 9(2).
+      *                             INDICADOR TIPO ACCION
+                   04  TAB-MSC-TACC PICTURE X(1).
+      *                             INDICADOR STATUS
+                   04  TAB-MSC-STAT PICTURE X(1).
+      *                             INDICADOR VIGENCIA
+                   04  TAB-IND-VIGE
+                             REDEFINES TAB-MSC-STAT
+                                    PICTURE X(1).
+      *                             CODIGO ORIGEN TRANSACCION
+                   04  TAB-COD-OTRN.
+      *                             INDICADOR TIPO ORIGEN
+                       05  TAB-MSC-TTRN
+                                    PICTURE X(1).
+      *                             CODIGO TIPO ORIGEN
+                       05  TAB-COD-TTRN
+                                    PICTURE X(3).
+      *                             AUTOR TRANSACCION
+                   04  TAB-COD-ATRN PICTURE X(12).
+      *                             KEY TIPO + CODIGO ( INTERNO COMPUTAC
+                   04  TAB-CIC-TABL.
+      *                             CODIGO TIPO TABLA
+                       05  TAB-CIC-TTAB
+                                    PICTURE X(3).
+      *                             CODIGO TABLA
+                       05  TAB-CIC-CTAB
+                                    PICTURE X(12).
+      *                             CODIGO EXTERNO
+                   04  TAB-EXT-TABL.
+      *                             CODIGO TIPO TABLA
+                       05  TAB-EXT-TTAB
+                                    PICTURE X(3).
+      *                             CODIGO TABLA
+                       05  TAB-EXT-CTAB
+                                    PICTURE X(5).
+      *                             DESCRIPCION CORTA
+                   04  TAB-GLS-DCOR PICTURE X(12).
+      *                             ABREVIACION DESCRIPCION
+                   04  TAB-GLS-ABRV PICTURE X(5).
+      *                             DESCRIPCION DEL CODIGO
+                   04  TAB-GLS-DESC PICTURE X(40).
+      *                             DATOS ANEXOS
+                   04  TAB-GLS-DATA PICTURE X(60).
+      *                             CLAVE SOUNDEX
+                   04  TAB-SNX-TABL.
+                       05  TAB-SNX-TTAB
+                                    PICTURE X(3).
+                       05  TAB-SNX-CTAB
+                                    PICTURE X(3).
+               03  TAB-REDEF REDEFINES TAB
+                                    PICTURE X(194).
+      ******************************************************************
+      *                 ELEMENT LIST                                   *
+      ******************************************************************
+      *
+       01  ELEM-LIST.
+           03 ELEM-1         PIC X(05).
+           03 ELEM-SEC       PIC X(01).
+           03 FILLER         PIC X(05) VALUE SPACES.
+      *-----------------------------------------------------------------
+
+       PROCEDURE DIVISION.
+      *===================
+           ENTRY 'DBMSCBL'.
+       AA-INICIO.
+           PERFORM B-INICIAR.
+       AB-PROCESO.
+           PERFORM C-PROCESAR.
+       AC-FIN.
+           PERFORM D-TERMINAR.
+       AZ-FIN-PROGRAMA.
+           GOBACK.
+
+       B-INICIAR SECTION.
+      *==================
+       BA-CONTROL-PROCESO.
+      *-------------------
+           PERFORM BB-ACCEPT-TARJETA.
+           PERFORM BC-OPEN-ARCHIVOS.
+           GO TO BZ-FIN-SECTION.
+
+       BB-ACCEPT-TARJETA.
+      *------------------
+           ACCEPT TARJETA-PARAMETRO.
+           DISPLAY BLANCO '* TARJETA PARAM. : ' TARJETA-PARAMETRO.
+           IF TPAR-NUM-DPRO NOT < '01' AND NOT > '31' AND
+              TPAR-NUM-MPRO NOT < '01' AND NOT > '12' AND
+              TPAR-NUM-APRO NUMERIC
+              MOVE TPAR-NUM-APRO TO WS-NUM-ADAT
+              MOVE TPAR-NUM-MPRO TO WS-NUM-MDAT
+              MOVE TPAR-NUM-DPRO TO WS-NUM-DDAT
+           ELSE
+              DISPLAY BLANCO '**************************'
+              DISPLAY BLANCO '* ERROR: EN VALIDACION   *'
+              DISPLAY BLANCO '* DE TARJETA PARAMETRO   *'
+              DISPLAY BLANCO '* PGM. SGCP310 CANCELADO *'
+              DISPLAY BLANCO
+              DISPLAY BLANCO '* ERROR: EN VALIDACION   *' UPON CONSOLE
+              DISPLAY BLANCO '* DE TARJETA PARAMETRO   *' UPON CONSOLE
+              DISPLAY BLANCO '* PGM. SGCP310 CANCELADO *' UPON CONSOLE
+              PERFORM D-TERMINAR
+              GOBACK.
+           ACCEPT WS-HORA FROM TIME.
+           MOVE 'NO'                   TO WS-REG-CONTROL.
+      *
+       BC-OPEN-ARCHIVOS.
+      *-----------------
+           OPEN OUTPUT LSTREC.
+           OPEN OUTPUT ARCHERR.
+           OPEN OUTPUT ARCHACP.
+           OPEN OUTPUT SGCJCC.
+           OPEN OUTPUT SGCBCT.
+
+       BZ-FIN-SECTION.
+      *---------------
+           EXIT.
+
+       C-PROCESAR SECTION.
+      *===================
+       CA-CONTROL-PROCESO.
+      *-------------------
+           SORT SRTCTE
+           ON ASCENDING KEY
+                       SCTE-TIP-MOV
+                       SCTE-CIC-IOPE
+                    USING MTOCTE
+                    OUTPUT PROCEDURE F-PROCESO-SORT.
+
+       CZ-FIN-SECTION.
+      *---------------
+           EXIT.
+
+       D-TERMINAR SECTION.
+      *===================
+           PERFORM DA-ESTADISTICAS.
+           IF RETURN-CODE NOT = 100
+             PERFORM DBA-CHEQUEA-TANDEM
+           END-IF.
+           PERFORM DB-CERRAR-ARCHIVOS.
+           GO TO DZ-FIN-SECTION.
+      *
+       DA-ESTADISTICAS.
+      *----------------
+           DISPLAY BLANCO.
+           DISPLAY BLANCO.
+           DISPLAY BLANCO '*****************************************'.
+           DISPLAY BLANCO '*                                       *'.
+           DISPLAY BLANCO '*        ESTADISTICAS DEL PROCESO       *'.
+           DISPLAY BLANCO '*                                       *'.
+           DISPLAY BLANCO '*****************************************'.
+           DISPLAY BLANCO.
+      *    DISPLAY BLANCO 'REG. LEIDOS ARCH. RANGOS  :' WS-LEI-SUCUR.
+      *    DISPLAY BLANCO.
+           DISPLAY BLANCO 'REG. LEIDOS CTAS. CTES.   :' WS-LEI-SCTE.
+           DISPLAY BLANCO 'REG. TIPO 1 (CREACION)    :' WS-LEI-TIP1.
+           DISPLAY BLANCO 'REG. TIPO 2 (MODIFICACION):' WS-LEI-TIP2.
+           DISPLAY BLANCO 'REG. TIPO 3 (ELIMINACION) :' WS-LEI-TIP3.
+           DISPLAY BLANCO 'REG. TIPO 4 (MODIF.DIRE ) :' WS-LEI-TIP4.
+           DISPLAY BLANCO 'REG. TIPO 5 (REG.CONTROL) :' WS-LEI-TIP5.
+           DISPLAY BLANCO 'REG. TIPO X (OTRO TIPO)   :' WS-LEI-TIPX.
+           DISPLAY BLANCO.
+           DISPLAY BLANCO 'REG. LEIDOS   TABLA DBC   :' WS-LEI-DBC.
+           DISPLAY BLANCO 'REG. INEXIST. TABLA DBC   :' WS-NEX-DBC.
+           DISPLAY BLANCO.
+           DISPLAY BLANCO.
+           DISPLAY BLANCO 'REG. CON ERRORES VALIDAC. :' WS-ERR-VAL.
+           DISPLAY BLANCO.
+           DISPLAY BLANCO 'REG. GRABADOS TABLA RCO   :' WS-GRA-RCO.
+           DISPLAY BLANCO 'REG. GRABADOS TABLA OPE   :' WS-GRA-OPE.
+           DISPLAY BLANCO.
+           DISPLAY BLANCO 'REG. ACT. RCO (POR MODIF) :' WS-MOD-RCO.
+           DISPLAY BLANCO 'REG. ACT. RCO (MODIF DIR) :' WS-MOD-RCO-DIRE
+           DISPLAY BLANCO 'REG. ACT. OPE (POR MODIF) :' WS-MOD-OPE.
+           DISPLAY BLANCO.
+           DISPLAY BLANCO 'REG. ACT. RCO (POR ELIMI) :' WS-ELI-RCO.
+           DISPLAY BLANCO 'REG. ACT. OPE (POR ELIMI) :' WS-ELI-OPE.
+           DISPLAY BLANCO.
+           DISPLAY BLANCO 'REG. YA EXISTENTES RCO    :' WS-EXI-RCO.
+           DISPLAY BLANCO 'REG. YA EXISTENTES OPE    :' WS-EXI-OPE.
+           DISPLAY BLANCO.
+           DISPLAY BLANCO 'REG. INEXISTENTES RCO     :' WS-NEL-RCO.
+           DISPLAY BLANCO 'REG. INEXISTENTES OPE     :' WS-NEL-OPE.
+           DISPLAY BLANCO.
+           DISPLAY BLANCO 'REG. ACT. OPE (CTA CARGO) :' WS-CAR-OPE.
+           DISPLAY BLANCO 'REG. INEX. OPE (CTA CARGO):' WS-NCA-OPE.
+           DISPLAY BLANCO.
+           DISPLAY BLANCO 'NUM. REGISTROS RECHAZADOS :' WS-LIN-GRA-LREC.
+           DISPLAY BLANCO 'REG. GRABADOS ARCH ERRORES:' WS-GRA-ERR.
+           DISPLAY BLANCO.
+           DISPLAY BLANCO '*****************************************'.
+      *
+       DBA-CHEQUEA-TANDEM.
+      *-------------------
+           IF NOT REG-CONTROL
+              DISPLAY BLANCO '************************************'
+              DISPLAY BLANCO '*                                  *'
+              DISPLAY BLANCO '* REGISTRO TOTALES TANDEM NO VIENE *'
+              DISPLAY BLANCO '*      PROCESO SE CANCELA.         *'
+              DISPLAY BLANCO '*                                  *'
+              DISPLAY BLANCO '************************************'
+              MOVE 100 TO RETURN-CODE
+           ELSE
+              IF WS-CANT-APERT   NOT = WS-LEI-TIP1 OR
+                 WS-CANT-MODIF   NOT = WS-LEI-TIP2 OR
+                 WS-CANT-CIERRES NOT = WS-LEI-TIP3 OR
+                 WS-CANT-MODIF-DIRE NOT = WS-LEI-TIP4 OR
+                 WS-CANT-OTROS   NOT = WS-LEI-TIPX
+                 DISPLAY BLANCO '*************************************'
+                 DISPLAY BLANCO '*************************************'
+                 DISPLAY BLANCO '*  ARCHIVO MOVIMIENTOS TRASPASADO   *'
+                 DISPLAY BLANCO '*  INCOMPLETO                       *'
+                 DISPLAY BLANCO '*  DESDE OBEY OBDCCSGC DE TANDEM    *'
+                 DISPLAY BLANCO '*  PROCESO CANCELADO                *'
+                 DISPLAY BLANCO '*  REPETIR OBEY EN TANDEM           *'
+                 DISPLAY BLANCO '*************************************'
+                 DISPLAY BLANCO '*************************************'
+                 DISPLAY BLANCO 'TOTAL REGS.APERT IBM = ' WS-LEI-TIP1
+                 DISPLAY BLANCO 'TOTAL REGS.APERT TDM = ' WS-CANT-APERT
+                 DISPLAY BLANCO 'TOTAL REGS.MODIF IBM = ' WS-LEI-TIP2
+                 DISPLAY BLANCO 'TOTAL REGS.MODIF TDM = ' WS-CANT-MODIF
+                 DISPLAY BLANCO 'TOTAL REGS.DIRE  TDM = '
+                                                  WS-CANT-MODIF-DIRE
+                 DISPLAY BLANCO 'TOTAL REGS.DIRE  IBM = ' WS-LEI-TIP4
+                 DISPLAY BLANCO 'TOTAL REGS.CIERR IBM = ' WS-LEI-TIP3
+                 DISPLAY BLANCO 'TOTAL REGS.CIERR TDM = '
+                 DISPLAY               WS-CANT-CIERRES
+                 DISPLAY BLANCO 'TOTAL REGS.OTROS IBM = ' WS-LEI-TIPX
+                 DISPLAY BLANCO 'TOTAL REGS.OTROS TDM = ' WS-CANT-OTROS
+                 MOVE 100   TO RETURN-CODE
+               ELSE
+                 DISPLAY BLANCO '*******************************'
+                 DISPLAY BLANCO '*                             *'
+                 DISPLAY BLANCO '*  ARCHIVO MOVIMIENTOS TANDEM *'
+                 DISPLAY BLANCO '*        CUADRADO             *'
+                 DISPLAY BLANCO '*                             *'
+                 DISPLAY BLANCO '*******************************'
+              END-IF
+           END-IF.
+
+           IF NOT REG-CONTROL
+              DISPLAY '*******************************************'
+                       UPON CONSOLE
+              DISPLAY '*                                         *'
+                       UPON CONSOLE
+              DISPLAY '*      REGISTRO CONTROL TANDEM NO VIENE   *'
+                       UPON CONSOLE
+              DISPLAY '*      PROCESO SE CANCELA.                *'
+                       UPON CONSOLE
+              DISPLAY '*                                         *'
+                       UPON CONSOLE
+              DISPLAY '*******************************************'
+                       UPON CONSOLE
+           ELSE
+           IF WS-CANT-APERT   NOT = WS-LEI-TIP1 OR
+              WS-CANT-MODIF   NOT = WS-LEI-TIP2 OR
+              WS-CANT-CIERRES NOT = WS-LEI-TIP3 OR
+              WS-CANT-MODIF-DIRE NOT = WS-LEI-TIP4 OR
+              WS-CANT-OTROS   NOT = WS-LEI-TIPX
+              DISPLAY '********************************************'
+                        UPON CONSOLE
+              DISPLAY '********************************************'
+                        UPON CONSOLE
+              DISPLAY 'ARCHIVO DE MOVIMIENTOS TRASPASADO INCOMPLETO'
+                        UPON CONSOLE
+              DISPLAY 'DESDE OBEY OBDCCSGC DE TANDEM               '
+                        UPON CONSOLE
+              DISPLAY 'PROCESO CANCELADO, REPETIR OBEY EN TANDEM   '
+                        UPON CONSOLE
+              DISPLAY '********************************************'
+                        UPON CONSOLE
+              DISPLAY '********************************************'
+                        UPON CONSOLE
+              DISPLAY 'TOTAL REGS.APERT IBM = ' WS-LEI-TIP1
+                        UPON CONSOLE
+              DISPLAY 'TOTAL REGS.APERT TDM = ' WS-CANT-APERT
+                        UPON CONSOLE
+              DISPLAY 'TOTAL REGS.MODIF IBM = ' WS-LEI-TIP2
+                        UPON CONSOLE
+              DISPLAY 'TOTAL REGS.MODIF TDM = ' WS-CANT-MODIF
+                        UPON CONSOLE
+              DISPLAY 'TOTAL REGS.CIERR IBM = ' WS-LEI-TIP3
+                        UPON CONSOLE
+              DISPLAY 'TOTAL REGS.CIERR TDM = ' WS-CANT-CIERRES
+                        UPON CONSOLE
+              DISPLAY 'TOTAL REGS.OTROS IBM = ' WS-LEI-TIPX
+                        UPON CONSOLE
+              DISPLAY 'TOTAL REGS.OTROS TDM = ' WS-CANT-OTROS
+                        UPON CONSOLE
+              DISPLAY BLANCO 'TOTAL REGS.DIRE  TDM = '
+                                               WS-CANT-MODIF-DIRE
+                        UPON CONSOLE
+              DISPLAY BLANCO 'TOTAL REGS.DIRE  IBM = ' WS-LEI-TIP4
+                        UPON CONSOLE
+           ELSE
+              DISPLAY '**************************************'
+                        UPON CONSOLE
+              DISPLAY '*                                    *'
+                        UPON CONSOLE
+              DISPLAY '*      ARCHIVO MOVIMIENTOS TANDEM    *'
+                        UPON CONSOLE
+              DISPLAY '*      CUADRADO.                     *'
+                        UPON CONSOLE
+              DISPLAY '*                                    *'
+                        UPON CONSOLE
+              DISPLAY '**************************************'
+                        UPON CONSOLE
+           END-IF
+           END-IF.
+       DB-CERRAR-ARCHIVOS.
+      *-------------------
+      *    CLOSE LSTREC SUCUR.
+           CLOSE LSTREC.
+      *
+     ** V.C.A 12.5.97**
+           CLOSE ARCHERR.
+           CLOSE SGCJCC.
+           CLOSE SGCBCT.
+           CLOSE ARCHACP.
+
+     *
+       DZ-FIN-SECTION.
+      *---------------
+           EXIT.
+
+       F-PROCESO-SORT SECTION.
+      *=======================
+       FA-CONTROL-PROCESO.
+      *-------------------
+           PERFORM FB-LEE-SRTCTE.
+           PERFORM FC-PROCESO UNTIL FS-SRTCTE = 10.
+           GO TO FZ-FIN-SECTION.
+
+       FB-LEE-SRTCTE.
+      *--------------
+           RETURN SRTCTE
+                  AT END MOVE 10 TO FS-SRTCTE.
+           IF FS-SRTCTE = 0
+              ADD 1 TO WS-LEI-SCTE
+              PERFORM FBA-CHEQUEA-TIP-MOV
+           END-IF.
+      *
+       FBA-CHEQUEA-TIP-MOV.
+      *--------------------
+           IF SCTE-TIP-MOV = '1'
+              ADD 1 TO WS-LEI-TIP1
+           ELSE
+              IF SCTE-TIP-MOV = '2'
+                 ADD 1 TO WS-LEI-TIP2
+              ELSE
+                 IF SCTE-TIP-MOV = '3'
+                    ADD 1 TO WS-LEI-TIP3
+                 ELSE
+                    IF SCTE-TIP-MOV = '4'
+                       ADD 1 TO WS-LEI-TIP4
+                    ELSE
+                       IF SCTE-TIP-MOV = '5'
+                          ADD 1 TO WS-LEI-TIP5
+                          PERFORM FBAA-PROC-REG-CONTROL
+                          MOVE 10       TO FS-SRTCTE
+                       ELSE
+                          ADD 1 TO WS-LEI-TIPX
+                      END-IF
+                    END-IF
+                 END-IF
+              END-IF
+           END-IF.
+
+      *
+       FBAA-PROC-REG-CONTROL.
+      *----------------------
+           MOVE FTP-APERT            TO WS-CANT-APERT.
+           MOVE FTP-MODIF            TO WS-CANT-MODIF.
+           MOVE FTP-MODIF-DIRE       TO WS-CANT-MODIF-DIRE.
+           MOVE FTP-CIERRE           TO WS-CANT-CIERRES.
+           MOVE FTP-OTROS            TO WS-CANT-OTROS.
+           MOVE 'SI'                 TO WS-REG-CONTROL.
+      *
+       FC-PROCESO.
+      *-----------
+           MOVE 0 TO FLAG-ERR.
+           MOVE SPACES TO WS-IND-RECH.
+           PERFORM FD-VALIDA-CAMPOS
+           IF WS-IND-RECH = '  '
+              IF SCTE-TIP-MOV = '1'
+                 PERFORM FC1-PROCESO-TIPO1
+              ELSE
+                 IF SCTE-TIP-MOV = '2'
+                    PERFORM FC2-PROCESO-TIPO2
+                 ELSE
+                    IF SCTE-TIP-MOV = '3'
+                       PERFORM FC3-PROCESO-TIPO3
+                    ELSE
+                       IF SCTE-TIP-MOV = '4'
+                          PERFORM FC4-PROCESO-TIPO4
+                       END-IF
+                    END-IF
+                 END-IF
+              END-IF
+           END-IF.
+           IF WS-IND-RECH = 'SI'
+              ADD 1 TO WS-ERR-VAL
+              PERFORM FN-IMPRIME-RECHAZO
+           END-IF.
+           PERFORM FB-LEE-SRTCTE.
+
+       FC1-PROCESO-TIPO1.
+      *------------------
+           PERFORM FF-CREA-RCO
+           IF REQ-RETURN-CODE = '  '
+              PERFORM FG-CREA-OPE
+           END-IF.
+           IF SCTE-TIP-CARG = 'FSDCCCPM    ' AND
+            SCTE-TIP-OPE = 'CPR'
+
+            PERFORM FP-GRABA-ARCH-BCT
+            PERFORM FQ-GRABA-ARCH-JCC
+            PERFORM FS-GRABA-ACP
+           END-IF.
+       FC2-PROCESO-TIPO2.
+      *------------------
+           PERFORM FH-MODIFICA-RCO
+           IF REQ-RETURN-CODE = '  '
+              PERFORM FI-MODIFICA-OPE
+           END-IF.
+
+       FC3-PROCESO-TIPO3.
+      *------------------
+           PERFORM FJ-ELIMINA-RCO.
+      *    SE MARCA COMO ELIMINADO EN OPE AUN CUANDO NO EXISTA EN RCO.
+           PERFORM FK-ELIMINA-OPE.
+
+       FC4-PROCESO-TIPO4.
+      *------------------
+      *   SE ACTUALIZA SOLO LA TABLA RCO CUANDO LA MODIF. ES LA DIRECC.
+           PERFORM FH-MODIFICA-RCO.
+           ADD 1       TO WS-MOD-RCO-DIRE.
+      *
+       FD-VALIDA-CAMPOS.
+      *-----------------
+           IF SCTE-TIP-MOV NOT = '1' AND NOT = '2' AND NOT = '3'
+              AND NOT = '4'
+              MOVE 'TIPO-MOV.-INVALIDO' TO LREC-DET-RECH
+              MOVE 'SI' TO WS-IND-RECH.
+           IF SCTE-TIP-MOV NOT = '3'
+              PERFORM FE-CONSULTA-DBC
+              IF WS-DBC-RETURN-CODE = '14'
+                 MOVE 'NO-EXISTE-DBC' TO LREC-DET-RECH
+                 MOVE 'SI' TO WS-IND-RECH
+                 MOVE 'EN-MODIF-NO-HAY-RCO' TO LREC-DET-RECH
+                 MOVE 'APL'          TO ERR-TIPO
+                 MOVE '0002'       TO ERR-ERRCODE
+                 MOVE 'REGISTRO NO EXISTE' TO  ERR-GLOSA
+               MOVE 'LECTURA'       TO ERR-SENTENCIA
+                MOVE REQ-KEY-VALUE  TO ERR-KEY
+                PERFORM FO-WRITE-ARCH-ERR
+                MOVE 1 TO FLAG-ERR
+                MOVE 'SI' TO WS-IND-RECH.
+           IF SCTE-TIP-OPE NOT = 'CCT' AND NOT = 'CPR' AND
+              SCTE-TIP-OPE NOT = 'CVA' AND NOT = 'CPL'
+              MOVE 'TIPO-OPER-ERRONEA' TO LREC-DET-RECH
+              MOVE 'SI' TO WS-IND-RECH.
+           IF SCTE-SUC < '001' AND SCTE-SUC > '999'
+              MOVE 'ERROR-EN-SUCURSAL' TO LREC-DET-RECH
+              MOVE 'SI' TO WS-IND-RECH.
+
+       FE-CONSULTA-DBC.
+      *----------------
+           MOVE 'REDKY' TO REQ-CMD.
+           MOVE 'DBC'   TO REQ-TBLNM.
+           MOVE 'DBC00' TO REQ-KEYNM.
+           MOVE SCTE-CIC-ICLI TO REQ-DBC-CIC-ICLI.
+           MOVE 'DBC00' TO ELEM-1.
+           CALL 'DBNTRY' USING UIB REQ-AREA DBC ELEM-LIST.
+           IF REQ-RETURN-CODE NOT = '  ' AND NOT = '14'
+              DISPLAY BLANCO '**************************'
+              DISPLAY BLANCO '* ERROR: REDKY TABLA DBC *'
+              DISPLAY BLANCO '* TABLA          : ' REQ-TBLNM
+              DISPLAY BLANCO '* CODIGO RETORNO : ' REQ-RETURN-CODE
+              DISPLAY BLANCO '* REQ. AREA      : ' REQ-AREA
+              DISPLAY BLANCO '* PGM. SGCP310 CANCELADO *'
+              DISPLAY BLANCO
+              DISPLAY BLANCO '* ERROR: REDKY TABLA DBC *' UPON CONSOLE
+              DISPLAY BLANCO '* PGM. SGCP310 CANCELADO *' UPON CONSOLE
+              MOVE 100 TO RETURN-CODE
+    * * V.C.A  12.5.97 **
+              MOVE 'SIS'          TO ERR-TIPO
+              MOVE '0005'       TO ERR-ERRCODE
+              MOVE 'ERROR DE LECTURA ' TO ERR-GLOSA
+              MOVE 'LECTURA'    TO ERR-SENTENCIA
+              MOVE REQ-KEY-VALUE  TO ERR-KEY
+              PERFORM FO-WRITE-ARCH-ERR
+              PERFORM D-TERMINAR
+              GOBACK.
+           MOVE REQ-RETURN-CODE TO WS-DBC-RETURN-CODE.
+      *    SI EXISTE EL CLIENTE POSTERIORMENTE NO SE CREARA.
+           IF REQ-RETURN-CODE = '  '
+              ADD 1 TO WS-LEI-DBC
+           ELSE
+              ADD 1 TO WS-NEX-DBC.
+
+       FF-CREA-RCO.
+      *------------
+           MOVE ' '           TO RCO-GLS-FLAG.
+
+      *    SE MUEVE EL CIC DEL CLIENTE
+           MOVE SCTE-CIC-ICLI TO RCO-CIC-ICLI.
+
+      *    ASUME COMO 0000 EL CAI CORRESP. A CTAS. CTES.
+           MOVE '0000'        TO RCO-CAI-IOPE.
+
+      *    MOVE EL NUMERO DE LA CTA.CTE. A LA OPERACION.
+           MOVE SCTE-IIC-IOPE TO RCO-IIC-IOPE.
+
+      *    MOVE LA FECHA Y HORA DE PROCESO.
+           MOVE WS-FEC-FDAT  TO RCO-STP-ITRN.
+           MOVE WS-HRA       TO RCO-HRA-HRTR.
+
+      *    ASIGNA VALORES CORRESP. A PROCESO BATCH DE CARGA.
+           MOVE 'I'          TO RCO-MSC-TACC.
+           MOVE 'V'          TO RCO-MSC-STAT.
+           MOVE 'B'          TO RCO-MSC-TTRN.
+           MOVE '   '        TO RCO-COD-TTRN.
+
+      *    MOVE NOMBRE DE PGM. DE CARGA AL CAMPO AUTOR.
+           MOVE 'SGCP310'    TO RCO-COD-ATRN.
+
+      *    MOVE VIGENTE AL CODIGO STATUS.
+           MOVE 'VIG'        TO RCO-COD-STAT
+
+      *    MOVE TITULAR CTA-CTISTA AL CODIGO RELACION-CLTE-OP.
+           MOVE 'TIT'        TO RCO-COD-RCOP.
+
+      *    MOVE DOMICILIO AL NUMERO DE DIRECCION.
+           IF SCTE-NUM-DIRE < '01' OR > '99'
+              MOVE 01           TO RCO-NUM-DIRE
+           ELSE
+              MOVE SCTE-NUM-DIRE TO RCO-NUM-DIRE
+           END-IF.
+
+      *    MOVE EL PORCENTAJE DE LA RELACION: SI ES 0 SE MUEVE 100.
+           IF SCTE-VAL-PRCO = SPACES OR = '000000000'
+              MOVE 100           TO RCO-VAL-PRCO
+           ELSE
+              MOVE SCTE-VAL-PRCO TO RCO-VAL-PRCO
+           END-IF.
+
+      *    MOVE CUENTA CORRIENTE A TIPO DE OPERACION.
+           MOVE SCTE-TIP-OPE TO RCO-COD-TOPR.
+           MOVE SCTE-STP-OPE TO RCO-COD-AOPR.
+      *    MOVE '   '        TO RCO-COD-AOPR.
+
+      *    MOVE SPACES A FILLER DISPONIBLE.
+           MOVE SPACES       TO RCO-GLS-DISP.
+
+           MOVE 'ADDIT' TO REQ-CMD.
+           MOVE 'RCO'   TO REQ-TBLNM.
+           MOVE 'RCO00' TO ELEM-1.
+           CALL 'DBNTRY' USING UIB REQ-AREA RCO ELEM-LIST.
+           IF REQ-RETURN-CODE NOT = '  ' AND NOT = '10'
+              DISPLAY BLANCO '**************************'
+              DISPLAY BLANCO '* ERROR: ADDIT TABLA RCO *'
+              DISPLAY BLANCO '* TABLA          : ' REQ-TBLNM
+              DISPLAY BLANCO '* CODIGO RETORNO : ' REQ-RETURN-CODE
+              DISPLAY BLANCO '* REQ. AREA      : ' REQ-AREA
+              DISPLAY BLANCO '* PGM. SGCP310 CANCELADO *'
+              DISPLAY BLANCO
+              DISPLAY BLANCO '* ERROR: ADDIT TABLA RCO *' UPON CONSOLE
+              DISPLAY BLANCO '* PGM. SGCP310 CANCELADO *' UPON CONSOLE
+              MOVE 100  TO RETURN-CODE
+      * * V.C.A  12.5.97 **
+              MOVE REQ-KEY-VALUE  TO ERR-KEY
+              MOVE 'SIS'          TO ERR-TIPO
+              MOVE '0004'       TO ERR-ERRCODE
+              MOVE 'ERROR AL AGREGAR REGISTRO ' TO  ERR-GLOSA
+              MOVE 'AGREGA'       TO ERR-SENTENCIA
+              PERFORM FO-WRITE-ARCH-ERR
+              PERFORM D-TERMINAR
+              GOBACK.
+      *    SI EXISTE LA REL. CLTE-OPER SE RECHAZA LA CREACION O ACT.
+           IF REQ-RETURN-CODE = '10'
+              MOVE 'SI' TO WS-IND-RECH
+              MOVE 'RCO-YA-EXISTE' TO LREC-DET-RECH
+              IF RCO-FEC-FTRN NOT = WS-FEC-FDAT
+                MOVE 'APL' TO ERR-TIPO
+                MOVE '0001'       TO ERR-ERRCODE
+                MOVE 'REGISTRO DUPLICACDO ' TO  ERR-GLOSA
+                MOVE 'WRITE '       TO ERR-SENTENCIA
+                MOVE REQ-KEY-VALUE  TO ERR-KEY
+                PERFORM FO-WRITE-ARCH-ERR
+                MOVE '1'   TO FLAG-ERR
+              END-IF
+              ADD 1 TO WS-EXI-RCO
+           END-IF.
+           IF REQ-RETURN-CODE = '  '
+              ADD 1 TO WS-GRA-RCO.
+
+       FG-CREA-OPE.
+      *------------
+           MOVE ' '          TO OPE-GLS-FLAG.
+
+      *    ASUME COMO 0000 EL CAI CORRESP. A CTAS. CTES.
+           MOVE '0000'       TO OPE-CAI-IOPE.
+
+      *    MOVE EL NUMERO DE LA CTA.CTE. A LA OPERACION.
+           MOVE SCTE-IIC-IOPE  TO OPE-IIC-IOPE.
+
+      *    MOVE LA FECHA Y HORA DE PROCESO.
+           MOVE WS-FEC-FDAT  TO OPE-STP-ITRN.
+           MOVE WS-HRA       TO OPE-HRA-HRTR.
+
+      *    ASIGNA VALORES CORRESP. A PROCESO BATCH DE CARGA.
+           MOVE 'I'          TO OPE-MSC-TACC.
+           MOVE 'V'          TO OPE-MSC-STAT.
+           MOVE 'B'          TO OPE-MSC-TTRN.
+           MOVE '   '        TO OPE-COD-TTRN.
+
+      *    MOVE NOMBRE DE PGM. DE CARGA AL CAMPO AUTOR.
+           MOVE 'SGCP310'    TO OPE-COD-ATRN.
+
+      *    MOVE VIGENTE AL CODIGO STATUS.
+           MOVE 'VIG'        TO OPE-COD-STAT
+
+      *    MOVE CODIGO DE MONEDA PESOS AL VALOR DE CAMBIO.
+           MOVE '0999  '     TO OPE-COD-VCOP.
+
+      *    MOVE CUENTA CORRIENTE A TIPO DE OPERACION.
+           MOVE SCTE-TIP-OPE TO OPE-COD-TOPR.
+           MOVE SCTE-STP-OPE TO OPE-COD-AOPR.
+
+      *    MOVE CODIGO OFIC A CODIGO OFIC OPERACION.
+           MOVE SCTE-SUC     TO OPE-COD-OFOP.
+
+      *    MOVE EL CODIGO DE EJECUTIVO.
+           MOVE SCTE-COD-EJEC TO OPE-COD-EJOP.
+
+      *    MOVE FECHA APERTURA A FECHA INICIO OPERACION.
+           MOVE SCTE-FEC-CREA TO WS-FEC-FPRO
+           MOVE WS-NUM-SPRO   TO OPE-NUM-SIOP
+           MOVE WS-NUM-APRO   TO OPE-NUM-AIOP
+           MOVE WS-NUM-MPRO   TO OPE-NUM-MIOP
+           MOVE WS-NUM-DPRO   TO OPE-NUM-DIOP.
+
+           MOVE 00000000     TO OPE-FEC-FTOP
+
+      *    MOVE SPACES A MOTIVO TERMINO OPERACION.
+           MOVE '  '         TO OPE-COD-MOTT.
+
+      *    MOVE ZEROES A FECHA REAPERTURA OPERACION.
+           MOVE 00000000     TO OPE-FEC-FROP.
+
+      *    MOVE SPACES A IND DE MULTIPLES CLIENTES.
+           MOVE '  '         TO OPE-IND-MCLI.
+
+      *    PARA CTAS. CTES. MOVE SPACES A OPERACION DE CARGO
+      *    MOVE TIPO COMISION A OPE TIPO COMISION.
+           IF SCTE-TIP-OPE = 'CCT' OR = 'CVA' OR = 'CPL'
+              MOVE SPACES        TO OPE-CIC-ICAR
+                                    OPE-CAI-ICAR
+              IF SCTE-COD-TCOM NUMERIC
+                 MOVE SCTE-COD-TCOM TO OPE-COD-TCOM
+              ELSE
+                 MOVE SPACES        TO OPE-COD-TCOM
+           END-IF.
+           IF SCTE-TIP-OPE = 'CPR'
+              MOVE '0000'           TO OPE-CAI-ICAR
+              MOVE SCTE-IIC-ICAR    TO OPE-IIC-ICAR
+              IF SCTE-COD-TCOM NUMERIC
+                 MOVE SCTE-COD-TCOM TO OPE-COD-TCOM
+              ELSE
+                 MOVE '00'          TO OPE-COD-TCOM
+              END-IF
+           END-IF.
+
+           MOVE 'ADDIT' TO REQ-CMD.
+           MOVE 'OPE'   TO REQ-TBLNM.
+           MOVE 'OPE00' TO ELEM-1.
+           CALL 'DBNTRY' USING UIB REQ-AREA OPE ELEM-LIST.
+           IF REQ-RETURN-CODE NOT = '  ' AND NOT = '10'
+              DISPLAY BLANCO '**************************'
+              DISPLAY BLANCO '* ERROR: ADDIT TABLA OPE *'
+              DISPLAY BLANCO '* TABLA          : ' REQ-TBLNM
+              DISPLAY BLANCO '* CODIGO RETORNO : ' REQ-RETURN-CODE
+              DISPLAY BLANCO '* REQ. AREA      : ' REQ-AREA
+              DISPLAY BLANCO '* PGM. SGCP310 CANCELADO *'
+              DISPLAY BLANCO
+              DISPLAY BLANCO '* ERROR: ADDIT TABLA OPE *' UPON CONSOLE
+              DISPLAY BLANCO '* PGM. SGCP310 CANCELADO *' UPON CONSOLE
+              MOVE 100 TO RETURN-CODE
+      * * V.C.A  12.5.97 **
+              MOVE 'SIS'          TO ERR-TIPO
+              MOVE '0004'       TO ERR-ERRCODE
+              MOVE 'ERROR AL AGREGAR REGISTRO ' TO  ERR-GLOSA
+              MOVE 'AGREGA'       TO ERR-SENTENCIA
+              MOVE REQ-KEY-VALUE  TO ERR-KEY
+              PERFORM FO-WRITE-ARCH-ERR
+              PERFORM D-TERMINAR
+              GOBACK.
+
+      *    SI OPERACION YA EXISTE SE RECHAZA LA CREACION PERO
+      *    SIN ERROR PORQUE SE ASUME CUENTA BIPERSONAL.
+           IF REQ-RETURN-CODE = '10'
+              ADD 1 TO WS-EXI-OPE
+              PERFORM FM-CONSULTA-MULTIPERSONAL
+              PERFORM FG1-ASIGNA-IND-MULTIPERSONAL
+           ELSE
+           IF REQ-RETURN-CODE = '  '
+              ADD 1 TO WS-GRA-OPE
+           END-IF.
+
+       FG1-ASIGNA-IND-MULTIPERSONAL.
+      *-----------------------------
+           MOVE 'RDUKY' TO REQ-CMD.
+           MOVE '0000'        TO REQ-OPE-CAI-IOPE.
+           MOVE SCTE-IIC-IOPE TO REQ-OPE-IIC-IOPE.
+           MOVE 'OPE'   TO REQ-TBLNM.
+           MOVE 'OPE00' TO REQ-KEYNM.
+           MOVE 'OPE00' TO ELEM-1.
+           CALL 'DBNTRY' USING UIB REQ-AREA OPE ELEM-LIST.
+           IF REQ-RETURN-CODE NOT = '  '
+              DISPLAY BLANCO '**************************'
+              DISPLAY BLANCO '* ERROR: RDUKY TABLA OPE *'
+              DISPLAY BLANCO '* TABLA          : ' REQ-TBLNM
+              DISPLAY BLANCO '* CODIGO RETORNO : ' REQ-RETURN-CODE
+              DISPLAY BLANCO '* REQ. AREA      : ' REQ-AREA
+              DISPLAY BLANCO '* PGM. SGCP310 CANCELADO *'
+              DISPLAY BLANCO
+              DISPLAY BLANCO '* ERROR: RDUKY TABLA OPE *' UPON CONSOLE
+              DISPLAY BLANCO '* PGM. SGCP310 CANCELADO *' UPON CONSOLE
+              MOVE 100 TO RETURN-CODE
+      * V.C.A  12.5.97 **
+              MOVE 'SIS'          TO ERR-TIPO
+              MOVE '0007'       TO ERR-ERRCODE
+              MOVE 'ERROR EN CONTROL ESCLUSIVO ' TO  ERR-GLOSA
+              MOVE 'LECTURA'     TO ERR-SENTENCIA
+              MOVE REQ-KEY-VALUE  TO ERR-KEY
+              PERFORM FO-WRITE-ARCH-ERR
+              PERFORM D-TERMINAR
+              GOBACK.
+
+      *    MOVE EL INDICADOR MULTIPERSONAL OBTENIDO
+           MOVE WS-IND-MCLI  TO OPE-IND-MCLI.
+
+           MOVE 'UPDAT' TO REQ-CMD.
+           MOVE 'OPE'   TO REQ-TBLNM.
+           MOVE 'OPE00' TO REQ-KEYNM.
+           CALL 'DBNTRY' USING UIB REQ-AREA OPE ELEM-LIST.
+           IF REQ-RETURN-CODE NOT = '  '
+              DISPLAY BLANCO '**************************'
+              DISPLAY BLANCO '* ERROR: UPDAT TABLA OPE *'
+              DISPLAY BLANCO '* TABLA          : ' REQ-TBLNM
+              DISPLAY BLANCO '* CODIGO RETORNO : ' REQ-RETURN-CODE
+              DISPLAY BLANCO '* REQ. AREA      : ' REQ-AREA
+              DISPLAY BLANCO '* PGM. SGCP310 CANCELADO *'
+              DISPLAY BLANCO
+              DISPLAY BLANCO '* ERROR: UPDAT TABLA OPE *' UPON CONSOLE
+              DISPLAY BLANCO '* PGM. SGCP310 CANCELADO *' UPON CONSOLE
+              MOVE 100 TO RETURN-CODE
+      *V.C.A  12.5.97 **
+              MOVE 'SIS'          TO ERR-TIPO
+              MOVE '0003'       TO ERR-ERRCODE
+              MOVE 'ERROR EN ACTUALIZACION ' TO  ERR-GLOSA
+              MOVE 'ACTUALIC'       TO ERR-SENTENCIA
+              MOVE REQ-KEY-VALUE  TO ERR-KEY
+              PERFORM FO-WRITE-ARCH-ERR
+              PERFORM D-TERMINAR
+              GOBACK.
+
+       FH-MODIFICA-RCO.
+      *----------------
+           MOVE SCTE-CIC-ICLI TO REQ-RCO-CIC-ICLI.
+           MOVE '0000'        TO REQ-RCO-CAI-IOPE.
+           MOVE SCTE-IIC-IOPE TO REQ-RCO-IIC-IOPE.
+
+           MOVE 'REDKY' TO REQ-CMD.
+           MOVE 'RCO'   TO REQ-TBLNM.
+           MOVE 'RCO00' TO REQ-KEYNM.
+           MOVE 'RCO00' TO ELEM-1.
+           CALL 'DBNTRY' USING UIB REQ-AREA RCO ELEM-LIST.
+           IF REQ-RETURN-CODE NOT = '  ' AND NOT = '14'
+              DISPLAY BLANCO '**************************'
+              DISPLAY BLANCO '* ERROR: REDKY TABLA RCO *'
+              DISPLAY BLANCO '* TABLA          : ' REQ-TBLNM
+              DISPLAY BLANCO '* CODIGO RETORNO : ' REQ-RETURN-CODE
+              DISPLAY BLANCO '* REQ. AREA      : ' REQ-AREA
+              DISPLAY BLANCO '* PGM. SGCP310 CANCELADO *'
+              DISPLAY BLANCO
+              DISPLAY BLANCO '* ERROR: REDKY TABLA RCO *' UPON CONSOLE
+              DISPLAY BLANCO '* PGM. SGCP310 CANCELADO *' UPON CONSOLE
+              MOVE 100   TO RETURN-CODE
+              MOVE 'SIS'          TO ERR-TIPO
+              MOVE '0005'       TO ERR-ERRCODE
+              MOVE 'ERROR DE LECTURA ' TO  ERR-GLOSA
+              MOVE 'LECTURA'     TO ERR-SENTENCIA
+              MOVE REQ-KEY-VALUE  TO ERR-KEY
+              PERFORM FO-WRITE-ARCH-ERR
+              PERFORM D-TERMINAR
+              GOBACK.
+      *    SI NO EXISTE LA REL. CLTE-OPER TAMPOCO EXISTE LA OPE.
+           IF REQ-RETURN-CODE = '14'
+              ADD 1 TO WS-NEL-RCO
+              MOVE 'SI' TO WS-IND-RECH
+              MOVE 'EN-MODIF-NO-HAY-RCO' TO LREC-DET-RECH
+              MOVE 'APL'          TO ERR-TIPO
+              MOVE '0002'       TO ERR-ERRCODE
+              MOVE 'REGISTRO NO EXISTE' TO  ERR-GLOSA
+              MOVE 'LECTURA'     TO ERR-SENTENCIA
+              MOVE REQ-KEY-VALUE  TO ERR-KEY
+              PERFORM FO-WRITE-ARCH-ERR
+              MOVE 1 TO FLAG-ERR
+           ELSE
+              IF SCTE-TIP-MOV = '4'
+                 PERFORM FH1-MODIFICA-RCO-ACT
+                 PERFORM FH2-MUEVE-CAMPOS-RCO-DIRE
+              ELSE
+                 PERFORM FH1-MODIFICA-RCO-ACT
+                 PERFORM FH2-MUEVE-CAMPOS-RCO
+              END-IF
+           END-IF.
+
+       FH1-MODIFICA-RCO-ACT.
+      *---------------------
+           MOVE 'RDUKY' TO REQ-CMD.
+           CALL 'DBNTRY' USING UIB REQ-AREA RCO ELEM-LIST.
+           IF REQ-RETURN-CODE NOT = '  '
+              DISPLAY BLANCO '**************************'
+              DISPLAY BLANCO '* ERROR: RDUKY TABLA RCO *'
+              DISPLAY BLANCO '* TABLA          : ' REQ-TBLNM
+              DISPLAY BLANCO '* CODIGO RETORNO : ' REQ-RETURN-CODE
+              DISPLAY BLANCO '* REQ. AREA      : ' REQ-AREA
+              DISPLAY BLANCO '* PGM. SGCP310 CANCELADO *'
+              DISPLAY BLANCO
+              DISPLAY BLANCO '* ERROR: RDUKY TABLA RCO *' UPON CONSOLE
+              DISPLAY BLANCO '* PGM. SGCP310 CANCELADO *' UPON CONSOLE
+              MOVE 100 TO RETURN-CODE
+      * V.C.A  12.5.97 **
+              MOVE 'SIS'          TO ERR-TIPO
+              MOVE '0007'       TO ERR-ERRCODE
+              MOVE 'ERROR EN CONTROL ESCLUSIVO ' TO  ERR-GLOSA
+              MOVE 'LECTURA'     TO ERR-SENTENCIA
+              MOVE REQ-KEY-VALUE  TO ERR-KEY
+              PERFORM FO-WRITE-ARCH-ERR
+              PERFORM D-TERMINAR
+              GOBACK.
+      *
+       FH2-MUEVE-CAMPOS-RCO.
+      *---------------------
+      *    MOVE LA FECHA Y HORA DE PROCESO.
+           MOVE WS-FEC-FDAT  TO RCO-STP-ITRN.
+           MOVE WS-HRA       TO RCO-HRA-HRTR.
+
+      *    ASIGNA VALORES CORRESP. A PROCESO BATCH DE CARGA.
+           MOVE 'I'          TO RCO-MSC-TACC.
+           MOVE 'V'          TO RCO-MSC-STAT.
+           MOVE 'B'          TO RCO-MSC-TTRN.
+           MOVE '   '        TO RCO-COD-TTRN.
+
+      *    MOVE NOMBRE DE PGM. DE CARGA AL CAMPO AUTOR.
+           MOVE 'SGCP310'    TO RCO-COD-ATRN.
+
+      *    MOVE VIGENTE AL CODIGO STATUS.
+           MOVE 'VIG'        TO RCO-COD-STAT
+
+      *    MOVE TITULAR CTA-CTISTA AL CODIGO RELACION-CLTE-OP.
+           MOVE 'TIT'        TO RCO-COD-RCOP.
+
+      *    MOVE DOMICILIO AL NUMERO DE DIRECCION.
+           IF SCTE-NUM-DIRE < '01' OR > '99'
+              MOVE 01           TO RCO-NUM-DIRE
+           ELSE
+              MOVE SCTE-NUM-DIRE TO RCO-NUM-DIRE
+           END-IF.
+
+      *    MOVE EL PORCENTAJE DE LA RELACION: SI ES 0 SE MUEVE 100.
+           IF SCTE-VAL-PRCO = SPACES OR = '000000000'
+              MOVE 100           TO RCO-VAL-PRCO
+           ELSE
+              MOVE SCTE-VAL-PRCO TO RCO-VAL-PRCO
+           END-IF.
+
+      *    MOVE CUENTA CORRIENTE A TIPO DE OPERACION.
+           MOVE SCTE-TIP-OPE TO RCO-COD-TOPR.
+
+      **  VCA 12-05-97 ***
+      *    MOVE CUENTA CORRIENTE A TIPO DE OPERACION AUXILIAR.
+           MOVE SCTE-STP-OPE TO RCO-COD-AOPR.
+      *    MOVE '   '        TO RCO-COD-AOPR.
+           PERFORM FH3-ACTUALIZA-RCO.
+           ADD 1 TO WS-MOD-RCO.
+      *
+       FH2-MUEVE-CAMPOS-RCO-DIRE.
+      *-------------------------,
+      *    MOVE LA FECHA Y HORA DE PROCESO.
+           MOVE WS-FEC-FDAT  TO RCO-STP-ITRN.
+           MOVE WS-HRA       TO RCO-HRA-HRTR.
+
+      *    ASIGNA VALORES CORRESP. A PROCESO BATCH DE CARGA.
+           MOVE 'I'          TO RCO-MSC-TACC.
+           MOVE 'V'          TO RCO-MSC-STAT.
+           MOVE 'B'          TO RCO-MSC-TTRN.
+           MOVE '   '        TO RCO-COD-TTRN.
+
+      *    MOVE NOMBRE DE PGM. DE CARGA AL CAMPO AUTOR.
+           MOVE 'SGCP310'    TO RCO-COD-ATRN.
+
+      *    MOVE VIGENTE AL CODIGO STATUS.
+           MOVE 'VIG'        TO RCO-COD-STAT
+
+      *    MOVE TITULAR CTA-CTISTA AL CODIGO RELACION-CLTE-OP.
+           MOVE 'TIT'        TO RCO-COD-RCOP.
+
+      *    MOVE DOMICILIO AL NUMERO DE DIRECCION.
+           IF SCTE-NUM-DIRE < '01' OR > '99'
+              MOVE 01           TO RCO-NUM-DIRE
+           ELSE
+              MOVE SCTE-NUM-DIRE TO RCO-NUM-DIRE
+           END-IF.
+           PERFORM FH3-ACTUALIZA-RCO.
+
+      *
+       FH3-ACTUALIZA-RCO.
+      *------------------
+           MOVE 'UPDAT' TO REQ-CMD.
+           MOVE 'RCO'   TO REQ-TBLNM.
+           MOVE 'RCO00' TO REQ-KEYNM.
+           CALL 'DBNTRY' USING UIB REQ-AREA RCO ELEM-LIST.
+           IF REQ-RETURN-CODE NOT = '  '
+              DISPLAY BLANCO '**************************'
+              DISPLAY BLANCO '* ERROR: UPDAT TABLA RCO *'
+              DISPLAY BLANCO '* TABLA          : ' REQ-TBLNM
+              DISPLAY BLANCO '* CODIGO RETORNO : ' REQ-RETURN-CODE
+              DISPLAY BLANCO '* REQ. AREA      : ' REQ-AREA
+              DISPLAY BLANCO '* PGM. SGCP310 CANCELADO *'
+              DISPLAY BLANCO
+              DISPLAY BLANCO '* ERROR: UPDAT TABLA RCO *' UPON CONSOLE
+              DISPLAY BLANCO '* PGM. SGCP310 CANCELADO *' UPON CONSOLE
+              MOVE 100 TO RETURN-CODE
+    * * V.C.A  12.5.97 **
+              MOVE 'SIS'          TO ERR-TIPO
+              MOVE '0003'       TO ERR-ERRCODE
+              MOVE 'ERROR EN ACTUALIZACION ' TO  ERR-GLOSA
+              MOVE 'ACTUALIC'       TO ERR-SENTENCIA
+              MOVE REQ-KEY-VALUE  TO ERR-KEY
+              PERFORM FO-WRITE-ARCH-ERR
+              PERFORM D-TERMINAR
+              GOBACK.
+
+       FI-MODIFICA-OPE.
+      *----------------
+           MOVE '0000'        TO REQ-OPE-CAI-IOPE.
+           MOVE SCTE-IIC-IOPE TO REQ-OPE-IIC-IOPE.
+
+           MOVE 'REDKY' TO REQ-CMD.
+           MOVE 'OPE'   TO REQ-TBLNM.
+           MOVE 'OPE00' TO REQ-KEYNM.
+           MOVE 'OPE00' TO ELEM-1.
+           CALL 'DBNTRY' USING UIB REQ-AREA OPE ELEM-LIST.
+           IF REQ-RETURN-CODE NOT = '  ' AND NOT = '14'
+              DISPLAY BLANCO '**************************'
+              DISPLAY BLANCO '* ERROR: REDKY TABLA OPE *'
+              DISPLAY BLANCO '* TABLA          : ' REQ-TBLNM
+              DISPLAY BLANCO '* CODIGO RETORNO : ' REQ-RETURN-CODE
+              DISPLAY BLANCO '* REQ. AREA      : ' REQ-AREA
+              DISPLAY BLANCO '* PGM. SGCP310 CANCELADO *'
+              DISPLAY BLANCO
+              DISPLAY BLANCO '* ERROR: REDKY TABLA OPE *' UPON CONSOLE
+              DISPLAY BLANCO '* PGM. SGCP310 CANCELADO *' UPON CONSOLE
+              MOVE 100 TO RETURN-CODE
+              MOVE 'SIS'          TO ERR-TIPO
+              MOVE '0005'       TO ERR-ERRCODE
+              MOVE 'ERROR DE LECTURA ' TO  ERR-GLOSA
+              MOVE 'LECTURA'     TO ERR-SENTENCIA
+              MOVE REQ-KEY-VALUE  TO ERR-KEY
+              PERFORM FO-WRITE-ARCH-ERR
+              PERFORM D-TERMINAR
+              GOBACK.
+      *    SI NO EXISTE LA REL. CLTE-OPER TAMPOCO EXISTE LA OPE.
+           IF REQ-RETURN-CODE = '14'
+              ADD 1 TO WS-NEL-OPE
+              MOVE 'SI' TO WS-IND-RECH
+              MOVE 'EN-MODIF-NO-HAY-OPE' TO LREC-DET-RECH
+    * * V.C.A  12.5.97 **
+              MOVE 'APL'          TO ERR-TIPO
+              MOVE '0002'       TO ERR-ERRCODE
+              MOVE 'REGISTRO NO EXISTE ' TO  ERR-GLOSA
+              MOVE 'LECTURA'     TO ERR-SENTENCIA
+              PERFORM FO-WRITE-ARCH-ERR
+              MOVE 1 TO FLAG-ERR
+           ELSE
+              PERFORM FI1-MODIFICA-OPE-ACT
+           END-IF.
+
+       FI1-MODIFICA-OPE-ACT.
+      *---------------------
+           MOVE 'RDUKY' TO REQ-CMD.
+           CALL 'DBNTRY' USING UIB REQ-AREA OPE ELEM-LIST.
+           IF REQ-RETURN-CODE NOT = '  '
+              DISPLAY BLANCO '**************************'
+              DISPLAY BLANCO '* ERROR: RDUKY TABLA OPE *'
+              DISPLAY BLANCO '* TABLA          : ' REQ-TBLNM
+              DISPLAY BLANCO '* CODIGO RETORNO : ' REQ-RETURN-CODE
+              DISPLAY BLANCO '* REQ. AREA      : ' REQ-AREA
+              DISPLAY BLANCO '* PGM. SGCP310 CANCELADO *'
+              DISPLAY BLANCO
+              DISPLAY BLANCO '* ERROR: RDUKY TABLA OPE *' UPON CONSOLE
+              DISPLAY BLANCO '* PGM. SGCP310 CANCELADO *' UPON CONSOLE
+              MOVE 100 TO RETURN-CODE
+      * V.C.A  12.5.97 **
+              MOVE 'SIS'          TO ERR-TIPO
+              MOVE '0007'       TO ERR-ERRCODE
+              MOVE 'ERROR EN CONTROL ESCLUSIVO ' TO  ERR-GLOSA
+              MOVE 'LECTURA'     TO ERR-SENTENCIA
+              MOVE REQ-KEY-VALUE  TO ERR-KEY
+              PERFORM FO-WRITE-ARCH-ERR
+              PERFORM D-TERMINAR
+              GOBACK.
+
+      *    MOVE LA FECHA Y HORA DE PROCESO.
+           MOVE WS-FEC-FDAT  TO OPE-STP-ITRN.
+           MOVE WS-HRA       TO OPE-HRA-HRTR.
+
+      *    ASIGNA VALORES CORRESP. A PROCESO BATCH DE CARGA.
+           MOVE 'I'          TO OPE-MSC-TACC.
+           MOVE 'V'          TO OPE-MSC-STAT.
+           MOVE 'B'          TO OPE-MSC-TTRN.
+           MOVE '   '        TO OPE-COD-TTRN.
+
+      *    MOVE NOMBRE DE PGM. DE CARGA AL CAMPO AUTOR.
+           MOVE 'SGCP310'    TO OPE-COD-ATRN.
+
+      *    MOVE VIGENTE AL CODIGO STATUS.
+           MOVE 'VIG'        TO OPE-COD-STAT
+
+      *    MOVE CODIGO DE MONEDA PESOS AL VALOR DE CAMBIO.
+           MOVE '0999  '     TO OPE-COD-VCOP.
+
+      *    MOVE CUENTA CORRIENTE A TIPO DE OPERACION.
+           MOVE SCTE-TIP-OPE TO OPE-COD-TOPR.
+           MOVE '   '        TO OPE-COD-AOPR.
+      *    IF SCTE-TIP-OPE = 'CPR'
+
+      *    ASIGNA SUCURSAL
+           MOVE SCTE-SUC TO OPE-COD-OFOP.
+
+      *    MOVE SPACES AL CODIGO DE EJECUTIVO.
+           MOVE SCTE-COD-EJEC TO OPE-COD-EJOP.
+
+      *    MOVE FECHA APERTURA A FECHA INICIO OPERACION.
+           MOVE SCTE-FEC-CREA TO WS-FEC-FPRO
+           MOVE WS-NUM-SPRO   TO OPE-NUM-SIOP
+           MOVE WS-NUM-APRO   TO OPE-NUM-AIOP
+           MOVE WS-NUM-MPRO   TO OPE-NUM-MIOP
+           MOVE WS-NUM-DPRO   TO OPE-NUM-DIOP.
+
+           MOVE 00000000     TO OPE-FEC-FTOP
+
+      *    MOVE SPACES A MOTIVO TERMINO OPERACION.
+           MOVE '  '         TO OPE-COD-MOTT.
+
+      *    MOVE ZEROES A FECHA REAPERTURA OPERACION.
+           MOVE 00000000     TO OPE-FEC-FROP.
+
+      *    OBTIENE INDICADOR DE MULTIPLES CLIENTES.
+           MOVE REQ-AREA     TO WS-REQ-AREA-OPE.
+           PERFORM FM-CONSULTA-MULTIPERSONAL.
+           MOVE WS-REQ-AREA-OPE TO REQ-AREA.
+           MOVE WS-IND-MCLI  TO OPE-IND-MCLI.
+
+      *    PARA CTAS. CTES. MOVE SPACES A OPERACION DE CARGO
+      *    MOVE TIPO COMISION A OPE TIPO COMISION.
+           IF SCTE-TIP-OPE = 'CCT' OR = 'CVA' OR = 'CPL'
+              MOVE SPACES        TO OPE-CIC-ICAR
+                                    OPE-CAI-ICAR
+              IF SCTE-COD-TCOM NUMERIC
+                 MOVE SCTE-COD-TCOM TO OPE-COD-TCOM
+              ELSE
+                 MOVE SPACES        TO OPE-COD-TCOM
+           END-IF.
+           IF SCTE-TIP-OPE =  'CPR'
+              MOVE '0000'           TO OPE-CAI-ICAR
+              MOVE SCTE-IIC-ICAR    TO OPE-IIC-ICAR
+              IF SCTE-COD-TCOM NUMERIC
+                 MOVE SCTE-COD-TCOM TO OPE-COD-TCOM
+              ELSE
+                 MOVE '00'          TO OPE-COD-TCOM
+              END-IF
+           END-IF.
+
+           MOVE 'UPDAT' TO REQ-CMD.
+           MOVE 'OPE00' TO ELEM-1.
+           CALL 'DBNTRY' USING UIB REQ-AREA OPE ELEM-LIST.
+           IF REQ-RETURN-CODE NOT = '  '
+              DISPLAY BLANCO '**************************'
+              DISPLAY BLANCO '* ERROR: UPDAT.TABLA OPE *'
+              DISPLAY BLANCO '* TABLA          : ' REQ-TBLNM
+              DISPLAY BLANCO '* CODIGO RETORNO : ' REQ-RETURN-CODE
+              DISPLAY BLANCO '* REQ. AREA      : ' REQ-AREA
+              DISPLAY BLANCO '* PGM. SGCP310 CANCELADO *'
+              DISPLAY BLANCO
+              DISPLAY BLANCO '* ERROR: UPDAT TABLA OPE *' UPON CONSOLE
+              DISPLAY BLANCO '* PGM. SGCP310 CANCELADO *' UPON CONSOLE
+              MOVE 100 TO RETURN-CODE
+    * * V.C.A  12.5.97 **
+              MOVE 'SIS'          TO ERR-TIPO
+              MOVE '0003'       TO ERR-ERRCODE
+              MOVE 'ERROR EN ACTUALIZACION ' TO  ERR-GLOSA
+              MOVE 'ACTUALIC'       TO ERR-SENTENCIA
+              MOVE REQ-KEY-VALUE  TO ERR-KEY
+              PERFORM FO-WRITE-ARCH-ERR
+              PERFORM D-TERMINAR
+              GOBACK.
+           ADD 1 TO WS-MOD-OPE.
+
+       FJ-ELIMINA-RCO.
+      *---------------
+           PERFORM FJ1-LEE-RCO-ELI.
+           IF REQ-RETURN-CODE = '  '
+              MOVE REQ-RCO-KEY-IIC TO WS-IIC-IOPE
+              PERFORM FJ2-LOOP-RCO-ELI
+                      UNTIL WS-IIC-IOPE NOT = REQ-RCO-KEY-IIC OR
+                      REQ-RETURN-CODE NOT = '  '
+              PERFORM FJ3-RELES-RCO.
+
+       FJ1-LEE-RCO-ELI.
+      *----------------
+           MOVE '0000'        TO REQ-RCO-KEY-CAI.
+           MOVE SCTE-IIC-IOPE TO REQ-RCO-KEY-IIC.
+           MOVE 'RDUKY' TO REQ-CMD.
+           MOVE 'RCO'   TO REQ-TBLNM.
+           MOVE 'RCO01' TO REQ-KEYNM.
+           MOVE 'RCO00' TO ELEM-1.
+           CALL 'DBNTRY' USING UIB REQ-AREA RCO ELEM-LIST.
+           IF REQ-RETURN-CODE NOT = '  ' AND NOT = '14'
+              DISPLAY BLANCO '**************************'
+              DISPLAY BLANCO '* ERROR: RDUKY TABLA RCO *'
+              DISPLAY BLANCO '* TABLA          : ' REQ-TBLNM
+              DISPLAY BLANCO '* CODIGO RETORNO : ' REQ-RETURN-CODE
+              DISPLAY BLANCO '* REQ. AREA      : ' REQ-AREA
+              DISPLAY BLANCO '* PGM. SGCP310 CANCELADO *'
+              DISPLAY BLANCO
+              DISPLAY BLANCO '* ERROR: RDUKY TABLA RCO *' UPON CONSOLE
+              DISPLAY BLANCO '* PGM. SGCP310 CANCELADO *' UPON CONSOLE
+              MOVE 100 TO RETURN-CODE
+      * V.C.A  12.5.97 **
+              MOVE 'SIS'          TO ERR-TIPO
+              MOVE '0007'       TO ERR-ERRCODE
+              MOVE 'ERROR EN CONTROL ESCLUSIVO ' TO  ERR-GLOSA
+              MOVE 'LECTURA'     TO ERR-SENTENCIA
+              MOVE REQ-KEY-VALUE  TO ERR-KEY
+              PERFORM FO-WRITE-ARCH-ERR
+              PERFORM D-TERMINAR
+              GOBACK.
+      *    SI NO EXISTE LA REL. CLTE-OPER SE LISTA.
+           IF REQ-RETURN-CODE = '14'
+              ADD 1 TO WS-NEL-RCO
+              MOVE 'SI' TO WS-IND-RECH
+              MOVE 'EN-ELIMI-NO-HAY-RCO' TO LREC-DET-RECH
+      * V.C.A  12.5.97 **
+              MOVE 'APL'          TO ERR-TIPO
+              MOVE '0002'       TO ERR-ERRCODE
+              MOVE 'REGISTRO NO EXISTE ' TO  ERR-GLOSA
+              MOVE 'LECTURA'     TO ERR-SENTENCIA
+              MOVE REQ-KEY-VALUE  TO ERR-KEY
+              PERFORM FO-WRITE-ARCH-ERR
+              MOVE 1 TO FLAG-ERR.
+       FJ2-LOOP-RCO-ELI.
+      *-----------------
+      *    MOVE LA FECHA Y HORA DE PROCESO.
+           MOVE WS-FEC-FDAT  TO RCO-STP-ITRN.
+           MOVE WS-HRA       TO RCO-HRA-HRTR.
+
+           MOVE 'E'          TO RCO-MSC-STAT.
+
+      *    MOVE NOMBRE DE PGM. DE CARGA AL CAMPO AUTOR.
+           MOVE 'SGCP310'    TO RCO-COD-ATRN.
+
+      *    MOVE VIGENTE AL CODIGO STATUS.
+           MOVE 'ELI'        TO RCO-COD-STAT
+
+           MOVE 'UPDAT' TO REQ-CMD.
+           CALL 'DBNTRY' USING UIB REQ-AREA RCO ELEM-LIST.
+           IF REQ-RETURN-CODE NOT = '  '
+              DISPLAY BLANCO '**************************'
+              DISPLAY BLANCO '* ERROR: UPDAT TABLA RCO *'
+              DISPLAY BLANCO '* TABLA          : ' REQ-TBLNM
+              DISPLAY BLANCO '* CODIGO RETORNO : ' REQ-RETURN-CODE
+              DISPLAY BLANCO '* REQ. AREA      : ' REQ-AREA
+              DISPLAY BLANCO '* PGM. SGCP310 CANCELADO *'
+              DISPLAY BLANCO
+              DISPLAY BLANCO '* ERROR: UPDAT TABLA RCO *' UPON CONSOLE
+              DISPLAY BLANCO '* PGM. SGCP310 CANCELADO *' UPON CONSOLE
+              MOVE 100 TO RETURN-CODE
+    * * V.C.A  12.5.97 **
+              MOVE 'SIS'          TO ERR-TIPO
+              MOVE REQ-KEY-VALUE  TO ERR-KEY
+              PERFORM FO-WRITE-ARCH-ERR
+              PERFORM D-TERMINAR
+              GOBACK.
+           ADD 1 TO WS-ELI-RCO.
+
+           MOVE 'RDUNX' TO REQ-CMD.
+           CALL 'DBNTRY' USING UIB REQ-AREA RCO ELEM-LIST.
+           IF REQ-RETURN-CODE NOT = '  ' AND NOT = '14'
+              DISPLAY BLANCO '**************************'
+              DISPLAY BLANCO '* ERROR: RDUNX TABLA RCO *'
+              DISPLAY BLANCO '* TABLA          : ' REQ-TBLNM
+              DISPLAY BLANCO '* CODIGO RETORNO : ' REQ-RETURN-CODE
+              DISPLAY BLANCO '* REQ. AREA      : ' REQ-AREA
+              DISPLAY BLANCO '* PGM. SGCP310 CANCELADO *'
+              DISPLAY BLANCO
+              DISPLAY BLANCO '* ERROR: RDUNX TABLA RCO *' UPON CONSOLE
+              DISPLAY BLANCO '* PGM. SGCP310 CANCELADO *' UPON CONSOLE
+              MOVE 100 TO RETURN-CODE
+      * V.C.A  12.5.97 **
+              MOVE 'SIS'          TO ERR-TIPO
+              MOVE '0007'       TO ERR-ERRCODE
+              MOVE 'ERROR EN CONTROL ESCLUSIVO ' TO  ERR-GLOSA
+              MOVE 'LECTURA'     TO ERR-SENTENCIA
+              MOVE REQ-KEY-VALUE  TO ERR-KEY
+              PERFORM FO-WRITE-ARCH-ERR
+              PERFORM D-TERMINAR
+              GOBACK.
+
+       FJ3-RELES-RCO.
+      *--------------
+           MOVE 'RELES' TO REQ-CMD.
+           CALL 'DBNTRY' USING UIB REQ-AREA RCO ELEM-LIST.
+           IF REQ-RETURN-CODE NOT = '  '
+              DISPLAY BLANCO '**************************'
+              DISPLAY BLANCO '* ERROR: RELES TABLA RCO *'
+              DISPLAY BLANCO '* TABLA          : ' REQ-TBLNM
+              DISPLAY BLANCO '* CODIGO RETORNO : ' REQ-RETURN-CODE
+              DISPLAY BLANCO '* REQ. AREA      : ' REQ-AREA
+              DISPLAY BLANCO '* PGM. SGCP310 CANCELADO *'
+              DISPLAY BLANCO
+              DISPLAY BLANCO '* ERROR: RELES TABLA RCO *' UPON CONSOLE
+              DISPLAY BLANCO '* PGM. SGCP310 CANCELADO *' UPON CONSOLE
+              MOVE 100 TO RETURN-CODE
+              PERFORM D-TERMINAR
+              GOBACK.
+
+       FK-ELIMINA-OPE.
+      *---------------
+           MOVE '0000'        TO REQ-OPE-CAI-IOPE.
+           MOVE SCTE-IIC-IOPE TO REQ-OPE-IIC-IOPE.
+
+           MOVE 'REDKY' TO REQ-CMD.
+           MOVE 'OPE'   TO REQ-TBLNM.
+           MOVE 'OPE00' TO REQ-KEYNM.
+           MOVE 'OPE00' TO ELEM-1.
+           CALL 'DBNTRY' USING UIB REQ-AREA OPE ELEM-LIST.
+           IF REQ-RETURN-CODE NOT = '  ' AND NOT = '14'
+              DISPLAY BLANCO '**************************'
+              DISPLAY BLANCO '* ERROR: REDKY TABLA OPE *'
+              DISPLAY BLANCO '* TABLA          : ' REQ-TBLNM
+              DISPLAY BLANCO '* CODIGO RETORNO : ' REQ-RETURN-CODE
+              DISPLAY BLANCO '* REQ. AREA      : ' REQ-AREA
+              DISPLAY BLANCO '* PGM. SGCP310 CANCELADO *'
+              DISPLAY BLANCO
+              DISPLAY BLANCO '* ERROR: REDKY TABLA OPE *' UPON CONSOLE
+              DISPLAY BLANCO '* PGM. SGCP310 CANCELADO *' UPON CONSOLE
+              MOVE 100 TO RETURN-CODE
+      **VCA 12.05.97*
+              MOVE 'SIS'          TO ERR-TIPO
+              MOVE '0005'       TO ERR-ERRCODE
+              MOVE 'ERROR DE LECTURA ' TO  ERR-GLOSA
+              MOVE 'LECTURA'     TO ERR-SENTENCIA
+              MOVE REQ-KEY-VALUE  TO ERR-KEY
+              PERFORM FO-WRITE-ARCH-ERR
+              PERFORM D-TERMINAR
+              GOBACK.
+      *    SI NO EXISTE LA REL. CLTE-OPER TAMPOCO EXISTE LA OPE.
+           IF REQ-RETURN-CODE = '14'
+              ADD 1 TO WS-NEL-OPE
+              MOVE 'SI' TO WS-IND-RECH
+              MOVE 'EN-ELIMI-NO-HAY-OPE' TO LREC-DET-RECH
+      **VCA 12.05.97*
+              MOVE 'APL'          TO ERR-TIPO
+              MOVE '0001'       TO ERR-ERRCODE
+              MOVE 'REGISTRO NO EXISTE' TO ERR-GLOSA
+              MOVE 'LECTURA'     TO ERR-SENTENCIA
+              MOVE REQ-KEY-VALUE  TO ERR-KEY
+              PERFORM FO-WRITE-ARCH-ERR
+              MOVE 1   TO FLAG-ERR
+           ELSE
+              PERFORM FK1-MODIFICA-OPE-ACT
+           END-IF.
+
+       FK1-MODIFICA-OPE-ACT.
+      *---------------------
+           MOVE 'RDUKY' TO REQ-CMD.
+           CALL 'DBNTRY' USING UIB REQ-AREA OPE ELEM-LIST.
+           IF REQ-RETURN-CODE NOT = '  '
+              DISPLAY BLANCO '**************************'
+              DISPLAY BLANCO '* ERROR: RDUKY TABLA OPE *'
+              DISPLAY BLANCO '* TABLA          : ' REQ-TBLNM
+              DISPLAY BLANCO '* CODIGO RETORNO : ' REQ-RETURN-CODE
+              DISPLAY BLANCO '* REQ. AREA      : ' REQ-AREA
+              DISPLAY BLANCO '* PGM. SGCP310 CANCELADO *'
+              DISPLAY BLANCO
+              DISPLAY BLANCO '* ERROR: RDUKY TABLA OPE *' UPON CONSOLE
+              DISPLAY BLANCO '* PGM. SGCP310 CANCELADO *' UPON CONSOLE
+              MOVE 100 TO RETURN-CODE
+      * V.C.A  12.5.97 **
+              MOVE 'SIS'          TO ERR-TIPO
+              MOVE '0007'       TO ERR-ERRCODE
+              MOVE 'ERROR EN CONTROL ESCLUSIVO ' TO  ERR-GLOSA
+              MOVE 'LECTURA'     TO ERR-SENTENCIA
+              MOVE REQ-KEY-VALUE  TO ERR-KEY
+              PERFORM FO-WRITE-ARCH-ERR
+              PERFORM D-TERMINAR
+              GOBACK.
+
+      *    MOVE LA FECHA Y HORA DE PROCESO.
+           MOVE WS-FEC-FDAT  TO OPE-STP-ITRN.
+           MOVE WS-HRA       TO OPE-HRA-HRTR.
+
+           MOVE 'E'          TO OPE-MSC-STAT.
+
+      *    MOVE NOMBRE DE PGM. DE CARGA AL CAMPO AUTOR.
+           MOVE 'SGCP310'    TO OPE-COD-ATRN.
+
+      *    MOVE VIGENTE AL CODIGO STATUS.
+           MOVE 'ELI'        TO OPE-COD-STAT
+
+           MOVE SCTE-FEC-CIER TO WS-FEC-FPRO
+           MOVE WS-NUM-SPRO   TO OPE-NUM-STOP
+           MOVE WS-NUM-APRO   TO OPE-NUM-ATOP
+           MOVE WS-NUM-MPRO   TO OPE-NUM-MTOP
+           MOVE WS-NUM-DPRO   TO OPE-NUM-DTOP.
+
+      *    MOVE SPACES A MOTIVO TERMINO OPERACION.
+           MOVE SCTE-MOT-CIER TO OPE-COD-MOTT.
+
+           MOVE 'UPDAT' TO REQ-CMD.
+           MOVE 'OPE'   TO REQ-TBLNM.
+           MOVE 'OPE00' TO REQ-KEYNM.
+           CALL 'DBNTRY' USING UIB REQ-AREA OPE ELEM-LIST.
+           IF REQ-RETURN-CODE NOT = '  '
+              DISPLAY BLANCO '**************************'
+              DISPLAY BLANCO '* ERROR: UPDAT TABLA OPE *'
+              DISPLAY BLANCO '* TABLA          : ' REQ-TBLNM
+              DISPLAY BLANCO '* CODIGO RETORNO : ' REQ-RETURN-CODE
+              DISPLAY BLANCO '* REQ. AREA      : ' REQ-AREA
+              DISPLAY BLANCO '* PGM. SGCP310 CANCELADO *'
+              DISPLAY BLANCO
+              DISPLAY BLANCO '* ERROR: UPDAT TABLA OPE *' UPON CONSOLE
+              DISPLAY BLANCO '* PGM. SGCP310 CANCELADO *' UPON CONSOLE
+              MOVE 100 TO RETURN-CODE
+    * * V.C.A  12.5.97 **
+              MOVE 'SIS'          TO ERR-TIPO
+              MOVE '0003'       TO ERR-ERRCODE
+              MOVE 'ERROR EN ACTUALIZACION ' TO  ERR-GLOSA
+              MOVE 'ACTUALIC'       TO ERR-SENTENCIA
+              MOVE REQ-KEY-VALUE  TO ERR-KEY
+              PERFORM FO-WRITE-ARCH-ERR
+              PERFORM D-TERMINAR
+              GOBACK.
+           ADD 1 TO WS-ELI-OPE.
+
+       FL-ACTUALIZA-COMISION-CTACTE.
+      *----------------------------------
+           MOVE OPE           TO WS-OPE.
+           MOVE '0000'        TO REQ-CCARGO-CAI-ICAR.
+           MOVE SCTE-IIC-ICAR TO REQ-CCARGO-IIC-ICAR.
+           MOVE 'RDUKY' TO REQ-CCARGO-CMD.
+           MOVE 'OPE00' TO ELEM-1.
+           CALL 'DBNTRY' USING UIB REQ-CCARGO-AREA OPE ELEM-LIST.
+           IF REQ-CCARGO-RETURN-CODE NOT = '  ' AND NOT = '14'
+              DISPLAY BLANCO '**************************'
+              DISPLAY BLANCO '* ERROR: RDUKY TABLA OPE *'
+              DISPLAY BLANCO '* TABLA          : ' REQ-CCARGO-TBLNM
+              DISPLAY BLANCO '* CODIGO RETORNO : '
+                                            REQ-CCARGO-RETURN-CODE
+              DISPLAY BLANCO '* REQ. CTA CARGO : ' REQ-CCARGO-AREA
+              DISPLAY BLANCO '* PGM. SGCP310 CANCELADO *'
+              DISPLAY BLANCO
+              DISPLAY BLANCO '* ERROR: RDUKY TABLA OPE *' UPON CONSOLE
+              DISPLAY BLANCO '* PGM. SGCP310 CANCELADO *' UPON CONSOLE
+              MOVE 100 TO RETURN-CODE
+      ***V.C.A 05.12.95*
+              MOVE 'SGC'              TO ERR-SISTEMA
+              MOVE 'SGCP310'          TO ERR-NOM-PGM
+      *       MOVE R-WS-FEC-FPRO      TO ERR-FECHA
+              IF TPAR-NUM-APRO > 60
+                 MOVE '19'            TO ERR-FEC-SS
+              ELSE
+                 MOVE '20'            TO ERR-FEC-SS
+              END-IF
+              MOVE TPAR-NUM-APRO      TO ERR-FEC-AA
+              MOVE TPAR-NUM-MPRO      TO ERR-FEC-MM
+              MOVE TPAR-NUM-DPRO      TO ERR-FEC-DD
+              MOVE WS-HH              TO WS-HRA-HH
+              MOVE WS-MM              TO WS-HRA-MM
+              MOVE WS-SS              TO WS-HRA-SS
+              MOVE WS-HORA-TND        TO ERR-HORA
+              MOVE REQ-CCARGO-TBLNM   TO ERR-TABLA-PROG
+              MOVE REQ-CCARGO-RETURN-CODE TO COD-ERR-SQL
+              MOVE R-COD-ERR-SQL          TO ERR-SQLCODE
+              MOVE 'SIS'              TO ERR-TIPO
+              MOVE '0007'           TO ERR-ERRCODE
+              MOVE 'ERROR EN CONTROL ESCLUSIVO' TO  ERR-GLOSA
+              MOVE 'LECTURA'    TO ERR-SENTENCIA
+              MOVE REQ-CCARGO-KEY-VALUE  TO ERR-KEY
+              PERFORM D-TERMINAR
+              GOBACK.
+      *    SI NO EXISTE LA CTA. CARGO, SE ASIGNA EL COBRO A LA CTAPRIMA
+           IF REQ-CCARGO-RETURN-CODE = '14'
+              ADD 1 TO WS-NCA-OPE
+              MOVE WS-OPE        TO OPE
+              MOVE SCTE-COD-TCOM TO OPE-COD-TCOM
+              MOVE SPACES        TO OPE-CIC-ICAR
+           ELSE
+              PERFORM FL1-ACTUALIZA-CCARGO
+              MOVE WS-OPE        TO OPE
+              MOVE '99'          TO OPE-COD-TCOM
+              MOVE '0000'        TO OPE-CAI-ICAR
+              MOVE SCTE-IIC-ICAR TO OPE-IIC-ICAR
+           END-IF.
+
+       FL1-ACTUALIZA-CCARGO.
+      *---------------------
+           MOVE SCTE-COD-TCOM TO OPE-COD-TCOM.
+           MOVE 'UPDAT' TO REQ-CCARGO-CMD.
+           CALL 'DBNTRY' USING UIB REQ-CCARGO-AREA OPE ELEM-LIST.
+           IF REQ-CCARGO-RETURN-CODE NOT = '  '
+              DISPLAY BLANCO '**************************'
+              DISPLAY BLANCO '* ERROR: UPDAT TABLA OPE *'
+              DISPLAY BLANCO '* TABLA          : ' REQ-CCARGO-TBLNM
+              DISPLAY BLANCO '* CODIGO RETORNO : '
+                                            REQ-CCARGO-RETURN-CODE
+              DISPLAY BLANCO '* REQ. CTA CARGO : ' REQ-CCARGO-AREA
+              DISPLAY BLANCO '* PGM. SGCP310 CANCELADO *'
+              DISPLAY BLANCO
+              DISPLAY BLANCO '* ERROR: UPDAT TABLA OPE *' UPON CONSOLE
+              DISPLAY BLANCO '* PGM. SGCP310 CANCELADO *' UPON CONSOLE
+              MOVE 100 TO RETURN-CODE
+    * * V.C.A  12.5.97 **
+              MOVE 'SGC'              TO ERR-SISTEMA
+              MOVE 'SGCP310'          TO ERR-NOM-PGM
+      *       MOVE R-WS-FEC-FPRO      TO ERR-FECHA
+              IF TPAR-NUM-APRO > 60
+                 MOVE '19'            TO ERR-FEC-SS
+              ELSE
+                 MOVE '20'            TO ERR-FEC-SS
+              END-IF
+              MOVE TPAR-NUM-APRO      TO ERR-FEC-AA
+              MOVE TPAR-NUM-MPRO      TO ERR-FEC-MM
+              MOVE TPAR-NUM-DPRO      TO ERR-FEC-DD
+              MOVE WS-HH              TO WS-HRA-HH
+              MOVE WS-MM              TO WS-HRA-MM
+              MOVE WS-SS              TO WS-HRA-SS
+              MOVE WS-HORA-TND        TO ERR-HORA
+              MOVE REQ-CCARGO-TBLNM   TO ERR-TABLA-PROG
+              MOVE REQ-CCARGO-RETURN-CODE TO COD-ERR-SQL
+              MOVE R-COD-ERR-SQL          TO ERR-SQLCODE
+              MOVE 'SIS'              TO ERR-TIPO
+              MOVE '0003'           TO ERR-ERRCODE
+              MOVE 'ERROR EN ACTUALIZACION ' TO  ERR-GLOSA
+              MOVE 'ACTUALIC'      TO ERR-SENTENCIA
+              MOVE REQ-CCARGO-KEY-VALUE TO ERR-KEY
+              PERFORM D-TERMINAR
+              GOBACK.
+
+           ADD 1 TO WS-CAR-OPE.
+
+       FM-CONSULTA-MULTIPERSONAL.
+      *--------------------------
+           MOVE 'REDKY' TO REQ-CMD.
+           MOVE 'RCO'   TO REQ-TBLNM.
+           MOVE 'RCO01' TO REQ-KEYNM.
+           MOVE '0000'         TO REQ-RCO-KEY-CAI.
+           MOVE SCTE-IIC-IOPE  TO REQ-RCO-KEY-IIC.
+           MOVE SCTE-IIC-IOPE  TO WS-IIC-IOPE.
+           MOVE 'RCO00' TO ELEM-1.
+           CALL 'DBNTRY' USING UIB REQ-AREA RCO ELEM-LIST.
+           IF REQ-RETURN-CODE NOT = '  '
+              DISPLAY BLANCO '**************************'
+              DISPLAY BLANCO '* ERROR: REDKY TABLA RCO *'
+              DISPLAY BLANCO '* TABLA          : ' REQ-TBLNM
+              DISPLAY BLANCO '* CODIGO RETORNO : ' REQ-RETURN-CODE
+              DISPLAY BLANCO '* REQ. AREA      : ' REQ-AREA
+              DISPLAY BLANCO '* PGM. SGCP310 CANCELADO *'
+              DISPLAY BLANCO
+              DISPLAY BLANCO '* ERROR: REDKY TABLA RCO *' UPON CONSOLE
+              DISPLAY BLANCO '* PGM. SGCP310 CANCELADO *' UPON CONSOLE
+              MOVE 100 TO RETURN-CODE
+    * * V.C.A  12.5.97 **
+              MOVE 'SIS'          TO ERR-TIPO
+              MOVE '0003'       TO ERR-ERRCODE
+              MOVE 'ERROR EN ACTUALIZACION ' TO  ERR-GLOSA
+              MOVE 'ACTUALIC'       TO ERR-SENTENCIA
+              MOVE REQ-KEY-VALUE  TO ERR-KEY
+              PERFORM FO-WRITE-ARCH-ERR
+              PERFORM D-TERMINAR
+              GOBACK.
+
+           MOVE 'REDNX' TO REQ-CMD.
+           CALL 'DBNTRY' USING UIB REQ-AREA RCO ELEM-LIST.
+           IF REQ-RETURN-CODE NOT = '  ' AND NOT = '14'
+              DISPLAY BLANCO '**************************'
+              DISPLAY BLANCO '* ERROR: REDNX TABLA RCO *'
+              DISPLAY BLANCO '* TABLA          : ' REQ-TBLNM
+              DISPLAY BLANCO '* CODIGO RETORNO : ' REQ-RETURN-CODE
+              DISPLAY BLANCO '* REQ. AREA      : ' REQ-AREA
+              DISPLAY BLANCO '* PGM. SGCP310 CANCELADO *'
+              DISPLAY BLANCO
+              DISPLAY BLANCO '* ERROR: REDNX TABLA RCO *' UPON CONSOLE
+              DISPLAY BLANCO '* PGM. SGCP310 CANCELADO *' UPON CONSOLE
+              MOVE 100 TO RETURN-CODE
+    * * V.C.A  12.5.97 **
+              MOVE 'SIS'          TO ERR-TIPO
+              MOVE '0005'       TO ERR-ERRCODE
+              MOVE 'ERROR DE LECTURA ' TO  ERR-GLOSA
+              MOVE 'LECTURA'     TO ERR-SENTENCIA
+              MOVE REQ-KEY-VALUE  TO ERR-KEY
+              PERFORM FO-WRITE-ARCH-ERR
+              PERFORM D-TERMINAR
+              GOBACK.
+           IF REQ-RETURN-CODE = '  '
+              IF WS-IIC-IOPE = RCO-IIC-IOPE
+                 MOVE 'MC' TO WS-IND-MCLI
+              ELSE
+                 MOVE '  ' TO WS-IND-MCLI
+              END-IF
+           ELSE
+                 MOVE '  ' TO WS-IND-MCLI
+           END-IF.
+
+       FN-IMPRIME-RECHAZO.
+      *-------------------
+           MOVE SCTE-TIP-MOV     TO LREC-DET-TIPO-MOV
+           MOVE SCTE-IIC-IOPE    TO LREC-DET-IIC-IOPE
+           MOVE SCTE-CIC-ICLI    TO LREC-DET-CIC-ICLI
+           MOVE SCTE-SUC         TO LREC-DET-SUC
+           MOVE SCTE-TIP-OPE     TO LREC-DET-TIP-OPE
+           MOVE SCTE-NUM-DIRE    TO LREC-DET-NUM-DIRE
+           MOVE SCTE-FEC-CIER    TO LREC-DET-FEC-CIER
+           MOVE SCTE-MOT-CIER    TO LREC-DET-MOT-CIER
+           MOVE SCTE-FEC-CREA    TO LREC-DET-FEC-CREA
+           MOVE SCTE-COD-EJEC    TO LREC-DET-COD-EJEC
+           MOVE SCTE-IIC-ICAR    TO LREC-DET-IIC-ICAR
+           MOVE SCTE-COD-TCOM    TO LREC-DET-COD-TCOM
+           MOVE SCTE-COD-EXEN    TO LREC-DET-COD-EXEN
+           MOVE SCTE-VAL-PRCO    TO LREC-DET-VAL-PRCO
+
+           IF WS-LIN-LREC > 55
+                 MOVE 1 TO WS-PAG-LREC
+                 PERFORM FN1-NUEVA-PAG-LREC
+           END-IF.
+           WRITE REG-LSTREC FROM LREC-DET.
+           ADD 1 TO WS-LIN-GRA-LREC.
+           ADD 1 TO WS-LIN-LREC.
+
+       FN1-NUEVA-PAG-LREC.
+      *-------------------
+           MOVE TPAR-FEC-FPRO TO LREC-T01-FEC-PROC.
+           MOVE WS-PAG-LREC   TO LREC-T02-PAG.
+           MOVE 8             TO WS-LIN-LREC.
+           WRITE REG-LSTREC FROM LREC-T01 AFTER PAGE.
+           WRITE REG-LSTREC FROM LREC-T02 AFTER 1.
+           WRITE REG-LSTREC FROM LREC-T03 AFTER 1.
+           WRITE REG-LSTREC FROM LREC-TLI AFTER 2.
+           WRITE REG-LSTREC FROM LREC-T05 AFTER 1.
+           WRITE REG-LSTREC FROM LREC-T06 AFTER 1.
+           WRITE REG-LSTREC FROM LREC-TLI AFTER 1.
+      *
+       FO-WRITE-ARCH-ERR.
+      *------------------
+            MOVE 'SGC'              TO ERR-SISTEMA
+            MOVE 'SGCP310'          TO ERR-NOM-PGM
+      *     MOVE R-WS-FEC-FPRO      TO ERR-FECHA
+            IF TPAR-NUM-APRO > 60
+               MOVE '19'            TO ERR-FEC-SS
+            ELSE
+               MOVE '20'            TO ERR-FEC-SS
+            END-IF
+            MOVE TPAR-NUM-APRO      TO ERR-FEC-AA
+            MOVE TPAR-NUM-MPRO      TO ERR-FEC-MM
+            MOVE TPAR-NUM-DPRO      TO ERR-FEC-DD
+            MOVE '-'                TO ERR-PAL-1 ERR-PAL-2
+
+            MOVE WS-HH              TO WS-HRA-HH
+            MOVE WS-MM              TO WS-HRA-MM
+            MOVE WS-SS              TO WS-HRA-SS
+            MOVE WS-HORA-TND        TO ERR-HORA
+            MOVE REQ-TBLNM          TO ERR-TABLA-PROG
+            MOVE REQ-RETURN-CODE    TO COD-ERR-SQL
+            MOVE R-COD-ERR-SQL      TO ERR-SQLCODE
+            IF FLAG-ERR = 0
+             WRITE REG-ERR
+             ADD 1 TO WS-GRA-ERR
+            END-IF.
+      *
+       FP-GRABA-ARCH-BCT.
+      *------------------
+           MOVE SCTE-IIC-IOPE   TO  BCT-IIC-IOPE
+           MOVE SCTE-SUC        TO  BCT-COD-OFOP
+           MOVE SCTE-COD-EJEC   TO  BCT-COD-EJOP.
+           MOVE SCTE-IDC-EMP    TO  BCT-IDC-EMP.
+           WRITE REG-BCT.
+      *
+       FQ-GRABA-ARCH-JCC.
+      *------------------
+           PERFORM FR-CONSULTA-RCD.
+           PERFORM FS-CONSULTA-DCP.
+           MOVE DBC-NUM-ICLI         TO   JCC-NUM-ICLI.
+           MOVE DBC-VRF-ICLI         TO   JCC-VRF-ICLI.
+           MOVE DBC-GLS-NOMC         TO   JCC-GLS-NOMC.
+      *    MOVE '0000'               TO   JCC-CAI-ICAR.
+      *    MOVE SCTE-IIC-ICAR        TO   JCC-IIC-ICAR.
+           MOVE SCTE-STP-OPE         TO   JCC-STP-OPE.
+           MOVE '0000'               TO   JCC-CAI-IOPE.
+           MOVE SCTE-IIC-IOPE        TO   JCC-IIC-IOPE.
+           MOVE SCTE-IDC-EMP         TO   JCC-IDC-ICLI.
+           WRITE JCC.
+      *
+       FR-CONSULTA-RCD.
+      *----------------
+           MOVE 'REDKY' TO RCD-COMMAND.
+           MOVE SCTE-CIC-ICLI TO REQ-RCD-KEY-CIC.
+           MOVE  1            TO REQ-RCD-KEY-NUMD.
+           MOVE 'RCD00' TO ELEM-1.
+           CALL 'DBNTRY' USING UIB REQ-AREA-RCD REG-RCD ELEM-LIST.
+           IF RCD-RET-COD NOT = '  ' AND NOT = '14'
+              DISPLAY BLANCO '**************************'
+              DISPLAY BLANCO '* ERROR: REDKY TABLA RCD *'
+              DISPLAY BLANCO '* TABLA          : ' RCD-TABLE
+              DISPLAY BLANCO '* CODIGO RETORNO : ' RCD-RET-COD
+              DISPLAY BLANCO '* REQ. AREA      : ' REQ-AREA-RCD
+              DISPLAY BLANCO '* PGM. SGCP310 CANCELADO *'
+              DISPLAY BLANCO
+              DISPLAY BLANCO '* ERROR: REDKY TABLA RCD *' UPON CONSOLE
+              DISPLAY BLANCO '* PGM. SGCP310 CANCELADO *' UPON CONSOLE
+              MOVE 'SIS'          TO ERR-TIPO
+              MOVE '0005'       TO ERR-ERRCODE
+              MOVE 'ERROR DE LECTURA ' TO ERR-GLOSA
+              MOVE 'LECTURA'    TO ERR-SENTENCIA
+              MOVE REQ-KEY-VALUE  TO ERR-KEY
+              PERFORM FO-WRITE-ARCH-ERR
+              PERFORM D-TERMINAR
+              GOBACK.
+           IF REQ-RETURN-CODE = '  '
+              MOVE RCD-GLS-DIRE  TO JCC-GLS-DIRE
+              MOVE RCD-COD-LUGA  TO JCC-COD-LUGA
+           END-IF.
+      *
+       FS-CONSULTA-DCP.
+      *----------------
+           MOVE 'REDKY' TO REQ-CMD.
+           MOVE 'DCP'   TO REQ-TBLNM.
+           MOVE 'DCP00' TO REQ-KEYNM.
+           MOVE SCTE-CIC-ICLI TO REQ-DCP-KEY-CIC.
+           MOVE 'DCP00' TO ELEM-1.
+           CALL 'DBNTRY' USING UIB REQ-AREA REG-DCP ELEM-LIST.
+           IF REQ-RETURN-CODE NOT = '  ' AND NOT = '14'
+              DISPLAY BLANCO '**************************'
+              DISPLAY BLANCO '* ERROR: REDKY TABLA DCP *'
+              DISPLAY BLANCO '* TABLA          : ' REQ-TBLNM
+              DISPLAY BLANCO '* CODIGO RETORNO : ' REQ-RETURN-CODE
+              DISPLAY BLANCO '* REQ. AREA      : ' REQ-AREA
+              DISPLAY BLANCO '* PGM. SGCP310 CANCELADO *'
+              DISPLAY BLANCO
+              DISPLAY BLANCO '* ERROR: REDKY TABLA DCP *' UPON CONSOLE
+              DISPLAY BLANCO '* PGM. SGCP310 CANCELADO *' UPON CONSOLE
+              MOVE 'SIS'          TO ERR-TIPO
+              MOVE '0005'       TO ERR-ERRCODE
+              MOVE 'ERROR DE LECTURA ' TO ERR-GLOSA
+              MOVE 'LECTURA'    TO ERR-SENTENCIA
+              MOVE REQ-KEY-VALUE  TO ERR-KEY
+              PERFORM FO-WRITE-ARCH-ERR
+              PERFORM D-TERMINAR
+              GOBACK.
+           IF REQ-RETURN-CODE = '  '
+              MOVE DCP-FEC-FNAC  TO JCC-FEC-FNAC
+              MOVE DCP-IND-SEXO  TO JCC-IND-SEXO
+              MOVE DCP-IND-ECIV  TO JCC-IND-ECIV
+           END-IF.
+       FS-GRABA-ACP.
+      *-------------
+           MOVE DBC-NUM-ICLI         TO   ACP-RUT-CLI.
+           MOVE DBC-VRF-ICLI         TO   ACP-DIG-CLI.
+           MOVE DBC-GLS-NOMC         TO   ACP-GLS-NOM.
+           MOVE SCTE-IIC-IOPE        TO   ACP-CIC-IOP.
+           MOVE DCP-FEC-FNAC          TO   ACP-FEC-NAC.
+           MOVE DCP-IND-SEXO         TO   ACP-SEX.
+           MOVE DCP-IND-ECIV         TO   ACP-EST-CIV.
+           MOVE DCP-IND-ECIV         TO   ACP-EST-CIV.
+           MOVE RCD-GLS-DIRE         TO   ACP-GLS-DIR.
+           MOVE RCD-COD-LUGA         TO   ACP-COD-COM.
+           MOVE SCTE-SUC             TO  ACP-COD-SUC.
+           PERFORM FT-BUSCA-GLOSA.
+           WRITE REG-ARCHACP.
+      *
+       FT-BUSCA-GLOSA.
+      *---------------
+           MOVE 'OFI'            TO REQ-COD-TAB.
+           MOVE SCTE-SUC         TO REQ-COM-TAB.
+           MOVE 'REDKY'          TO TAB-COMMAND.
+           MOVE 'TAB00' TO ELEM-1.
+           CALL 'DBNTRY' USING UIB REQ-AREA-TAB
+                                   REG-TAB ELEM-LIST.
+           IF TAB-RET-COD = SPACES
+              MOVE TAB-GLS-DCOR  TO ACP-GLS-OFI
+           ELSE
+             IF TAB-RET-COD = '14'
+                MOVE SPACES         TO ACP-GLS-OFI
+             ELSE
+               DISPLAY '**  ERROR AL LEER TABLA TAB (REDKY) **'
+              DISPLAY BLANCO '**************************'
+              DISPLAY BLANCO '* ERROR: REDKY TABLA TAB *'
+              DISPLAY BLANCO '* TABLA          : ' TAB-VALUE
+              DISPLAY BLANCO '* CODIGO RETORNO : ' TAB-RET-COD
+              DISPLAY BLANCO '* REQ. AREA      : ' REQ-AREA-TAB
+              DISPLAY BLANCO '* PGM. SGCP310 CANCELADO *'
+              DISPLAY BLANCO
+              DISPLAY BLANCO '* ERROR: REDKY TABLA TAB *' UPON CONSOLE
+              DISPLAY BLANCO '* PGM. SGCP310 CANCELADO *' UPON CONSOLE
+              MOVE 100 TO RETURN-CODE
+              MOVE 'SIS'          TO ERR-TIPO
+              MOVE '0005'       TO ERR-ERRCODE
+              MOVE 'ERROR DE LECTURA ' TO ERR-GLOSA
+              MOVE 'LECTURA'    TO ERR-SENTENCIA
+              MOVE TAB-KEY        TO ERR-KEY
+              PERFORM FO-WRITE-ARCH-ERR
+              PERFORM D-TERMINAR
+              GOBACK.
+      *---------------
+       FZ-FIN-SECTION.
+      *---------------
+           EXIT.

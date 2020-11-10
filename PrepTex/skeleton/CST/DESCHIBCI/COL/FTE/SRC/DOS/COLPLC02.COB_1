@@ -1,0 +1,1055 @@
+       IDENTIFICATION DIVISION.
+      *************************
+       PROGRAM-ID.     COLPLC02.
+      *AUTHOR.         DONOSO JARA OSVALDO.
+      *                DATE-WRITTEN,  03/08/92.
+      ******************************************************************
+      *  INTERSOFT                                                     *
+      *  MIGRACION A COBOL OS/390                                      *
+      *  FECHA: 30 DE MARZO DE 1998                                    *
+      ******************************************************************
+      ******************************************************************
+      *  Sistema  : Colocaciones                                       *
+      *  Subsist. : Lineas de Avances                                  *
+      *  Analista : Retamal Pablo.                                     *
+      *  Objetivo : Emite listado de cartolas, por lineas vcdas o por  *
+      *             emision normal mensual.                            *
+      *  Archivos :                                                    *
+      *   Entrada : COLMCAR, Archivo de cartolas.                      *
+      *             TAB 150, Tabla de oficinas.                        *
+      *             DBC 100, Datos basicos de clientes.                *
+      *             RCD 100, Relacion cliente direccion.               *
+      *                                                                *
+      *   Salida  : COLLC02, Listado de cartolas duplicado.            *
+      *                                                                *
+      *   Ent/Sal :                                                    *
+      *                                                                *
+      *   Trabajo :                                                    *
+      *                                                                *
+      *  Mantenciones                                                  *
+      *  ============                                                  *
+      *            Programador: O Donoso ..................            *
+      *            Fecha      : 01/02/93                               *
+      *            Cambio     : Se debe emitir la cartola aun cuando   *
+      *                         no exista el cliente o no exista la    *
+      *                         direccion                              *
+      ******************************************************************
+           EJECT
+       ENVIRONMENT DIVISION.
+      **********************
+       CONFIGURATION SECTION.
+      *=====================
+       SPECIAL-NAMES.
+             C01 IS CANAL-1
+             DECIMAL-POINT IS COMMA.
+       INPUT-OUTPUT SECTION.
+      *=====================
+       FILE-CONTROL.
+           SELECT COLLC02 ASSIGN       TO UT-S-COLLC02.
+           SELECT COLMCAR ASSIGN       TO COLMCAR
+                  ORGANIZATION         IS INDEXED
+                  ACCESS               IS SEQUENTIAL
+                  RECORD KEY           IS CAR-CLAVE-LDA
+                  FILE STATUS          IS WR-FS-COLMCAR.
+           EJECT
+       DATA DIVISION.
+      *==============
+           SKIP3
+       FILE SECTION.
+      *=============
+       FD  COLLC02
+      ***  RECORD CONTAINS 133 CHARACTERS
+           RECORD CONTAINS 67  CHARACTERS
+           LABEL RECORD OMITTED.
+      *01  COLRC02                        PIC X(133).
+       01  COLRC02                        PIC X(67).
+           SKIP1
+       FD  COLMCAR.
+       COPY COLMCAR.
+           SKIP1
+       WORKING-STORAGE SECTION.
+      *========================
+       01  W-SWITCHES.
+           05 WS-PROCESO                   PIC 9(01) VALUE 0.
+              88 WS-PROCESO-OK                        VALUE 0.
+              88 WS-PROCESO-NO-OK                     VALUE 1.
+              88 WS-PROCESO-WARNING                   VALUE 2.
+           SKIP1
+       01  W-TABLAS VALUE HIGH-VALUE.
+           05 WT-OFICINA OCCURS 300 TIMES ASCENDING WT-COD-OFI
+                                          INDEXED BY WI-OFI.
+              10 WT-COD-OFI                PIC X(03).
+              10 WT-GLS-OFI                PIC X(20).
+           05 WT-COMUNA OCCURS 1000 TIMES ASCENDING WT-COD-COM
+                                          INDEXED BY WI-COM.
+              10 WT-COD-COM                PIC X(04).
+              10 WT-GLS-COM                PIC X(20).
+           05 WT-NOMBRE                    PIC X(75).
+           05 WT-N REDEFINES WT-NOMBRE OCCURS 75 PIC X(01).
+       SKIP1
+       01  W-INDICES.
+           05 WI-I                         PIC 9(04).
+           05 WI-J                         PIC 9(02).
+           05 WI-K                         PIC 9(02).
+           SKIP1
+       01  W-CONTADORES-Y-ACUMULADORES.
+           05 WA-L-CAR                     PIC 9(06) VALUE 0.
+           05 WA-S-CAR                     PIC 9(06) VALUE 0.
+           05 WA-R-CAR                     PIC 9(06) VALUE 0.
+           05 WA-I-CAR                     PIC 9(06) VALUE 0.
+           05 WA-LINEA                     PIC 9(06) VALUE 0.
+           SKIP1
+       01  W-REGISTROS-DE-TRABAJO.
+           05 WR-FECHA-HOY.
+              10 WR-HOY-AA                 PIC X(02).
+              10 WR-HOY-MM                 PIC X(02).
+              10 WR-HOY-DD                 PIC X(02).
+           05 WR-MENSAJES.
+              10 WR-SECCION                PIC X(15).
+              10 WR-PARRAFO                PIC X(15).
+              10 WR-ARCHIVO                PIC X(10).
+              10 WR-OPERACI                PIC X(10).
+              10 WR-FILE-ST                PIC X(02).
+              10 WR-MENSAJE                PIC X(35).
+           05 WR-FS-COLMCAR                PIC 9(02) VALUE 0.
+           05 WR-CAR-AUX                   PIC X(01).
+           05 WR-GLS-MES.
+              10 FILLER                    PIC X(10) VALUE '  ENERO   '.
+              10 FILLER                    PIC X(10) VALUE '  FEBRERO '.
+              10 FILLER                    PIC X(10) VALUE '   MARZO  '.
+              10 FILLER                    PIC X(10) VALUE '   ABRIL  '.
+              10 FILLER                    PIC X(10) VALUE '   MAYO   '.
+              10 FILLER                    PIC X(10) VALUE '  JUNIO   '.
+              10 FILLER                    PIC X(10) VALUE '  JULIO   '.
+              10 FILLER                    PIC X(10) VALUE '  AGOSTO  '.
+              10 FILLER                    PIC X(10) VALUE 'SEPTIEMBRE'.
+              10 FILLER                    PIC X(10) VALUE '  OCTUBRE '.
+              10 FILLER                    PIC X(10) VALUE 'NOVIEMBRE '.
+              10 FILLER                    PIC X(10) VALUE 'DICIEMBRE '.
+           05 WR-MES REDEFINES WR-GLS-MES OCCURS 12 TIMES PIC X(10).
+      ******************************************************************
+      * Lineas de salida de cartola                                    *
+      ******************************************************************
+      *
+           05 WR-LINEA00.
+              10 FILLER                      PIC X(01).
+              10 WR-LA00-LI1                 PIC X(66).
+              10 WR-LA00-LI2                 PIC X(66).
+           05 WR-LINEA1A.
+              10 FILLER                    PIC X(055) VALUE SPACES.
+      *****   10 FILLER                    PIC X(008) VALUE 'ESPECIAL'.
+              10 FILLER                    PIC X(008) VALUE SPACES.
+           05 WR-LINEA01.
+              10 FILLER                    PIC X(006) VALUE SPACES.
+              10 WR-LA01-LDA-COP           PIC X(012).
+              10 FILLER                    PIC X(007) VALUE SPACES.
+              10 WR-LA01-GLS-OFI           PIC X(020).
+              10 FILLER                    PIC X(011) VALUE SPACES.
+              10 WR-LA01-COR-CAR           PIC ZZZ9.
+           05 WR-LINEA02.
+              10 FILLER                    PIC X(003) VALUE SPACES.
+              10 WR-LA02-NOM-CLT           PIC X(030).
+           05 WR-LINEA03.
+              10 FILLER                    PIC X(003) VALUE SPACES.
+              10 WR-LA03-DIR-CLT           PIC X(043).
+              10 FILLER                    PIC X(004) VALUE SPACES.
+              10 WR-LA03-MES-PRO           PIC X(010).
+              10 FILLER                    PIC X(002) VALUE SPACES.
+              10 WR-LA03-ANO-PRO           PIC X(002).
+           05 WR-LINEA04.
+              10 FILLER                    PIC X(003) VALUE SPACES.
+              10 WR-LA04-GLS-COM           PIC X(012).
+           05 WR-LINEA05.
+              10 FILLER                    PIC X(002) VALUE SPACES.
+              10 WR-LA05-DIA-MOV           PIC Z9.
+              10 FILLER                    PIC X(001) VALUE SPACES.
+              10 WR-LA05-COD-MOV           PIC X(003).
+              10 FILLER                    PIC X(001) VALUE SPACES.
+              10 WR-LA05-VAL-CAR           PIC -ZZZZZZZZZZZZ.
+              10 WR-LA05-VAL-ABO           PIC -ZZZZZZZZZZZZ.
+              10 WR-LA05-SLD-AVA           PIC -ZZZZZZZZZZZZ.
+              10 WR-LA05-VAL-TAS           PIC ZZ9V99.
+      *****   10 WR-LA05-VAL-TAS           PIC ZZ9,99.
+              10 WR-LA05-VAL-INT           PIC -ZZZZZZZZZZZZ.
+           05 WR-LINEA06.
+              10 FILLER                    PIC X(002) VALUE SPACES.
+              10 WR-LA06-DIA-ANT           PIC X(002).
+              10 FILLER                    PIC X(001) VALUE '/'.
+              10 WR-LA06-MES-ANT           PIC X(002).
+              10 FILLER                    PIC X(001) VALUE '/'.
+              10 WR-LA06-ANO-ANT           PIC X(002).
+              10 FILLER                    PIC X(001) VALUE SPACES.
+              10 WR-LA06-SLD-ANT           PIC -ZZZZZZZZZZZZ9.
+              10 FILLER                    PIC X(001) VALUE SPACES.
+              10 WR-LA06-DIA-ACT           PIC X(002).
+              10 FILLER                    PIC X(001) VALUE '/'.
+              10 WR-LA06-MES-ACT           PIC X(002).
+              10 FILLER                    PIC X(001) VALUE '/'.
+              10 WR-LA06-ANO-ACT           PIC X(003).
+              10 WR-LA06-SLD-ACT           PIC -ZZZZZZZZZZZZ9.
+              10 FILLER                    PIC X(003) VALUE SPACES.
+              10 WR-LA06-TOT-INT           PIC -ZZZZZZZZZZZZ.
+           05 WR-LINEA07.
+              10 FILLER                    PIC X(037) VALUE SPACES.
+              10 WR-LA07-CTA-CTE           PIC X(008).
+           05 WR-LINEA08.
+              10 FILLER                    PIC X(052) VALUE SPACES.
+              10 WR-LA08-TOT-IMP           PIC -ZZZZZZZZZZZZ.
+           05 WR-LINEA09.
+              10 FILLER                    PIC X(022) VALUE SPACES.
+              10 WR-LA09-CAR-DIA           PIC X(002).
+              10 FILLER                    PIC X(004) VALUE ' DE '.
+              10 WR-LA09-CAR-MES           PIC X(010).
+              10 FILLER                    PIC X(003) VALUE ' 19'.
+              10 WR-LA09-CAR-ANO           PIC X(024).
+           05 WR-LINEA10.
+              10 FILLER                    PIC X(051) VALUE SPACES.
+              10 WR-LA10-TOT-CAR           PIC -ZZZZZZZZZZZZZ.
+      ******************************************************************
+      * Areas de uso para Datacom                                      *
+      ******************************************************************
+      *
+       01  WB-UIB.
+           05 FILLER                       PIC X(32) VALUE 'COLPLC02'.
+      *
+       01  WB-REQ-TAB-AREA.
+           02 WB-REQ-TAB-CMD               PIC X(5).
+           02 FILLER                       PIC X(3) VALUE 'TAB'.
+           02 FILLER                       PIC X(5) VALUE 'TAB00'.
+           02 WB-REQ-TAB-RC                PIC X(2) VALUE SPACES.
+           02 FILLER                       PIC X(1).
+           02 FILLER                       PIC S9(4) COMP VALUE +150.
+           02 FILLER                       PIC X(58).
+           02 WB-REQ-TAB-KEY-VALUE.
+              03 WB-REQ-TAB-KEY-1          PIC X(03).
+              03 WB-REQ-TAB-KEY-2          PIC X(12).
+      *
+       01  WB-REQ-DBC-AREA.
+           02 WB-REQ-DBC-CMD               PIC X(5) VALUE 'REDKY'.
+           02 FILLER                       PIC X(3) VALUE 'DBC'.
+           02 FILLER                       PIC X(5) VALUE 'DBC00'.
+           02 WB-REQ-DBC-RC                PIC X(2) VALUE SPACES.
+           02 FILLER                       PIC X(1).
+           02 FILLER                       PIC S9(4) COMP VALUE +100.
+           02 FILLER                       PIC X(58).
+           02 WB-REQ-DBC-KEY-VALUE         PIC X(20).
+      *
+       01  WB-REQ-RCD-AREA.
+           02 WB-REQ-RCD-CMD               PIC X(5) VALUE 'REDKY'.
+           02 FILLER                       PIC X(3) VALUE 'RCD'.
+           02 FILLER                       PIC X(5) VALUE 'RCD00'.
+           02 WB-REQ-RCD-RC                PIC X(2) VALUE SPACES.
+           02 FILLER                       PIC X(1).
+           02 FILLER                       PIC S9(4) COMP VALUE +100.
+           02 FILLER                       PIC X(58).
+           02 WB-REQ-RCD-KEY-VALUE.
+              03 WB-REQ-RCD-KEY-1          PIC X(12).
+              03 WB-REQ-RCD-KEY-2          PIC X(02).
+      *
+      *    Datos Basicos del Cliente
+      *    -------------------------
+      *
+      *    Nombre Registro : DBC
+      *    Clave(s)        : DBC-KEY-IDBC(UU), DBC-STP-ITRN(UU),DBC-IDC-
+      *                      DBC-GLS-NOMC(DC), DBC-SNX-NOMC(DC)
+      *    Largo           : 241
+      *    Bloqueo         : 1
+      *    Observaciones   :
+      *
+       01  DBC.
+      *
+      *    Filler Compatibilidad VSAM/MVS
+           03  DBC-GLS-FLAG                             PIC X(01).
+      *
+      *KEY Clave Primaria Registro
+           03  DBC-KEY-IREG.
+      *
+      *        Identificacion Datos Basicos Clientes
+               05  DBC-KEY-IDBC.
+      *
+      *            Cod. Int. Comp. Cliente
+                   07  DBC-CIC-ICLI.
+      *
+      *                Centro Asignacion Identificacion
+                       09  DBC-CAI-ICLI.
+                           11  DBC-COD-TCLI             PIC X(01).
+                           11  DBC-COD-CCLI             PIC X(03).
+      *
+      *                Ident. Interna Computacional
+                       09  DBC-IIC-ICLI                 PIC X(08).
+      *
+      *        Time Stamp Transaccion
+               05  DBC-STP-ITRN.
+      *
+      *            Fecha Transaccion
+                   07  DBC-FEC-FTRN.
+                       09  DBC-NUM-STRN                 PIC 9(02).
+                       09  DBC-NUM-ATRN                 PIC 9(02).
+                       09  DBC-NUM-MTRN                 PIC 9(02).
+                       09  DBC-NUM-DTRN                 PIC 9(02).
+      *
+      *            Hora Transaccion
+                   07  DBC-HRA-HRTR.
+                       09  DBC-NUM-HHTR                 PIC 9(02).
+                       09  DBC-NUM-MMTR                 PIC 9(02).
+                       09  DBC-NUM-SSTR                 PIC 9(02).
+      *
+      *    Indicador Tipo Accion
+           03  DBC-MSC-TACC                             PIC X(01).
+      *
+      *    Indicador Status
+           03  DBC-MSC-STAT                             PIC X(01).
+      *
+      *    Codigo Origen Transaccion
+           03  DBC-COD-OTRN.
+      *
+      *        Indicador Tipo Origen
+               05  DBC-MSC-TTRN                         PIC X(01).
+      *
+      *        Codigo Tipo Origen
+               05  DBC-COD-TTRN                         PIC X(03).
+      *
+      *    Autor Transaccion
+           03  DBC-COD-ATRN                             PIC X(12).
+      *
+      *KEY Rut Cliente + Indicador o Calificador + Extension
+           03  DBC-IDC-ICLI.
+      *
+      *        RUT Cliente
+               05  DBC-NUM-ICLI                         PIC X(08).
+      *
+      *        Indicador Tipo RUT
+               05  DBC-IND-ICLI                         PIC X(01).
+      *
+      *        Extension del RUT
+               05  DBC-GLS-ICLI                         PIC X(03).
+      *
+      *KEY Digito Verificador del Rut
+           03  DBC-VRF-ICLI                             PIC X(01).
+      *
+      *KEY Nombre Cliente Generico (Persona o Empresa)
+           03  DBC-GLS-NOMC.
+               05  DBC-GLS-APAT                         PIC X(25).
+               05  DBC-GLS-AMAT                         PIC X(25).
+               05  DBC-GLS-NOMB                         PIC X(25).
+      *
+      *    Soundex del Nombre de Cliente
+           03  DBC-SNX-NOMC.
+               05  DBC-SNX-APAT                         PIC X(03).
+               05  DBC-SNX-AMAT                         PIC X(03).
+               05  DBC-SNX-NOMB                         PIC X(03).
+      *
+      *    Numero de Direccion de Envio Correspondencia
+           03  DBC-NUM-DCOR                             PIC 9(02).
+      *
+      *OPR Ind Tipo Cliente ( Persona o Empresa )       SGC TICL
+           03  DBC-IND-TICL                             PIC X(01).
+      *
+      *    Tipo Cliente (Potencial,No Cliente,Grupo)    SGC TCL
+           03  DBC-COD-TICL                             PIC X(02).
+      *
+      *    Codigo Clasificacion Comercial               SGC CLC
+           03  DBC-COD-CLCM                             PIC X(02).
+      *
+      *RCM Codigo del Ejecutivo Encargado del Cliente   TAB USR
+           03  DBC-COD-EJEC                             PIC X(12).
+      *
+      *OPR Codigo de Oficina donde opera el Cliente     TAB OFI
+           03  DBC-COD-OFIC                             PIC X(03).
+      *
+      *RCM Indicador si opera en otra Oficina           SGC OOFI
+           03  DBC-IND-OOFI                             PIC X(01).
+      *
+      *EXT Codigo Actividad Economica                   TAB ACT
+           03  DBC-COD-ACTI                             PIC X(09).
+      *
+      *EXT Origen y Destino Sect (Comp.Inst)            TAB ODS
+           03  DBC-COD-ODSE                             PIC X(03).
+      *
+      *INF Fecha Ultima Declaracion Articulo 85
+           03  DBC-FEC-FA85.
+               05  DBC-NUM-SA85                         PIC 9(02).
+               05  DBC-NUM-AA85                         PIC 9(02).
+               05  DBC-NUM-MA85                         PIC 9(02).
+               05  DBC-NUM-DA85                         PIC 9(02).
+      *
+      *    Tipo Ultimo Pago Impuesto a la Renta         SGC UPIR
+           03  DBC-IND-UPIR                             PIC X(03).
+      *
+      *    Fecha Ultimo Pago Impuesto a la Renta
+           03  DBC-FEC-FUPI.
+               05  DBC-NUM-SUPI                         PIC 9(02).
+               05  DBC-NUM-AUPI                         PIC 9(02).
+               05  DBC-NUM-MUPI                         PIC 9(02).
+               05  DBC-NUM-DUPI                         PIC 9(02).
+      *
+      *INF Indicador de Multas Banco Central            SGC MUBC
+           03  DBC-IND-MUBC                             PIC X(01).
+      *
+      *INF Indicador de Juicios Banco Central           SGC JUBC
+           03  DBC-IND-JUBC                             PIC X(01).
+      *
+      *EXT Codigo Estado Cliente ( como Deudor )        SGC SCLI
+           03  DBC-MSC-SCLI                             PIC X(01).
+      *
+      *    Fecha Estado Cliente
+           03  DBC-FEC-FSCL.
+               05  DBC-NUM-SSCL                         PIC 9(02).
+               05  DBC-NUM-ASCL                         PIC 9(02).
+               05  DBC-NUM-MSCL                         PIC 9(02).
+               05  DBC-NUM-DSCL                         PIC 9(02).
+      *
+      *    Codigo de Bloqueo del Cliente                SGC BLO
+           03  DBC-COD-BLOC                             PIC X(02).
+      *
+      *    Numero Total de Direcciones
+           03  DBC-NUM-TDIR                             PIC 9(02).
+      *
+      *    Numero Total de Comentarios
+           03  DBC-NUM-TCMT                             PIC 9(03).
+      *
+      *    Fecha Inicio Operacion
+           03  DBC-FEC-FIOP.
+               05  DBC-NUM-SIOP                         PIC 9(02).
+               05  DBC-NUM-AIOP                         PIC 9(02).
+               05  DBC-NUM-MIOP                         PIC 9(02).
+               05  DBC-NUM-DIOP                         PIC 9(02).
+      *
+      *    Fecha Termino Operacion
+           03  DBC-FEC-FTOP.
+               05  DBC-NUM-STOP                         PIC 9(02).
+               05  DBC-NUM-ATOP                         PIC 9(02).
+               05  DBC-NUM-MTOP                         PIC 9(02).
+               05  DBC-NUM-DTOP                         PIC 9(02).
+      *
+      *    Numero Operaciones Fecha Termino Nula
+           03  DBC-NUM-OFTN                             PIC 9(03).
+      *
+      *    Fecha Ingreso de Datos a la Base de Datos
+           03  DBC-FEC-FINP.
+               05  DBC-NUM-SINP                         PIC 9(02).
+               05  DBC-NUM-AINP                         PIC 9(02).
+               05  DBC-NUM-MINP                         PIC 9(02).
+               05  DBC-NUM-DINP                         PIC 9(02).
+      *
+      *    Disponible
+      *    03  DBC-GLS-DISP                             PIC X(00).
+      *    Relacion Cliente Direcciones
+      *    ----------------------------
+      *
+      *    Nombre Registro : RCD
+      *    Clave(s)        : RCD-KEY-IRCD(UU), RCD-STP-ITRN(UU)
+      *    Largo           : 158
+      *    Bloqueo         : 1
+      *    Observaciones   :
+      *
+       01  RCD.
+      *
+      *    Filler Compatibilidad VSAM/MVS
+           03  RCD-GLS-FLAG                             PIC X(01).
+      *
+      *KEY Clave Primaria Registro
+           03  RCD-KEY-IREG.
+      *
+      *        Identificacion Relacion Cliente Direcciones
+               05  RCD-KEY-IRCD.
+      *
+      *            Cod. Int. Comp. Cliente
+                   07  RCD-CIC-ICLI.
+      *
+      *                Centro Asignacion Identificacion
+                       09  RCD-CAI-ICLI.
+                           11  RCD-COD-TCLI             PIC X(01).
+                           11  RCD-COD-CCLI             PIC X(03).
+      *
+      *                Ident. Interna Computacional
+                       09  RCD-IIC-ICLI                 PIC X(08).
+      *
+      *            Numero Direccion
+                   07  RCD-NUM-DIRE                     PIC 9(02).
+      *
+      *        Time Stamp Transaccion
+               05  RCD-STP-ITRN.
+      *
+      *            Fecha Transaccion
+                   07  RCD-FEC-FTRN.
+                       09  RCD-NUM-STRN                 PIC 9(02).
+                       09  RCD-NUM-ATRN                 PIC 9(02).
+                       09  RCD-NUM-MTRN                 PIC 9(02).
+                       09  RCD-NUM-DTRN                 PIC 9(02).
+      *
+      *            Hora Transaccion
+                   07  RCD-HRA-HRTR.
+                       09  RCD-NUM-HHTR                 PIC 9(02).
+                       09  RCD-NUM-MMTR                 PIC 9(02).
+                       09  RCD-NUM-SSTR                 PIC 9(02).
+      *
+      *    Indicador Tipo Accion
+           03  RCD-MSC-TACC                             PIC X(01).
+      *
+      *    Indicador Status
+           03  RCD-MSC-STAT                             PIC X(01).
+      *
+      *    Codigo Origen Transaccion
+           03  RCD-COD-OTRN.
+      *
+      *        Indicador Tipo Origen
+               05  RCD-MSC-TTRN                         PIC X(01).
+      *
+      *        Codigo Tipo Origen
+               05  RCD-COD-TTRN                         PIC X(03).
+      *
+      *    Autor Transaccion
+           03  RCD-COD-ATRN                             PIC X(12).
+      *
+      *    Tipo Direccion                               SGC TDIR
+           03  RCD-MSC-TDIR                             PIC X(01).
+      *
+      *    Estado Direccion ( Mala, Verificada, etc )   SGC SDIR
+           03  RCD-MSC-SDIR                             PIC X(01).
+      *
+      *    Fecha de Verificacion
+           03  RCD-FEC-FVRF.
+               05  RCD-NUM-SVRF                         PIC 9(02).
+               05  RCD-NUM-AVRF                         PIC 9(02).
+               05  RCD-NUM-MVRF                         PIC 9(02).
+               05  RCD-NUM-DVRF                         PIC 9(02).
+      *
+      *RCM Descripcion de la Direccion
+           03  RCD-GLS-DIRE                             PIC X(60).
+      *
+      *RCM Codigo de Lugar                              TAB COM
+           03  RCD-COD-LUGA                             PIC X(04).
+      *
+      *    Telefono de la Direccion
+           03  RCD-GLS-FONO.
+               05  RCD-NUM-FONO                         PIC X(08).
+               05  RCD-NUM-ANXO                         PIC X(04).
+      *
+      *    Disponible
+           03  RCD-GLS-DISP                             PIC X(25).
+      *
+       01  RCD-VARI.
+           03  RCD-MSC-DOMI             VALUE 'D'       PIC X(01).
+      *    Registro Generico de Tablas
+      *    ---------------------------
+      *
+      *    Nombre Registro : TAB
+      *    Clave(s)        : TAB-COD-TABL(UU), TAB-STP-ITRN(UU),
+      *                      TAB-CIC-TABL(UU), TAB-EXT-TABL(DC)
+      *    Largo           : 194
+      *    Bloqueo         : 2
+      *    Observaciones   :
+      *
+       01  TAB.
+      *
+      *    Filler Compatibilidad VSAM/MVS
+           03  TAB-GLS-FLAG                             PIC X(01).
+      *
+      *    Clave Primaria Registro
+           03  TAB-KEY-IREG.
+      *
+      *KEY     Tipo + Codigo ( LLave Primaria )
+               05  TAB-COD-TABL.
+      *
+      *            Codigo Tipo Tabla
+                   07  TAB-COD-TTAB                     PIC X(03).
+      *
+      *            Codigo Tabla
+                   07  TAB-COD-CTAB                     PIC X(12).
+      *
+      *        Time Stamp Transaccion
+               05  TAB-STP-ITRN.
+      *
+      *            Fecha Transaccion
+                   07  TAB-FEC-FTRN.
+                       09  TAB-NUM-STRN                 PIC 9(02).
+                       09  TAB-NUM-ATRN                 PIC 9(02).
+                       09  TAB-NUM-MTRN                 PIC 9(02).
+                       09  TAB-NUM-DTRN                 PIC 9(02).
+      *
+      *            Hora Transaccion
+                   07  TAB-HRA-HRTR.
+                       09  TAB-NUM-HHTR                 PIC 9(02).
+                       09  TAB-NUM-MMTR                 PIC 9(02).
+                       09  TAB-NUM-SSTR                 PIC 9(02).
+      *
+      *    Indicador Tipo Accion
+           03  TAB-MSC-TACC                             PIC X(01).
+      *
+      *    Indicador Status
+           03  TAB-MSC-STAT                             PIC X(01).
+      *
+      *    Indicador Vigencia                           GNS VIGE
+           03  TAB-IND-VIGE  REDEFINES  TAB-MSC-STAT    PIC X(01).
+      *
+      *    Codigo Origen Transaccion
+           03  TAB-COD-OTRN.
+      *
+      *        Indicador Tipo Origen
+               05  TAB-MSC-TTRN                         PIC X(01).
+      *
+      *        Codigo Tipo Origen
+               05  TAB-COD-TTRN                         PIC X(03).
+      *
+      *    Autor Transaccion
+           03  TAB-COD-ATRN                             PIC X(12).
+      *
+      *KEY Tipo + Codigo ( Interno Computacional )
+           03  TAB-CIC-TABL.
+      *
+      *        Codigo Tipo Tabla
+               05  TAB-CIC-TTAB                         PIC X(03).
+      *
+      *        Codigo Tabla
+               05  TAB-CIC-CTAB                         PIC X(12).
+      *
+      *    Codigo Externo
+           03  TAB-EXT-TABL.
+      *
+      *        Codigo Tipo Tabla
+               05  TAB-EXT-TTAB                         PIC X(03).
+      *
+      *        Codigo Tabla
+               05  TAB-EXT-CTAB                         PIC X(05).
+      *
+      *    Descripcion Corta
+           03  TAB-GLS-DCOR                             PIC X(12).
+      *
+      *    Abreviacion Descripcion
+           03  TAB-GLS-ABRV                             PIC X(05).
+      *
+      *    Descripcion del Codigo
+           03  TAB-GLS-DESC                             PIC X(40).
+      *
+      *    Datos Anexos
+           03  TAB-GLS-DATA.
+               05  TAB-GLS-DAT1.
+                   07  TAB-COD-DAT1     OCCURS 10       PIC X(01).
+               05  TAB-GLS-DAT2.
+                   07  TAB-COD-DAT2     OCCURS 10       PIC X(02).
+               05  TAB-GLS-DAT3.
+                   07  TAB-COD-DAT3     OCCURS 10       PIC X(03).
+      *
+      *    Clave Soundex
+           03  TAB-SNX-TABL.
+               05  TAB-SNX-TTAB                         PIC X(03).
+               05  TAB-SNX-CTAB                         PIC X(03).
+      *
+      *    Variables de Tablas
+       01  TAB-VARI.
+      *
+      *    Codigo Sistema
+           03  TAB-COD-SIST                             PIC X(03).
+      *
+       01  WB-ELEM-LIS                     PIC X(11).
+      *
+           EJECT
+       PROCEDURE DIVISION.
+      *===================
+       A-CONTROL SECTION.
+      *=================
+       AA-INICIALIZACION.
+           ENTRY 'DBMSCBL'.
+           PERFORM B-INICIALIZAR.
+           SKIP1
+       AB-PROCESAMIENTO.
+           IF WS-PROCESO-OK
+              PERFORM C-PROCESAR
+           END-IF.
+           SKIP1
+       AC-TERMINACION.
+           PERFORM D-TERMINAR.
+           SKIP1
+       AZ-FIN-DE-PROCESO.
+           GOBACK.
+           EJECT
+       B-INICIALIZAR SECTION.
+      *======================
+       BA-PROC-PPAL.
+      *-------------
+           PERFORM BB-ABRIR-ARCHIVOS.
+           IF (WS-PROCESO-OK)
+               PERFORM BC-CARGAR-OFICINAS
+           END-IF.
+           IF (WS-PROCESO-OK)
+               PERFORM BD-CARGAR-COMUNAS
+           END-IF.
+           GO BZ-FIN-DE-SECCION.
+       BB-ABRIR-ARCHIVOS.
+      *------------------
+           OPEN INPUT  COLMCAR
+                OUTPUT COLLC02.
+
+           IF (WR-FS-COLMCAR NOT = 0 AND NOT = 97)
+               MOVE 'B-INICIALIZAR'        TO WR-SECCION
+               MOVE 'BB-ABRIR-ARCHIVOS'    TO WR-PARRAFO
+               MOVE 'COLMCAR    '          TO WR-ARCHIVO
+               MOVE 'OPEN       '          TO WR-OPERACI
+               MOVE WR-FS-COLMCAR          TO WR-FILE-ST
+               PERFORM BE-DISPLAY-ERROR
+           END-IF.
+           SKIP1
+       BC-CARGAR-OFICINAS.
+      *-------------------
+           MOVE 'OFI'                      TO WB-REQ-TAB-KEY-VALUE
+           MOVE 'REDKG'                    TO WB-REQ-TAB-CMD
+           PERFORM BF-LEER-TAB.
+           SET  WI-OFI                     TO 1
+           MOVE 'REDNX'                    TO WB-REQ-TAB-CMD
+           PERFORM UNTIL (WS-PROCESO-NO-OK OR WI-OFI > 300 OR
+                          TAB-COD-TTAB NOT = 'OFI')
+              MOVE TAB-GLS-DESC            TO WT-GLS-OFI(WI-OFI)
+              MOVE TAB-COD-CTAB            TO WT-COD-OFI(WI-OFI)
+              SET WI-OFI UP BY 1
+              PERFORM BF-LEER-TAB
+           END-PERFORM.
+           SKIP1
+       BD-CARGAR-COMUNAS.
+      *------------------
+           MOVE 'COM'                      TO WB-REQ-TAB-KEY-VALUE
+           MOVE 'REDKG'                    TO WB-REQ-TAB-CMD
+           PERFORM BF-LEER-TAB.
+           SET  WI-COM                     TO 1
+           MOVE 'REDNX'                    TO WB-REQ-TAB-CMD
+           PERFORM UNTIL (WS-PROCESO-NO-OK OR WI-COM > 1000 OR
+                          TAB-COD-TTAB NOT = 'COM')
+              MOVE TAB-GLS-DESC            TO WT-GLS-COM(WI-COM)
+              MOVE TAB-COD-CTAB            TO WT-COD-COM(WI-COM)
+              SET WI-COM UP BY 1
+              PERFORM BF-LEER-TAB
+           END-PERFORM.
+           SKIP1
+       BE-DISPLAY-ERROR.
+      *-----------------
+           SET  WS-PROCESO-NO-OK           TO TRUE
+           DISPLAY ' '
+           DISPLAY 'ERROR EN SECCION  : ' WR-SECCION
+           DISPLAY ' PARRAFO          : ' WR-PARRAFO
+           DISPLAY ' ARCHIVO          : ' WR-ARCHIVO
+           DISPLAY ' OPERACION        : ' WR-OPERACI
+           DISPLAY ' FILE STATUS      : ' WR-FILE-ST
+           DISPLAY ' MENSAJE DE ERROR : ' WR-MENSAJE
+           DISPLAY ' '.
+           SKIP1
+       BF-LEER-TAB.
+      *------------
+           MOVE SPACES                     TO WB-REQ-TAB-RC
+           MOVE 'TAB00'                    TO WB-ELEM-LIS
+           CALL 'DBNTRY' USING WB-UIB WB-REQ-TAB-AREA TAB WB-ELEM-LIS
+           IF (WB-REQ-TAB-RC NOT = '  ' AND NOT = '14')
+               MOVE 'B-INICIALIZAR'        TO WR-SECCION
+               MOVE 'BF-LEER-TAB'          TO WR-PARRAFO
+               MOVE 'TAB'                  TO WR-ARCHIVO
+               MOVE WB-REQ-TAB-CMD         TO WR-OPERACI
+               MOVE WB-REQ-TAB-RC          TO WR-FILE-ST
+               MOVE WB-REQ-TAB-KEY-VALUE   TO WR-MENSAJE
+               PERFORM BE-DISPLAY-ERROR
+           END-IF.
+           SKIP1
+       BZ-FIN-DE-SECCION.
+      *------------------
+           EXIT.
+           EJECT
+       C-PROCESAR SECTION.
+      *===================
+       CA-PROC-PPAL.
+      *-------------
+           PERFORM CB-LEER-COLMCAR
+           PERFORM CC-LISTA-CARTOLA
+            UNTIL (WR-FS-COLMCAR NOT = 0 OR WS-PROCESO-NO-OK)
+           GO CZ-FIN-DE-SECCION.
+           SKIP1
+       CB-LEER-COLMCAR.
+      *----------------
+           READ COLMCAR END-READ
+           IF (WR-FS-COLMCAR NOT = 0 AND NOT = 10)
+               MOVE 'C-PROCESAR'           TO WR-SECCION
+               MOVE 'CB-LEER-COLMCAR'      TO WR-PARRAFO
+               MOVE 'COLMCAR'              TO WR-ARCHIVO
+               MOVE 'READ       '          TO WR-OPERACI
+               MOVE WR-FS-COLMCAR          TO WR-FILE-ST
+               MOVE CAR-CLAVE-LDA          TO WR-MENSAJE
+               PERFORM BE-DISPLAY-ERROR
+           END-IF.
+           SKIP1
+       CC-LISTA-CARTOLA.
+      *-----------------
+           ADD 1                           TO WA-L-CAR
+      **** MOVE 'S'       TO CAR-IND-LISTAR
+           IF (CAR-IND-LISTAR = 'S')
+               ADD 1                       TO WA-S-CAR
+               PERFORM CD-BUSCA-DATOS-CLTE
+               PERFORM CE-LISTA-ENCABEZ
+               MOVE 1                      TO WI-I
+               PERFORM CF-LISTA-DETALLE
+                    UNTIL (WI-I > CAR-NRO-COLAS)
+               PERFORM CG-LISTA-PIEPAGI
+               ADD 1                       TO WA-I-CAR
+           END-IF.
+           PERFORM CB-LEER-COLMCAR.
+           SKIP1
+       CD-BUSCA-DATOS-CLTE.
+      *--------------------
+           MOVE CAR-CIC-CLTE               TO WB-REQ-DBC-KEY-VALUE
+           PERFORM CH-LEER-DBC.
+           IF (WB-REQ-DBC-RC = SPACES)
+               PERFORM CJ-COMPACTA-NOMBRE
+               MOVE CAR-CIC-CLTE           TO WB-REQ-RCD-KEY-1
+               MOVE DBC-NUM-DCOR           TO WB-REQ-RCD-KEY-2
+               MOVE 'REDKY'                TO WB-REQ-RCD-CMD
+               PERFORM CI-LEER-RCD
+               IF (WB-REQ-RCD-RC NOT = SPACES)
+                   MOVE CAR-CIC-CLTE       TO WB-REQ-RCD-KEY-1
+                   MOVE SPACES             TO WB-REQ-RCD-KEY-2
+                   MOVE 'REDKG'            TO WB-REQ-RCD-CMD
+                   PERFORM CI-LEER-RCD
+                   IF (WB-REQ-RCD-RC NOT = SPACES OR
+                       CAR-CIC-CLTE  NOT = WB-REQ-RCD-KEY-1)
+                       SET WS-PROCESO-WARNING  TO TRUE
+                       DISPLAY '** SE EMITE CARTOLA SIN DIR. PARA '
+                       CAR-CLAVE-LDA
+                       MOVE ZEROES              TO RCD-COD-LUGA
+                       MOVE '**SIN/DIRECCION**' TO RCD-GLS-DIRE
+                   END-IF
+               END-IF
+           ELSE
+               SET WS-PROCESO-WARNING      TO TRUE
+               DISPLAY '** NO EXISTE DATOS CLIENTE PARA ' CAR-CLAVE-LDA
+               MOVE ZEROES                 TO RCD-COD-LUGA
+               MOVE ZEROES                 TO DBC-COD-OFIC
+               MOVE '**SIN DIRECCION**'    TO RCD-GLS-DIRE
+               MOVE '**SIN NOMBRE**'       TO DBC-GLS-NOMC
+           END-IF.
+           SKIP1
+       CE-LISTA-ENCABEZ.
+      *-----------------
+           SET WI-OFI                      TO 1.
+           SEARCH ALL WT-OFICINA
+              AT END
+                   MOVE '** S/DESCRIPCION **' TO WR-LA01-GLS-OFI
+              WHEN WT-COD-OFI(WI-OFI) = DBC-COD-OFIC
+                   MOVE WT-GLS-OFI(WI-OFI) TO WR-LA01-GLS-OFI
+           END-SEARCH.
+
+           SET WI-COM                      TO 1.
+           SEARCH ALL WT-COMUNA
+              AT END
+                   MOVE '** S/DESCRIPCION **' TO WR-LA04-GLS-COM
+              WHEN WT-COD-COM(WI-COM) = RCD-COD-LUGA
+                   MOVE WT-GLS-COM(WI-COM) TO WR-LA04-GLS-COM
+           END-SEARCH.
+
+           MOVE CAR-CLAVE-LDA              TO WR-LA01-LDA-COP
+           MOVE CAR-FOLIO                  TO WR-LA01-COR-CAR
+           MOVE DBC-GLS-NOMC               TO WR-LA02-NOM-CLT
+           MOVE RCD-GLS-DIRE               TO WR-LA03-DIR-CLT
+           MOVE CAR-FEC-SAC-MM             TO WI-J
+           MOVE WR-MES(WI-J)               TO WR-LA03-MES-PRO
+           MOVE CAR-FEC-SAC-AA             TO WR-LA03-ANO-PRO.
+           MOVE WR-LINEA1A                 TO WR-LA00-LI1 WR-LA00-LI2
+           WRITE COLRC02 FROM WR-LINEA00 AFTER CANAL-1.
+           MOVE WR-LINEA01                 TO WR-LA00-LI1 WR-LA00-LI2
+           WRITE COLRC02 FROM WR-LINEA00 AFTER 3.
+           MOVE WR-LINEA02                 TO WR-LA00-LI1 WR-LA00-LI2
+           WRITE COLRC02 FROM WR-LINEA00 AFTER 2.
+           MOVE WR-LINEA03                 TO WR-LA00-LI1 WR-LA00-LI2
+           WRITE COLRC02 FROM WR-LINEA00 AFTER 1.
+           MOVE WR-LINEA04                 TO WR-LA00-LI1 WR-LA00-LI2
+           WRITE COLRC02 FROM WR-LINEA00 AFTER 1.
+           MOVE SPACES                     TO WR-LINEA00.
+           WRITE COLRC02 FROM WR-LINEA00 AFTER 2.
+           MOVE 1                          TO WA-LINEA.
+           SKIP1
+       CF-LISTA-DETALLE.
+      *-----------------
+           IF (WA-LINEA > 35)
+               PERFORM CE-LISTA-ENCABEZ
+           END-IF.
+
+           MOVE IMO-FEC-MOV-DD(WI-I)       TO WR-LA05-DIA-MOV
+           IF (IMO-TIPO-MOV(WI-I) = 'A')
+               MOVE 'ABV'                  TO WR-LA05-COD-MOV
+               MOVE IMO-MONTO(WI-I)        TO WR-LA05-VAL-ABO
+               MOVE ZERO                   TO WR-LA05-VAL-CAR
+           ELSE
+               MOVE 'AVA'                  TO WR-LA05-COD-MOV
+               MOVE IMO-MONTO(WI-I)        TO WR-LA05-VAL-CAR
+               MOVE ZERO                   TO WR-LA05-VAL-ABO
+           END-IF.
+
+           MOVE IMO-SALDO-OPC(WI-I)        TO WR-LA05-SLD-AVA
+           MOVE IMO-TASA(WI-I)             TO WR-LA05-VAL-TAS
+           MOVE IMO-INTERES(WI-I)          TO WR-LA05-VAL-INT
+           MOVE WR-LINEA05                 TO WR-LA00-LI1 WR-LA00-LI2
+           WRITE COLRC02 FROM WR-LINEA00 AFTER 1.
+           ADD 1                           TO WI-I.
+           ADD 1                           TO WA-LINEA.
+           SKIP1
+       CG-LISTA-PIEPAGI.
+      *-----------------
+           MOVE CAR-FEC-SAN-DD             TO WR-LA06-DIA-ANT
+           MOVE CAR-FEC-SAN-MM             TO WR-LA06-MES-ANT
+           MOVE CAR-FEC-SAN-AA             TO WR-LA06-ANO-ANT
+           MOVE CAR-SALD-ANT               TO WR-LA06-SLD-ANT
+           MOVE CAR-FEC-SAC-DD             TO WR-LA06-DIA-ACT
+           MOVE CAR-FEC-SAC-MM             TO WR-LA06-MES-ACT
+           MOVE CAR-FEC-SAC-AA             TO WR-LA06-ANO-ACT
+           MOVE CAR-SALD-ACT               TO WR-LA06-SLD-ACT
+           MOVE CAR-INTERES                TO WR-LA06-TOT-INT
+           MOVE CAR-CTA-CTE                TO WR-LA07-CTA-CTE
+           MOVE CAR-VAL-IMPTO              TO WR-LA08-TOT-IMP
+           MOVE CAR-FEC-SAC-DD             TO WR-LA09-CAR-DIA
+           MOVE CAR-FEC-SAC-MM             TO WI-J
+           MOVE WR-MES(WI-J)               TO WR-LA09-CAR-MES
+           MOVE CAR-FEC-SAC-AA             TO WR-LA09-CAR-ANO
+           MOVE CAR-VAL-IMPTO              TO WR-LA10-TOT-CAR.
+
+      * Calculo de lineas a saltar
+           COMPUTE WA-LINEA = 36 - WA-LINEA + 4.
+
+           MOVE WR-LINEA06                 TO WR-LA00-LI1 WR-LA00-LI2
+           WRITE COLRC02 FROM WR-LINEA00 AFTER WA-LINEA.
+           MOVE WR-LINEA07                 TO WR-LA00-LI1 WR-LA00-LI2
+           WRITE COLRC02 FROM WR-LINEA00 AFTER 2.
+           MOVE WR-LINEA08                 TO WR-LA00-LI1 WR-LA00-LI2
+           WRITE COLRC02 FROM WR-LINEA00 AFTER 1.
+           MOVE WR-LINEA09                 TO WR-LA00-LI1 WR-LA00-LI2
+           WRITE COLRC02 FROM WR-LINEA00 AFTER 1.
+           MOVE WR-LINEA10                 TO WR-LA00-LI1 WR-LA00-LI2
+           WRITE COLRC02 FROM WR-LINEA00 AFTER 2.
+           SKIP1
+       CH-LEER-DBC.
+      *------------
+           MOVE SPACES                     TO WB-REQ-DBC-RC
+           MOVE 'DBC00'                    TO WB-ELEM-LIS
+           CALL 'DBNTRY' USING WB-UIB WB-REQ-DBC-AREA DBC WB-ELEM-LIS
+           IF (WB-REQ-DBC-RC NOT = '14' AND NOT = '  ')
+               MOVE 'C-PROCESAR'           TO WR-SECCION
+               MOVE 'CH-LEER-DBC'          TO WR-PARRAFO
+               MOVE 'DBC'                  TO WR-ARCHIVO
+               MOVE WB-REQ-DBC-CMD         TO WR-OPERACI
+               MOVE WB-REQ-DBC-RC          TO WR-FILE-ST
+               MOVE WB-REQ-DBC-KEY-VALUE   TO WR-MENSAJE
+               PERFORM BE-DISPLAY-ERROR
+           END-IF.
+           SKIP1
+       CI-LEER-RCD.
+      *------------
+           MOVE SPACES                     TO WB-REQ-RCD-RC
+           MOVE 'RCD00'                    TO WB-ELEM-LIS
+           CALL 'DBNTRY' USING WB-UIB WB-REQ-RCD-AREA RCD WB-ELEM-LIS
+           IF (WB-REQ-RCD-RC NOT = '14' AND NOT = '  ')
+               MOVE 'C-PROCESAR'           TO WR-SECCION
+               MOVE 'CI-LEER-RCD'          TO WR-PARRAFO
+               MOVE 'RCD'                  TO WR-ARCHIVO
+               MOVE WB-REQ-RCD-CMD         TO WR-OPERACI
+               MOVE WB-REQ-RCD-RC          TO WR-FILE-ST
+               MOVE WB-REQ-RCD-KEY-VALUE   TO WR-MENSAJE
+               PERFORM BE-DISPLAY-ERROR
+           END-IF.
+           SKIP1
+       CJ-COMPACTA-NOMBRE.
+      *-------------------
+           MOVE DBC-GLS-NOMC IN DBC        TO WT-NOMBRE
+           MOVE 0                          TO WI-K WI-I
+           PERFORM CK-COMPACTA VARYING WI-I FROM 1 BY 1
+                  UNTIL (WI-I > 75).
+           MOVE WT-NOMBRE                  TO DBC-GLS-NOMC IN DBC.
+           SKIP1
+       CK-COMPACTA.
+      *------------
+           MOVE WT-N(WI-I)                 TO WR-CAR-AUX
+           MOVE ' '                        TO WT-N(WI-I)
+           IF (WI-K = 0 AND WR-CAR-AUX = ' ')
+               NEXT SENTENCE
+           ELSE
+           IF (WR-CAR-AUX = ' ')
+               IF (WT-N(WI-K) = ' ')
+                   NEXT SENTENCE
+               ELSE
+                   ADD 1                   TO WI-K
+                   MOVE ' '                TO WT-N(WI-K)
+               END-IF
+           ELSE
+               ADD 1                       TO WI-K
+               MOVE WR-CAR-AUX             TO WT-N(WI-K)
+           END-IF
+           END-IF.
+           SKIP1
+       CZ-FIN-DE-SECCION.
+      *------------------
+           EXIT.
+           EJECT
+       D-TERMINAR SECTION.
+      *===================
+       DA-ESTADISTICAS.
+      *----------------
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY 'INFORMES'
+           DISPLAY '--------'
+           DISPLAY ' '
+           IF (WS-PROCESO-NO-OK)
+               DISPLAY 'CARTOLAS NO EMITIDAS O INCOMPLETAS'
+           ELSE
+               DISPLAY 'CARTOLAS EMITIDAS EN FORMA LOCAL'
+           END-IF.
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY 'ESTADISTICAS DE PROCESO PROGRAMA COLPLC02 FECHA '
+                    WR-FECHA-HOY
+           DISPLAY '-----------------------------------------------'
+           DISPLAY '    EMITE CARTOLAS LINEAS DE AVANCE'
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY 'REG LEIDOS DE COLMCAR : ' WA-L-CAR
+           DISPLAY 'REG SELECCIONADOS     : ' WA-S-CAR
+           DISPLAY 'REG RECHAZADOS        : ' WA-R-CAR
+           DISPLAY 'NRO. CARTOLAS EMITIDAS: ' WA-I-CAR
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY 'TARJETAS DE PARAMETROS'
+           DISPLAY '----------------------'
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY 'MENSAJES PARA EL EXPLOTADOR'
+           DISPLAY '---------------------------'
+           DISPLAY ' '
+           IF WS-PROCESO-OK
+               DISPLAY 'NO HAY MENSAJES PARA EL EXPLOTADOR'
+           ELSE
+               DISPLAY 'HAY MENSAJES PARA EL EXPLOTADOR'
+           END-IF.
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY ' '.
+           SKIP1
+       DB-TERMINO.
+      *-----------
+           CLOSE COLMCAR COLLC02
+           IF WS-PROCESO-NO-OK
+              MOVE 100                     TO RETURN-CODE
+              DISPLAY ' '
+              DISPLAY ' '
+              DISPLAY '**********************************************'
+              DISPLAY '**********************************************'
+              DISPLAY '********                              ********'
+              DISPLAY '******** TERMINO ERRONEO DEL PROCESO  ********'
+              DISPLAY '********                              ********'
+              DISPLAY '**********************************************'
+              DISPLAY '**********************************************'
+           ELSE
+              DISPLAY ' '
+              DISPLAY ' '
+              DISPLAY '*****PROCESO TERMINO EN FORMA NORMAL*****'
+           END-IF.
+           SKIP1
+       DZ-FIN-DE-SECCION.
+      *------------------
+           EXIT.
+           EJECT

@@ -1,0 +1,619 @@
+       IDENTIFICATION DIVISION.
+      *************************
+       PROGRAM-ID.     COLPB815.
+      *AUTHOR.         DONOSO JARA OSVALDO.
+      *                DATE-WRITTEN,  20/11/91.
+      ******************************************************************
+      *  INTERSOFT                                                     *
+      *  MIGRACION A COBOL OS/390                                      *
+      *  FECHA: 30 DE MARZO DE 1998                                    *
+      ******************************************************************
+      ******************************************************************
+      *  Sistema  : Colocaciones                                       *
+      *  Subsist. :                                                    *
+      *  Analista : Retamal Pablo                                      *
+      *  Objetivo : Copia valores UF desde tabal CAM/150 a archivo     *
+      *             maestro de valor UF para el sistema de creditos    *
+      *                                                                *
+      *  Archivos :                                                    *
+      *   Entrada : SYSIN  : Parametro rango de fechas                 *
+      *             CAM 150: Tabla valores de monedas                  *
+      *                                                                *
+      *   Ent/Sal : COLMVUF, Maestro valor UF                          *
+      *                                                                *
+      *   Salida  :                                                    *
+      *                                                                *
+      *  Mantenciones                                                  *
+      *  ============                                                  *
+      *            Programador: .............................          *
+      *            Fecha      : dd/mm/aa                               *
+      *            Cambio     : .............................          *
+      *                         .............................          *
+      *                         .............................          *
+      *                                                                *
+      ******************************************************************
+           EJECT
+       ENVIRONMENT DIVISION.
+      **********************
+       CONFIGURATION SECTION.
+      *======================
+       SPECIAL-NAMES.
+            DECIMAL-POINT IS COMMA.
+           EJECT
+       INPUT-OUTPUT SECTION.
+      *=====================
+       FILE-CONTROL.
+           SELECT COLMVUF ASSIGN TO COLMVUF
+                      ORGANIZATION IS INDEXED
+                      ACCESS MODE  IS RANDOM
+                      RECORD KEY   IS VUF-FEC-VLR-UF
+                      FILE STATUS  IS WR-FS-COLMVUF.
+
+           EJECT
+       DATA DIVISION.
+      *==============
+           SKIP3
+       FILE SECTION.
+      *=============
+           SKIP1
+       FD  COLMVUF.
+       01  COLRVUF.
+           10 VUF-FEC-VLR-UF.
+              15 VUF-FA-VLR                 PIC  9(02).
+              15 VUF-FM-VLR                 PIC  9(02).
+              15 VUF-FD-VLR                 PIC  9(02).
+           10 VUF-VLR-UF                    PIC S9(8)V99 COMP-3.
+           SKIP1
+       WORKING-STORAGE SECTION.
+      *========================
+       SKIP1
+       01  W-SWITCHES.
+           05 WS-PROCESO                    PIC 9(01) VALUE 0.
+              88 WS-PROCESO-OK       VALUE 0.
+              88 WS-PROCESO-WARNING  VALUE 1.
+              88 WS-PROCESO-ERROR    VALUE 2.
+       SKIP1
+       01  W-PARAMETROS.
+           05 FILLER                        PIC X(20).
+           05 WP-FECHA1.
+              10 WP-DIA1                    PIC X(02).
+              10 FILLER                     PIC X(01).
+              10 WP-MES1                    PIC X(02).
+              10 FILLER                     PIC X(01).
+              10 WP-ANO1                    PIC X(04).
+           05 FILLER                        PIC X(10).
+           05 WP-FECHA2.
+              10 WP-DIA2                    PIC X(02).
+              10 FILLER                     PIC X(01).
+              10 WP-MES2                    PIC X(02).
+              10 FILLER                     PIC X(01).
+              10 WP-ANO2                    PIC X(04).
+           05 FILLER                        PIC X(30).
+       SKIP1
+       01  W-CONTADORES-Y-ACUMULADORES.
+           05 WA-L-CAM                      PIC 9(06) VALUE 0.
+           05 WA-L-VUF                      PIC 9(06) VALUE 0.
+           05 WA-G-VUF                      PIC 9(06) VALUE 0.
+           05 WA-R-VUF                      PIC 9(06) VALUE 0.
+           SKIP1
+       01  W-REGISTROS-DE-TRABAJO.
+           05 WR-FECHA-HOY.
+              10 WR-HOY-AA                  PIC X(02).
+              10 WR-HOY-MM                  PIC X(02).
+              10 WR-HOY-DD                  PIC X(02).
+           05 WR-MENSAJES.
+              10 WR-SECCION                 PIC X(15).
+              10 WR-PARRAFO                 PIC X(15).
+              10 WR-ARCHIVO                 PIC X(10).
+              10 WR-OPERACI                 PIC X(10).
+              10 WR-FILE-ST                 PIC X(02).
+              10 WR-MENSAJE                 PIC X(35).
+           05 WR-FS-COLMVUF                 PIC 9(02) VALUE 0.
+           05 WR-FECHA-INICIAL.
+              10 WR-FECHA-INI-A             PIC X(04).
+              10 WR-FECHA-INI-M             PIC X(02).
+              10 WR-FECHA-INI-D             PIC X(02).
+           05 WR-FECHA-FINAL.
+              10 WR-FECHA-FIN-A             PIC X(04).
+              10 WR-FECHA-FIN-M             PIC X(02).
+              10 WR-FECHA-FIN-D             PIC X(02).
+           05 WR-ACCION                     PIC X(07).
+      *---------------------------------------------------------------*
+      *    DEFINICION DE AREAS PARA RUTINA CALENDAR.                  *
+      *---------------------------------------------------------------*
+      ******************************************************************
+      *
+       01  RTNWCALE.
+      *
+      * AREA DE LLAMADA A SUBRUTINA "RTNUCALE"
+      *
+      * ***  FUNCIONES VALIDAS PARA SUBRUTINA  ***
+      *
+      * AVNDC  : AVANZA N DIAS CALENDARIO (N = 0 A 99999)
+      * AVNDH  : AVANZA N DIAS HABILES (N = 0 A 99999)
+      * BDCA   : BUSCA DIA CALENDARIO ANTERIOR
+      * BDCS   : BUSCA DIA CALENDARIO SIGUIENTE
+      * BDHA   : BUSCA DIA HABIL ANTERIOR
+      * BDHS   : BUSCA DIA HABIL SIGUIENTE
+      * BPDCM  : BUSCA PRIMER DIA CALENDARIO MES (ACTUAL)
+      * BPDCMA : BUSCA PRIMER DIA CALENDARIO MES ANTERIOR
+      * BPDCMS : BUSCA PRIMER DIA CALENDARIO MES SIGUIENTE
+      * BPDHM  : BUSCA PRIMER DIA HABIL MES (ACTUAL)
+      * BPDHMA : BUSCA PRIMER DIA HABIL MES ANTERIOR
+      * BPDHMS : BUSCA PRIMER DIA HABIL MES SIGUIENTE
+      * BUDCM  : BUSCA ULTIMO DIA CALENDARIO MES (ACTUAL)
+      * BUDCMA : BUSCA ULTIMO DIA CALENDARIO MES ANTERIOR
+      * BUDCMS : BUSCA ULTIMO DIA CALENDARIO MES SIGUIENTE
+      * BUDHM  : BUSCA ULTIMO DIA HABIL MES (ACTUAL)
+      * BUDHMA : BUSCA ULTIMO DIA HABIL MES ANTERIOR
+      * BUDHMS : BUSCA ULTIMO DIA HABIL MES SIGUIENTE
+      * CARGAR : CARGA ARCHIVO CALENDARIO EN MEMORIA DESDE UNA FECHA
+      * CDCEF  : CALCULA DIFERENCIA DE DIAS CALENDARIO ENTRE FECHAS
+      * INFO   : ENTREGA INFORMACION ACERCA DE UNA FECHA
+      * RENDC  : RETROCEDE N DIAS CALENDARIO (N = 0 A 99999)
+      * RENDH  : RETROCEDE N DIAS HABILES (N = 0 A 99999)
+      *
+           05 CALEAREA-FUNCION              PIC X(06).
+           05 CALEAREA-FECHA-1              PIC X(08).
+           05 R1-CALEAREA-FECHA-1         REDEFINES CALEAREA-FECHA-1.
+              10 CALEAREA-FECHA-1-D         PIC 9(02).
+              10 CALEAREA-FECHA-1-M         PIC 9(02).
+              10 CALEAREA-FECHA-1-A         PIC 9(04).
+              10 R1-CALEAREA-FECHA-1-A    REDEFINES CALEAREA-FECHA-1-A.
+                 15 CALEAREA-FECHA-1-AM     PIC 9(02).
+                 15 CALEAREA-FECHA-1-AA     PIC 9(02).
+           05 CALEAREA-FECHA-2              PIC X(08).
+           05 R1-CALEAREA-FECHA-2         REDEFINES CALEAREA-FECHA-2.
+              10 CALEAREA-FECHA-2-D         PIC 9(02).
+              10 CALEAREA-FECHA-2-M         PIC 9(02).
+              10 CALEAREA-FECHA-2-A         PIC 9(04).
+              10 R1-CALEAREA-FECHA-2-A    REDEFINES CALEAREA-FECHA-2-A.
+                 15 CALEAREA-FECHA-2-AM     PIC 9(02).
+                 15 CALEAREA-FECHA-2-AA     PIC 9(02).
+           05 CALEAREA-NUM-DIA              PIC S9(8).
+           05 CALEAREA-TIP-DIA              PIC X(01).
+           05 CALEAREA-INI-DIA              PIC X(02).
+           05 CALEAREA-COD-RET              PIC 9(02).
+      *
+      ******************************************************************
+      *---------------------------------------------------------------*
+      *    AREAS DATACOM                                              *
+      *---------------------------------------------------------------*
+      *
+       01  WB-UIB.
+           05 FILLER                        PIC X(32) VALUE 'COLPB815'.
+      *
+       01  WB-REQ-CAM-AREA.
+           02 WB-REQ-CAM-CMD                PIC X(5) VALUE 'REDKY'.
+           02 FILLER                        PIC X(3) VALUE 'CAM'.
+           02 FILLER                        PIC X(5) VALUE 'CAM00'.
+           02 WB-REQ-CAM-RC                 PIC X(2) VALUE SPACES.
+           02 FILLER                        PIC X(1).
+           02 FILLER                        PIC S9(4) COMP VALUE +150.
+           02 FILLER                        PIC X(58).
+           02 WB-REQ-CAM-KEY-VALUE.
+              03 WB-REQ-CAM-KEY-FEC1.
+                 04 WB-REQ-CAM-KEY-FEC1-A   PIC X(04).
+                 04 WB-REQ-CAM-KEY-FEC1-M   PIC X(02).
+                 04 WB-REQ-CAM-KEY-FEC1-D   PIC X(02).
+              03 WB-REQ-CAM-KEY-FEC2.
+                 04 WB-REQ-CAM-KEY-FEC2-A   PIC X(04).
+                 04 WB-REQ-CAM-KEY-FEC2-M   PIC X(02).
+                 04 WB-REQ-CAM-KEY-FEC2-D   PIC X(02).
+              03 WB-REQ-CAM-KEY-COD1        PIC X(06) VALUE '0998  '.
+              03 WB-REQ-CAM-KEY-COD2        PIC X(06) VALUE '0999  '.
+
+      *
+       01  WB-ELEM-LIS                      PIC X(11) VALUE 'CAM00'.
+      *
+      *    Registro de Valores de Cambios
+      *    ------------------------------
+      *
+      *    Nombre Registro : CAM
+      *    Clave(s)        : CAM-KEY-CAMB(UU), CAM-STP-ITRN(UU)
+      *    Largo           : 75
+      *    Bloqueo         : 1
+      *    Observaciones   :
+      *
+       01  CAM.
+      *
+      *    Filler Compatibilidad VSAM/MVS
+           03  CAM-GLS-FLAG                             PIC X(01).
+      *
+      *    Clave Primaria Registro
+           03  CAM-KEY-IREG.
+      *
+      *KEY     Fecha 1 + Fecha 2 + Valor 1 + Valor 2 ( LLave Primaria )
+               05  CAM-KEY-CAMB.
+      *
+      *            Fecha de Cambio
+                   07  CAM-FEC-CAMB.
+      *
+      *                Fecha 1 + Fecha 2
+                       09  CAM-FEC-FCAM OCCURS 2 TIMES.
+                           11  CAM-NUM-SCAM             PIC 9(02).
+                           11  CAM-NUM-ACAM             PIC 9(02).
+                           11  CAM-NUM-MCAM             PIC 9(02).
+                           11  CAM-NUM-DCAM             PIC 9(02).
+      *
+      *            Codigo Valor de Cambio
+                   07  CAM-COD-CAMB.
+      *
+      *                Valor 1 + Valor 2
+                       09  CAM-COD-VCAM OCCURS 2 TIMES.
+      *
+      *                    Tipo Valor                   TAB TVAL
+                           11  CAM-MSC-TVAL             PIC X(01).
+      *
+      *                    Codigo Valor
+                           11  CAM-COD-CVAL             PIC X(03).
+      *
+      *                    Tipo Cambio
+                           11  CAM-COD-TCAM             PIC X(02).
+      *
+      *        Time Stamp Transaccion
+               05  CAM-STP-ITRN.
+      *
+      *            Fecha Transaccion
+                   07  CAM-FEC-FTRN.
+                       09  CAM-NUM-STRN                 PIC 9(02).
+                       09  CAM-NUM-ATRN                 PIC 9(02).
+                       09  CAM-NUM-MTRN                 PIC 9(02).
+                       09  CAM-NUM-DTRN                 PIC 9(02).
+      *
+      *            Hora Transaccion
+                   07  CAM-HRA-HRTR.
+                       09  CAM-NUM-HHTR                 PIC 9(02).
+                       09  CAM-NUM-MMTR                 PIC 9(02).
+                       09  CAM-NUM-SSTR                 PIC 9(02).
+      *
+      *    Indicador Tipo Accion
+           03  CAM-MSC-TACC                             PIC X(01).
+      *
+      *    Indicador Status
+           03  CAM-MSC-STAT                             PIC X(01).
+      *
+      *    Indicador Vigencia                           GNS VIGE
+           03  CAM-IND-VIGE  REDEFINES  CAM-MSC-STAT    PIC X(01).
+      *
+      *    Codigo Origen Transaccion
+           03  CAM-COD-OTRN.
+      *
+      *        Indicador Tipo Origen
+               05  CAM-MSC-TTRN                         PIC X(01).
+      *
+      *        Codigo Tipo Origen
+               05  CAM-COD-TTRN                         PIC X(03).
+      *
+      *    Autor Transaccion
+           03  CAM-COD-ATRN                             PIC X(12).
+      *
+      *    Valor de Cambio
+           03  CAM-SGV-VCAM                  COMP-3     PIC S9(11)V9(4).
+      *
+      *    Disponible
+           03  CAM-GLS-DISP                             PIC X(06).
+      *
+      *    Variables de Cambio
+       01  CAM-VARI.
+      *
+      *    Codigo Sistema
+           03  CAM-COD-SIST                             PIC X(03).
+      *
+      *    Moneda Nacional
+           03  CAM-COD-MNAC             VALUE '0999'    PIC X(06).
+      *
+      *    Moneda Extranjera
+           03  CAM-COD-MEXT             VALUE '1'       PIC X(01).
+      *
+      *    Porcentaje
+           03  CAM-COD-PORC             VALUE '0000'    PIC X(06).
+      *
+      *    Subindices de Valores de Cambio
+           03  CAM-SIND.
+               05  CAM-I                COMP            PIC 9(04).
+               05  CAM-IMAX             COMP            PIC 9(04).
+      *
+      *    Vector de Valores de Cambio
+           03  CAM-TAB-ICAM.
+               05  CAM-VEC-ICAM OCCURS 10.
+                   07  CAM-COD-VCAM                     PIC X(06).
+                   07  CAM-SGV-VCAM     COMP-3          PIC S9(11)V9(4).
+      *
+           EJECT
+       PROCEDURE DIVISION.
+      *===================
+           ENTRY 'DBMSCBL'.
+           EJECT
+       A-CONTROL SECTION.
+      *=================
+       AA-INICIALIZACION.
+           PERFORM B-INICIALIZAR.
+           SKIP1
+       AB-PROCESAMIENTO.
+           IF NOT WS-PROCESO-ERROR
+              PERFORM C-PROCESAR
+           END-IF.
+           SKIP1
+       AC-TERMINACION.
+           PERFORM D-TERMINAR.
+           SKIP1
+       AZ-FIN-DE-SECCION.
+           GOBACK.
+           EJECT
+       B-INICIALIZAR SECTION.
+      *======================
+           PERFORM BA-ABRIR-ARCHIVOS.
+           PERFORM BB-VALIDA-FECHAS.
+           GO BZ-FIN-DE-SECCION.
+           SKIP1
+       BA-ABRIR-ARCHIVOS.
+      *------------------
+           OPEN I-O COLMVUF.
+           IF (WR-FS-COLMVUF NOT = 0 AND NOT = 97)
+               MOVE 'B-INICIALIZAR'         TO WR-SECCION
+               MOVE 'BA-ABRIR-ARCHIVOS'     TO WR-PARRAFO
+               MOVE 'COLMVUF'               TO WR-ARCHIVO
+               MOVE 'OPEN'                  TO WR-OPERACI
+               MOVE WR-FS-COLMVUF           TO WR-FILE-ST
+               PERFORM BC-DISPLAY-ERROR
+           END-IF.
+           ACCEPT WR-FECHA-HOY FROM DATE.
+           SKIP1
+       BB-VALIDA-FECHAS.
+      *-----------------
+           ACCEPT W-PARAMETROS.
+           MOVE 'CARGAR'                    TO CALEAREA-FUNCION.
+           MOVE  WP-DIA1                    TO CALEAREA-FECHA-1-D
+           MOVE  WP-MES1                    TO CALEAREA-FECHA-1-M
+           MOVE  WP-ANO1                    TO CALEAREA-FECHA-1-A
+           CALL 'RUTUCALE' USING RTNWCALE.
+           IF (CALEAREA-FUNCION = 'CANCEL')
+               MOVE 'B-INICIALIZAR'         TO WR-SECCION
+               MOVE 'BB-VALIDA-FECHAS'      TO WR-PARRAFO
+               MOVE 'RUTUCALE'              TO WR-ARCHIVO
+               MOVE 'CALL'                  TO WR-OPERACI
+               MOVE '**CARGA FALLIDA**'     TO WR-MENSAJE
+               MOVE CALEAREA-FUNCION        TO WR-FILE-ST
+               PERFORM BC-DISPLAY-ERROR
+           END-IF.
+
+           IF (NOT WS-PROCESO-ERROR)
+               MOVE 'INFO'                  TO CALEAREA-FUNCION
+               MOVE  WP-DIA1                TO CALEAREA-FECHA-1-D
+               MOVE  WP-MES1                TO CALEAREA-FECHA-1-M
+               MOVE  WP-ANO1                TO CALEAREA-FECHA-1-A
+               MOVE  0                      TO CALEAREA-COD-RET
+               CALL 'RUTUCALE' USING RTNWCALE
+               IF (CALEAREA-COD-RET NOT = 0)
+                   MOVE 'B-INICIALIZAR'     TO WR-SECCION
+                   MOVE 'BB-VALIDA-FECHAS'  TO WR-PARRAFO
+                   MOVE 'RUTUCALE'          TO WR-ARCHIVO
+                   MOVE '*FECHA1 INVALIDA*' TO WR-MENSAJE
+                   MOVE CALEAREA-COD-RET    TO WR-FILE-ST
+                   PERFORM BC-DISPLAY-ERROR
+               ELSE
+                   MOVE CALEAREA-FECHA-1-A  TO WR-FECHA-INI-A
+                   MOVE CALEAREA-FECHA-1-M  TO WR-FECHA-INI-M
+                   MOVE CALEAREA-FECHA-1-D  TO WR-FECHA-INI-D
+               END-IF
+           END-IF.
+
+           IF (NOT WS-PROCESO-ERROR)
+               MOVE 'INFO'                  TO CALEAREA-FUNCION
+               MOVE  WP-DIA2                TO CALEAREA-FECHA-1-D
+               MOVE  WP-MES2                TO CALEAREA-FECHA-1-M
+               MOVE  WP-ANO2                TO CALEAREA-FECHA-1-A
+               MOVE  0                      TO CALEAREA-COD-RET
+               CALL 'RUTUCALE' USING RTNWCALE
+               IF (CALEAREA-COD-RET NOT = 0)
+                   MOVE 'B-INICIALIZAR'     TO WR-SECCION
+                   MOVE 'BB-VALIDA-FECHAS'  TO WR-PARRAFO
+                   MOVE 'RUTUCALE'          TO WR-ARCHIVO
+                   MOVE '*FECHA2 INVALIDA*' TO WR-MENSAJE
+                   MOVE CALEAREA-COD-RET    TO WR-FILE-ST
+                   PERFORM BC-DISPLAY-ERROR
+               ELSE
+                   MOVE CALEAREA-FECHA-1-A  TO WR-FECHA-FIN-A
+                   MOVE CALEAREA-FECHA-1-M  TO WR-FECHA-FIN-M
+                   MOVE CALEAREA-FECHA-1-D  TO WR-FECHA-FIN-D
+               END-IF
+           END-IF.
+           SKIP1
+       BC-DISPLAY-ERROR.
+      *-----------------
+           SET WS-PROCESO-ERROR             TO TRUE
+           DISPLAY ' '
+           DISPLAY 'Error en seccion    : ' WR-SECCION
+           DISPLAY '   Parrafo          : ' WR-PARRAFO
+           DISPLAY '   Archivo          : ' WR-ARCHIVO
+           DISPLAY '   Operacion        : ' WR-OPERACI
+           DISPLAY '   File status      : ' WR-FILE-ST
+           DISPLAY '   Mensaje de error : ' WR-MENSAJE.
+           SKIP1
+       BZ-FIN-DE-SECCION.
+      *------------------
+           EXIT.
+           EJECT
+       C-PROCESAR SECTION.
+      *===================
+       CA-PROCESO-GRAL.
+      *----------------
+           MOVE WR-FECHA-INI-A              TO CALEAREA-FECHA-2-A
+           MOVE WR-FECHA-INI-M              TO CALEAREA-FECHA-2-M
+           MOVE WR-FECHA-INI-D              TO CALEAREA-FECHA-2-D.
+           PERFORM CB-COPIA-VALOR-UF
+              UNTIL (WR-FECHA-INICIAL > WR-FECHA-FINAL OR
+                     WS-PROCESO-ERROR)
+           GO CZ-FIN-DE-SECCION.
+           SKIP1
+       CB-COPIA-VALOR-UF.
+      *------------------
+           MOVE CALEAREA-FECHA-2-D          TO WB-REQ-CAM-KEY-FEC1-D
+           MOVE CALEAREA-FECHA-2-M          TO WB-REQ-CAM-KEY-FEC1-M
+           MOVE CALEAREA-FECHA-2-A          TO WB-REQ-CAM-KEY-FEC1-A
+           MOVE WB-REQ-CAM-KEY-FEC1         TO WB-REQ-CAM-KEY-FEC2
+           PERFORM CE-LEER-CAM
+           IF (WB-REQ-CAM-RC = '  ')
+               ADD  1                       TO WA-L-CAM
+               PERFORM CC-GRABA-UF
+           ELSE
+               SET WS-PROCESO-WARNING       TO TRUE
+               DISPLAY 'No Existe UF con fecha ' WB-REQ-CAM-KEY-FEC1
+           END-IF.
+
+           IF (NOT WS-PROCESO-ERROR)
+               MOVE CALEAREA-FECHA-2        TO CALEAREA-FECHA-1
+               MOVE ZEROES                  TO CALEAREA-FECHA-2
+               MOVE 1                       TO CALEAREA-NUM-DIA
+               MOVE 'AVNDC'                 TO CALEAREA-FUNCION
+               CALL 'RUTUCALE' USING RTNWCALE
+               IF (CALEAREA-COD-RET NOT = 0)
+                   MOVE 'C-PROCESAR'        TO WR-SECCION
+                   MOVE 'CB-COPIA-VALOR-UF' TO WR-PARRAFO
+                   MOVE 'RUTUCALE'          TO WR-ARCHIVO
+                   MOVE 'CALL'              TO WR-OPERACI
+                   MOVE '**AVNDC FALLIDA**' TO WR-MENSAJE
+                   MOVE CALEAREA-COD-RET    TO WR-FILE-ST
+                   PERFORM BC-DISPLAY-ERROR
+               ELSE
+                   MOVE CALEAREA-FECHA-2-A  TO WR-FECHA-INI-A
+                   MOVE CALEAREA-FECHA-2-M  TO WR-FECHA-INI-M
+                   MOVE CALEAREA-FECHA-2-D  TO WR-FECHA-INI-D
+               END-IF
+           END-IF.
+           SKIP1
+       CC-GRABA-UF.
+      *------------
+           MOVE CALEAREA-FECHA-2-AA         TO VUF-FA-VLR
+           MOVE CALEAREA-FECHA-2-M          TO VUF-FM-VLR
+           MOVE CALEAREA-FECHA-2-D          TO VUF-FD-VLR.
+           MOVE 'READ'                      TO WR-ACCION
+           PERFORM CD-I-O-COLMVUF
+           IF (WR-FS-COLMVUF = 0)
+               MOVE CAM-SGV-VCAM IN CAM     TO VUF-VLR-UF
+               MOVE 'REWRITE'               TO WR-ACCION
+               PERFORM CD-I-O-COLMVUF
+           ELSE
+               IF (WR-FS-COLMVUF = 23)
+                   MOVE CAM-SGV-VCAM IN CAM TO VUF-VLR-UF
+                   MOVE 'WRITE'             TO WR-ACCION
+                   PERFORM CD-I-O-COLMVUF
+               END-IF
+           END-IF.
+           SKIP1
+       CD-I-O-COLMVUF.
+      *---------------
+           MOVE 99                          TO WR-FS-COLMVUF.
+           EVALUATE TRUE
+             WHEN (WR-ACCION = 'READ'   ) READ    COLMVUF END-READ
+             WHEN (WR-ACCION = 'WRITE'  ) WRITE   COLRVUF END-WRITE
+             WHEN (WR-ACCION = 'REWRITE') REWRITE COLRVUF END-REWRITE
+           END-EVALUATE
+
+           IF (WR-FS-COLMVUF = 0)
+               EVALUATE TRUE
+                 WHEN (WR-ACCION = 'READ'   ) ADD 1 TO WA-L-VUF
+                 WHEN (WR-ACCION = 'WRITE'  ) ADD 1 TO WA-G-VUF
+                 WHEN (WR-ACCION = 'REWRITE') ADD 1 TO WA-R-VUF
+               END-EVALUATE
+           ELSE
+               IF (WR-FS-COLMVUF NOT = 23)
+                   MOVE 'C-PROCESAR'        TO WR-SECCION
+                   MOVE 'CD-I-O-COLMVUF'    TO WR-PARRAFO
+                   MOVE 'COLMVUF'           TO WR-ARCHIVO
+                   MOVE WR-ACCION           TO WR-OPERACI
+                   MOVE WR-FS-COLMVUF       TO WR-FILE-ST
+                   MOVE 'ERROR DE I/O'      TO WR-MENSAJE
+                   PERFORM BC-DISPLAY-ERROR
+               END-IF
+           END-IF.
+           SKIP1
+       CE-LEER-CAM.
+      *------------
+           MOVE SPACES                      TO WB-REQ-CAM-RC
+           CALL 'DBNTRY' USING WB-UIB WB-REQ-CAM-AREA CAM WB-ELEM-LIS
+           IF (WB-REQ-CAM-RC NOT = '  ' AND NOT = '14')
+               MOVE 'C-PROCESAR'            TO WR-SECCION
+               MOVE 'CE-LEER-CAM'           TO WR-PARRAFO
+               MOVE 'CAM'                   TO WR-ARCHIVO
+               MOVE WB-REQ-CAM-CMD          TO WR-OPERACI
+               MOVE WB-REQ-CAM-RC           TO WR-FILE-ST
+               MOVE WB-REQ-CAM-KEY-VALUE    TO WR-MENSAJE
+               PERFORM BC-DISPLAY-ERROR
+           END-IF.
+           SKIP1
+       CZ-FIN-DE-SECCION.
+      *------------------
+           EXIT.
+           EJECT
+       D-TERMINAR SECTION.
+      *===================
+       DA-ESTADISTICAS.
+      *----------------
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY 'Informes'
+           DISPLAY '--------'
+           DISPLAY ' '
+           DISPLAY 'Proceso no emite informe'
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY 'Estadisticas de proceso programa COLPB815 fecha '
+                    WR-FECHA-HOY
+           DISPLAY '------------------------------------------------'
+           DISPLAY '    Actualizacion de maestro valor uf'
+           DISPLAY ' '
+           DISPLAY 'Actualizaciones COLMVUF : '
+           DISPLAY '  Reg. leidos     : ' WA-L-VUF
+           DISPLAY '  Reg. grabados   : ' WA-G-VUF
+           DISPLAY '  Reg. regrabados : ' WA-R-VUF
+           DISPLAY ' '
+           DISPLAY 'Reg. leidos CAM   : ' WA-L-CAM
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY 'Tarjeta de parametros'
+           DISPLAY '---------------------'
+           DISPLAY ' '
+           DISPLAY W-PARAMETROS.
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY 'Mensajes para el explotador'
+           DISPLAY '---------------------------'
+           DISPLAY ' '
+           IF WS-PROCESO-OK
+               DISPLAY 'No hay mensajes para el explotador'
+           ELSE
+               DISPLAY 'Hay mensajes para el explotador'
+           END-IF.
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY ' '.
+           SKIP1
+       DB-TERMINO.
+      *-----------
+           CLOSE COLMVUF.
+           IF WS-PROCESO-ERROR
+              MOVE 100                      TO RETURN-CODE
+              DISPLAY ' '
+              DISPLAY ' '
+              DISPLAY '**********************************************'
+              DISPLAY '**********************************************'
+              DISPLAY '********                              ********'
+              DISPLAY '******** Termino ERRONEO del proceso  ********'
+              DISPLAY '********                              ********'
+              DISPLAY '**********************************************'
+              DISPLAY '**********************************************'
+           ELSE
+              DISPLAY ' '
+              DISPLAY ' '
+              DISPLAY '*****Proceso termino en forma NORMAL*****'
+           END-IF.
+           SKIP1
+       DZ-FIN-DE-SECCION.
+      *------------------
+           EXIT.
+           EJECT

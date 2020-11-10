@@ -1,0 +1,502 @@
+       IDENTIFICATION DIVISION.
+      *************************
+       PROGRAM-ID.     COLPB795.
+      *AUTHOR.         DONOSO JARA OSVALDO.
+      *                DATE-WRITTEN,  18/08/92.
+      ******************************************************************
+      *  INTERSOFT                                                     *
+      *  MIGRACION A COBOL OS/390                                      *
+      *  FECHA: 30 DE MARZO DE 1998                                    *
+      ******************************************************************
+      ******************************************************************
+      *  Sistema  : Colocaciones                                       *
+      *  Subsist. :                                                    *
+      *  Analista : Retamal Pablo                                      *
+      *  Objetivo : Corregir codigos de direccion no poblados en la    *
+      *             tabla RDC-160 para colocaciones                    *
+      *                                                                *
+      *  Archivos :                                                    *
+      *   Entrada : RCD 100: Relacion cliente direccion                *
+      *                                                                *
+      *   Salida  :                                                    *
+      *                                                                *
+      *   Ent/Sal : RDC 160: Relacion deuda credito                    *
+      *                                                                *
+      *   Trabajo :                                                    *
+      *                                                                *
+      *  Mantenciones                                                  *
+      *  ============                                                  *
+      *            Programador: ...........................            *
+      *            Fecha      : dd/mm/aa                               *
+      *            Cambio     : ....................................   *
+      *                         ....................................   *
+      *                         ....................................   *
+      *                                                                *
+      ******************************************************************
+           EJECT
+       ENVIRONMENT DIVISION.
+      **********************
+       CONFIGURATION SECTION.
+      *======================
+       SPECIAL-NAMES.
+            DECIMAL-POINT IS COMMA.
+           EJECT
+       DATA DIVISION.
+      *==============
+       WORKING-STORAGE SECTION.
+      *========================
+       SKIP1
+       01  W-SWITCHES.
+           05 WS-PROCESO                    PIC 9(01) VALUE 0.
+              88 WS-PROCESO-OK       VALUE 0.
+              88 WS-PROCESO-NO-OK    VALUE 1.
+       SKIP1
+       01  W-CONTADORES-Y-ACUMULADORES.
+           05 WA-L-RDC                      PIC 9(06) VALUE 0.
+           05 WA-G-DIR-D                    PIC 9(06) VALUE 0.
+           05 WA-G-DIR-2                    PIC 9(06) VALUE 0.
+           05 WA-G-DIR-1                    PIC 9(06) VALUE 0.
+           SKIP1
+       01  W-REGISTROS-DE-TRABAJO.
+           05 WR-FECHA-HOY.
+              10 WR-HOY-AA                  PIC X(02).
+              10 WR-HOY-MM                  PIC X(02).
+              10 WR-HOY-DD                  PIC X(02).
+           05 WR-MENSAJES.
+              10 WR-SECCION                 PIC X(15).
+              10 WR-PARRAFO                 PIC X(15).
+              10 WR-ARCHIVO                 PIC X(10).
+              10 WR-OPERACI                 PIC X(10).
+              10 WR-FILE-ST                 PIC X(02).
+              10 WR-MENSAJE                 PIC X(35).
+           05 WR-COD-DIR-D                  PIC X(02).
+           05 WR-COD-DIR-2                  PIC X(02).
+      ******************************************************************
+      *      AREAS DE USO PARA DATACOM                                 *
+      ******************************************************************
+      *
+       01  WB-UIB.
+           05 FILLER                        PIC X(32) VALUE 'COLPB795'.
+      *
+       01  WB-REQ-RDC-AREA.
+           02 WB-REQ-RDC-CMD                PIC X(5) VALUE 'RDUKG'.
+           02 FILLER                        PIC X(3) VALUE 'RDC'.
+           02 FILLER                        PIC X(5) VALUE 'RDC01'.
+           02 WB-REQ-RDC-RC                 PIC X(2) VALUE SPACES.
+           02 FILLER                        PIC X(1).
+           02 FILLER                        PIC S9(4) COMP VALUE +160.
+           02 FILLER                        PIC X(58).
+           02 WB-REQ-RDC-KEY-VALUE.
+              03 WB-REQ-RDC-KEY-OPC         PIC X(12) VALUE 'D'.
+              03 WB-REQ-RDC-KEY-REL         PIC X(03) VALUE SPACES.
+
+       01  WB-REQ-RCD-AREA.
+           02 WB-REQ-RCD-CMD                PIC X(5).
+           02 FILLER                        PIC X(3) VALUE 'RCD'.
+           02 FILLER                        PIC X(5) VALUE 'RCD00'.
+           02 WB-REQ-RCD-RC                 PIC X(2) VALUE SPACES.
+           02 FILLER                        PIC X(1).
+           02 FILLER                        PIC S9(4) COMP VALUE +100.
+           02 FILLER                        PIC X(58).
+           02 WB-REQ-RCD-KEY-VALUE.
+              03 WB-REQ-RCD-KEY-CLI         PIC X(12).
+              03 WB-REQ-RCD-KEY-DIR         PIC X(02).
+      *
+      *    RELACION DEUDOR CREDITO
+      *    -----------------------
+      *
+      *    NOMBRE REGISTRO : RDC
+      *    CLAVE(S)        : RDC-KEY-IRDC(UU), RDC-KEY-IDLC(DU)
+      *    LARGO           : 075
+      *    BLOQUEO         : 1
+      *    OBSERVACIONES   :
+      *
+      *    01) MODIFICACIONES 06/09/88, LJV
+      *        - ELIMINACION CLAVE RDC-KEY-IREG
+      *        - ESTANDARIZACION A HEADER TIPO LOG
+      *        - MODIFICACION LARGO/BLOQUEO REGISTRO (064/1)
+      *        - INCORPORACION CAMPO RDC-COD-TRDC
+      *
+       01  RDC.
+      *
+      *    FILLER COMPATIBILIDAD VSAM/MVS
+           03  RDC-GLS-FLAG                             PIC X(01).
+      *
+      *    CLAVE PRIMARIA REGISTRO
+           03  RDC-KEY-IREG.
+      *
+      *KEY     IDENTIFICACION RELACION DEUDOR CREDITO
+               05  RDC-KEY-IRDC.
+      *
+      *            COD. INT. COMP. CLIENTE
+                   07  RDC-CIC-ICLI.
+      *
+      *                CENTRO ASIGNACION IDENTIFICACION
+                       09  RDC-CAI-ICLI.
+                           11  RDC-COD-TCLI             PIC X(01).
+                           11  RDC-COD-CCLI             PIC X(03).
+      *
+      *                IDENT. INTERNA COMPUTACIONAL
+                       09  RDC-IIC-ICLI                 PIC X(08).
+      *
+      *            IDENTIFICACION DOCUMENTO LEGAL
+                   07  RDC-KEY-IDLC.
+      *
+      *                COD. INT. COMP. OPERACION CURSADA
+                       09  RDC-CIC-IOPC.
+      *
+      *                    CENTRO ASIGNACION IDENTIFICACION
+                           11  RDC-CAI-IOPC.
+                               13  RDC-COD-TOPC         PIC X(01).
+                               13  RDC-COD-COPC         PIC X(03).
+      *
+      *                    IDENT. INTERNA COMPUTACIONAL
+                           11  RDC-IIC-IOPC.
+                               13  RDC-COD-OOPC.
+                                   15  RDC-COD-SOPC     PIC X(02).
+                                   15  RDC-IND-SOPC     PIC X(01).
+                               13  RDC-GLS-NOPC         PIC X(05).
+      *
+      *                NUM IDENTIFICACION DOCUMENTO LEGAL
+                       09  RDC-NUM-IDLC                 PIC 9(03).
+      *
+      *ING-01
+      *        CODIGO TIPO RELACION                     COL RDC
+               05  RDC-COD-TRDC                         PIC X(03).
+      *
+      *        TIME STAMP TRANSACCION
+               05  RDC-STP-ITRN.
+      *
+      *            FECHA TRANSACCION
+                   07  RDC-FEC-FTRN.
+                       09  RDC-NUM-STRN                 PIC 9(02).
+                       09  RDC-NUM-ATRN                 PIC 9(02).
+                       09  RDC-NUM-MTRN                 PIC 9(02).
+                       09  RDC-NUM-DTRN                 PIC 9(02).
+      *
+      *            HORA TRANSACCION
+                   07  RDC-HRA-HRTR.
+                       09  RDC-NUM-HHTR                 PIC 9(02).
+                       09  RDC-NUM-MMTR                 PIC 9(02).
+                       09  RDC-NUM-SSTR                 PIC 9(02).
+      *
+      *REQ INDICADOR TIPO ACCION
+           03  RDC-MSC-TACC                             PIC X(01).
+      *
+      *    INDICADOR STATUS
+           03  RDC-MSC-STAT                             PIC X(01).
+      *
+      *REQ CODIGO ORIGEN TRANSACCION
+           03  RDC-COD-OTRN.
+      *
+      *        INDICADOR TIPO ORIGEN
+               05  RDC-MSC-TTRN                         PIC X(01).
+      *
+      *        CODIGO TIPO ORIGEN
+               05  RDC-COD-TTRN                         PIC X(03).
+      *
+      *REQ AUTOR TRANSACCION
+           03  RDC-COD-ATRN                             PIC X(12).
+      *
+      *PEN DIRECCION ASOCIADA
+           03  RDC-NUM-DIRE                             PIC X(02).
+      *
+      *REQ MONTO LIMITE DEUDA ( PORCENTAJE )
+           03  RDC-VAL-LIMD             COMP            PIC 9(03)V9(06).
+      *
+      *MOD-01  PIC X(11)
+      *    GLOSA DISPONIBLE
+           03  RDC-GLS-DISP                             PIC X(06).
+      *    Relacion Cliente Direcciones
+      *    ----------------------------
+      *
+      *    Nombre Registro : RCD
+      *    Clave(s)        : RCD-KEY-IRCD(UU), RCD-STP-ITRN(UU)
+      *    Largo           : 158
+      *    Bloqueo         : 1
+      *    Observaciones   :
+      *
+       01  RCD.
+      *
+      *    Filler Compatibilidad VSAM/MVS
+           03  RCD-GLS-FLAG                             PIC X(01).
+      *
+      *KEY Clave Primaria Registro
+           03  RCD-KEY-IREG.
+      *
+      *        Identificacion Relacion Cliente Direcciones
+               05  RCD-KEY-IRCD.
+      *
+      *            Cod. Int. Comp. Cliente
+                   07  RCD-CIC-ICLI.
+      *
+      *                Centro Asignacion Identificacion
+                       09  RCD-CAI-ICLI.
+                           11  RCD-COD-TCLI             PIC X(01).
+                           11  RCD-COD-CCLI             PIC X(03).
+      *
+      *                Ident. Interna Computacional
+                       09  RCD-IIC-ICLI                 PIC X(08).
+      *
+      *            Numero Direccion
+                   07  RCD-NUM-DIRE                     PIC 9(02).
+      *
+      *        Time Stamp Transaccion
+               05  RCD-STP-ITRN.
+      *
+      *            Fecha Transaccion
+                   07  RCD-FEC-FTRN.
+                       09  RCD-NUM-STRN                 PIC 9(02).
+                       09  RCD-NUM-ATRN                 PIC 9(02).
+                       09  RCD-NUM-MTRN                 PIC 9(02).
+                       09  RCD-NUM-DTRN                 PIC 9(02).
+      *
+      *            Hora Transaccion
+                   07  RCD-HRA-HRTR.
+                       09  RCD-NUM-HHTR                 PIC 9(02).
+                       09  RCD-NUM-MMTR                 PIC 9(02).
+                       09  RCD-NUM-SSTR                 PIC 9(02).
+      *
+      *    Indicador Tipo Accion
+           03  RCD-MSC-TACC                             PIC X(01).
+      *
+      *    Indicador Status
+           03  RCD-MSC-STAT                             PIC X(01).
+      *
+      *    Codigo Origen Transaccion
+           03  RCD-COD-OTRN.
+      *
+      *        Indicador Tipo Origen
+               05  RCD-MSC-TTRN                         PIC X(01).
+      *
+      *        Codigo Tipo Origen
+               05  RCD-COD-TTRN                         PIC X(03).
+      *
+      *    Autor Transaccion
+           03  RCD-COD-ATRN                             PIC X(12).
+      *
+      *    Tipo Direccion                               SGC TDIR
+           03  RCD-MSC-TDIR                             PIC X(01).
+      *
+      *    Estado Direccion ( Mala, Verificada, etc )   SGC SDIR
+           03  RCD-MSC-SDIR                             PIC X(01).
+      *
+      *    Fecha de Verificacion
+           03  RCD-FEC-FVRF.
+               05  RCD-NUM-SVRF                         PIC 9(02).
+               05  RCD-NUM-AVRF                         PIC 9(02).
+               05  RCD-NUM-MVRF                         PIC 9(02).
+               05  RCD-NUM-DVRF                         PIC 9(02).
+      *
+      *RCM Descripcion de la Direccion
+           03  RCD-GLS-DIRE                             PIC X(60).
+      *
+      *RCM Codigo de Lugar                              TAB COM
+           03  RCD-COD-LUGA                             PIC X(04).
+      *
+      *    Telefono de la Direccion
+           03  RCD-GLS-FONO.
+               05  RCD-NUM-FONO                         PIC X(08).
+               05  RCD-NUM-ANXO                         PIC X(04).
+      *
+      *    Disponible
+           03  RCD-GLS-DISP                             PIC X(25).
+      *
+       01  RCD-VARI.
+           03  RCD-MSC-DOMI             VALUE 'D'       PIC X(01).
+      *
+       01  WB-ELEM-LIS                      PIC X(11).
+           EJECT
+       PROCEDURE DIVISION.
+      *===================
+           ENTRY 'DBMSCBL'.
+           EJECT
+       A-CONTROL SECTION.
+      *=================
+       AA-INICIALIZACION.
+           PERFORM B-INICIALIZAR.
+           SKIP1
+       AB-PROCESAMIENTO.
+           IF WS-PROCESO-OK
+              PERFORM C-PROCESAR
+           END-IF.
+           SKIP1
+       AC-TERMINACION.
+           PERFORM D-TERMINAR.
+           SKIP1
+       AZ-FIN-DE-SECCION.
+           GOBACK.
+           EJECT
+       B-INICIALIZAR SECTION.
+      *======================
+           GO BZ-FIN-DE-SECCION.
+           SKIP1
+       BZ-FIN-DE-SECCION.
+      *------------------
+           EXIT.
+           EJECT
+       C-PROCESAR SECTION.
+      *===================
+       CA-PROCESO-GRAL.
+      *----------------
+           PERFORM CD-LEER-RDC.
+           PERFORM CB-PROCESA-DIRECCIONES
+              UNTIL (RDC-COD-TOPC   NOT = 'D'  OR
+                     WB-REQ-RDC-RC  NOT = '  ' OR WS-PROCESO-NO-OK)
+           GO CZ-FIN-DE-SECCION.
+           SKIP1
+       CB-PROCESA-DIRECCIONES.
+      *-----------------------
+           ADD 1                            TO WA-L-RDC
+           IF (RDC-NUM-DIRE NOT NUMERIC OR RDC-NUM-DIRE = '00')
+               MOVE RDC-CIC-ICLI            TO WB-REQ-RCD-KEY-CLI
+               MOVE SPACES                  TO WB-REQ-RCD-KEY-DIR
+               MOVE 'REDKG'                 TO WB-REQ-RCD-CMD
+               MOVE SPACES                  TO WR-COD-DIR-D
+               MOVE SPACES                  TO WR-COD-DIR-2
+               PERFORM CE-LEER-RCD
+               PERFORM CC-BUSCA-DIR-D-2
+                UNTIL (RDC-CIC-ICLI  NOT = RCD-CIC-ICLI OR
+                       WB-REQ-RCD-RC NOT = SPACES OR WS-PROCESO-NO-OK)
+               EVALUATE TRUE
+                 WHEN WR-COD-DIR-D > SPACES
+                       MOVE WR-COD-DIR-D    TO RDC-NUM-DIRE
+                       ADD  1               TO WA-G-DIR-D
+                 WHEN WR-COD-DIR-2 > SPACES
+                       MOVE WR-COD-DIR-2    TO RDC-NUM-DIRE
+                       ADD  1               TO WA-G-DIR-2
+                 WHEN OTHER
+                       MOVE '01'            TO RDC-NUM-DIRE
+                       ADD  1               TO WA-G-DIR-1
+               END-EVALUATE
+               MOVE 'UPDAT'                 TO WB-REQ-RDC-CMD
+               PERFORM CD-LEER-RDC
+           ELSE
+               MOVE 'RELES'                 TO WB-REQ-RDC-CMD
+               PERFORM CD-LEER-RDC
+           END-IF.
+
+           IF (WS-PROCESO-OK)
+               MOVE 'RDUNX'                 TO WB-REQ-RDC-CMD
+               PERFORM CD-LEER-RDC
+           END-IF.
+           SKIP1
+       CC-BUSCA-DIR-D-2.
+      *-----------------
+           EVALUATE RCD-MSC-TDIR
+             WHEN 'D'  MOVE RCD-NUM-DIRE    TO WR-COD-DIR-D
+             WHEN '2'  MOVE RCD-NUM-DIRE    TO WR-COD-DIR-2
+           END-EVALUATE
+           MOVE 'REDNX'                     TO WB-REQ-RCD-CMD
+           PERFORM CE-LEER-RCD.
+           SKIP1
+       CD-LEER-RDC.
+      *------------
+           MOVE SPACES                      TO WB-REQ-RDC-RC
+           MOVE 'RDC00'                     TO WB-ELEM-LIS
+           CALL 'DBNTRY' USING WB-UIB WB-REQ-RDC-AREA RDC WB-ELEM-LIS
+           IF (WB-REQ-RDC-RC NOT = '  ' AND NOT = '14')
+               MOVE 'C-PROCESAR'            TO WR-SECCION
+               MOVE 'CD-LEER-RDC'           TO WR-PARRAFO
+               MOVE 'RDC'                   TO WR-ARCHIVO
+               MOVE WB-REQ-RDC-CMD          TO WR-OPERACI
+               MOVE WB-REQ-RDC-RC           TO WR-FILE-ST
+               MOVE WB-REQ-RDC-KEY-VALUE    TO WR-MENSAJE
+               PERFORM CF-DISPLAY-ERROR
+           END-IF.
+           SKIP1
+       CE-LEER-RCD.
+      *------------
+           MOVE SPACES                      TO WB-REQ-RCD-RC
+           MOVE 'RCD00'                     TO WB-ELEM-LIS
+           CALL 'DBNTRY' USING WB-UIB WB-REQ-RCD-AREA RCD WB-ELEM-LIS
+           IF (WB-REQ-RCD-RC NOT = '  ' AND NOT = '14')
+               MOVE 'C-PROCESAR'            TO WR-SECCION
+               MOVE 'CE-LEER-RCD'           TO WR-PARRAFO
+               MOVE 'RCD'                   TO WR-ARCHIVO
+               MOVE WB-REQ-RCD-CMD          TO WR-OPERACI
+               MOVE WB-REQ-RCD-RC           TO WR-FILE-ST
+               MOVE WB-REQ-RCD-KEY-VALUE    TO WR-MENSAJE
+               PERFORM CF-DISPLAY-ERROR
+           END-IF.
+           SKIP1
+       CF-DISPLAY-ERROR.
+      *-----------------
+           SET WS-PROCESO-NO-OK             TO TRUE.
+           DISPLAY ' '
+           DISPLAY 'ERROR EN SECCION   : ' WR-SECCION
+           DISPLAY '   PARRAFO         : ' WR-PARRAFO
+           DISPLAY '   ARCHIVO         : ' WR-ARCHIVO
+           DISPLAY '   OPERACION       : ' WR-OPERACI
+           DISPLAY '   FILE STATUS     : ' WR-FILE-ST
+           DISPLAY '   MENSAJE DE ERROR: ' WR-MENSAJE.
+           SKIP1
+       CZ-FIN-DE-SECCION.
+      *------------------
+           EXIT.
+           EJECT
+       D-TERMINAR SECTION.
+      *===================
+       DA-ESTADISTICAS.
+      *----------------
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY 'INFORMES'
+           DISPLAY '--------'
+           DISPLAY ' '
+           DISPLAY 'COLPB795 NO EMITE INFORME'
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY ' '
+           ACCEPT WR-FECHA-HOY FROM DATE.
+           DISPLAY 'ESTADISTICAS DE PROCESO PROGRAMA COLPB795 FECHA '
+                    WR-FECHA-HOY
+           DISPLAY '------------------------------------------------'
+           DISPLAY '   CORRIGE CODIGOS DE DIRECC. EN RDC-160'
+           DISPLAY ' '
+           DISPLAY 'LEIDOS RDC              : ' WA-L-RDC
+           DISPLAY 'RDC CORREG. CON COD "D" : ' WA-G-DIR-D
+           DISPLAY 'RDC CORREG. CON COD "2" : ' WA-G-DIR-2
+           DISPLAY 'RDC CORREG. CON COD "1" : ' WA-G-DIR-1
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY 'TARJETAS DE PARAMETROS'
+           DISPLAY '----------------------'
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY 'MENSAJES PARA EL EXPLOTADOR'
+           DISPLAY '---------------------------'
+           DISPLAY ' '
+           IF WS-PROCESO-OK
+               DISPLAY 'NO HAY MENSAJES PARA EL EXPLOTADOR'
+           ELSE
+               DISPLAY 'HAY MENSAJES PARA EL EXPLOTADOR'.
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY ' '.
+           SKIP1
+       DB-TERMINO.
+      *-----------
+           IF WS-PROCESO-NO-OK
+              MOVE 100                      TO RETURN-CODE
+              DISPLAY ' '
+              DISPLAY ' '
+              DISPLAY '**********************************************'
+              DISPLAY '**********************************************'
+              DISPLAY '********                              ********'
+              DISPLAY '******** TERMINO ERRONEO DEL PROCESO  ********'
+              DISPLAY '********                              ********'
+              DISPLAY '**********************************************'
+              DISPLAY '**********************************************'
+           ELSE
+              DISPLAY ' '
+              DISPLAY ' '
+              DISPLAY '*****PROCESO TERMINO EN FORMA NORMAL*****'.
+           SKIP1
+       DZ-FIN-DE-SECCION.
+      *------------------
+           EXIT.

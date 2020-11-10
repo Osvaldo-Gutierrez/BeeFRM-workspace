@@ -1,0 +1,665 @@
+       IDENTIFICATION DIVISION.
+      *************************
+       PROGRAM-ID.     SUPPCD00.
+      *AUTHOR.         DONOSO JARA OSVALDO.
+      *                DATE-WRITTEN,  24/04/95.
+      ******************************************************************
+      *  INTERSOFT                                                     *
+      *  MIGRACION A COBOL OS/390                                      *
+      *  FECHA: 15 DE ABRIL DE 1998                                    *
+      ******************************************************************
+      ******************************************************************
+      *  Sistema  : Sistema Super Bancos                               *
+      *  Subsist. :                                                    *
+      *  Analista : Donoso J. Osvaldo                                  *
+      *  Objetivo : Realiza cuadratura del archivo D00 por capital,    *
+      *             reajustes e intereses contra la contabilidad       *
+      *  Archivos :                                                    *
+      *   Entrada : SYSIN,   Fecha de proceso                          *
+      *             SUPVD00, Archivo D00 resumido y acumulado          *
+      *             SUPVCTB, Saldo de la contabilidad a fin de mes     *
+      *             SUPVREC, Tabla de cuentas contables OPERAC         *
+      *             TAB-150, Tabla de cuentas oficinas                 *
+      *                                                                *
+      *   Salida  : SUPLIS1, Listado de cuadratura de contabilidad     *
+      *                                                                *
+      *   Ent/Sal :                                                    *
+      *                                                                *
+      *   Trabajo :                                                    *
+      *                                                                *
+      *  Mantenciones                                                  *
+      *  ============                                                  *
+      *            Programador: ...........................            *
+      *            Fecha      : dd/mm/aa                               *
+      *            Cambio     : ....................................   *
+      *                         ....................................   *
+      *                         ....................................   *
+      *                                                                *
+      ******************************************************************
+           EJECT
+       ENVIRONMENT DIVISION.
+      **********************
+       CONFIGURATION SECTION.
+      *=====================
+       SPECIAL-NAMES.
+                      DECIMAL-POINT IS COMMA.
+       INPUT-OUTPUT SECTION.
+      *=====================
+       FILE-CONTROL.
+           SELECT SUPVCTB ASSIGN TO SUPVCTB
+                  ORGANIZATION IS INDEXED
+                  ACCESS MODE  IS RANDOM
+                  RECORD KEY   IS CTB-KEY
+                  FILE STATUS IS WR-FS-SUPVCTB.
+           SELECT SUPVREC  ASSIGN TO SUPVREC
+                  ORGANIZATION IS INDEXED
+                  ACCESS MODE  IS SEQUENTIAL
+                  RECORD KEY   IS REC-KEY
+                  FILE STATUS  IS WR-FS-SUPVREC.
+           SELECT SUPVD00  ASSIGN TO SUPVD00
+                  FILE STATUS IS WR-FS-SUPVD00.
+           SELECT SUPLIS1  ASSIGN TO SUPLIS1.
+           EJECT
+       DATA DIVISION.
+      *==============
+           SKIP3
+       FILE SECTION.
+      *=============
+       FD  SUPVD00
+           RECORD CONTAINS 360 CHARACTERS
+           BLOCK  CONTAINS 0 RECORDS
+           LABEL  RECORD OMITTED.
+       COPY SUPBRD00.
+           SKIP1
+       FD  SUPVCTB
+           RECORD CONTAINS 133 CHARACTERS
+           BLOCK  CONTAINS 0 RECORDS
+           LABEL  RECORD OMITTED.
+       01  SUPRCTB.
+           05 FILLER                     PIC X(01).
+           05 CTB-KEY.
+              10 CTB-CTA-CTB             PIC X(09).
+              10 CTB-VAL-ZER             PIC X(01).
+              10 CTB-COD-OFI             PIC X(03).
+           05 CTB-SLD-CTA                PIC S9(13) SIGN TRAILING
+                                                    SEPARATE.
+           05 FILLER REDEFINES CTB-SLD-CTA.
+              10 FILLER                  PIC X(13).
+              10 CTB-SLD-SIG             PIC X(01).
+           05 CTB-GLS-CTA                PIC X(40).
+           05 FILLER                     PIC X(65).
+           SKIP1
+       FD  SUPVREC.
+       01  SUPRREC.
+           05 REC-KEY                       PIC  X(03).
+           05 FILLER                        PIC  X(30).
+           05 REC-CTA-COL                   PIC  X(09).
+           05 FILLER                        PIC  X(27).
+           05 REC-CTA-INT                   PIC  X(09).
+           05 REC-CTA-RJT                   PIC  X(09).
+           05 FILLER                        PIC  X(41).
+           SKIP1
+       FD  SUPLIS1
+           BLOCK  CONTAINS 0 RECORDS
+           LABEL  RECORD OMITTED.
+       01  SUPRLIS                         PIC X(132).
+           SKIP1
+       WORKING-STORAGE SECTION.
+      *========================
+       01  W-SWITCHES.
+           05 WS-PROCESO                    PIC 9(01) VALUE 0.
+              88 WS-PROCESO-OK              VALUE 0.
+              88 WS-PROCESO-ERROR           VALUE 1.
+              88 WS-PROCESO-WARNING         VALUE 2.
+           SKIP1
+       01  W-PARAMETROS.
+           05 FILLER                        PIC  X(20).
+           05 WP-DIA                        PIC  X(02).
+           05 WP-MES                        PIC  X(02).
+           05 WP-ANO                        PIC  X(02).
+           SKIP1
+       01  W-CONTADORES-Y-ACUMULADORES.
+           05 WA-L-D00                      PIC  9(06) VALUE 0.
+           05 WA-L-REC                      PIC  9(06) VALUE 0.
+           05 WA-L-CTB                      PIC  9(06) VALUE 0.
+           05 WA-LINEA                      PIC  9(03) VALUE 80.
+           05 WA-PAGINA                     PIC  9(04) VALUE 0.
+           SKIP1
+       01  W-TABLA.
+           05 WT-REL-CTAS OCCURS 1000 TIMES INDEXED BY WI-IND.
+              10 WT-CTA-COL                 PIC  X(09).
+              10 WT-CTA-INT                 PIC  X(09).
+              10 WT-CTA-RJT                 PIC  X(09).
+           SKIP1
+       01  W-REGISTROS-DE-TRABAJO.
+           05 WR-FECHA-HOY.
+              10 WR-HOY-AA                  PIC X(02).
+              10 WR-HOY-MM                  PIC X(02).
+              10 WR-HOY-DD                  PIC X(02).
+           05 WR-MENSAJES.
+              10 WR-SECCION                 PIC X(15).
+              10 WR-PARRAFO                 PIC X(15).
+              10 WR-ARCHIVO                 PIC X(10).
+              10 WR-OPERACI                 PIC X(10).
+              10 WR-FILE-ST                 PIC X(02).
+              10 WR-MENSAJE                 PIC X(35).
+           05 WR-FS-SUPVCTB                 PIC 9(02) VALUE 0.
+           05 WR-FS-SUPVREC                 PIC 9(02) VALUE 0.
+           05 WR-FS-SUPVD00                 PIC 9(02) VALUE 0.
+           05 WR-TOT-DIF                    PIC S9(13) COMP-3.
+           05 WR-VAL-D00                    PIC S9(13) COMP-3.
+      *---------------------------------------------------------------*
+      * LINEAS DE LISTADO DE CONTROL                                  *
+      *---------------------------------------------------------------*
+           05 WR-LINEA01.
+              10 FILLER           PIC X(018) VALUE 'BANCO CREDITO INVE'.
+              10 FILLER           PIC X(007) VALUE 'RSIONES'.
+              10 FILLER           PIC X(085) VALUE ALL ' '.
+              10 FILLER           PIC X(012) VALUE 'PAGINA    :'.
+              10 WR-LA01-PAGINA   PIC ZZZ9.
+           05 WR-LINEA02.
+              10 FILLER           PIC X(018) VALUE 'SISTEMA SUPER BANC'.
+              10 FILLER           PIC X(002) VALUE 'OS'.
+              10 FILLER           PIC X(090) VALUE ALL ' '.
+              10 FILLER           PIC X(012) VALUE 'F.PROCESO :'.
+              10 WR-LA02-DIA      PIC X(002).
+              10 FILLER           PIC X(001) VALUE ALL '/'.
+              10 WR-LA02-MES      PIC X(002).
+              10 FILLER           PIC X(001) VALUE ALL '/'.
+              10 WR-LA02-ANO      PIC X(002).
+           05 WR-LINEA03.
+              10 FILLER           PIC X(046) VALUE ALL ' '.
+              10 FILLER           PIC X(018) VALUE 'CUADRATURA CUENTAS'.
+              10 FILLER           PIC X(018) VALUE ' D00 V/S CONTABILI'.
+              10 FILLER           PIC X(003) VALUE 'DAD'.
+           05 WR-LINEA04.
+              10 FILLER           PIC X(058) VALUE ALL ' '.
+              10 FILLER           PIC X(003) VALUE 'AL'.
+              10 WR-LA04-DIA      PIC X(002).
+              10 FILLER           PIC X(001) VALUE ALL '/'.
+              10 WR-LA04-MES      PIC X(002).
+              10 FILLER           PIC X(001) VALUE ALL '/'.
+              10 WR-LA04-ANO      PIC X(002).
+           05 WR-LINEA44.
+              10 FILLER           PIC X(010) VALUE 'OFICINA :'.
+              10 WR-LA44-COD-OFI  PIC X(003) VALUE ALL ' '.
+              10 FILLER           PIC X(001) VALUE ALL ' '.
+              10 WR-LA44-GLS-OFI  PIC X(026).
+           05 WR-LINEA05.
+              10 FILLER           PIC X(130) VALUE ALL '-'.
+           05 WR-LINEA06.
+              10 FILLER           PIC X(007) VALUE ' CUENTA'.
+              10 FILLER           PIC X(046) VALUE ALL ' '.
+              10 FILLER           PIC X(015) VALUE 'SALDO INFORMADO'.
+              10 FILLER           PIC X(018) VALUE '           SALDO I'.
+              10 FILLER           PIC X(008) VALUE 'NFORMADO'.
+           05 WR-LINEA07.
+              10 FILLER           PIC X(018) VALUE 'CONTABLE     DESCR'.
+              10 FILLER           PIC X(006) VALUE 'IPCION'.
+              10 FILLER           PIC X(029) VALUE ALL ' '.
+              10 FILLER           PIC X(016) VALUE 'POR CONTABILIDAD'.
+              10 FILLER           PIC X(018) VALUE '          POR ARCH'.
+              10 FILLER           PIC X(007) VALUE 'IVO D00'.
+              10 FILLER           PIC X(018) VALUE '               DIF'.
+              10 FILLER           PIC X(007) VALUE 'ERENCIA'.
+           05 WR-LINEA08.
+              10 WR-LA08-COD-CTA  PIC X(009).
+              10 FILLER           PIC X(004) VALUE ALL ' '.
+              10 WR-LA08-GLS-CTA  PIC X(030).
+              10 FILLER           PIC X(004) VALUE ALL ' '.
+              10 WR-LA08-TOT-CON  PIC ----.---.---.---.--9,99.
+              10 FILLER           PIC X(002) VALUE ALL ' '.
+              10 WR-LA08-TOT-CAL  PIC ----.---.---.---.--9,99.
+              10 FILLER           PIC X(002) VALUE ALL ' '.
+              10 WR-LA08-TOT-DIF  PIC ----.---.---.---.--9,99.
+      ******************************************************************
+      * Areas de uso para Datacom                                      *
+      ******************************************************************
+      *
+       01  WB-UIB.
+           05 FILLER                 PIC X(32) VALUE 'SUPPCD00'.
+      *
+       01  WB-REQ-TAB-AREA.
+           02 WB-REQ-TAB-CMD          PIC X(5) VALUE 'REDKY'.
+           02 FILLER                  PIC X(3) VALUE 'TAB'.
+           02 FILLER                  PIC X(5) VALUE 'TAB00'.
+           02 WB-REQ-TAB-RC           PIC X(2) VALUE SPACES.
+           02 FILLER                  PIC X(1).
+           02 FILLER                  PIC S9(4) COMP VALUE +150.
+           02 FILLER                  PIC X(58).
+           02 WB-REQ-TAB-KEY-VALUE.
+              03 WB-REQ-TAB-KEY-COD   PIC X(03).
+              03 WB-REQ-TAB-KEY-OFI   PIC X(12).
+      *
+      *    Registro Generico de Tablas
+      *    ---------------------------
+      *
+      *    Nombre Registro : TAB
+      *    Clave(s)        : TAB-COD-TABL(UU), TAB-STP-ITRN(UU),
+      *                      TAB-CIC-TABL(UU), TAB-EXT-TABL(DC)
+      *    Largo           : 194
+      *    Bloqueo         : 2
+      *    Observaciones   :
+      *
+       01  TAB.
+      *
+      *    Filler Compatibilidad VSAM/MVS
+           03  TAB-GLS-FLAG                             PIC X(01).
+      *
+      *    Clave Primaria Registro
+           03  TAB-KEY-IREG.
+      *
+      *KEY     Tipo + Codigo ( LLave Primaria )
+               05  TAB-COD-TABL.
+      *
+      *            Codigo Tipo Tabla
+                   07  TAB-COD-TTAB                     PIC X(03).
+      *
+      *            Codigo Tabla
+                   07  TAB-COD-CTAB                     PIC X(12).
+      *
+      *        Time Stamp Transaccion
+               05  TAB-STP-ITRN.
+      *
+      *            Fecha Transaccion
+                   07  TAB-FEC-FTRN.
+                       09  TAB-NUM-STRN                 PIC 9(02).
+                       09  TAB-NUM-ATRN                 PIC 9(02).
+                       09  TAB-NUM-MTRN                 PIC 9(02).
+                       09  TAB-NUM-DTRN                 PIC 9(02).
+      *
+      *            Hora Transaccion
+                   07  TAB-HRA-HRTR.
+                       09  TAB-NUM-HHTR                 PIC 9(02).
+                       09  TAB-NUM-MMTR                 PIC 9(02).
+                       09  TAB-NUM-SSTR                 PIC 9(02).
+      *
+      *    Indicador Tipo Accion
+           03  TAB-MSC-TACC                             PIC X(01).
+      *
+      *    Indicador Status
+           03  TAB-MSC-STAT                             PIC X(01).
+      *
+      *    Indicador Vigencia                           GNS VIGE
+           03  TAB-IND-VIGE  REDEFINES  TAB-MSC-STAT    PIC X(01).
+      *
+      *    Codigo Origen Transaccion
+           03  TAB-COD-OTRN.
+      *
+      *        Indicador Tipo Origen
+               05  TAB-MSC-TTRN                         PIC X(01).
+      *
+      *        Codigo Tipo Origen
+               05  TAB-COD-TTRN                         PIC X(03).
+      *
+      *    Autor Transaccion
+           03  TAB-COD-ATRN                             PIC X(12).
+      *
+      *KEY Tipo + Codigo ( Interno Computacional )
+           03  TAB-CIC-TABL.
+      *
+      *        Codigo Tipo Tabla
+               05  TAB-CIC-TTAB                         PIC X(03).
+      *
+      *        Codigo Tabla
+               05  TAB-CIC-CTAB                         PIC X(12).
+      *
+      *    Codigo Externo
+           03  TAB-EXT-TABL.
+      *
+      *        Codigo Tipo Tabla
+               05  TAB-EXT-TTAB                         PIC X(03).
+      *
+      *        Codigo Tabla
+               05  TAB-EXT-CTAB                         PIC X(05).
+      *
+      *    Descripcion Corta
+           03  TAB-GLS-DCOR                             PIC X(12).
+      *
+      *    Abreviacion Descripcion
+           03  TAB-GLS-ABRV                             PIC X(05).
+      *
+      *    Descripcion del Codigo
+           03  TAB-GLS-DESC                             PIC X(40).
+      *
+      *    Datos Anexos
+           03  TAB-GLS-DATA.
+               05  TAB-GLS-DAT1.
+                   07  TAB-COD-DAT1     OCCURS 10       PIC X(01).
+               05  TAB-GLS-DAT2.
+                   07  TAB-COD-DAT2     OCCURS 10       PIC X(02).
+               05  TAB-GLS-DAT3.
+                   07  TAB-COD-DAT3     OCCURS 10       PIC X(03).
+      *
+      *    Clave Soundex
+           03  TAB-SNX-TABL.
+               05  TAB-SNX-TTAB                         PIC X(03).
+               05  TAB-SNX-CTAB                         PIC X(03).
+      *
+      *    Variables de Tablas
+       01  TAB-VARI.
+      *
+      *    Codigo Sistema
+           03  TAB-COD-SIST                             PIC X(03).
+      *
+       01  WB-ELEM-LIS                PIC X(11) VALUE 'TAB00'.
+      *
+           EJECT
+       PROCEDURE DIVISION.
+      *===================
+           EJECT
+       A-CONTROL SECTION.
+      *=================
+       AA-INICIALIZACION.
+           ENTRY 'DBMSCBL'.
+           PERFORM B-INICIALIZAR.
+           SKIP1
+       AB-PROCESAMIENTO.
+           IF WS-PROCESO-OK
+              PERFORM C-PROCESAR
+           END-IF.
+           SKIP1
+       AC-TERMINACION.
+           PERFORM D-TERMINAR.
+           SKIP1
+       AZ-FIN-DE-PROCESO.
+           GOBACK.
+           EJECT
+       B-INICIALIZAR SECTION.
+      *======================
+       A-INICIO.
+      *---------
+           PERFORM BA-ABRIR-ARCHIVOS.
+           PERFORM CD-PONE-FECHA-PROCESO.
+           PERFORM XX-CARGA-TABLA-CTAS.
+           GO TO BZ-FIN-DE-SECCION.
+           SKIP1
+       BA-ABRIR-ARCHIVOS.
+      *------------------
+           OPEN INPUT  SUPVD00 SUPVCTB SUPVREC
+                OUTPUT SUPLIS1.
+           IF (WR-FS-SUPVCTB NOT = 0 AND NOT = 97)
+               MOVE 'B-INICIALIZAR'         TO WR-SECCION
+               MOVE 'BA-ABRIR-ARCHIVOS'     TO WR-PARRAFO
+               MOVE 'SUPVCTB    '           TO WR-ARCHIVO
+               MOVE 'OPEN       '           TO WR-OPERACI
+               MOVE WR-FS-SUPVCTB           TO WR-FILE-ST
+               PERFORM BG-DISPLAY-ERROR
+           END-IF.
+           IF (WR-FS-SUPVREC NOT = 0 AND NOT = 97)
+               MOVE 'B-INICIALIZAR'         TO WR-SECCION
+               MOVE 'BA-ABRIR-ARCHIVOS'     TO WR-PARRAFO
+               MOVE 'SUPVREC    '           TO WR-ARCHIVO
+               MOVE 'OPEN       '           TO WR-OPERACI
+               MOVE WR-FS-SUPVREC           TO WR-FILE-ST
+               PERFORM BG-DISPLAY-ERROR
+           END-IF.
+           IF (WR-FS-SUPVD00 NOT = 0 AND NOT = 97)
+               MOVE 'B-INICIALIZAR'         TO WR-SECCION
+               MOVE 'BA-ABRIR-ARCHIVOS'     TO WR-PARRAFO
+               MOVE 'SUPVD00    '           TO WR-ARCHIVO
+               MOVE 'OPEN       '           TO WR-OPERACI
+               MOVE WR-FS-SUPVD00           TO WR-FILE-ST
+               PERFORM BG-DISPLAY-ERROR
+           END-IF.
+           SKIP1
+       CD-PONE-FECHA-PROCESO.
+      *----------------------
+           ACCEPT W-PARAMETROS
+           MOVE WP-DIA                      TO WR-LA04-DIA
+           MOVE WP-MES                      TO WR-LA04-MES
+           MOVE WP-ANO                      TO WR-LA04-ANO
+           ACCEPT WR-FECHA-HOY FROM DATE.
+           MOVE WR-HOY-DD                   TO WR-LA02-DIA
+           MOVE WR-HOY-MM                   TO WR-LA02-MES
+           MOVE WR-HOY-AA                   TO WR-LA02-ANO.
+           SKIP1
+       XX-CARGA-TABLA-CTAS.
+      *--------------------
+           SET WI-IND                       TO 1
+           PERFORM XX-LEER-SUPVREC
+           PERFORM UNTIL (WR-FS-SUPVREC NOT = 0 OR WS-PROCESO-ERROR)
+               MOVE REC-CTA-COL             TO WT-CTA-COL(WI-IND)
+               MOVE REC-CTA-INT             TO WT-CTA-INT(WI-IND)
+               MOVE REC-CTA-RJT             TO WT-CTA-RJT(WI-IND)
+               SET WI-IND                   UP BY 1
+               PERFORM XX-LEER-SUPVREC
+           END-PERFORM.
+           SKIP1
+       XX-LEER-SUPVREC.
+      *----------------
+           READ SUPVREC NEXT END-READ
+           IF (WR-FS-SUPVD00 = 0)
+               ADD 1                        TO WA-L-REC
+           ELSE
+           IF (WR-FS-SUPVD00 NOT = 10)
+               MOVE 'B-INICIALIZAR'         TO WR-SECCION
+               MOVE 'XX-LEER-SUPVREC'       TO WR-PARRAFO
+               MOVE 'SUPVREC    '           TO WR-ARCHIVO
+               MOVE 'READ       '           TO WR-OPERACI
+               MOVE WR-FS-SUPVREC           TO WR-FILE-ST
+               PERFORM BG-DISPLAY-ERROR
+           END-IF.
+           SKIP1
+       BG-DISPLAY-ERROR.
+      *-----------------
+           SET WS-PROCESO-ERROR             TO TRUE
+           DISPLAY ' '
+           DISPLAY 'Error en seccion    : ' WR-SECCION
+           DISPLAY '   Parrafo          : ' WR-PARRAFO
+           DISPLAY '   Archivo          : ' WR-ARCHIVO
+           DISPLAY '   Operacion        : ' WR-OPERACI
+           DISPLAY '   File status      : ' WR-FILE-ST
+           DISPLAY '   Mensaje de error : ' WR-MENSAJE.
+           SKIP1
+       BZ-FIN-DE-SECCION.
+      *------------------
+           EXIT.
+           EJECT
+       C-PROCESAR SECTION.
+      *===================
+       CA-PROCESO-GRAL.
+      *----------------
+           PERFORM CD-LEER-SUPVD00.
+           PERFORM CG-COMPARA-SALDOS
+              UNTIL (WR-FS-SUPVD00 NOT =  0 OR WS-PROCESO-ERROR)
+           GO CZ-FIN-DE-SECCION.
+           SKIP1
+       CG-COMPARA-SALDOS.
+      *------------------
+           IF (D00-COD-OFIC NOT = WR-LA44-COD-OFI)
+               MOVE 'OFI'                   TO WB-REQ-TAB-KEY-COD
+               MOVE D00-COD-OFIC            TO WB-REQ-TAB-KEY-OFI
+               MOVE D00-COD-OFIC            TO WR-LA44-COD-OFI
+               PERFORM XX-LEER-TAB
+               MOVE TAB-GLS-DESC            TO WR-LA44-GLS-OFI
+               MOVE 88                      TO WA-LINEA
+           END-IF.
+
+           MOVE D00-COD-CCTB                TO CTB-CTA-CTB
+           MOVE D00-VAL-SCON                TO WR-VAL-D00
+
+           SET WI-IND                       TO 1
+           SEARCH WT-REL-CTAS
+             AT END
+                   PERFORM CL-COMPARA-TOTALES
+                   MOVE D00-VAL-IPCO        TO WR-VAL-D00
+                   MOVE '999999999'         TO CTB-CTA-CTB
+                   PERFORM CL-COMPARA-TOTALES
+                   MOVE D00-VAL-RDEV        TO WR-VAL-D00
+                   MOVE '999999999'         TO CTB-CTA-CTB
+                   PERFORM CL-COMPARA-TOTALES
+             WHEN (WT-CTA-COL(WI-IND) = D00-COD-CCTB)
+                   PERFORM CL-COMPARA-TOTALES
+                   MOVE D00-VAL-IPCO        TO WR-VAL-D00
+                   MOVE WT-CTA-INT(WI-IND)  TO CTB-CTA-CTB
+                   PERFORM CL-COMPARA-TOTALES
+                   MOVE D00-VAL-RDEV        TO WR-VAL-D00
+                   MOVE WT-CTA-RJT(WI-IND)  TO CTB-CTA-CTB
+                   PERFORM CL-COMPARA-TOTALES
+           END-SEARCH.
+           PERFORM CD-LEER-SUPVD00.
+           SKIP1
+       CL-COMPARA-TOTALES.
+      *-------------------
+           IF (CTB-CTA-CTB NOT = ZEROES)
+               MOVE '0'                     TO CTB-VAL-ZER
+               MOVE D00-COD-OFIC            TO CTB-COD-OFI
+               PERFORM CL-LEER-SUPVCTB
+
+               MOVE CTB-CTA-CTB             TO WR-LA08-COD-CTA
+               MOVE CTB-GLS-CTA             TO WR-LA08-GLS-CTA
+               MOVE CTB-SLD-CTA             TO WR-LA08-TOT-CON
+               MOVE WR-VAL-D00              TO WR-LA08-TOT-CAL
+               SUBTRACT CTB-SLD-CTA       FROM WR-VAL-D00
+                                        GIVING WR-TOT-DIF
+               MOVE WR-TOT-DIF              TO WR-LA08-TOT-DIF
+
+               IF (WA-LINEA > 60)
+                   ADD 1                    TO WA-PAGINA
+                   MOVE WA-PAGINA           TO WR-LA01-PAGINA
+                   WRITE SUPRLIS FROM WR-LINEA01 AFTER PAGE
+                   WRITE SUPRLIS FROM WR-LINEA02 AFTER 1
+                   WRITE SUPRLIS FROM WR-LINEA03 AFTER 3
+                   WRITE SUPRLIS FROM WR-LINEA04 AFTER 1
+                   WRITE SUPRLIS FROM WR-LINEA44 AFTER 1
+                   WRITE SUPRLIS FROM WR-LINEA05 AFTER 1
+                   WRITE SUPRLIS FROM WR-LINEA06 AFTER 1
+                   WRITE SUPRLIS FROM WR-LINEA07 AFTER 1
+                   WRITE SUPRLIS FROM WR-LINEA05 AFTER 1
+                   MOVE 10                  TO WA-LINEA
+               END-IF
+               WRITE SUPRLIS FROM WR-LINEA08 AFTER 1
+               ADD 1                        TO WA-LINEA
+           END-IF.
+           SKIP1
+       CD-LEER-SUPVD00.
+      *----------------
+           READ SUPVD00 NEXT END-READ
+           IF (WR-FS-SUPVD00 = 0)
+               ADD 1                        TO WA-L-D00
+           ELSE
+           IF (WR-FS-SUPVD00 NOT = 10)
+               MOVE 'C-PROCESAR'            TO WR-SECCION
+               MOVE 'CD-LEER-SUPVD00'       TO WR-PARRAFO
+               MOVE 'SUPVD00    '           TO WR-ARCHIVO
+               MOVE 'READ       '           TO WR-OPERACI
+               MOVE WR-FS-SUPVD00           TO WR-FILE-ST
+               PERFORM BG-DISPLAY-ERROR
+           END-IF.
+           SKIP1
+       CL-LEER-SUPVCTB.
+      *----------------
+           READ SUPVCTB END-READ
+           IF (WR-FS-SUPVCTB NOT = 0)
+               MOVE 'SIN DESCRIPCION'       TO CTB-GLS-CTA
+               MOVE 0                       TO CTB-SLD-CTA
+           ELSE
+           IF (CTB-SLD-SIG NOT > SPACES)
+               MOVE '+'                     TO CTB-SLD-SIG
+           END-IF
+           END-IF.
+
+           IF (WR-FS-SUPVCTB = 0)
+               ADD 1                        TO WA-L-CTB
+           ELSE
+           IF (WR-FS-SUPVCTB NOT = 23)
+               MOVE 'C-PROCESAR'            TO WR-SECCION
+               MOVE 'CL-LEER-SUPVCTB'       TO WR-PARRAFO
+               MOVE 'SUPVCTB    '           TO WR-ARCHIVO
+               MOVE 'READ       '           TO WR-OPERACI
+               MOVE WR-FS-SUPVCTB           TO WR-FILE-ST
+               PERFORM BG-DISPLAY-ERROR
+           END-IF.
+           SKIP1
+       XX-LEER-TAB.
+      *------------
+           MOVE SPACES                   TO WB-REQ-TAB-RC
+           CALL 'DBNTRY' USING WB-UIB WB-REQ-TAB-AREA TAB WB-ELEM-LIS
+           IF (WB-REQ-TAB-RC = '  ')
+               NEXT SENTENCE
+           ELSE
+           IF (WB-REQ-TAB-RC = '14')
+               MOVE 'SIN DESCRIPCION'    TO TAB-GLS-DESC
+           ELSE
+               MOVE 'C-PROCESAR'         TO WR-SECCION
+               MOVE 'XX-LEER-TAB'        TO WR-PARRAFO
+               MOVE 'TAB'                TO WR-ARCHIVO
+               MOVE WB-REQ-TAB-CMD       TO WR-OPERACI
+               MOVE WB-REQ-TAB-RC        TO WR-FILE-ST
+               MOVE WB-REQ-TAB-KEY-VALUE TO WR-MENSAJE
+               PERFORM BG-DISPLAY-ERROR
+           END-IF.
+           SKIP1
+       CZ-FIN-DE-SECCION.
+      *------------------
+           EXIT.
+           EJECT
+       D-TERMINAR SECTION.
+      *===================
+       DB-ESTADISTICAS.
+      *----------------
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY 'INFORMES'
+           DISPLAY '--------'
+           DISPLAY ' '
+           DISPLAY 'EMITIDO EN FORMA LOCAL'
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY 'ESTADISTICAS DE PROCESO PROGRAMA SUPPCD00 FECHA '
+                    WR-FECHA-HOY
+           DISPLAY '-----------------------------------------------'
+           DISPLAY '  Cuadratura archivo D00 v/s Contabilidad'
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY 'Reg. leidos de D00                  : ' WA-L-D00
+           DISPLAY 'Reg. leidos de relacion ctas        : ' WA-L-REC
+           DISPLAY 'Reg. leidos de contabilidad         : ' WA-L-CTB
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY 'TARJETAS DE PARAMETROS'
+           DISPLAY '----------------------'
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY  W-PARAMETROS.
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY 'MENSAJES PARA EL EXPLOTADOR'
+           DISPLAY '---------------------------'
+           DISPLAY ' '
+           IF WS-PROCESO-OK
+               DISPLAY 'NO HAY MENSAJES PARA EL EXPLOTADOR'
+           ELSE
+               DISPLAY 'HAY MENSAJES PARA EL EXPLOTADOR'
+           END-IF.
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY ' '.
+           SKIP1
+       DC-TERMINO.
+      *-----------
+           CLOSE SUPVCTB SUPVD00 SUPVREC SUPLIS1.
+           IF WS-PROCESO-ERROR
+              MOVE 100                      TO RETURN-CODE
+              DISPLAY ' '
+              DISPLAY ' '
+              DISPLAY '**********************************************'
+              DISPLAY '**********************************************'
+              DISPLAY '********                              ********'
+              DISPLAY '******** TERMINO ERRONEO DEL PROCESO  ********'
+              DISPLAY '********                              ********'
+              DISPLAY '**********************************************'
+              DISPLAY '**********************************************'
+           ELSE
+              DISPLAY ' '
+              DISPLAY ' '
+              DISPLAY '*****PROCESO TERMINO EN FORMA NORMAL*****'
+           END-IF.
+           SKIP1
+       DZ-FIN-DE-SECCION.
+      *------------------
+           EXIT.

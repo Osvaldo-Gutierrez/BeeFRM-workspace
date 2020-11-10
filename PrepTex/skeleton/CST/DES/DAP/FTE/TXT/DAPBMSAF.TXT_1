@@ -1,0 +1,205 @@
+*% IF FIN_PUT_OPD_SAF
+      *<<<< FIN_PUT_OPD_SAF
+           PERFORM BUS-VPES.
+
+      *VAL-COD Valida codigo de tabla
+           MOVE 'TAB' TO TAB-COD-SIST.
+           MOVE 'AUX' TO TAB-COD-TTAB IN TAB.
+           MOVE OPD-COD-COPD IN OPD TO TAB-COD-CTAB IN TAB.
+           PERFORM BUS-TAB.
+           MOVE TAB-GLS-DESC IN TAB TO FRM-GLS-AOPD IN SAF-FLD.
+       
+      *>>>>
+*% END
+*% IF INI_FST_FLD_SAF
+      *<<<< INI_FST_FLD_SAF
+           MOVE -1 TO FRM-VAL-IPES-LEN IN SAF-FLD.
+           GO TO FIN-FST-FLD-SAF.
+*% END
+*% IF INI_VAL_FLD_SAF
+      *<<<< INI_VAL_FLD_SAF
+      *    acceso a opd
+           PERFORM KEY-ALL-SAF.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM DAP-FIO-OPD.
+
+           MOVE 'TAB' TO TAB-COD-SIST.
+           MOVE 'VLR' TO TAB-COD-TTAB IN TAB.
+           MOVE OPD-COD-VCAM IN OPD TO TAB-COD-CTAB IN TAB.
+           PERFORM BUS-TAB.
+           MOVE TAB-CIC-CTAB IN TAB TO WSS-CIC-VCAM.
+       
+      *>>>>
+*% END
+*% IF OPD_VAL_CAJA
+      *<<<< OPD_VAL_CAJA
+           MOVE SPACES TO MSG-COD-MENS.
+
+       OPD-VAL-CAJA-MEXT.
+      *    moneda extranjera
+           IF WSS-CIC-TVAL = '0'
+               GO TO OPD-VAL-CAJA-MNAC.
+
+           IF FRM-VAL-PPES IN SAF-FLD NOT = ZEROES
+      *        moneda extranjera => valor en pesos debe ser cero 
+               MOVE 'PPES=ZERO' TO MSG-COD-MENS
+               GO TO ERR-VAL-CAPT.
+
+           IF FRM-VAL-PCAJ IN SAF-FLD = ZEROES
+      *        moneda extranjera =>
+      *        valor inic moneda origen debe ser <> cero 
+               MOVE 'PCAP<>ZERO' TO MSG-COD-MENS
+               GO TO ERR-VAL-CAPT.
+
+           GO TO FRM-VAL-NCAJ-RNGO.
+
+       OPD-VAL-CAJA-MNAC.
+      *    moneda chilena
+           IF FRM-VAL-PPES IN SAF-FLD NOT > ZEROES AND
+              FRM-VAL-PCAJ IN SAF-FLD NOT > ZEROES
+      *        valor inicial pesos y valor inicial moneda original
+      *        no pueden ser cero ambos
+               MOVE 'PPESPCAP  NZ' TO MSG-COD-MENS
+               GO TO ERR-VAL-CAPT.
+
+      *    si dap en moneda chilena reajustable, entonces convertir a pesos
+
+           MOVE 1 TO WSS-SGV-VCAM IN WSS-VARI.
+           IF NOT ( WSS-CIC-TVAL = '0' AND 
+                    WSS-CIC-VCAM NOT = '0999' )
+               GO TO VRF-MON-NAC.
+      *    OBTIENE VALOR VALOR DE CAMBIO PARA MONEDA REAJUSTABLE
+      *    CHILENA Y NO PESOS
+
+           MOVE '0999  '     TO TAB-CIC-CTAB IN TAB.
+           MOVE OPD-COD-VCAM IN OPD TO TAB-COD-CTAB IN TAB.
+           MOVE OPD-NUM-DREA IN OPD TO TAB-NUM-DTRN IN TAB.
+           MOVE OPD-NUM-MREA IN OPD TO TAB-NUM-MTRN IN TAB.
+           MOVE OPD-NUM-SREA IN OPD TO TAB-NUM-STRN IN TAB.
+           MOVE OPD-NUM-AREA IN OPD TO TAB-NUM-ATRN IN TAB.
+           PERFORM GET-VCAM.
+           IF MSG-COD-MENS = SPACES
+               MOVE CAM-SGV-VCAM IN CAM TO WSS-SGV-VCAM IN WSS-VARI
+           ELSE
+               GO TO ERR-VAL-CAPT.
+
+       VRF-MON-NAC.
+
+           MULTIPLY FRM-VAL-PCAJ IN SAF-FLD BY 
+               WSS-SGV-VCAM IN WSS-VARI GIVING 
+               WSS-VAL-IPES IN WSS-VARI.
+
+           DIVIDE FRM-VAL-PPES IN SAF-FLD BY 
+               WSS-SGV-VCAM IN WSS-VARI GIVING 
+               WSS-VAL-CAPT IN WSS-VARI.
+
+           IF FRM-VAL-PCAJ IN SAF-FLD NOT > ZEROES
+               MOVE WSS-VAL-CAPT IN WSS-VARI TO FRM-VAL-PCAJ IN SAF-FLD.
+ 
+           IF WSS-VAL-CAPT IN WSS-VARI NOT > ZEROES
+               MOVE FRM-VAL-PCAJ IN SAF-FLD TO WSS-VAL-CAPT IN WSS-VARI.
+ 
+           IF FRM-VAL-PPES IN SAF-FLD NOT > ZEROES
+               MOVE WSS-VAL-IPES IN WSS-VARI TO FRM-VAL-PPES IN SAF-FLD.
+
+           IF WSS-VAL-IPES IN WSS-VARI NOT > ZEROES
+               MOVE FRM-VAL-PPES IN SAF-FLD TO WSS-VAL-IPES IN WSS-VARI.
+
+      *    aproximaciones de cantidades en pesos
+           MOVE WSS-VAL-IPES IN WSS-VARI TO PES-SGV-DECI.
+           PERFORM PES-SCTV.
+           MOVE PES-SGV-ENTE TO WSS-VAL-IPES IN WSS-VARI.
+
+           MOVE FRM-VAL-PPES IN SAF-FLD TO PES-SGV-DECI.
+           PERFORM PES-SCTV.
+           MOVE PES-SGV-ENTE TO FRM-VAL-PPES IN SAF-FLD.
+
+           IF WSS-VAL-IPES IN WSS-VARI NOT = FRM-VAL-PPES IN SAF-FLD OR
+              WSS-VAL-CAPT IN WSS-VARI NOT = FRM-VAL-PCAJ IN SAF-FLD
+      *        valor captacion inconsistente
+               MOVE 'VALPAGO  INC' TO MSG-COD-MENS
+               GO TO ERR-VAL-CAPT.
+
+       FRM-VAL-NCAJ-RNGO.
+
+           GO TO FIN-VAL-OPD-VAL-CAJA.
+
+       ERR-VAL-CAPT.
+           IF WSS-CIC-TVAL = '0'
+               MOVE -1 TO FRM-VAL-PPES-LEN IN SAF-FLD.
+           MOVE FRM-SUAR-MAL TO FRM-SUAR.
+           MOVE 'DAP' TO MSG-COD-SIST.
+           PERFORM GET-MSG.
+           MOVE MSG-GLS-DESC TO FRM-MENS.
+      *>>>> OPD_VAL_CAJA
+*% END
+*% IF VAL_CON_FLD_SAF
+      *<<<< VAL_CON_FLD_SAF
+           IF SCR-CMND = 'PAG'
+              IF FRM-VAL-PCAJ IN SAF-FLD > OPD-VAL-CAJA IN SAF-FLD
+      *        NO PUEDE PAGAR MAS DEL MONTO INFORMADO AL EJECUTIVO
+               MOVE 'DAP' TO MSG-COD-SIST
+               MOVE 'PCAP>CAPTPAG' TO MSG-COD-MENS
+               PERFORM GET-MSG
+               MOVE MSG-GLS-DESC TO FRM-MENS
+               MOVE FRM-SUAR-MAL TO FRM-SUAR
+               GO TO FIN-VAL-CON-FLD-SAF.
+
+           SUBTRACT FRM-VAL-PPES IN SAF-FLD FROM
+                    FRM-VAL-IPES IN SAF-FLD GIVING
+                      FRM-VAL-NPES IN SAF-FLD.
+
+           SUBTRACT FRM-VAL-PCAJ IN SAF-FLD FROM
+                    OPD-VAL-CAJA IN SAF-FLD GIVING
+                      FRM-VAL-NCAJ IN SAF-FLD.
+      *>>>> VAL_CON_FLD_SAF
+*% END
+*% IF EOF 
+      *<<<< EOF 
+       BUS-VPES SECTION.
+       INI-BUS-VPES.
+
+      *SE ACCESA DE NUEVO LA BDD, PUES ES NECESARIO OBTENER
+      *EL CIC DE OPD-COD-VCAM
+      *BUS-TAB busca glosa de codigo en tabla
+           IF OPD-COD-VCAM IN SAF-FLD NOT > SPACES
+               GO TO FIN-BUS-VPES.
+
+           MOVE 'TAB' TO TAB-COD-SIST.
+           MOVE 'VLR' TO TAB-COD-TTAB IN TAB.
+           MOVE OPD-COD-VCAM IN OPD TO TAB-COD-CTAB IN TAB.
+           PERFORM BUS-TAB.
+           MOVE TAB-CIC-CTAB IN TAB TO WSS-CIC-VCAM.
+
+      *    moneda extranjera
+           IF WSS-CIC-TVAL NOT = '0'
+                GO TO FIN-BUS-VPES.
+      *    moneda chilena y pesos
+           IF WSS-CIC-VCAM = '0999'
+                MOVE FRM-VAL-PCAJ IN SAF-FLD TO FRM-VAL-PPES IN SAF-FLD
+                GO TO FIN-BUS-VPES.
+
+      *    moneda reajustable, chilena y no pesos ; convertir a pesos
+           MOVE '0999  '     TO TAB-CIC-CTAB IN TAB.
+           MOVE OPD-COD-VCAM IN OPD TO TAB-COD-CTAB IN TAB.
+           MOVE OPD-NUM-DREA IN OPD TO TAB-NUM-DTRN IN TAB.
+           MOVE OPD-NUM-MREA IN OPD TO TAB-NUM-MTRN IN TAB.
+           MOVE OPD-NUM-SREA IN OPD TO TAB-NUM-STRN IN TAB.
+           MOVE OPD-NUM-AREA IN OPD TO TAB-NUM-ATRN IN TAB.
+           PERFORM GET-VCAM.
+           IF MSG-COD-MENS = SPACES
+               MOVE CAM-SGV-VCAM IN CAM TO WSS-SGV-VCAM IN WSS-VARI
+           ELSE
+               MOVE ZEROES TO WSS-SGV-VCAM IN WSS-VARI.
+
+           MULTIPLY FRM-VAL-PCAJ IN SAF-FLD BY 
+               WSS-SGV-VCAM IN WSS-VARI GIVING 
+               WSS-VAL-IPES IN WSS-VARI.
+
+           MOVE WSS-VAL-IPES IN WSS-VARI TO PES-SGV-DECI.
+           PERFORM PES-SCTV.
+           MOVE PES-SGV-ENTE TO FRM-VAL-PPES IN SAF-FLD.
+       FIN-BUS-VPES.
+           EXIT.
+      *>>>>
+*% END

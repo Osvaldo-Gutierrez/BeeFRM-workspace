@@ -1,0 +1,442 @@
+       IDENTIFICATION DIVISION.
+      *=======================
+       PROGRAM-ID.      {sis}PS{reg}.
+       AUTHOR.          CONSIST.
+       DATE-WRITTEN.    {fec}.
+
+      * Subrutina SERVER de I/O para archivo indexado {sis}{reg}.
+
+       ENVIRONMENT DIVISION.
+      *====================
+       INPUT-OUTPUT SECTION.
+       FILE-CONTROL.
+           SELECT  GNSINP ASSIGN TO $RECEIVE
+                   STATUS            IS WSS-STAT.
+           SELECT  GNSOUT ASSIGN TO $RECEIVE.
+           SELECT  {sis}{reg} ASSIGN TO        {sis}{reg}
+                ORGANIZATION         IS INDEXED
+                ACCESS               IS DYNAMIC
+                RECORD KEY           IS {ky0} IN {sis}{reg}
+*% FOR I = 1 TO {nka}
+                ALTERNATE RECORD KEY IS {ky{i}} IN {sis}{reg}
+*% IF BDU{i}
+                WITH DUPLICATES
+*% END
+*% NEXT I
+                STATUS               IS FIO-STAT.
+
+       DATA DIVISION.
+      *=============
+       FILE SECTION.
+
+       FD  GNSINP
+           LABEL RECORDS ARE OMITTED.
+       01  FIO-INPU                             PIC X(1689).
+
+       FD  GNSOUT
+           LABEL RECORDS ARE OMITTED.
+       01  FIO-OUTP                             PIC X(1689).
+
+       FD  {sis}{reg}
+           LABEL RECORDS STANDARD
+           RECORD CONTAINS {rsz}
+       .
+       COPY {sis}BR{reg}.
+
+       WORKING-STORAGE SECTION.
+      *-----------------------
+       01  WSS-STAT.
+           03 WSS-STT1                          PIC 9(01).
+              88 WSS-STAT-CLO VALUE 1.
+           03 WSS-STT2                          PIC 9(01).
+       01  WSS-RKEY                             PIC X({kl0}).
+       01  WSS-AKEY                             PIC X(32).
+       01  WSS-VKEY                             PIC X(100).
+       COPY GNSWVFIO.
+       COPY GNSWCFIO.
+       COPY GNSWGTSF.
+
+       PROCEDURE DIVISION.
+      *===================
+
+       COPY GNSBEFIO
+           REPLACING
+                FIO-VOID BY =="{sis}{reg}"==
+           .
+
+       MAIN SECTION.
+       INI-MAIN.
+           OPEN INPUT  GNSINP.
+           OPEN OUTPUT GNSOUT.
+           PERFORM PROC UNTIL WSS-STAT-CLO.
+       FIN-MAIN.
+           STOP RUN.
+
+       PROC SECTION.
+       INI-PROC.
+           MOVE SPACES TO FIO-INPU.
+           READ GNSINP, AT END STOP RUN.
+           MOVE FIO-INPU TO FIO-VARI.
+           IF FIO-AKEY > SPACES
+               MOVE FIO-AKEY TO WSS-AKEY
+           ELSE
+               MOVE SPACES   TO WSS-AKEY.
+           MOVE SPACES TO FIO-AKEY.
+           GO TO INI-GET-KEY     INI-GET-NXT     INI-GET-FST
+                 INI-GET-NLS     INI-GET-GRT     INI-PUT-FIL
+                 INI-MOD-FIL     INI-DEL-FIL     INI-CHG-FIL
+                 INI-INP-FIL     INI-OUT-FIL     INI-UPD-FIL
+                 INI-CLO-FIL     INI-FND-EQL     INI-FND-FST
+                 INI-FND-NLS     INI-FND-GRT     INI-ULK-REC
+                 INI-ULK-ALL     ERR-PROC        NUL-PROC
+                 ERR-PROC        ERR-PROC        ERR-PROC
+                 ERR-PROC
+
+                 INI-GET-KEY     INI-GET-FST     INI-GET-NLS
+                 INI-GET-GRT     INI-FND-EQL     INI-FND-FST
+                 INI-FND-NLS     INI-FND-GRT
+
+                 INI-GET-NXT     INI-GET-KEY-UPD INI-GET-KEY-UPD
+                 NUL-PROC        INI-BCK-OUT     INI-GET-LEQ
+                 INI-GET-PRV     INI-CHK-PNT     NUL-PROC
+                 NUL-PROC        INI-ALL-LCK
+
+           DEPENDING ON FIO-CMND.
+
+       ERR-PROC.
+           DISPLAY "? CODIGO "
+                FIO-CMND
+                .
+           DISPLAY "  INVALIDO EN {sis}PS{reg} PARA ARCHIVO "
+                "{sis}{reg}"
+                " : ABORTO"
+                .
+           STOP RUN.
+      *
+       GET-KEY.
+       INI-GET-KEY.
+           MOVE FIO-DFLD TO {reg}.
+           IF WSS-AKEY = "{ky0}" OR
+              WSS-AKEY NOT > SPACES
+               READ {sis}{reg} INTO FIO-DFLD
+               IF FIO-STAT-OKS
+                   MOVE {ky0} TO WSS-RKEY
+               ELSE
+                   NEXT SENTENCE
+           ELSE
+*% FOR I = 1 TO {nka}
+           IF WSS-AKEY = "{ky{i}}"
+               READ {sis}{reg} INTO FIO-DFLD KEY {ky{i}} IN {sis}{reg}
+           ELSE
+*% NEXT I
+               PERFORM ERR-ALT.
+       FIN-GET-KEY.
+           GO TO FIN-PROC.
+      *
+       GET-NXT.
+       INI-GET-NXT.
+           READ {sis}{reg} NEXT INTO FIO-DFLD.
+           IF FIO-STAT-OKS
+               MOVE {ky0} TO WSS-RKEY.
+       FIN-GET-NXT.
+           GO TO FIN-PROC.
+      *
+       GET-FST.
+       INI-GET-FST.
+           PERFORM INI-FND-FST.
+           IF FIO-STAT-OKS
+               GO TO INI-GET-NXT.
+       FIN-GET-FST.
+           GO TO FIN-PROC.
+      *
+       GET-NLS.
+       INI-GET-NLS.
+           PERFORM INI-FND-NLS.
+           IF FIO-STAT-OKS
+               GO TO INI-GET-NXT.
+       FIN-GET-NLS.
+           GO TO FIN-PROC.
+      *
+       GET-GRT.
+       INI-GET-GRT.
+           PERFORM INI-FND-GRT.
+           IF FIO-STAT-OKS
+               GO TO INI-GET-NXT.
+       FIN-GET-GRT.
+           GO TO FIN-PROC.
+      *
+       PUT-FIL.
+       INI-PUT-FIL.
+           WRITE {reg} FROM FIO-DFLD.
+       FIN-PUT-FIL.
+           GO TO FIN-PROC.
+      *
+       MOD-FIL.
+       INI-MOD-FIL.
+           REWRITE {reg} FROM FIO-DFLD WITH UNLOCK.
+       FIN-MOD-FIL.
+           GO TO FIN-PROC.
+      *
+       DEL-FIL.
+       INI-DEL-FIL.
+           MOVE FIO-DFLD TO {reg}.
+           DELETE {sis}{reg}.
+       FIN-DEL-FIL.
+           GO TO FIN-PROC.
+      *
+       CHG-FIL.
+       INI-CHG-FIL.
+           WRITE {reg} FROM FIO-DFLD.
+           IF NOT FIO-STAT-OKS
+                GO TO FIN-CHG-FIL.
+           MOVE WSS-RKEY TO {ky0}.
+           DELETE {sis}{reg}.
+       FIN-CHG-FIL.
+           GO TO FIN-PROC.
+      *
+       INP-FIL.
+       INI-INP-FIL.
+           IF FIO-ACCS = FIO-ACCS-UPD
+               OPEN INPUT {sis}{reg} SHARED
+           ELSE
+           IF FIO-ACCS = FIO-ACCS-INP
+               OPEN INPUT {sis}{reg} PROTECTED
+           ELSE
+           IF FIO-ACCS = FIO-ACCS-NOT
+               OPEN INPUT {sis}{reg} EXCLUSIVE
+           ELSE
+               OPEN INPUT {sis}{reg}.
+       FIN-INP-FIL.
+           GO TO FIN-PROC.
+      *
+       OUT-FIL.
+       INI-OUT-FIL.
+           IF FIO-ACCS = FIO-ACCS-UPD
+               OPEN OUTPUT {sis}{reg} SHARED
+           ELSE
+           IF FIO-ACCS = FIO-ACCS-INP
+               OPEN OUTPUT {sis}{reg} PROTECTED
+           ELSE
+           IF FIO-ACCS = FIO-ACCS-NOT
+               OPEN OUTPUT {sis}{reg} EXCLUSIVE
+           ELSE
+               OPEN OUTPUT {sis}{reg}.
+       FIN-OUT-FIL.
+           GO TO FIN-PROC.
+      *
+       UPD-FIL.
+       INI-UPD-FIL.
+           IF FIO-ACCS = FIO-ACCS-UPD
+               OPEN I-O {sis}{reg} SHARED
+           ELSE
+           IF FIO-ACCS = FIO-ACCS-INP
+               OPEN I-O {sis}{reg} PROTECTED
+           ELSE
+           IF FIO-ACCS = FIO-ACCS-NOT
+               OPEN I-O {sis}{reg} EXCLUSIVE
+           ELSE
+               OPEN I-O {sis}{reg}.
+       FIN-UPD-FIL.
+           GO TO FIN-PROC.
+      *
+       CLO-FIL.
+       INI-CLO-FIL.
+           CLOSE {sis}{reg}.
+       FIN-CLO-FIL.
+           GO TO FIN-PROC.
+      *
+       FND-EQL.
+       INI-FND-EQL.
+           MOVE FIO-DFLD TO {reg}.
+           IF WSS-AKEY = "{ky0}" OR
+              WSS-AKEY NOT > SPACES
+               START {sis}{reg} KEY EQUAL {ky0} IN {sis}{reg}
+           ELSE
+*% FOR I = 1 TO {nka}
+           IF WSS-AKEY = "{ky{i}}"
+               START {sis}{reg} KEY EQUAL {ky{i}} IN {sis}{reg}
+           ELSE
+*% NEXT I
+               PERFORM ERR-ALT.
+       FIN-FND-EQL.
+           GO TO FIN-PROC.
+      *
+       FND-FST.
+       INI-FND-FST.
+           IF WSS-AKEY = "{ky0}" OR
+              WSS-AKEY NOT > SPACES
+               MOVE LOW-VALUES TO {ky0} IN {sis}{reg}
+               START {sis}{reg} KEY NOT LESS {ky0} IN {sis}{reg}
+           ELSE
+*% FOR I = 1 TO {nka}
+           IF WSS-AKEY = "{ky{i}}"
+               MOVE LOW-VALUES TO {ky{i}} IN {reg}
+               START {sis}{reg} KEY NOT LESS {ky{i}} IN {sis}{reg}
+           ELSE
+*% NEXT I
+               PERFORM ERR-ALT.
+       FIN-FND-FST.
+           GO TO FIN-PROC.
+      *
+       FND-NLS.
+       INI-FND-NLS.
+           MOVE FIO-DFLD TO {reg}.
+           IF WSS-AKEY = "{ky0}" OR
+              WSS-AKEY NOT > SPACES
+               START {sis}{reg} KEY NOT LESS {ky0} IN {sis}{reg}
+           ELSE
+*% FOR I = 1 TO {nka}
+           IF WSS-AKEY = "{ky{i}}"
+               START {sis}{reg} KEY NOT LESS {ky{i}} IN {sis}{reg}
+           ELSE
+*% NEXT I
+               PERFORM ERR-ALT.
+       FIN-FND-NLS.
+           GO TO FIN-PROC.
+      *
+       FND-GRT.
+       INI-FND-GRT.
+           MOVE FIO-DFLD TO {reg}.
+           IF WSS-AKEY = "{ky0}" OR
+              WSS-AKEY NOT > SPACES
+               START {sis}{reg} KEY GREATER {ky0} IN {sis}{reg}
+           ELSE
+*% FOR I = 1 TO {nka}
+           IF WSS-AKEY = "{ky{i}}"
+               START {sis}{reg} KEY GREATER {ky{i}} IN {sis}{reg}
+           ELSE
+*% NEXT I
+               PERFORM ERR-ALT.
+       FIN-FND-GRT.
+           GO TO FIN-PROC.
+      *
+       GET-KEY-UPD.
+       INI-GET-KEY-UPD.
+           MOVE FIO-DFLD TO {reg}.
+           IF WSS-AKEY = "{ky0}" OR
+              WSS-AKEY NOT > SPACES
+               READ {sis}{reg} INTO FIO-DFLD WITH LOCK
+               IF FIO-STAT-OKS
+                   MOVE {ky0} TO WSS-RKEY
+               ELSE
+                   NEXT SENTENCE
+           ELSE
+*% FOR I = 1 TO {nka}
+           IF WSS-AKEY = "{ky{i}}"
+               READ {sis}{reg} INTO FIO-DFLD WITH LOCK
+                   KEY {ky{i}} IN {sis}{reg}
+                    
+           ELSE
+*% NEXT I
+               PERFORM ERR-ALT.
+       FIN-GET-KEY-UPD.
+           GO TO FIN-PROC.
+      *
+       GET-LEQ.
+       INI-GET-LEQ.
+           PERFORM ERR-PROC.
+           MOVE FIO-DFLD TO {reg}.
+           IF WSS-AKEY = "{ky0}" OR
+              WSS-AKEY NOT > SPACES
+               MOVE {ky0} IN {reg} TO WSS-VKEY
+               START {sis}{reg} KEY NOT LESS {ky0} IN {sis}{reg}
+           ELSE
+*% FOR I = 1 TO {nka}
+           IF WSS-AKEY = "{ky{i}}"
+               MOVE {ky{i}} IN {reg} TO WSS-VKEY
+               START {sis}{reg} KEY NOT LESS {ky{i}} IN {sis}{reg}
+           ELSE
+*% NEXT I
+               PERFORM ERR-ALT.
+           IF NOT FIO-STAT-OKS
+               PERFORM GET-LEQ-NOK
+               GO TO FIN-GET-LEQ.
+           READ {sis}{reg} NEXT INTO FIO-DFLD.
+           IF NOT FIO-STAT-OKS
+               GO TO FIN-GET-LEQ.
+           MOVE FIO-DFLD TO {reg}.
+
+           IF WSS-AKEY = "{ky0}" OR
+              WSS-AKEY NOT > SPACES
+               IF WSS-VKEY = {ky0} IN {reg}
+                   GO TO FIN-GET-LEQ
+               ELSE
+                   PERFORM GET-PRV
+           ELSE
+*% FOR I = 1 TO {nka}
+           IF WSS-AKEY = "{ky{i}}"
+               IF WSS-VKEY = {ky{i}} IN {reg}
+                   GO TO FIN-GET-LEQ
+               ELSE
+                   PERFORM GET-PRV
+           ELSE
+*% NEXT I
+               PERFORM ERR-ALT.
+       FIN-GET-LEQ.
+           GO TO FIN-PROC.
+      *
+       GET-LEQ-NOK.
+       INI-GET-LEQ-NOK.
+      *Faltan funcionalidades para poder
+      *implementarilo
+       FIN-GET-LEQ-NOK.
+           GO TO FIN-PROC.
+      *
+       GET-PRV.
+       INI-GET-PRV.
+           READ {sis}{reg} REVERSED INTO FIO-DFLD.
+           IF FIO-STAT-OKS
+               MOVE {ky0} TO WSS-RKEY.
+       FIN-GET-PRV.
+           GO TO FIN-PROC.
+      *
+       CHK-PNT.
+       INI-CHK-PNT.
+      *Implementado a nivel de modulo {sis}BF{reg}
+      *     CHECKPOINT.
+       FIN-CHK-PNT.
+           GO TO FIN-PROC.
+      *
+       BCK-OUT.
+       INI-BCK-OUT.
+           STARTBACKUP 1 1.
+       FIN-BCK-OUT.
+           GO TO FIN-PROC.
+      *
+       ULK-REC.
+       INI-ULK-REC.
+           UNLOCKRECORD {sis}{reg}.
+       FIN-ULK-REC.
+           GO TO FIN-PROC.
+      *
+       ULK-ALL.
+       INI-ULK-ALL.
+           UNLOCKFILE {sis}{reg}.
+       FIN-ULK-ALL.
+           GO TO FIN-PROC.
+      *
+       ALL-LCK.
+       INI-ALL-LCK.
+           LOCKFILE {sis}{reg}.
+       FIN-ALL-LCK.
+           GO TO FIN-PROC.
+      *
+       ERR-ALT.
+       INI-ERR-ALT.
+           DISPLAY "? LLAVE"
+                WSS-AKEY
+                .
+           DISPLAY "  INVALIDO EN {sis}PS{reg} PARA ARCHIVO "
+                "{sis}{reg}"
+                " : ABORTO"
+                .
+           STOP RUN.
+       FIN-ERR-ALT.
+           GO TO FIN-PROC.
+      *
+       NUL-PROC.
+           MOVE "00"   TO FIO-STAT.
+       FIN-PROC.
+           MOVE 0 TO FIO-ACCS FIO-RPLY.
+           MOVE FIO-VARI TO FIO-OUTP.
+           WRITE FIO-OUTP.

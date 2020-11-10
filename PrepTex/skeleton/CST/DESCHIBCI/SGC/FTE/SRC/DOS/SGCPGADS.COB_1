@@ -1,0 +1,228 @@
+       IDENTIFICATION DIVISION.
+      *=======================*
+       PROGRAM-ID.      SGCPGADS.
+       AUTHOR.          CONSIST(REL).
+       DATE-WRITTEN.    17-ENE-1996
+      *
+      *  BDE --->  REC }  ADS  de Sistema SGC
+      *
+       ENVIRONMENT DIVISION.
+      *====================*
+       CONFIGURATION SECTION.
+      *---------------------*
+       SPECIAL-NAMES.
+            DECIMAL-POINT IS COMMA.
+       INPUT-OUTPUT SECTION.
+      *--------------------*
+       FILE-CONTROL.
+
+       DATA DIVISION.
+      *=============*
+       WORKING-STORAGE SECTION.
+      *-----------------------*
+      *<<<< WSS_DTC
+
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-REC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-DBC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-TAB-REQA==.
+
+      *<<<< WSS
+       COPY SGCBRADS.
+       COPY SGCBRBDE.
+
+       COPY SGCBRREC.
+       COPY SGCBRDBC.
+       COPY GNSBRTAB.
+       COPY GNSBRIDD.
+
+       COPY GNSWGRQA.
+       COPY GNSWGUIB.
+       COPY GNSWGELS.
+       COPY GNSWVIDD.
+       COPY GNSWCFIO.
+       COPY GNSWVFIO.
+       COPY GNSWGSYS.
+
+       01  ADS-VARI.
+           03 ADS-NUM-RLEE          VALUE ZEROES PIC 9(05).
+           03 ADS-NUM-RPRO          VALUE ZEROES PIC 9(05).
+           03 ADS2-NUM-RLEE         VALUE ZEROES PIC 9(05).
+           03 SUP-NUM-RLEE          VALUE ZEROES PIC 9(05).
+
+       01 WSS-VARI.
+      * Estructura que contiene tipo de relaciones
+           03 TDD-AUX.
+              05 TDD-TREL OCCURS 15 INDEXED BY TDD-INTB.
+                 07 TDD-GRUP.
+                    09 TDD-REL         PIC X(02).
+      * Variables que permiten buscar en la estructura anterior
+           03 TDD-DAUX              PIC X(02).
+           03 TDD-IAUX              PIC 9(03).
+           03 TDD-IDX               PIC 9(01).
+
+           03 SEM-REL               PIC 9(01).
+
+
+           03 WSS-RUT-AUX.
+              05 WSS-SUP-CHA            PIC 9(01). 
+              05 WSS-SUP-RUT            PIC X(09).
+
+       PROCEDURE DIVISION.
+      *==================*
+       MAIN SECTION.
+      *------------*
+       INI-MAIN.
+      *--------*
+           COPY GNSBGEDB.
+           MOVE 'SGCPGADS' TO FIO-PROG.
+           PERFORM GNS-BUS-IDD.
+
+           MOVE 'SGC'       TO FIO-SIST.
+           MOVE 'CRS'       TO TAB-COD-TTAB IN TAB.
+           MOVE 'SGCPGDSP'  TO TAB-COD-CTAB IN TAB.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM GNS-FIO-TAB.
+           IF NOT (FIO-STAT-OKS AND TAB-IND-VIGE = 'S')
+               DISPLAY 'ERROR : TABLA INEX O NO VIG'
+               DISPLAY 'TAB = ' TAB-COD-TTAB
+               DISPLAY 'CODIGO' TAB-COD-CTAB
+               DISPLAY 'ABORTO' 
+               STOP RUN
+           ELSE
+               MOVE  TAB-GLS-DATA  TO  TDD-AUX. 
+
+           PERFORM  ABRE-ARCHIVOS.
+           MOVE LOW-VALUES         TO BDE-CIC-ICLI.
+           MOVE FIO-GET-FST        TO FIO-CMND.
+           PERFORM SGC-FIO-BDE.
+           IF NOT FIO-STAT-OKS
+              DISPLAY ' ARCHIVO VACIO '
+              PERFORM CIERRA-ARCHIVOS
+              STOP RUN
+           ELSE
+              ADD 1 TO ADS-NUM-RLEE IN ADS-VARI.
+       LUP-BDE
+      * ---- GUARDA EN REGISTRO ADS 
+              MOVE BDE-NUM-ICLI      TO ADS-NUM-ICLI.
+              MOVE BDE-VRF-ICLI      TO ADS-VRF-ICLI.
+              MOVE BDE-CIC-ICLI      TO ADS-CIC-ICLI.
+              PERFORM GUARDAR-REG.
+      * ---- 
+
+              MOVE BDE-CIC-ICLI TO REC-CIC-ICLI.
+              MOVE SPACES       TO REC-COD-TREC IN REC.
+              MOVE SPACES       TO REC-CIC-IREL.
+              MOVE ZEROES       TO REC-NUM-TREC.
+              MOVE FIO-GET-NLS  TO FIO-CMND.
+       LUP-REL.
+              PERFORM SGC-FIO-REC.
+              IF NOT (FIO-STAT-OKS AND REC-CIC-ICLI = BDE-CIC-ICLI)
+                   DISPLAY ' ERROR O TERMINO ARCHIVO '
+                   PERFORM NXT-BDE 
+                   GO TO LUP-BDE
+              ELSE
+                   MOVE REC-COD-TREC IN REC TO TDD-DAUX
+                   PERFORM COMPARA 
+                   IF  SEM-REL = 1
+                       MOVE REC-CIC-IREL TO DBC-CIC-ICLI
+                       MOVE FIO-GET-KEY  TO FIO-CMND
+                       PERFORM SGC-FIO-DBC
+                       IF NOT FIO-STAT-OKS
+                          DISPLAY ' NO EXISTE RUT '
+                       ELSE
+      * ---- GUARDA EN REGISTRO RUT
+                          MOVE DBC-NUM-ICLI       TO ADS-NUM-ICLI
+                          MOVE DBC-VRF-ICLI       TO ADS-VRF-ICLI
+                          MOVE DBC-CIC-ICLI       TO ADS-CIC-ICLI
+                          PERFORM GUARDAR-REG.
+      * ----
+              MOVE FIO-GET-NXT           TO FIO-CMND. 
+              GO TO LUP-REL.
+              
+       FIN-MAIN.
+      *--------*
+
+
+       ABRE-ARCHIVOS SECTION.
+       INI-ABRE-ARCHIVOS.
+           MOVE FIO-INP TO FIO-CMND.
+           DISPLAY 'OPEN-OUTPUT SEQ'.
+           PERFORM SGC-FIO-BDE.
+           IF NOT FIO-STAT-OKS
+              DISPLAY 'ERROR EN APERTURA SEQ: ' FIO-STAT
+              PERFORM GNS-PRO-END.
+           MOVE FIO-OUT TO FIO-CMND.
+           PERFORM SGC-FIO-ADS.
+           IF NOT FIO-STAT-OKS
+              DISPLAY 'ERROR EN APERTURA SEQ: ' FIO-STAT
+              PERFORM GNS-PRO-END.
+       FIN-ABRE-ARCHIVOS.
+           EXIT.
+
+
+       CIERRA-ARCHIVOS SECTION.
+       INI-CIERRA-ARCHIVOS.
+           DISPLAY 'CIERRA ARCHIVOS'.
+           MOVE FIO-CLO TO FIO-CMND.
+           PERFORM SGC-FIO-BDE.
+           MOVE FIO-CLO TO FIO-CMND.
+           PERFORM SGC-FIO-ADS.
+       FIN-CIERRA-ARCHIVOS.
+           EXIT.
+
+
+       COMPARA SECTION.
+       INI-COMPARA.
+           MOVE  0  TO   SEM-REL.
+           MOVE  1  TO   TDD-IAUX.
+           SET   TDD-INTB TO 1.
+           SEARCH TDD-TREL VARYING TDD-IAUX
+             AT END
+                DISPLAY ' NO ENCONTRE RELACION '
+                GO TO FIN-COMPARA
+           WHEN TDD-REL(TDD-INTB) = TDD-DAUX.
+                MOVE 1 TO SEM-REL.
+       FIN-COMPARA.
+           EXIT.                   
+
+
+       NXT-BDE SECTION.
+       INI-NXT-BDE.
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM SGC-FIO-BDE.
+           IF NOT FIO-STAT-OKS
+              DISPLAY ' ARCHIVO VACIO '
+              PERFORM CIERRA-ARCHIVOS.
+              STOP RUN.
+       FIN-NXT-BDE.
+           EXIT.                   
+
+
+       GUARDAR-REG SECTION.
+       INI-GUARDAR-REG.
+              MOVE FIO-PUT TO FIO-CMND.
+              PERFORM SGC-FIO-ADS.
+              IF NOT FIO-STAT-OKS
+                 DISPLAY 'ERROR AL GRABAR SEQ-ADS: ' FIO-STAT
+                 PERFORM GNS-PRO-END.
+              ADD 1 TO ADS-NUM-RPRO IN ADS-VARI.
+       FIN-GUARDAR-REG.
+           EXIT.                   
+
+
+
+       COPY SGCBFADS.
+       COPY SGCBFBDE.
+
+       COPY SGCBFREC.
+       COPY SGCBFDBC.
+       COPY GNSBFTAB.
+
+       COPY GNSBGDTC.
+       COPY GNSBGIDD.
+       COPY GNSBTABT.
+       COPY GNSBBSYS.
+       COPY GNSBGEND.
+       COPY GNSBGABT.
+
+

@@ -1,0 +1,448 @@
+       IDENTIFICATION DIVISION.
+      *************************
+       PROGRAM-ID.     SUPPG15S.
+      *AUTHOR.         DONOSO JARA OSVALDO.
+      *                DATE-WRITTEN,  15/06/95.
+00000 *COMPILED SITE 2000         07.08.98
+      ******************************************************************
+      *  INTERSOFT                                                     *
+      *  MIGRACION A COBOL OS/390                                      *
+      *  FECHA: 15 DE ABRIL DE 1998                                    *
+      ******************************************************************
+      ******************************************************************
+      *  Sistema  : Sistema Super Bancos                               *
+      *  Subsist. :                                                    *
+      *  Analista : Donoso J. Osvaldo                                  *
+      *  Objetivo : Genera archivo P15 formato Super                   *
+      *                                                                *
+      *  Archivos :                                                    *
+      *   Entrada : SUPVP15, Archivo P15 formato banco                 *
+      *             SUPVTAR, Carteras origen asociadas a Cod. Producto *
+      *                                                                *
+      *   Salida  : SUPV15S, Archivo P15 enviado a la Super            *
+      *                                                                *
+      *   Ent/Sal :                                                    *
+      *                                                                *
+      *   Trabajo :                                                    *
+      *                                                                *
+      *  Mantenciones                                                  *
+      *  ============                                                  *
+      * Modificacion  2 :                                              *
+      *            Programador: David Parraguez Muoz.............     *
+      *            Fecha      : 02/07/98                               *
+      *            Cambio     : Se inserta siglo en encabezado del     *
+      *                         archivo que se graba en la cinta para  *
+      *                         la super                               *
+      *                                                                *
+      *            Programador: ...........................            *
+      *            Fecha      : dd/mm/aa                               *
+      *            Cambio     : .....................................  *
+      *                         .....................................  *
+      *                         .....................................  *
+      ******************************************************************
+           EJECT
+       ENVIRONMENT DIVISION.
+      **********************
+       CONFIGURATION SECTION.
+      *=====================
+       SPECIAL-NAMES.
+                      DECIMAL-POINT IS COMMA.
+       INPUT-OUTPUT SECTION.
+      *=====================
+       FILE-CONTROL.
+           SELECT SUPVP15 ASSIGN       TO SUPVP15
+                  ORGANIZATION         IS INDEXED
+                  ACCESS MODE          IS SEQUENTIAL
+                  RECORD KEY           IS P15-COD-IP15
+                  FILE STATUS          IS WR-FS-SUPVP15.
+           SELECT SUPV15S ASSIGN       TO SUPV15S
+                  FILE STATUS          IS WR-FS-SUPV15S.
+           SELECT SUPVTAR ASSIGN       TO SUPVTAR
+                  FILE STATUS          IS WR-FS-SUPVTAR.
+           EJECT
+       DATA DIVISION.
+      *==============
+           SKIP3
+       FILE SECTION.
+      *=============
+       FD  SUPVP15                LABEL RECORD STANDARD
+                                  RECORD CONTAINS 27 CHARACTERS
+                                  BLOCK  CONTAINS 0 RECORDS.
+       COPY SUPBRP15.
+           SKIP1
+       FD  SUPV15S                LABEL RECORD STANDARD
+                                  RECORD CONTAINS 26 CHARACTERS
+                                  BLOCK  CONTAINS 0 RECORDS.
+       COPY SUPBR15S.
+           SKIP1
+       FD  SUPVTAR.
+       01  SUPRTAR                PIC  X(80).
+           SKIP1
+       WORKING-STORAGE SECTION.
+      *========================
+       01  W-PARAMETROS.
+           05 FILLER                        PIC X(20).
+           05 WP-FEC-PRO.
+              10 WP-SIG-PRO                 PIC X(02).
+              10 WP-ANO-PRO                 PIC X(02).
+              10 WP-MES-PRO                 PIC X(02).
+              10 WP-DIA-PRO                 PIC X(02).
+           05 FILLER                        PIC X(52).
+           SKIP1
+       01  W-TABLAS.
+           05 WT-PRODUCTOS OCCURS 100 TIMES INDEXED BY WI-PRO.
+              10 WT-COD-TCCO                PIC  X(04).
+              10 FILLER                     PIC  X(01).
+              10 WT-COD-PROD                PIC  X(03).
+           05 WT-ACUM-PROD OCCURS 2000 TIMES INDEXED BY WI-IND.
+              10 WT-COD-PPRO                PIC  X(03).
+              10 WT-COD-REGI                PIC  X(02).
+              10 WT-COD-MONE                PIC  X(03).
+              10 WT-COD-ODSE                PIC  X(03).
+              10 WT-VAL-SCON                PIC  9(14)V9(02) COMP-3.
+           SKIP1
+       01  W-SWITCHES.
+           05 WS-PROCESO                    PIC 9(01) VALUE 0.
+              88 WS-PROCESO-OK       VALUE 0.
+              88 WS-PROCESO-ERROR    VALUE 1.
+              88 WS-PROCESO-WARNING  VALUE 2.
+           SKIP1
+       01  W-CONTADORES-Y-ACUMULADORES.
+           02 WA-L-P15                      PIC 9(06) VALUE 0.
+           02 WA-G-P15                      PIC 9(06) VALUE 0.
+           SKIP1
+       01  W-REGISTROS-DE-TRABAJO.
+           05 WR-FECHA-HOY.
+              10 WR-HOY-AA                  PIC X(02).
+              10 WR-HOY-MM                  PIC X(02).
+              10 WR-HOY-DD                  PIC X(02).
+           05 WR-MENSAJES.
+              10 WR-SECCION                 PIC X(15).
+              10 WR-PARRAFO                 PIC X(15).
+              10 WR-ARCHIVO                 PIC X(10).
+              10 WR-OPERACI                 PIC X(10).
+              10 WR-FILE-ST                 PIC X(02).
+              10 WR-MENSAJE                 PIC X(35).
+           05 WR-FS-SUPVP15                 PIC 9(02) VALUE 0.
+           05 WR-FS-SUPV15S                 PIC 9(02) VALUE 0.
+           05 WR-FS-SUPVTAR                 PIC 9(02) VALUE 0.
+           05 WR-COD-PROD-OK                PIC X(02).
+      *<<<< VARIABLES PARA RUTINA DE VAL DE FECHAS
+       COPY RTNWCALE.
+      *
+           EJECT
+       PROCEDURE DIVISION.
+      *===================
+       A-CONTROL SECTION.
+      *=================
+       AA-INICIALIZACION.
+           PERFORM B-INICIALIZAR.
+           SKIP1
+       AB-PROCESAMIENTO.
+           IF WS-PROCESO-OK
+              PERFORM C-PROCESAR
+           END-IF.
+           SKIP1
+       AC-TERMINACION.
+           PERFORM D-TERMINAR.
+           SKIP1
+       AZ-FIN-DE-SECCION.
+           STOP RUN.
+           EJECT
+       B-INICIALIZAR SECTION.
+      *======================
+       BA-PROC-PPAL.
+      *-------------
+           PERFORM BB-ABRIR-ARCHIVOS.
+           PERFORM BB-VALIDA-FECHA.
+           PERFORM BB-CARGA-TABLA-PROD.
+           GO BZ-FIN-DE-SECCION.
+       BB-ABRIR-ARCHIVOS.
+      *------------------
+           OPEN OUTPUT SUPV15S
+                INPUT  SUPVP15 SUPVTAR.
+
+           IF WR-FS-SUPV15S NOT = 0 AND NOT = 97
+              MOVE 'B-INICIALIZAR'          TO WR-SECCION
+              MOVE 'BB-ABRIR-ARCHIVOS'      TO WR-PARRAFO
+              MOVE 'SUPV15S    '            TO WR-ARCHIVO
+              MOVE 'OPEN       '            TO WR-OPERACI
+              MOVE WR-FS-SUPV15S            TO WR-FILE-ST
+              PERFORM BC-DISPLAY-ERROR
+           END-IF.
+           IF WR-FS-SUPVP15 NOT = 0 AND NOT = 97
+              MOVE 'B-INICIALIZAR'          TO WR-SECCION
+              MOVE 'BB-ABRIR-ARCHIVOS'      TO WR-PARRAFO
+              MOVE 'SUPVP15    '            TO WR-ARCHIVO
+              MOVE 'OPEN       '            TO WR-OPERACI
+              MOVE WR-FS-SUPVP15            TO WR-FILE-ST
+              PERFORM BC-DISPLAY-ERROR
+           END-IF.
+           IF WR-FS-SUPVTAR NOT = 0 AND NOT = 97
+              MOVE 'B-INICIALIZAR'          TO WR-SECCION
+              MOVE 'BB-ABRIR-ARCHIVOS'      TO WR-PARRAFO
+              MOVE 'SUPVTAR    '            TO WR-ARCHIVO
+              MOVE 'OPEN       '            TO WR-OPERACI
+              MOVE WR-FS-SUPVTAR            TO WR-FILE-ST
+              PERFORM BC-DISPLAY-ERROR
+           END-IF.
+           ACCEPT WR-FECHA-HOY FROM DATE.
+           SKIP1
+       BB-VALIDA-FECHA.
+      *----------------
+           ACCEPT W-PARAMETROS.
+           MOVE 'CARGAR'                    TO CALEAREA-FUNCION.
+           MOVE ZEROES                      TO CALEAREA-FECHA-1.
+           MOVE ZEROES                      TO CALEAREA-FECHA-2.
+           PERFORM BD-CALL-RUTUCALE.
+           MOVE WP-SIG-PRO                  TO CALEAREA-FECHA-1-AM
+           MOVE WP-ANO-PRO                  TO CALEAREA-FECHA-1-AA
+           MOVE WP-MES-PRO                  TO CALEAREA-FECHA-1-M
+           MOVE WP-DIA-PRO                  TO CALEAREA-FECHA-1-D
+           MOVE ZEROES                      TO CALEAREA-FECHA-2
+           MOVE 'INFO  '                    TO CALEAREA-FUNCION
+           PERFORM BD-CALL-RUTUCALE
+           IF (CALEAREA-COD-RET NOT = 0)
+               MOVE 'B-INICIALIZAR'    TO WR-SECCION
+               MOVE 'BD-CALL-RUTUCALE' TO WR-PARRAFO
+               MOVE 'RUTUCALE'         TO WR-ARCHIVO
+               MOVE CALEAREA-FUNCION   TO WR-OPERACI
+               MOVE '*ERROR EN FECHA ' TO WR-MENSAJE
+               MOVE CALEAREA-COD-RET   TO WR-FILE-ST
+               DISPLAY 'CALEAREA-FECHA-1 : ' CALEAREA-FECHA-1
+               DISPLAY 'CALEAREA-FECHA-2 : ' CALEAREA-FECHA-2
+               PERFORM BC-DISPLAY-ERROR
+           END-IF.
+           SKIP1
+       BD-CALL-RUTUCALE.
+      *-----------------
+           CALL 'RUTUCALE' USING RTNWCALE.
+           IF (CALEAREA-FUNCION = 'CANCEL')
+               MOVE 'B-INICIALIZAR'    TO WR-SECCION
+               MOVE 'BD-CALL-RUTUCALE' TO WR-PARRAFO
+               MOVE 'RUTUCALE'         TO WR-ARCHIVO
+               MOVE CALEAREA-FUNCION   TO WR-OPERACI
+               MOVE '*ERROR EN RUTINA' TO WR-MENSAJE
+               MOVE CALEAREA-COD-RET   TO WR-FILE-ST
+               DISPLAY 'CALEAREA-FECHA-1 : ' CALEAREA-FECHA-1
+               DISPLAY 'CALEAREA-FECHA-2 : ' CALEAREA-FECHA-2
+               PERFORM BC-DISPLAY-ERROR
+           END-IF.
+           SKIP1
+       BB-CARGA-TABLA-PROD.
+      *--------------------
+           INITIALIZE W-TABLAS.
+           SET WI-PRO                       TO 1
+           READ SUPVTAR.
+           PERFORM UNTIL (WR-FS-SUPVTAR NOT = 00 OR WS-PROCESO-ERROR OR
+                          WI-PRO > 100)
+              MOVE SUPRTAR                  TO WT-PRODUCTOS(WI-PRO)
+              READ SUPVTAR
+              SET WI-PRO                    UP BY 1
+           END-PERFORM.
+           IF (WI-PRO > 100)
+              MOVE 'B-INICIALIZAR'          TO WR-SECCION
+              MOVE 'BB-CARGA-TABLA-PROD'    TO WR-PARRAFO
+              MOVE 'SUPVTAR    '            TO WR-ARCHIVO
+              MOVE '           '            TO WR-OPERACI
+              MOVE '  '                     TO WR-FILE-ST
+              MOVE 'SE LLENO TABLA PRODUC'  TO WR-MENSAJE
+              PERFORM BC-DISPLAY-ERROR
+           END-IF.
+           SKIP1
+       BC-DISPLAY-ERROR.
+      *-----------------
+           SET  WS-PROCESO-ERROR            TO TRUE
+           DISPLAY ' '
+           DISPLAY 'ERROR EN SECCION  : ' WR-SECCION
+           DISPLAY ' PARRAFO          : ' WR-PARRAFO
+           DISPLAY ' ARCHIVO          : ' WR-ARCHIVO
+           DISPLAY ' OPERACION        : ' WR-OPERACI
+           DISPLAY ' FILE STATUS      : ' WR-FILE-ST
+           DISPLAY ' MENSAJE DE ERROR : ' WR-MENSAJE
+           DISPLAY ' '.
+           SKIP1
+       BZ-FIN-DE-SECCION.
+      *------------------
+           EXIT.
+           EJECT
+       C-PROCESAR SECTION.
+      *===================
+       CA-PROC-PPAL.
+      *-------------
+           PERFORM XX-MUEVE-REG-CABECERA
+           PERFORM CB-LEER-SUPVP15
+           PERFORM CC-ACUMULA-P15-SUPER
+              UNTIL (WR-FS-SUPVP15 NOT = 0 OR WS-PROCESO-ERROR)
+           PERFORM CC-GENERA-P15-SUPER
+           GO CZ-FIN-DE-SECCION.
+           SKIP1
+       CB-LEER-SUPVP15.
+      *----------------
+           READ SUPVP15 END-READ.
+           IF WR-FS-SUPVP15 = 0
+              ADD 1                         TO WA-L-P15
+           ELSE
+           IF WR-FS-SUPVP15  NOT = 10
+              MOVE 'C-PROCESAR'             TO WR-SECCION
+              MOVE 'CB-LEER-SUPVP15 '       TO WR-PARRAFO
+              MOVE 'SUPVP15     '           TO WR-ARCHIVO
+              MOVE 'READ       '            TO WR-OPERACI
+              MOVE WR-FS-SUPVP15            TO WR-FILE-ST
+              PERFORM BC-DISPLAY-ERROR
+           END-IF.
+           SKIP1
+       XX-MUEVE-REG-CABECERA.
+      *----------------------
+           MOVE '016'                       TO P15H-COD-INS-FIN
+           MOVE 'P15'                       TO P15H-IDE-ARC
+      * DPM ini  2-JUL-1998
+           MOVE WP-SIG-PRO                  TO P15H-SIG-PER.
+      * DPM fin  2-JUL-1998
+           MOVE WP-ANO-PRO                  TO P15H-ANO-PER.
+           MOVE WP-MES-PRO                  TO P15H-MES-PER.
+           MOVE SPACES                      TO P15H-FILLER
+           PERFORM XX-GRABA-SUPV15S.
+           SKIP1
+       CC-ACUMULA-P15-SUPER.
+      *---------------------
+           SET WI-PRO                       TO 1
+           SEARCH WT-PRODUCTOS
+             AT END MOVE 'NO'               TO WR-COD-PROD-OK
+             WHEN (WT-COD-TCCO(WI-PRO) = P15-COD-PROD)
+                   MOVE 'SI'                TO WR-COD-PROD-OK
+           END-SEARCH.
+
+           IF (WR-COD-PROD-OK   = 'SI')
+
+               SET WI-IND                   TO 1
+               SEARCH WT-ACUM-PROD
+                AT END  DISPLAY 'ERROR INESPERADO EN PGM...'
+                        PERFORM BC-DISPLAY-ERROR
+                WHEN (WT-COD-PPRO(WI-IND) = SPACES)
+                      MOVE WT-COD-PROD(WI-PRO) TO WT-COD-PPRO(WI-IND)
+                      MOVE P15-COD-REGI        TO WT-COD-REGI(WI-IND)
+                      MOVE P15-IND-TMON        TO WT-COD-MONE(WI-IND)
+                      MOVE P15-COD-ODSE        TO WT-COD-ODSE(WI-IND)
+                WHEN (WT-COD-PPRO(WI-IND) = WT-COD-PROD(WI-PRO) AND
+                      WT-COD-MONE(WI-IND) = P15-IND-TMON        AND
+                      WT-COD-REGI(WI-IND) = P15-COD-REGI        AND
+                      WT-COD-ODSE(WI-IND) = P15-COD-ODSE)
+                      CONTINUE
+               END-SEARCH
+
+               IF (WS-PROCESO-OK)
+                   ADD P15-VAL-SCON         TO WT-VAL-SCON(WI-IND)
+               END-IF
+           ELSE
+              DISPLAY 'CODIGO DE PRODUCTO ' P15-COD-PROD ' NO TIENE EQU'
+              'IVALENCIA CON TABLA 21 SUPER'
+              MOVE 'C-PROCESAR'             TO WR-SECCION
+              MOVE 'CC-ACUMULA-P15-SUPER'   TO WR-PARRAFO
+              MOVE '  '                     TO WR-ARCHIVO
+              MOVE '  '                     TO WR-OPERACI
+              MOVE '  '                     TO WR-FILE-ST
+              MOVE '  '                     TO WR-FILE-ST
+              PERFORM BC-DISPLAY-ERROR
+           END-IF.
+           PERFORM CB-LEER-SUPVP15.
+           SKIP1
+       CC-GENERA-P15-SUPER.
+      *--------------------
+           SET WI-IND                        TO 1
+           PERFORM UNTIL (WI-IND > 2000 OR WT-COD-PPRO(WI-IND) = '   ')
+             MOVE WT-COD-PPRO(WI-IND)        TO P15S-COD-PROD
+             MOVE WT-COD-MONE(WI-IND)        TO P15S-IND-TMON
+             MOVE WT-COD-REGI(WI-IND)        TO P15S-COD-REGI
+             MOVE WT-COD-ODSE(WI-IND)        TO P15S-COD-ODSE
+             MOVE SPACES                     TO P15S-FILLER
+             MULTIPLY WT-VAL-SCON(WI-IND) BY 1000 GIVING P15S-VAL-SCON
+             PERFORM XX-GRABA-SUPV15S
+             SET WI-IND                      UP BY 1
+           END-PERFORM.
+           SKIP1
+       XX-GRABA-SUPV15S.
+      *-----------------
+           WRITE P15S END-WRITE.
+           IF WR-FS-SUPV15S = 0
+              ADD 1                         TO WA-G-P15
+           ELSE
+              MOVE 'C-PROCESAR'             TO WR-SECCION
+              MOVE 'XX-GRABA-SUPV15S'       TO WR-PARRAFO
+              MOVE 'SUPV15S     '           TO WR-ARCHIVO
+              MOVE 'WRITE      '            TO WR-OPERACI
+              MOVE WR-FS-SUPV15S            TO WR-FILE-ST
+              PERFORM BC-DISPLAY-ERROR
+           END-IF.
+           SKIP1
+       CZ-FIN-DE-SECCION.
+      *------------------
+           EXIT.
+           EJECT
+       D-TERMINAR SECTION.
+      *===================
+       DA-ESTADISTICAS.
+      *----------------
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY 'INFORMES'
+           DISPLAY '--------'
+           DISPLAY ' '
+           DISPLAY 'ESTE PROCESO NO EMITE INFORME'
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY 'ESTADISTICAS DE PROCESO PROGRAMA SUPPG15S FECHA '
+                    WR-FECHA-HOY
+           DISPLAY '-----------------------------------------------'
+           DISPLAY '    GENERA ARCHIVO P15 EN FORMATO SUPER'
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY 'REG LEIDOS DE SUPVP15 : ' WA-L-P15
+           DISPLAY 'REG GRABADOS  SUPV15S : ' WA-G-P15
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY 'TARJETAS DE PARAMETROS'
+           DISPLAY '----------------------'
+           DISPLAY ' '
+           DISPLAY W-PARAMETROS
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY 'MENSAJES PARA EL EXPLOTADOR'
+           DISPLAY '---------------------------'
+           DISPLAY ' '
+           IF WS-PROCESO-OK
+               DISPLAY 'NO HAY MENSAJES PARA EL EXPLOTADOR'
+           ELSE
+               DISPLAY 'HAY MENSAJES PARA EL EXPLOTADOR'
+           END-IF.
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY ' '.
+           SKIP1
+       DB-TERMINO.
+      *-----------
+           CLOSE SUPVP15 SUPV15S SUPVTAR
+           IF WS-PROCESO-ERROR
+              MOVE 100                      TO RETURN-CODE
+              DISPLAY ' '
+              DISPLAY ' '
+              DISPLAY '**********************************************'
+              DISPLAY '**********************************************'
+              DISPLAY '********                              ********'
+              DISPLAY '******** TERMINO ERRONEO DEL PROCESO  ********'
+              DISPLAY '********                              ********'
+              DISPLAY '**********************************************'
+              DISPLAY '**********************************************'
+           ELSE
+              DISPLAY ' '
+              DISPLAY ' '
+              DISPLAY '*****PROCESO TERMINO EN FORMA NORMAL*****'
+           END-IF.
+           SKIP1
+       DZ-FIN-DE-SECCION.
+      *------------------
+           EXIT.
+           EJECT
+

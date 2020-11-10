@@ -1,0 +1,217 @@
+			JCL's para MVS
+			--------------
+
+
+  Las instrucciones de JCL para MVS comienzan todas con //. A continuacion
+se muestra la estructura general de un JOB:
+
+
+1. Encabezado del JOB 
+---------------------
+
+//{nombre-JOB} JOB ,{nombre-programador},CLASS={clase},MSGCLASS={msgclas}
+//                  NOTIFY={usuario}
+
+		{nombre-JOB}	     : Nombre del JOB ( libre 8 caracteres )
+		{nombre-programador} : nombre libre
+		{clase}		     : clase con la que se submite, puede ser :
+				A    : sin cinta hasta  5 minutos de CPU
+				C    : con cinta hasta 30 minutos de CPU
+				L    : sin cinta hasta 30 minutos de CPU
+			        D    : 2 cintas
+		{msgclas}	     : Si el programa emite un listado queda
+				       con esta clase, usar por ahora X
+				       que siginifica Holding, ya que no hay
+				       inpresion directa en este momento.
+		{usuario}	     : Usuario al cual se le notifica que el
+				       JOB ha terminado. Por ahora son usuarios
+				       ROSCOE es decir de la forma ROSC{xxx}.
+
+
+2. Encabezado del STEP
+----------------------
+
+//{nombre-STEP} EXEC PGM={programa}
+
+		{nombre-STEP}	     : Nombre del STEP ( libre )
+		PGM={programa}       : PGM indica que es un programa a ejecutar
+				       y que se llama {programa}
+
+
+3. Asignaciones de Archivos
+---------------------------
+
+//{nombre-logico-select} DD {descripcion}
+
+	ejemplos :
+
+//SYSPRINT DD SYSOUT=*		Asigna impresora y la deja con clase *
+				esto significa con la misma clase que
+				{msgclas}
+
+//{file} DD DSN={archivo},DISP={disp},UNIT=TAPE,
+//          DCB=(RECFM={recfm},LRECL={lrecl},BLKSIZE={blksize},DEN={densidad),
+//              LABEL={label},VOL=SER={volumen}
+
+				Asigna un archivo con nombre fisico {archivo}
+				y nombre logico {file} que debe ser el que
+				esta en el SELECT del programa. El archivo
+				esta en cinta ( UNIT=TAPE ).
+
+				{disp} puede ser :
+
+					SHR : para VSAM
+					OLD : Secuencial para OUTPUT
+					MOD : Secuencial para EXTENT
+					SHR : Secuencial para READ
+					
+				DCB ( DATA CONTROL BLOCK ) indica :
+				formato ( RECFM= ), largo de registro LRECL=,
+				Bloqueo ( BLKSIZE= ), Densidad ( DEN= ),
+				Label ( LABEL= ), volumen ( VOL=SER= ) que
+				debiera ser el externo para que el operador
+				monte la cinta y tambien el interno.
+
+				Para archivos catalogados en disco, que es como
+				se recomienda trabajar, solo son necesarias las
+				clausulas DSN y DISP
+
+
+4. Para asignar Bibliotecas privadas de programas ejecutables
+-------------------------------------------------------------
+
+//STEPLIB DD DSN={biblio1},DISP=SHR
+//        DD DSN={biblio2},DISP=SHR
+
+		Se buscara el programa a ejecutar en la {biblio1},{biblio2} y
+		luego en las Bibliotecas definidas para el MVS ( en caso de no
+		encontrarlo previamente ).
+
+
+5. Para entregar Datos al Programa que se Ejecuta
+-------------------------------------------------
+
+//{nombre-lectora} DD *
+.
+.
+datos
+.
+.
+/*
+
+		{nombre-lectora}	: El nombre logico de la lectora que
+					  esta en el SELECT del programa.
+
+6. Para terminar el JOB
+-----------------------
+
+//
+
+7. Ejemplos
+-----------
+
+a.
+
+//MARRATI1 JOB ,IEBGENER,CLASS=C,MSGCLASS=X,
+//	      NOTIFY=ROSCMV1
+//* Step ( Comentario )
+//STEP1  EXEC PGM=IEBGENER
+//SYSPRINT DD SYSOUT=*
+//SYSUT1   DD DSN=BLOG,DISP=OLD,UNIT=TAPE,
+//            DCB=(RECFM=FB,LRECL=42,BLKSIZE=31920,DEN=4),LABEL=14,
+//            VOL=SER=BLG004
+//SYSUT2   DD SYSOUT=*
+//SYSIND   DUMMY		equivalente a la clausula IGN ( ignore ) de DOS
+//
+
+	Este ejemplo ejecuta el programa IEBGENER que graba la cinta BLG004.
+
+b.
+
+//LSTTAB JOB ,LSTTAB,CLAS=C,MSGCLAS=X,
+//            NOTIFY=ROSCJSS
+//LISTAR EXEC PGM=GNSPLFUN
+//RPTFUN      DD SYSOUT=*
+//GNSFUN      DD DSN=GNSFUN,DISP=SHR
+//STEPLIB     DD DSN=CLGNS,DISP=SHR
+//            DD DSN=SLGNS,DISP=SHR
+//            DD DSN=ADRPROC,DISP=SHR
+//LECTORA     DD *
+TAB
+*
+*
+*
+*
+/*
+//
+
+		Consultar : si es valido para cuando se leen datos con ACCEPT,
+			    ya que esto es valido cuando se leen datos a traves
+			    de lectora de tarjetas.
+
+
+				Reunion 05 Enero de 1987, 14:30 hrs.
+
+						Marco Arratia
+						Julio Sepulveda S.
+
+						p.p.	JSS.
+		
+
+-------------------------------------------------------------------------------
+
+EJEMPLO DE 'JCL' PARA MVS ( PROGRAMAS LISTADORES Y GENERADORES )
+================================================================
+
+//job JOB ,,CLASS=A,MSGCLASS=X,NOTIFY=maquina
+					
+	job      = cualquier nombre de 8 caracteres
+	maquina  = donde se desea que avise que termino el job
+
+//STEP1 EXEC PGM=programa,PARM='DBURT=urt'
+
+	programa = nombre del programa que se va a ejecutar
+	urt      = nombre de URT que usa el programa si usa, si no
+                   se omite desde  ,PARM.....
+
+//STEPLIB  DD DSN=Libreria,DISP=SHR
+
+	libreria = se refiere al nombre externo de la biblioteca
+                   donde esta el programa
+
+//         DD DSN=ADR0.DB75.LOAD.DESA,DIS=SHR    (Si usan libreria ADR)   
+* AREA EXTERNA DE SORT
+//SORTWK1  DD UNIT=SYSDA,SPACE=(CYL,(2,1)),DISP=(NEW,DELETE)
+
+* ARCHIVOS DE ENTRADA
+//aaaaaaa  DD DSN=Nombre_fisico_archivo_A,DISP=SHR   aaaaaaaa=nombre logico del
+                                                     archivo ( 8 caracteres ?)
+//bbbbbbb  DD DSN=Nombre_fisico_archivo_B,DISP=SHR      
+
+* ARCHIVOS DE SALIDA  
+//ccccccc  DD DSN=Nombre_fisico_archivo_C,DISP=(NEW,KEEP),UNIT=SYSDA,VOL=SER=YYY,
+               DCB=(RECFM=FB,LRECL=nn,BLKSIZE=nnnn),SPACE=(TRK,(2,1),RLSE)
+
+* ARCHIVOS DE PASO  pendiente ???
+//ddddddd  DD DSN=Nombre_libreria_file_D,DISP=(NEW,PASS),UNIT=DISK,VOL=SER=YYY
+
+//SYSOUT   DD SYSOUT=*      para programa CON SORT interno  *=dejelo ahi mismo
+//SYSPRINT DD SYSOUT=X      salida del jcl
+//report   DD SYSOUT=A      para el reporte propiamente tal, 
+                            report = nombre logico del report (SELECT)
+
+//SYSIN    DD *             lee parametros de la lectora de tarjetas
+...
+...
+datos
+...
+...
+/*    fin del STEP1
+//STEP2.....
+...
+...
+...
+/*    fin del STEP2
+//    fin del JOB
+
+

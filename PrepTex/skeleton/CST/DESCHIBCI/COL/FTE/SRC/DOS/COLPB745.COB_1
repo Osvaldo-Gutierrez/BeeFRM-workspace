@@ -1,0 +1,656 @@
+       IDENTIFICATION DIVISION.
+      *************************
+       PROGRAM-ID.     COLPB745.
+      *AUTHOR.         DONOSO JARA OSVALDO.
+      *                DATE-WRITTEN,  03/03/92.
+      ******************************************************************
+      *  INTERSOFT                                                     *
+      *  MIGRACION A COBOL OS/390                                      *
+      *  FECHA: 30 DE MARZO DE 1998                                    *
+      ******************************************************************
+      ******************************************************************
+      *  Sistema  : Colocaciones                                       *
+      *  Subsist. : Sobregiro no pactado                               *
+      *  Analista : Retamal Pablo                                      *
+      *  Objetivo : Detectar las operaciones de sobregiros no pactados *
+      *             que tengan saldo cero, para ser eliminados         *
+      *  Archivos :                                                    *
+      *   Entrada : OPC 160: Tabla de curses                           *
+      *             MASGEMP: Maestro de sobregiro no pactado
+      *                                                                *
+      *   SAlida  : COLVELI: Creditos a ser eliminados                 *
+      *                                                                *
+      *   Ent/Sal :                                                    *
+      *                                                                *
+      *   Trabajo :                                                    *
+      *                                                                *
+      *  Mantenciones                                                  *
+      *  ============                                                  *
+      *            Programador: O.Donoso...................            *
+      *            Fecha      : 30/04/92                               *
+      *            Cambio     : No se seleccionara OPC por             *
+      *                         OPC-MSC-STAT..............             *
+      *                                                                *
+      ******************************************************************
+       EJECT
+       ENVIRONMENT DIVISION.
+      **********************
+       CONFIGURATION SECTION.
+      *======================
+       SPECIAL-NAMES.
+            DECIMAL-POINT IS COMMA.
+       EJECT
+       INPUT-OUTPUT SECTION.
+      *=====================
+       FILE-CONTROL.
+           SELECT COLVELI ASSIGN TO SYS004-DA-3340-S-COLVELI
+                  FILE STATUS IS WR-FS-COLVELI.
+           SELECT MASGEMP ASSIGN TO MASGEMP
+                  ORGANIZATION IS INDEXED
+                  ACCESS IS RANDOM
+                  RECORD KEY IS MSG-CLAVE
+                  FILE STATUS IS WR-FS-MASGEMP.
+       EJECT
+       DATA DIVISION.
+      *==============
+       SKIP1
+       FILE SECTION.
+      *=============
+       SKIP1
+       FD  COLVELI
+           RECORD CONTAINS 80 CHARACTERS
+           LABEL RECORDS OMITTED.
+       01  COLRELI                     PIC X(80).
+       SKIP1
+       FD  MASGEMP
+           RECORD CONTAINS 181 CHARACTERS
+           LABEL RECORD STANDARD.
+       01  REG-MASGEMP.
+           05  MSG-MLLBB              PIC XX.
+           05  MSG-LOW                PIC XX.
+           05  MSG-MSIZE              PIC X.
+           05  MSG-MIDENT             PIC X.
+           05  MSG-CLAVE.
+               10 MSG-SUC             PIC XX.
+               10 MSG-CUENTA          PIC X(4).
+           05  MSG-MDATE              PIC XXX.
+           05  MSG-MLASTJ             PIC X(4).
+           05  MSG-MLASTT             PIC XX.
+           05  MSG-MSTATS.
+               10 BYTE-UNO            PIC X.
+               10 BYTE-DOS            PIC X.
+           05  MSG-MMISC              PIC XXX.
+           05  MSG-MABAL              PIC S9(9)V99 COMP-3.
+           05  MSG-MBBAL              PIC S9(9)V99 COMP-3.
+           05  MSG-MCBAL              PIC S9(9)V99 COMP-3.
+           05  MSG-MDBAL              PIC S9(9)V99 COMP-3.
+           05  MSG-MEBAL              PIC S9(9)V99 COMP-3.
+           05  MSG-MCRFICHA           PIC X(4).
+           05  MSG-SGPIEMNP           PIC S9(9)V99 COMP-3.
+           05  MSG-SGPIMANP           PIC S9(9)V99 COMP-3.
+           05  MSG-SGPIMPEM           PIC S9(9)V99 COMP-3.
+           05  MSG-SGPIMPMA           PIC S9(9)V99 COMP-3.
+           05  MSG-SGPRUTDD.
+               10 MSG-SGPRUTDD-N      PIC X(5).
+               10 MSG-SGPRUTDD-DV     PIC X.
+           05  MSG-SGPRUTDI.
+               10 MSG-SGPRUTDI-N      PIC X(5).
+               10 MSG-SGPRUTDI-DV     PIC X.
+           05  MSG-SGPCC              PIC X(6).
+           05  MSG-SGPCOPER           PIC X(5).
+           05  MSG-SGPCOD             PIC X(4).
+           05  MSG-SGPCEST            PIC X.
+               88 SOB-PACTADO         VALUES '4' '5'.
+               88 SOB-NO-PACTADO      VALUES '2' '3'.
+           05  MSG-SGPCPAGO           PIC X.
+           05  MSG-SGPCHIST           PIC X.
+           05  MSG-SGPFEAPE           PIC XXX.
+           05  MSG-SGPFECAN           PIC XXX.
+           05  MSG-SGPFEVEN           PIC XXX.
+           05  MSG-SGPSPRE            PIC 999V99 COMP-3.
+           05  MSG-SGPDSSG            PIC 999    COMP-3.
+           05  MSG-SGPFULC            PIC XXX.
+           05  MSG-SGPNDSG            PIC 999 COMP-3.
+           05  MSG-SGPNPAC            PIC 9(11)V99 COMP-3.
+           05  MSG-SGPNNPA            PIC 9(11)V99 COMP-3.
+           05  MSG-SGPSPM1            PIC 9(9)V99 COMP-3.
+           05  MSG-SGPMON1            PIC 9(9)V99 COMP-3.
+           05  MSG-SGPTAS1            PIC 9(5) COMP-3.
+           05  MSG-SGPCOD1            PIC X.
+           05  MSG-SGPCOD2            PIC X.
+           05  MSG-SGPCOD3            PIC X.
+           05  FILLER                 PIC X(16).
+       SKIP1
+       WORKING-STORAGE SECTION.
+      *========================
+       SKIP1
+       01  W-SWITCHES.
+           05 WS-PROCESO             PIC 9(01) VALUE 0.
+              88 WS-PROCESO-OK       VALUE 0.
+              88 WS-PROCESO-NO-OK    VALUE 1.
+       SKIP1
+       01  W-CONTADORES-Y-ACUMULADORES.
+           05 WA-L-EMP               PIC 9(06) VALUE 0.
+           05 WA-L-OPC               PIC 9(06) VALUE 0.
+           05 WA-S-OPC               PIC 9(06) VALUE 0.
+           05 WA-G-ELI               PIC 9(06) VALUE 0.
+       SKIP1
+       01  W-REGISTROS-DE-TRABAJO.
+           05 WR-FECHA-HOY.
+              10 WR-HOY-AA           PIC X(02).
+              10 WR-HOY-MM           PIC X(02).
+              10 WR-HOY-DD           PIC X(02).
+           05 WR-MENSAJES.
+              10 WR-SECCION          PIC X(15).
+              10 WR-PARRAFO          PIC X(15).
+              10 WR-ARCHIVO          PIC X(10).
+              10 WR-OPERACI          PIC X(10).
+              10 WR-FILE-ST          PIC X(02).
+              10 WR-MENSAJE          PIC X(35).
+           05 WR-FS-COLVELI          PIC 9(02) VALUE 0.
+           05 WR-FS-MASGEMP          PIC 9(02) VALUE 0.
+           05 WR-CLAVE-MSG           PIC 9(12) COMP-3.
+           05 WR-CLAVE-OPC.
+              10 FILLER              PIC X(01).
+              10 WR-COD-OPER         PIC 9(11).
+      ******************************************************************
+      *      USER INFORMATION BLOCK                                    *
+      ******************************************************************
+      *
+       01  WB-UIB.
+           05 FILLER                 PIC X(32) VALUE 'COLPB745'.
+      *
+      ******************************************************************
+      *      REQUEST AREA                                              *
+      ******************************************************************
+      *
+       01  WB-REQ-OPC-AREA.
+           02 WB-REQ-OPC-CMD          PIC X(5) VALUE 'REDKG'.
+           02 FILLER                  PIC X(3) VALUE 'OPC'.
+           02 FILLER                  PIC X(5) VALUE 'OPC00'.
+           02 WB-REQ-OPC-RC           PIC X(2) VALUE SPACES.
+           02 FILLER                  PIC X(1).
+           02 FILLER                  PIC S9(4) COMP VALUE +160.
+           02 FILLER                  PIC X(58).
+           02 WB-REQ-OPC-KEY-VALUE    PIC X(12) VALUE 'C'.
+
+
+      ******************************************************************
+      *                   WORK AREA                                    *
+      ******************************************************************
+      *
+      *    Operacion Credito
+      *    -----------------
+      *
+      *    Nombre Registro : OPC
+      *    Clave(s)        : OPC-KEY-IOPC(UU), OPC-FEC-FCOL(DC),
+      *                      OPC-FEC-FING(DC), OPC-FEC-FINP(DC)
+      *    Largo           : 245
+      *    Bloqueo         : 2
+      *    Observaciones   :
+      *
+      *    01) Modificaciones 06/09/88, LJV
+      *        - Eliminacion Clave OPC-STP-ITRN
+      *    02) Modificaciones 11/10/89, ALD
+      *        - Cambio nombre campo OPC-NUM-IEVC
+      *          por  OPC-NUM-IVEN
+      *        - Ingreso campo OPC-IND-VSTR
+      *    03) Modificacion  30/06/93,  DAD
+      *        - Modificado Largo/Bloqueo del registro, de 218/4 a 245/2
+      *          aumentando la Glosa Disponible.
+      *    04) Modificacion  06/09/95,  ALD
+      *        - Ingreso Campo OPC-VAL-SEGP
+      *        - Modificado Glosa Disponible de 28 a 20
+      *
+       01  OPC.
+      *
+      *    Filler Compatibilidad VSAM/MVS
+           03  OPC-GLS-FLAG                             PIC X(01).
+      *
+      *    Clave Primaria Registro
+           03  OPC-KEY-IREG.
+      *
+      *KEY     Identificacion Operacion Credito
+               05  OPC-KEY-IOPC.
+      *
+      *            Cod. Int. Comp. Operacion Credito
+                   07  OPC-CIC-IOPC.
+      *
+      *                Centro Asignacion Identificacion
+                       09  OPC-CAI-IOPC.
+                           11  OPC-COD-TOPC             PIC X(01).
+                           11  OPC-COD-COPC             PIC X(03).
+      *
+      *                Ident. Interna Computacional
+                       09  OPC-IIC-IOPC.
+                           11  OPC-COD-OOPC.
+                               13  OPC-COD-SOPC         PIC X(02).
+                               13  OPC-IND-SOPC         PIC X(01).
+                           11  OPC-GLS-NOPC             PIC X(05).
+      *
+      *        Time Stamp Transaccion
+               05  OPC-STP-ITRN.
+      *
+      *            Fecha Transaccion
+                   07  OPC-FEC-FTRN.
+                       09  OPC-NUM-STRN                 PIC 9(02).
+                       09  OPC-NUM-ATRN                 PIC 9(02).
+                       09  OPC-NUM-MTRN                 PIC 9(02).
+                       09  OPC-NUM-DTRN                 PIC 9(02).
+      *
+      *            Hora Transaccion
+                   07  OPC-HRA-HRTR.
+                       09  OPC-NUM-HHTR                 PIC 9(02).
+                       09  OPC-NUM-MMTR                 PIC 9(02).
+                       09  OPC-NUM-SSTR                 PIC 9(02).
+      *
+      *REQ Indicador Tipo Accion
+           03  OPC-MSC-TACC                             PIC X(01).
+      *
+      *    Indicador Status
+           03  OPC-MSC-STAT                             PIC X(01).
+               88  OPC-INGRESADA               VALUE 'I'.
+               88  OPC-MODIFICADA              VALUE 'M'.
+               88  OPC-APROBADA-CTC            VALUE 'F'.
+               88  OPC-LIQUIDADA-CTC           VALUE 'K'.
+               88  OPC-LIQUIDADA-LIQ           VALUE 'L'.
+               88  OPC-ACTIVADA                VALUE 'A'.
+               88  OPC-ESPERA-OPC              VALUE 'C'.
+               88  OPC-ESPERA-ENVIO-ABONO-DIF  VALUE 'B'.
+               88  OPC-ESPERA-ENVIO-ABONO      VALUE 'G'.
+               88  OPC-ESPERA-CONF-ABONO       VALUE 'H'.
+               88  OPC-ESPERA-ABONO-X          VALUE 'X'.
+               88  OPC-SUSPENDIDA              VALUE 'S'.
+               88  OPC-DESACTIVADA             VALUE 'D'.
+               88  OPC-ACTUALIZADA             VALUE 'I' 'M'.
+               88  OPC-PENDIENTE-CTC           VALUE 'F' 'K'.
+               88  OPC-LIQUIDADA               VALUE 'L' 'K'.
+               88  OPC-ESPERA-ABONO            VALUE 'B' 'G' 'H' 'X'.
+      * RBG INI 10-APR-1996
+               88  OPC-APROBADA-APR            VALUE 'J'.
+      * RBG FIN 10-APR-1996
+      *
+      *REQ Codigo Origen Transaccion
+           03  OPC-COD-OTRN.
+      *
+      *        Indicador Tipo Origen
+               05  OPC-MSC-TTRN                         PIC X(01).
+      *
+      *        Codigo Tipo Origen
+               05  OPC-COD-TTRN                         PIC X(03).
+      *
+      *REQ Autor Transaccion
+           03  OPC-COD-ATRN                             PIC X(12).
+      *
+      *REQ Valor de Cambio Operacion Credito            TAB VLR
+           03  OPC-COD-VCOC.
+      *
+      *        Miscelaneo Tipo Valor                    TAB TVAL
+               05  OPC-MSC-TVOC                         PIC X(01).
+      *
+      *        Codigo Valor
+               05  OPC-COD-CVOC                         PIC X(03).
+      *
+      *        Codigo Tipo Cambio
+               05  OPC-COD-TCOC                         PIC X(02).
+      *
+      *REQ Codigo Clase Operacion Credito               COL AUX
+           03  OPC-COD-COOC.
+      *
+      *        Codigo Tipo Operacion                    COL TOC
+               05  OPC-COD-TOOC                         PIC X(03).
+      *
+      *        Codigo Auxiliar Operacion
+               05  OPC-COD-AOOC                         PIC X(03).
+      *
+      *REQ Codigo Oficina Operacion Credito             TAB OFI
+           03  OPC-COD-OFOC                             PIC X(03).
+      *
+      *    Responsable Mantencion Operacion Credito     TAB USR
+           03  OPC-COD-RMOC                             PIC X(12).
+      *
+      *    Codigo Destino Operacion Credito             COL DES
+           03  OPC-COD-CDOC                             PIC X(03).
+      *
+      *    Cod. Int. Comp. Linea de Credito
+           03  OPC-CIC-ILDC.
+      *
+      *        Centro Asignacion Identificacion
+               05  OPC-CAI-ILDC.
+                   07  OPC-COD-TLDC                     PIC X(01).
+                   07  OPC-COD-CLDC                     PIC X(03).
+      *
+      *        Ident. Interna Computacional
+               05  OPC-IIC-ILDC.
+                   07  OPC-COD-OLDC.
+                       09  OPC-COD-SLDC                 PIC X(02).
+                       09  OPC-IND-SLDC                 PIC X(01).
+                   07  OPC-GLS-NLDC                     PIC X(05).
+      *
+      *REQ Fecha Curse o Colocacion
+           03  OPC-FEC-FCOL.
+               05  OPC-NUM-SCOL                         PIC 9(02).
+               05  OPC-NUM-ACOL                         PIC 9(02).
+               05  OPC-NUM-MCOL                         PIC 9(02).
+               05  OPC-NUM-DCOL                         PIC 9(02).
+      *
+      *REQ Fecha Curse Contable
+           03  OPC-FEC-FING.
+               05  OPC-NUM-SING                         PIC 9(02).
+               05  OPC-NUM-AING                         PIC 9(02).
+               05  OPC-NUM-MING                         PIC 9(02).
+               05  OPC-NUM-DING                         PIC 9(02).
+      *
+      *REQ Fecha Curse Computacional
+           03  OPC-FEC-FINP.
+               05  OPC-NUM-SINP                         PIC 9(02).
+               05  OPC-NUM-AINP                         PIC 9(02).
+               05  OPC-NUM-MINP                         PIC 9(02).
+               05  OPC-NUM-DINP                         PIC 9(02).
+      *
+      *REQ Monto Credito
+           03  OPC-VAL-CRED             COMP-3          PIC 9(11)V9(04).
+      *
+      *REQ Saldo Valor Credito K Capital Insoluto
+           03  OPC-VAL-SCRE             COMP-3          PIC 9(11)V9(04).
+      *
+      *REQ Analisis Feriados (S/N)                      COL AFER
+           03  OPC-IND-AFER                             PIC X(01).
+      *
+      *REQ Modalidad Calculo Valores Finales            COL MCVF
+           03  OPC-MSC-MCVF                             PIC X(01).
+      *
+      *REQ Tipo Calculo Vencimientos                    COL TCVE
+           03  OPC-MSC-TCVE.
+      *
+      *        Base Calculo Credito                     COL BCCR
+               05  OPC-MSC-BCCR                         PIC X(01).
+      *
+      *        Valores Informados Credito               COL VICR
+               05  OPC-MSC-VICR                         PIC X(01).
+      *
+      *    Tipo Renovacion                              COL RENO
+           03  OPC-IND-RENO                             PIC X(03).
+      *
+      *    Condicion Garantia                           COL GARA
+           03  OPC-IND-GARA                             PIC X(03).
+      *
+      *    Valor Comision
+           03  OPC-SGV-VCOM             COMP-3          PIC S9(11)V9(4).
+      *
+      *    Valor Gastos
+           03  OPC-VAL-GAST             COMP-3          PIC S9(11)V9(4).
+      *
+      *    Codigo de Seguro Desgravamen                 TAB IVB
+           03  OPC-COD-SEGD.
+               05  OPC-COD-ISEG                         PIC X(03).
+               05  OPC-COD-CSEG                         PIC X(03).
+               05  OPC-COD-SSEG                         PIC X(03).
+      *
+      *    Valor Seguro
+           03  OPC-VAL-SEGD             COMP-3          PIC 9(11)V9(04).
+      *
+      *    Valor Liquido
+           03  OPC-SGV-LIQU             COMP-3          PIC S9(11)V9(4).
+      *
+      *MOD-02
+      *REQ Numero Proximo Vencimiento
+           03  OPC-NUM-IVEN                             PIC 9(03).
+      *
+      *REQ Numero Vencimientos Originales
+           03  OPC-NUM-VCOR                             PIC 9(03).
+      *
+      *REQ Numero Vencimientos Vigentes
+           03  OPC-NUM-VCVG                             PIC 9(03).
+      *
+      *    Numero Venctos Cancelados en forma Oportuna
+           03  OPC-NUM-VCCO                             PIC 9(03).
+      *
+      *    Numero Vencimientos Cancelados Morosos
+           03  OPC-NUM-VCCM                             PIC 9(03).
+      *
+      *    Numero de Vencimientos Cancelados Vencidos
+           03  OPC-NUM-VCCV                             PIC 9(03).
+      *
+      *REQ Numero Total Vencimientos Cancelados
+           03  OPC-NUM-TVCC                             PIC 9(03).
+      *
+      *ING-02
+      *    Indicador Vencimientos Estructurados
+           03  OPC-IND-VSTR                             PIC X(01).
+      *
+      *    Cod. Int. Comp. Credito Enlace
+           03  OPC-CIC-ICEN.
+      *
+      *        Centro Asignacion Identificacion
+               05  OPC-CAI-ICEN.
+                   07  OPC-COD-TCEN                     PIC X(01).
+                   07  OPC-COD-CCEN                     PIC X(03).
+      *
+      *        Ident. Interna Computacional
+               05  OPC-IIC-ICEN.
+                   07  OPC-COD-OCEN.
+                       09  OPC-COD-SCEN                 PIC X(02).
+                       09  OPC-IND-SCEN                 PIC X(01).
+                   07  OPC-GLS-NCEN                     PIC X(05).
+      *
+      *    Codigo Area Gestion                          COL GES
+           03  OPC-COD-AGES                             PIC X(02).
+      *
+      *    Flag para activar sin contabilizar
+           03 OPC-IND-CTBL                              PIC X(01).
+      *
+      *    Indicador Insistencia
+           03 OPC-COD-INSI                              PIC X(01).
+      *
+      *    Canal de Venta
+           03 OPC-COD-CVTA                              PIC X(01).
+      *
+      *MOD-04
+      *    Valor Seguro
+           03  OPC-VAL-SEGP             COMP-3          PIC 9(11)V9(04).
+      *
+      *MOD-04
+      *    Glosa Disponible
+           03  OPC-GLS-DISP                             PIC X(20).
+      ******************************************************************
+      *                 ELEMENT LIST                                   *
+      ******************************************************************
+      *
+       01  WB-ELEM-LIS        PIC X(11) VALUE 'OPC00'.
+       EJECT
+       PROCEDURE DIVISION.
+      *===================
+           ENTRY 'DBMSCBL'.
+       A-CONTROL SECTION.
+      *=================
+       AA-INICIALIZACION.
+           PERFORM B-INICIALIZAR.
+       AB-PROCESAMIENTO.
+           IF WS-PROCESO-OK
+              PERFORM C-PROCESAR .
+       AC-TERMINACION.
+           PERFORM D-TERMINAR.
+       AZ-FIN-DE-PROCESO.
+           GOBACK.
+       SKIP1
+       B-INICIALIZAR SECTION.
+      *======================
+           PERFORM BA-ABRIR-ARCHIVOS.
+           GO BZ-FIN-DE-SECCION.
+       SKIP1
+       BA-ABRIR-ARCHIVOS.
+      *------------------
+           OPEN INPUT MASGEMP OUTPUT COLVELI.
+           IF (WR-FS-COLVELI NOT = 0 AND NOT = 97)
+               MOVE 'B-INICIALIZAR'     TO WR-SECCION
+               MOVE 'BA-ABRIR-ARCHIVOS' TO WR-PARRAFO
+               MOVE 'COLVELI    '       TO WR-ARCHIVO
+               MOVE 'OPEN'              TO WR-OPERACI
+               MOVE WR-FS-COLVELI       TO WR-FILE-ST
+               PERFORM BB-DISPLAY-ERROR
+           END-IF.
+           IF (WR-FS-MASGEMP NOT = 0 AND NOT = 97)
+               MOVE 'B-INICIALIZAR'     TO WR-SECCION
+               MOVE 'BA-ABRIR-ARCHIVOS' TO WR-PARRAFO
+               MOVE 'MASGEMP    '       TO WR-ARCHIVO
+               MOVE 'OPEN'              TO WR-OPERACI
+               MOVE WR-FS-MASGEMP       TO WR-FILE-ST
+               PERFORM BB-DISPLAY-ERROR
+           END-IF.
+           ACCEPT WR-FECHA-HOY FROM DATE.
+       SKIP1
+       BB-DISPLAY-ERROR.
+      *-----------------
+           SET WS-PROCESO-NO-OK        TO TRUE.
+           DISPLAY ' '
+           DISPLAY 'ERROR EN SECCION   : ' WR-SECCION
+           DISPLAY '   PARRAFO         : ' WR-PARRAFO
+           DISPLAY '   ARCHIVO         : ' WR-ARCHIVO
+           DISPLAY '   OPERACION       : ' WR-OPERACI
+           DISPLAY '   FILE STATUS     : ' WR-FILE-ST
+           DISPLAY '   MENSAJE DE ERROR: ' WR-MENSAJE.
+       SKIP1
+       BZ-FIN-DE-SECCION.
+      *------------------
+           EXIT.
+       SKIP1
+       C-PROCESAR SECTION.
+      *===================
+       CA-PROCESO-GRAL.
+      *----------------
+           PERFORM CB-LEER-OPC
+           MOVE 'REDNX'                TO WB-REQ-OPC-CMD.
+           PERFORM CC-PROCESA-OPERACIONES
+              UNTIL (WB-REQ-OPC-RC  NOT = '  ' OR WS-PROCESO-NO-OK OR
+                     OPC-COD-TOPC NOT = 'C')
+           GO CZ-FIN-DE-SECCION.
+       SKIP1
+       CB-LEER-OPC.
+      *------------
+           MOVE SPACES                   TO WB-REQ-OPC-RC
+           CALL 'DBNTRY' USING WB-UIB WB-REQ-OPC-AREA OPC WB-ELEM-LIS
+           IF (WB-REQ-OPC-RC NOT = '  ' AND NOT = '14')
+               MOVE 'C-PROCESAR'         TO WR-SECCION
+               MOVE 'CB-LEER-OPC'        TO WR-PARRAFO
+               MOVE 'OPC'                TO WR-ARCHIVO
+               MOVE WB-REQ-OPC-CMD       TO WR-OPERACI
+               MOVE WB-REQ-OPC-RC        TO WR-FILE-ST
+               MOVE WB-REQ-OPC-KEY-VALUE TO WR-MENSAJE
+               PERFORM BB-DISPLAY-ERROR
+           END-IF.
+       SKIP1
+       CC-PROCESA-OPERACIONES.
+      *-----------------------
+           ADD 1                         TO WA-L-OPC
+           IF (OPC-VAL-SCRE = 0 AND OPC-COD-TOOC = 'SGN')
+               ADD 1                     TO WA-S-OPC
+               PERFORM CE-LEER-MASGEMP
+               IF (WR-FS-MASGEMP = 0)
+                   ADD 1                 TO WA-L-EMP
+               ELSE
+                   IF (WR-FS-MASGEMP = 23)
+                       PERFORM CG-GRABAR-ELIMINACION
+                       ADD 1             TO WA-G-ELI
+                   END-IF
+               END-IF
+           END-IF.
+           PERFORM CB-LEER-OPC.
+       SKIP1
+       CE-LEER-MASGEMP.
+      *----------------
+           MOVE OPC-CIC-IOPC           TO WR-CLAVE-OPC
+           COMPUTE WR-CLAVE-MSG = WR-COD-OPER * 10
+           MOVE WR-CLAVE-MSG           TO MSG-CLAVE.
+           READ MASGEMP END-READ
+           IF (WR-FS-MASGEMP NOT = 0 AND NOT = '23')
+               MOVE 'C-PROCESAR'       TO WR-SECCION
+               MOVE 'CE-LEER-MASGEMP'  TO WR-PARRAFO
+               MOVE 'MASGEMP'          TO WR-ARCHIVO
+               MOVE 'READ'             TO WR-OPERACI
+               MOVE WR-FS-MASGEMP      TO WR-FILE-ST
+               MOVE OPC-CIC-IOPC       TO WR-MENSAJE
+               PERFORM BB-DISPLAY-ERROR
+           END-IF.
+       SKIP1
+       CG-GRABAR-ELIMINACION.
+      *----------------------
+           MOVE OPC-KEY-IOPC            TO COLRELI.
+           WRITE COLRELI END-WRITE.
+           IF (WR-FS-COLVELI NOT = 0)
+               MOVE 'C-PROCESAR'        TO WR-SECCION
+               MOVE 'CG-GRABAR-ELIMINA' TO WR-PARRAFO
+               MOVE 'COLVELI    '       TO WR-ARCHIVO
+               MOVE 'WRITE'             TO WR-OPERACI
+               MOVE WR-FS-COLVELI       TO WR-FILE-ST
+               MOVE COLRELI             TO WR-MENSAJE
+               PERFORM BB-DISPLAY-ERROR
+           END-IF.
+       SKIP1
+       CZ-FIN-DE-SECCION.
+      *------------------
+           EXIT.
+       EJECT
+       D-TERMINAR SECTION.
+      *===================
+       DA-ESTADISTICAS.
+      *----------------
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY 'INFORMES'
+           DISPLAY '--------'
+           DISPLAY ' '
+           DISPLAY 'COLPB745 NO EMITE INFORME'
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY 'ESTADISTICAS DE PROCESO PROGRAMA COLPB745 FECHA '
+                    WR-FECHA-HOY
+           DISPLAY '------------------------------------------------'
+           DISPLAY '     OPERACIONES SOB. NO PACTADO A ELIMINAR'
+           DISPLAY ' '
+           DISPLAY 'LEIDOS OPC       : ' WA-L-OPC
+           DISPLAY 'SELECC OPC       : ' WA-S-OPC
+           DISPLAY 'LEIDOS MASGEMP   : ' WA-L-EMP
+           DISPLAY 'GRABADOS COLVELI : ' WA-G-ELI
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY 'TARJETAS DE PARAMETROS'
+           DISPLAY '----------------------'
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY 'MENSAJES PARA EL EXPLOTADOR'
+           DISPLAY '---------------------------'
+           DISPLAY ' '
+           IF WS-PROCESO-OK
+               DISPLAY 'NO HAY MENSAJES PARA EL EXPLOTADOR'
+           ELSE
+               DISPLAY 'HAY MENSAJES PARA EL EXPLOTADOR'.
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY ' '.
+       SKIP1
+       DC-TERMINO.
+      *-----------
+           CLOSE COLVELI MASGEMP.
+           IF WS-PROCESO-NO-OK
+              MOVE 100 TO RETURN-CODE
+              DISPLAY ' '
+              DISPLAY ' '
+              DISPLAY '**********************************************'
+              DISPLAY '**********************************************'
+              DISPLAY '********                              ********'
+              DISPLAY '******** TERMINO ERRONEO DEL PROCESO  ********'
+              DISPLAY '********                              ********'
+              DISPLAY '**********************************************'
+              DISPLAY '**********************************************'
+           ELSE
+              DISPLAY ' '
+              DISPLAY ' '
+              DISPLAY '*****PROCESO TERMINO EN FORMA NORMAL*****'.
+       SKIP1
+       DZ-FIN-DE-SECCION.
+      *------------------
+           EXIT.

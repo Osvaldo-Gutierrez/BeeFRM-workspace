@@ -1,0 +1,217 @@
+       IDENTIFICATION DIVISION.
+      *=======================
+       PROGRAM-ID.      DAPPKOPD.
+       AUTHOR.          CONSIST.
+       DATE-WRITTEN.     8-NOV-1994 11:56:49.
+
+      * Genera campo OPD-VAL-IPES = OPD-VAL-CAPT * V.C. en OPD
+
+       ENVIRONMENT DIVISION.
+      *====================
+       CONFIGURATION SECTION.
+      *---------------------
+       SPECIAL-NAMES.
+            DECIMAL-POINT IS COMMA.
+       INPUT-OUTPUT SECTION.
+      *--------------------
+       FILE-CONTROL.
+
+       DATA DIVISION.
+      *=============
+       FILE SECTION.
+      *------------
+
+       WORKING-STORAGE SECTION.
+      *-----------------------
+
+       COPY GNSWGRQA.
+       COPY GNSWGUIB.
+       COPY GNSWGELS.
+       COPY GNSWGIFD.
+       COPY GNSWCFIO.
+       COPY GNSWVFIO.
+       COPY GNSWGSYS.
+       COPY GNSWVNUM.
+       COPY GNSWCNUM.
+       COPY GNSWGPES.
+       COPY GNSWGCPT.
+
+      * Entidades de GNS
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-TAB-REQA==.
+       COPY GNSBRTAB.
+
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-MSG-REQA==.
+       COPY GNSBRMSG.
+
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-MSC-REQA==.
+       COPY GNSBRMSC.
+
+      * Entidades de DAP
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-OPD-REQA==.
+       COPY DAPBROPD.
+
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-CAD-REQA==.
+       COPY DAPBRCAD.
+
+      * Entidades de TAB
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-CAM-REQA==.
+       COPY TABBRCAM.
+
+       01  FRM-VARI.
+           03 FRM-IFLD                PIC 9(05).
+           03 FRM-MENS                PIC X(79).
+           03 FRM-MENS-RED REDEFINES  FRM-MENS.
+              05 FRM-MEN1             PIC X(40).
+              05 FRM-MEN2             PIC X(39).
+           03 FRM-SUAR                PIC X(03).
+           03 FRM-SUAR-MAL            PIC X(3) VALUE 'MAL'.
+           03 FRM-SUAR-WRN            PIC X(3) VALUE 'WRN'.
+           03 FRM-SUAR-CLR            PIC X(3) VALUE 'CLR'.
+           03 FRM-SUAR-OKS            PIC X(3) VALUE 'OKS'.
+           03 FRM-SUAR-EOF            PIC X(3) VALUE 'EOF'.
+
+       01  WSS-VARI.
+           03  WSS-STAT-VCAM        VALUE ZEROES     PIC 9(01).
+           03  SUM-CADS                              PIC S9(11)V9(4).
+           03  WSS-FEC-FINI                          PIC X(08).
+           03  WSS-VAL-IPES                          PIC 9(11).
+           03  WSS-PROG                              PIC X(12).
+           03  WSS-REG-LEID         VALUE ZEROES     PIC 9(07).
+           03  WSS-REG-NPRO         VALUE ZEROES     PIC 9(07).
+           03  WSS-REG-SPRO         VALUE ZEROES     PIC 9(07).
+           03  WSS-REG-MALO         VALUE ZEROES     PIC 9(07).
+           03  WSS-REG-GRAB         VALUE ZEROES     PIC 9(07).
+
+       PROCEDURE DIVISION.
+      *==================
+
+       MAIN SECTION.
+       INI-MAIN.
+       COPY GNSBGEDB.
+           MOVE 'DAPPKOPD' TO FIO-PROG
+                              WSS-PROG.
+           PERFORM BUS-FSIS.
+           ACCEPT WSS-FEC-FINI IN WSS-VARI.
+           IF WSS-FEC-FINI IN WSS-VARI = '*       '
+              MOVE '19000101' TO WSS-FEC-FINI IN WSS-VARI
+           ELSE
+              IF WSS-FEC-FINI IN WSS-VARI IS NOT NUMERIC
+                 DISPLAY 'PARAMETRO FECHA INVALIDO'
+                 PERFORM GNS-PRO-END.
+           MOVE FIO-UPD TO FIO-CMND.
+           PERFORM DAP-FIO-OPD.
+           IF FIO-STAT-OKS
+               MOVE FIO-GET-FST TO FIO-CMND
+               PERFORM DAP-FIO-OPD
+               IF FIO-STAT-OKS
+                   ADD 1 TO WSS-REG-LEID
+                   PERFORM PROCESA-VAL-IPES
+                   MOVE FIO-CLO TO FIO-CMND
+                   PERFORM DAP-FIO-OPD
+                   IF NOT FIO-STAT-OKS
+                       DISPLAY 'ERROR EN CLOSE A OPD. FIO-STAT: '
+                                                      FIO-STAT
+                   ELSE
+                       NEXT SENTENCE
+               ELSE
+                   DISPLAY 'ERROR EN START A OPD. FIO-STAT: ' FIO-STAT
+           ELSE
+               DISPLAY 'ERROR EN OPEN A OPD. FIO-STAT: ' FIO-STAT.
+           DISPLAY '*********************************************'.
+           DISPLAY '*         ESTADISTICAS DEL PROCESO          *'.
+           DISPLAY '*********************************************'.
+           DISPLAY '* OPD LEIDAS              : ' WSS-REG-LEID.
+           DISPLAY '* OPD YA PROCESADAS       : ' WSS-REG-NPRO.
+           DISPLAY '* OPD POR PROCESAR        : ' WSS-REG-SPRO.
+           DISPLAY '* OPD C/ERROR AL REGRABAR : ' WSS-REG-MALO.
+           DISPLAY '* OPD REGRABADAS OK       : ' WSS-REG-GRAB.
+           PERFORM GNS-PRO-END.
+       FIN-MAIN.
+           EXIT.
+
+       PROCESA-VAL-IPES SECTION.
+       INI-PROCESA-VAL-IPES.
+           IF WSS-FEC-FINI IN WSS-VARI > OPD-FEC-FCMP IN OPD
+              ADD 1 TO WSS-REG-NPRO
+              GO TO LEE-PROXIMA-OPD.
+           ADD 1 TO WSS-REG-SPRO.
+           MOVE FIO-GET-KEY-UPD TO FIO-CMND.
+           PERFORM DAP-FIO-OPD.
+           IF NOT FIO-STAT-OKS
+               DISPLAY 'ERROR AL LEER OPD DE UPD. CIC: '
+                                              OPD-CIC-IOPD IN OPD
+           ELSE
+               IF OPD-MSC-TVAL IN OPD = '0' AND
+                  OPD-COD-CVAL IN OPD NOT = '999'
+                   PERFORM BUSCA-VALOR-CAMBIO
+                   IF WSS-STAT-VCAM = 0
+                       MULTIPLY OPD-VAL-CAPT IN OPD BY
+                                CAM-SGV-VCAM IN CAM GIVING
+                                WSS-VAL-IPES IN WSS-VARI ROUNDED
+                       MOVE WSS-VAL-IPES IN WSS-VARI TO
+                            OPD-VAL-IPES IN OPD
+                       PERFORM GRABA-VAL-IPES
+                   ELSE
+                       NEXT SENTENCE
+               ELSE
+                   MOVE OPD-VAL-CAPT IN OPD TO OPD-VAL-IPES IN OPD
+                   PERFORM GRABA-VAL-IPES.
+       LEE-PROXIMA-OPD.
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM DAP-FIO-OPD.
+           IF FIO-STAT-OKS
+              ADD 1 TO WSS-REG-LEID
+              GO TO INI-PROCESA-VAL-IPES.
+       FIN-PROCESA-VAL-IPES.
+           EXIT.
+
+       BUSCA-VALOR-CAMBIO SECTION.
+       INI-BUSCA-VALOR-CAMBIO.
+      *VALOR DEL CAMBIO A FECHA CAPTACION
+           MOVE 0 TO WSS-STAT-VCAM
+           MOVE '0999  '            TO TAB-CIC-CTAB IN TAB.
+           MOVE OPD-COD-VCAM IN OPD TO TAB-COD-CTAB IN TAB.
+           MOVE OPD-NUM-DREA IN OPD TO TAB-NUM-DTRN IN TAB.
+           MOVE OPD-NUM-MREA IN OPD TO TAB-NUM-MTRN IN TAB.
+           MOVE OPD-NUM-SREA IN OPD TO TAB-NUM-STRN IN TAB.
+           MOVE OPD-NUM-AREA IN OPD TO TAB-NUM-ATRN IN TAB.
+           PERFORM GET-VCAM.
+           IF MSG-COD-MENS > SPACES
+               MOVE 1 TO WSS-STAT-VCAM
+               DISPLAY 'NO EXISTE VCAM A F CAPT. REAL: '
+            OPD-FEC-FREA IN OPD ' Y MONEDA: ' OPD-COD-VCAM IN OPD
+            ' CIC: ' OPD-CIC-IOPD IN OPD.
+       FIN-BUSCA-VALOR-CAMBIO.
+           EXIT.
+
+       GRABA-VAL-IPES SECTION.
+       INI-GRABA-VAL-IPES.
+           MOVE FIO-MOD TO FIO-CMND.
+           PERFORM DAP-FIO-OPD.
+           IF NOT FIO-STAT-OKS
+               DISPLAY 'ERROR AL GRABAR OPD. CIC ' OPD-CIC-IOPD IN OPD
+               ADD 1 TO WSS-REG-MALO
+           ELSE
+               ADD 1 TO WSS-REG-GRAB.
+      *    DISPLAY 'REGRABO OPD ' OPD-CIC-IOPD IN OPD.
+       FIN-GRABA-VAL-IPES.
+           EXIT.
+
+       COPY TABBFCAM.
+       COPY DAPBFOPD.
+       COPY DAPBFCAD.
+       COPY GNSBGDTC.
+       COPY GNSBTABT.
+       COPY GNSBGABT.
+       COPY GNSBBSYS.
+       COPY GNSBVTAB.
+       COPY GNSBBTAB.
+       COPY GNSBFTAB.
+       COPY GNSBGCAM.
+       COPY GNSBFMSG.
+       COPY GNSBFMSC.
+       COPY GNSBBMSC.
+       COPY GNSBGEND.
+      *Entidades  de GNS
+       COPY GNSBBMSG.
+       COPY GNSBGIFD.

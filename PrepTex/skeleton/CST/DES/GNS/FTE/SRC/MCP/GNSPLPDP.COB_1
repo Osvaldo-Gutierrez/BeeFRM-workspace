@@ -1,0 +1,189 @@
+      $SET LIST
+       IDENTIFICATION DIVISION.
+      *========================
+       PROGRAM-ID. GNSPLPDP.
+       AUTHOR. CST.
+       DATE-WRITTEN.      15-DEC-1995 17:12:38.
+      *
+      * LISTA PDP PARA REVISAR GRUPOS
+      *
+       ENVIRONMENT DIVISION.
+      *=====================
+       CONFIGURATION SECTION.
+      *----------------------
+       SPECIAL-NAMES.
+               DECIMAL-POINT IS COMMA.
+      
+       INPUT-OUTPUT SECTION.
+       FILE-CONTROL.
+           SELECT LSTPDP  ASSIGN TO DISK
+                 ORGANIZATION IS SEQUENTIAL.
+      
+       DATA DIVISION.
+      *==============
+      
+       FILE SECTION.
+       FD  LSTPDP
+           LABEL RECORD ARE STANDARD
+           VALUE OF FILETYPE IS 7,
+           BLOCKSIZE IS 4300,
+           TITLE IS "LST/LSTPDP".
+       01  REG-PDP                                        PIC X(43).
+      
+       DATA-BASE SECTION.
+       DB  BDCST.
+       01  AUDITAREA.
+       01  GNSPDP.
+      *
+       WORKING-STORAGE SECTION.
+       01  REG1-PDP.
+               05  REG1-PDP-GLS-BLK0                      PIC X(01).
+               05  REG1-PDP-GLS-GRPO                      PIC X(12).
+               05  REG1-PDP-GLS-BLK1                      PIC X(01).
+               05  REG1-PDP-GLS-SECU                      PIC X(05).
+               05  REG1-PDP-GLS-BLK2                      PIC X(01).
+               05  REG1-PDP-GLS-SIST                      PIC X(03).
+               05  REG1-PDP-GLS-BLK3                      PIC X(01).
+               05  REG1-PDP-GLS-NEMO                      PIC X(12).
+               05  REG1-PDP-GLS-BLK4                      PIC X(01).
+               05  REG1-PDP-GLS-CMND                      PIC X(03).
+               05  REG1-PDP-GLS-BLK5                      PIC X(01).
+               05  REG1-PDP-GLS-RESP                      PIC X(01).
+               05  REG1-PDP-GLS-BLK6                      PIC X(01).
+       01  REG2-PDP REDEFINES REG1-PDP.
+               05  REG2-PDP-GLS-BLK0                      PIC X(01).
+               05  REG2-PDP-GLS-GLOSA                     PIC X(17).
+               05  REG2-PDP-GLS-TOT                       PIC ZZZZ9.
+               05  REG2-PDP-GLS-RESTO                     PIC X(20).
+       COPY GNSWCFIO OF GNS.
+       COPY GNSWVFIO OF GNS.
+       COPY GNSWSFIO OF GNS.
+       COPY GNSBRPDP OF GNS.
+      * PARA DETERMINAR LOS CAMBIO DE GRUPOS EN CARGA INICIAL
+       77  WSS-COD-GRUP-VIG VALUE SPACES     PIC X(12).
+       77  WSS-IDX-PDP-X    VALUE 1          PIC 9(05).
+       77  WSS-MAX-PDP-X    VALUE ZEROES     PIC 9(05).
+       77  WSS-MAX-PDP-Y    VALUE ZEROES     PIC 9(05).
+      
+       PROCEDURE DIVISION.
+      *===================
+      
+       MAIN SECTION.
+       INI-MAIN.
+      
+           MOVE "N" TO FIO-BTRN.
+           MOVE "99" TO FIO-STAT.
+           MOVE FIO-INP TO FIO-CMND.
+           PERFORM GNS-FIO-PDP.
+           IF NOT FIO-STAT-OKS
+               DISPLAY "GNSPLPDP: ERROR APERTURA ARCHIVO PDP STOP RUN"
+               FIO-STAT
+               STOP RUN.
+      
+           PERFORM PRO-ABRE-ARCH.
+      
+           PERFORM GET-PDP.
+           PERFORM MAX-PDP.
+      
+           PERFORM PRO-CIERRA-ARCH.
+      
+           STOP RUN.
+       LUP-MAIN.
+       FIN-MAIN.
+           EXIT.
+      
+       GET-PDP SECTION.
+       INI-GET-PDP.
+           MOVE 1      TO WSS-IDX-PDP-X.
+           MOVE ZEROES TO WSS-MAX-PDP-Y.
+           MOVE LOW-VALUES          TO PDP-KEY-IPDP IN PDP.
+           MOVE FIO-GET-NLS         TO FIO-CMND.
+       CIC-GET-PDP-2.
+           PERFORM GNS-FIO-PDP.
+           IF  NOT FIO-STAT-OKS
+               PERFORM ANL-FIN-ARCH
+               DISPLAY "FIN DE ARCHIVO "
+               GO TO FIN-GET-PDP.
+      
+           IF PDP-COD-GRPO IN PDP NOT = WSS-COD-GRUP-VIG
+               PERFORM GEN-LBLK
+               MOVE PDP-COD-GRPO IN PDP TO WSS-COD-GRUP-VIG
+               ADD 1 TO WSS-MAX-PDP-Y
+               IF WSS-IDX-PDP-X > WSS-MAX-PDP-X
+                   MOVE WSS-IDX-PDP-X TO WSS-MAX-PDP-X
+                   MOVE 1 TO WSS-IDX-PDP-X
+               ELSE
+                   MOVE 1 TO WSS-IDX-PDP-X
+           ELSE
+               ADD 1 TO WSS-IDX-PDP-X.
+      
+           MOVE SPACES TO REG1-PDP.
+           MOVE PDP-COD-GRPO IN PDP TO REG1-PDP-GLS-GRPO.
+           MOVE PDP-NUM-SECU IN PDP TO REG1-PDP-GLS-SECU.
+           MOVE PDP-COD-SIST IN PDP TO REG1-PDP-GLS-SIST.
+           MOVE PDP-COD-NEMO IN PDP TO REG1-PDP-GLS-NEMO.
+           MOVE PDP-COD-CMND IN PDP TO REG1-PDP-GLS-CMND.
+           MOVE PDP-IND-RESP IN PDP TO REG1-PDP-GLS-RESP.
+      
+           PERFORM PUT-PDP-PGM.
+      
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           GO TO CIC-GET-PDP-2.
+       FIN-GET-PDP.
+           EXIT.
+      
+       ANL-FIN-ARCH SECTION.
+       INI-ANL-FIN-ARCH.
+           IF WSS-IDX-PDP-X > WSS-MAX-PDP-X
+              MOVE WSS-IDX-PDP-X TO WSS-MAX-PDP-X
+              MOVE 1 TO WSS-IDX-PDP-X.
+       FIN-ANL-FIN-ARCH.
+          EXIT.
+      
+       MAX-PDP SECTION.
+       INI-MAX-PDP.
+           MOVE SPACES TO REG1-PDP.
+           PERFORM PUT-PDP-PGM.
+           MOVE SPACES TO REG2-PDP.
+           MOVE "TOTAL GRUPOS   : " TO REG2-PDP-GLS-GLOSA.
+           MOVE WSS-MAX-PDP-Y       TO REG2-PDP-GLS-TOT.
+           PERFORM PUT-PDP-PGM.
+           MOVE SPACES TO REG2-PDP.
+           MOVE "MAX OCURRENCIAS: " TO REG2-PDP-GLS-GLOSA.
+           MOVE WSS-MAX-PDP-X       TO REG2-PDP-GLS-TOT.
+           PERFORM PUT-PDP-PGM.
+       FIN-MAX-PDP.
+           EXIT.
+      
+       PRO-ABRE-ARCH SECTION.
+       INI-PRO-ABRE-ARCH.
+           OPEN OUTPUT LSTPDP.
+       FIN-PRO-ABRE-ARCH.
+           EXIT.
+      
+       GEN-LBLK SECTION.
+       INI-GEN-LBLK.
+           IF WSS-COD-GRUP-VIG > SPACES
+              DISPLAY "WSS-COD-GRUP-VIG : " WSS-COD-GRUP-VIG
+              MOVE SPACES TO REG1-PDP
+              PERFORM  PUT-PDP-PGM.
+       FIN-GEN-LBLK.
+           EXIT.
+      
+       PUT-PDP-PGM SECTION.
+       INI-PUT-PDP-PGM.
+           MOVE REG1-PDP TO REG-PDP.
+      
+           WRITE REG-PDP INVALID KEY DISPLAY
+                "ERROR AL GRABAR LSTPDP".
+       FIN-PUT-PDP-PGM.
+           EXIT.
+      
+       PRO-CIERRA-ARCH SECTION.
+       INI-PRO-CIERRA-ARCH.
+           CLOSE LSTPDP WITH LOCK.
+       FIN-PRO-CIERRA-ARCH.
+           EXIT.
+      
+       COPY GNSBFPDP OF GNS.
+       COPY GNSBGDMD OF GNS.

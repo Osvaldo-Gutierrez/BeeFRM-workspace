@@ -1,0 +1,1365 @@
+000100 IDENTIFICATION DIVISION.
+000200*========================
+000300 PROGRAM-ID.    SGCPGES8.
+000400*AUTHOR.        C OLIVA C.
+000500*DATE-WRITTEN.  24 JUL 1990.
+000600*DATE-COMPILED. 22.04.98.
+000700*ULTIMA ACT.   13/05/98    15:50
+000800***********************************************************
+000900*                                                         *
+001000* OBJETIVO :    ACTUALIZAR TABLA OPE DE LA BASE 362.      *
+001100*                                                         *
+001200* ARCHIVOS :    RCO 362 : TABLA RELACION CLTE-OPERACION   *
+001300*               OPE 362 : TABLA DE  OPERACIONES           *
+001400*               TAB 150 : TABLA DE TABLAS                 *
+001500*               MOP     : ARCHIVO MOVIMIENTOS OPE         *
+001600*                                                         *
+001700* MANTENCION :                                            *
+001800*   FECHA  :    05-OCTUBRE-1992.                          *
+001900*   PROGR  :    C OLIVA C.                                *
+002000*   MOTIVO :    AL CREAR UNA OPERACION, SE INICIALIZAN EN *
+002100*               CEROS LOS NUEVOS CAMPOS  DE  LA TABLA OPE *
+002200*               BD 362 (RENTABILIDAD).                    *
+002300*                                                         *
+002400***********************************************************
+002500 ENVIRONMENT DIVISION.
+002600*=====================
+002700 CONFIGURATION SECTION.
+002800 SPECIAL-NAMES.
+002900               DECIMAL-POINT IS COMMA
+003000               C01 IS CANAL-1.
+003100 INPUT-OUTPUT SECTION.
+003200 FILE-CONTROL.
+003300
+003400     SELECT MOVOPE   ASSIGN               TO MOVOPE
+003500                     ORGANIZATION         IS INDEXED
+003600                     ACCESS MODE          IS DYNAMIC
+003700                     RECORD KEY           IS MOP-CLAVE
+003800                     FILE STATUS          IS FS-MOVOPE.
+003900
+004000     SELECT PARAMT   ASSIGN               TO PARAMT
+004100                     FILE STATUS          IS FS-PARAMT.
+004200/
+004300 DATA DIVISION.
+004400*==============
+004500 FILE SECTION.
+004600
+004700 FD  MOVOPE        LABEL RECORD STANDARD
+004800                   RECORD CONTAINS 222 CHARACTERS.
+004900     COPY GESRMOP.
+005000/
+005100 FD  PARAMT        LABEL RECORD STANDARD
+005200                   RECORD CONTAINS 080 CHARACTERS.
+005300 01  WP-PARAMETRO.
+005400     03 WP-REG1.
+005500        05 WP-FECHA-PRO.
+005600           10 WP-DIA-PRO          PIC 9(02).
+005700           10 WP-MES-PRO          PIC 9(02).
+005800           10 WP-SIG-PRO          PIC 9(02).
+005900           10 WP-ANO-PRO          PIC 9(02).
+006000        05 WP-FILLER-REG1         PIC X(72).
+006100/
+006200 WORKING-STORAGE SECTION.
+006300
+006400 01  WR-AUXILIARES.
+006500     03 WR-CREA-MOP-S             PIC ZZZZZ9.
+006600     03 WR-ELIM-MOP-S             PIC ZZZZZ9.
+006700     03 WR-ACTI-MOP-S             PIC ZZZZZ9.
+006800     03 WR-DESA-MOP-S             PIC ZZZZZ9.
+006900     03 WR-MODI-MOP-S             PIC ZZZZZ9.
+007000
+007100 01  WS-SWITCHS.
+007200     03 WS-HAY-ERROR              PIC X(02) VALUE '  '.
+007300
+007400 01  WR-ESTADOS.
+007500     03 FS-MOVOPE                 PIC X(02) VALUE ZEROS.
+007600     03 FS-PARAMT                 PIC X(02) VALUE ZEROS.
+007700
+007800 01  WR-TERMINO                   PIC 9(01)  VALUE 0.
+007900     88 WR-TERMINO-OK             VALUE 0.
+008000     88 WR-HAY-MSG-WRN-OP         VALUE 1.
+008100     88 WR-HAY-MSG-ERR-OP         VALUE 2.
+008200     88 WR-TERMINO-ANORMAL        VALUE 3.
+008300     88 WR-TERMINO-ERROR          VALUE 2 3.
+008400
+008500 01  WR-VARIABLES-TERMINO.
+008600     05 WR-SECCION                PIC X(25).
+008700     05 WR-PARRAFO                PIC X(25).
+008800     05 WR-ARCHIVO                PIC X(10).
+008900     05 WR-OPERACI                PIC X(10).
+009000     05 WR-FILE-ST                PIC X(02).
+009100     05 WR-MENSAJE.
+009200        10 WR-COD-PGM             PIC X(08).
+009300        10 WR-BLANCO              PIC X(01) VALUE ' '.
+009400        10 WR-COD-MSG             PIC X(03).
+009500
+009600 01  WR-FECHAS.
+009700     03 WR-FECHA.
+009800        05 WR-FEC-SS              PIC 9(02).
+009900        05 WR-FEC-AA              PIC 9(02).
+010000        05 WR-FEC-MM              PIC 9(02).
+010100        05 WR-FEC-DD              PIC 9(02).
+010200     03 WR-FECHA-P.
+010300        05 WR-FEC-DD-P            PIC 9(02).
+010400        05 WR-FEC-MM-P            PIC 9(02).
+010500        05 WR-FEC-SS-P            PIC 9(02).
+010600        05 WR-FEC-AA-P            PIC 9(02).
+010700     03 WR-FECHA-HOY.
+010800        05 WR-AA-HOY              PIC X(02).
+010900        05 WR-MM-HOY              PIC X(02).
+011000        05 WR-DD-HOY              PIC X(02).
+011100     03 WR-FECHA-HOY-D.
+011200        05 WR-DD-HOY-D            PIC X(02).
+011300        05 FILLER                 PIC X(01) VALUE '/'.
+011400        05 WR-MM-HOY-D            PIC X(02).
+011500        05 FILLER                 PIC X(01) VALUE '/'.
+011600        05 WR-AA-HOY-D            PIC X(02).
+011700
+011800 01  WR-LIN-TIT.
+011900     05 FILLER                    PIC X(05) VALUE SPACES.
+012000     05 FILLER                    PIC X(07) VALUE 'LEIDOS'.
+012100     02 FILLER                    PIC X(07) VALUE 'CREADO'.
+012200     02 FILLER                    PIC X(07) VALUE 'MODIFI'.
+012300     02 FILLER                    PIC X(07) VALUE 'ELIMIN'.
+012400     02 FILLER                    PIC X(06) VALUE 'RECHAZ'.
+012500
+012600 01  WR-LIN-DET.
+012700     02 FILLER                    PIC X(01) VALUE SPACES.
+012800     02 WR-LD-SUBTIT              PIC X(04).
+012900     02 WR-LD-LEIDOS              PIC ZZZZZ9.
+013000     02 FILLER                    PIC X(01) VALUE SPACES.
+013100     02 WR-LD-CREADO              PIC ZZZZZ9.
+013200     02 FILLER                    PIC X(01) VALUE SPACES.
+013300     02 WR-LD-MODIFI              PIC ZZZZZ9.
+013400     02 FILLER                    PIC X(01) VALUE SPACES.
+013500     02 WR-LD-ELIMIN              PIC ZZZZZ9.
+013600     02 FILLER                    PIC X(01) VALUE SPACES.
+013700     02 WR-LD-RECHAZ              PIC ZZZZZ9.
+013800
+013900 01  WA-ESTADIST.
+014000     02 FILLER OCCURS 05 TIMES.
+014100        03 WA-LEIDO               PIC 9(06) COMP-3.
+014200        03 WA-CREAD               PIC 9(06) COMP-3.
+014300        03 WA-MODIF               PIC 9(06) COMP-3.
+014400        03 WA-ELIMI               PIC 9(06) COMP-3.
+014500        03 WA-RECHA               PIC 9(06) COMP-3.
+014600     02 WA-GLS-EST.
+014700        03 FILLER                 PIC X(04) VALUE 'MOP '.
+014800        03 FILLER                 PIC X(04) VALUE 'RCO '.
+014900        03 FILLER                 PIC X(04) VALUE 'OPE '.
+015000        03 FILLER                 PIC X(04) VALUE 'TIO '.
+015100        03 FILLER                 PIC X(04) VALUE 'AUX '.
+015200     02 WA-TIT-EST REDEFINES WA-GLS-EST OCCURS 05 TIMES PIC X(04).
+015300
+015400 01  WA-ESTADIST-MOP.
+015500     02 WA-ACUM-MOP.
+015600        03 WA-CREA-MOP            PIC 9(06) COMP-3 VALUE 0.
+015700        03 WA-ELIM-MOP            PIC 9(06) COMP-3 VALUE 0.
+015800        03 WA-ACTI-MOP            PIC 9(06) COMP-3 VALUE 0.
+015900        03 WA-DESA-MOP            PIC 9(06) COMP-3 VALUE 0.
+016000        03 WA-MODI-MOP            PIC 9(06) COMP-3 VALUE 0.
+016100
+016200 01  WI-INDICES.
+016300     02 WI-MOP                    PIC 9(01) VALUE 1.
+016400     02 WI-RCO                    PIC 9(01) VALUE 2.
+016500     02 WI-OPE                    PIC 9(01) VALUE 3.
+016600     02 WI-TIO                    PIC 9(01) VALUE 4.
+016700     02 WI-AUX                    PIC 9(01) VALUE 5.
+016800     02 WI-IND                    PIC 9(01) VALUE 0.
+016900/
+017000     COPY RTNWCALE.
+017100/
+017200*------------------------------------------------------------*
+017300*          A R E A S   D A T A C O M / D B                   *
+017400*------------------------------------------------------------*
+017500
+017600 01  UIB.
+017700     03 FILLER                    PIC X(32) VALUE 'SGCPGES8'.
+017800*---------------------------------------------------------------*
+017900*      REQUEST AREA / REGISTRO / ELEMENT LIST      TABLA RCO    *
+018000*---------------------------------------------------------------*
+018100 01  WR-REQ-RCO-AREA.
+018200     03 WR-REQ-RCO-COMMAND        PIC X(5).
+018300     03 WR-REQ-RCO-TABLE          PIC X(3)  VALUE 'RCO'.
+018400     03 WR-REQ-RCO-KEY            PIC X(5)  VALUE 'RCO01'.
+018500     03 WR-REQ-RCO-RTC            PIC X(2)  VALUE SPACES.
+018600     03 WR-REQ-RCO-INT-RC         PIC X(1).
+018700     03 WR-REQ-RCO-DB-ID          PIC S9(4) COMP VALUE +362.
+018800     03 WR-REQ-RCO-REC-ID         PIC X(7).
+018900     03 FILLER                    PIC X(25).
+019000     03 WR-REQ-RCO-CONT-MAX       PIC S9(4) COMP.
+019100     03 WR-REQ-RCO-CONT-IO        PIC S9(4) COMP.
+019200     03 FILLER                    PIC X(22).
+019300     03 WR-REQ-RCO-VALUE.
+019400        05 WR-REQ-RCO-CIC-IOPE    PIC X(12).
+019500
+019600 01  WR-RCO.
+019700*    COPYDD OPE-R-RCO.OPE-E-RCO00(PROD),1,D
+      *                             EQUIVALENTE AL REGISTRO RCO
+           02  OPE-E-RCO00.
+      *                             RELACION CLIENTE OPERACION
+               03  RCO.
+      *                             FILLER COMPATIBILIDAD VSAM/MVS
+                   04  RCO-GLS-FLAG PICTURE X(1).
+      *                             KEY CLAVE PRIMARIA REGISTRO
+                   04  RCO-KEY-IREG.
+      *                             IDENTIFICACION RELACION CLIENTE OPER
+                       05  RCO-KEY-IRCO.
+      *                             COD. INT. COMP. CLIENTE
+                       06  RCO-CIC-ICLI.
+      *                             CENTRO ASIGNACION IDENTIFICACION
+                       07  RCO-CAI-ICLI.
+                       08  RCO-COD-TCLI
+                                    PICTURE X(1).
+                       08  RCO-COD-CCLI
+                                    PICTURE X(3).
+      *                             IDENT. INTERNA COMPUTACIONAL
+                       07  RCO-IIC-ICLI
+                                    PICTURE X(8).
+      *                             IDENTIFICACION OPERACION RELACION
+                       06  RCO-KEY-IOPE.
+      *                             COD. INT. COMP. OPERACION
+                       07  RCO-CIC-IOPE.
+      *                             CENTRO ASIGNACION IDENTIFICACION
+                       08  RCO-CAI-IOPE.
+                       09  RCO-COD-TOPE
+                                    PICTURE X(1).
+                       09  RCO-COD-COPE
+                                    PICTURE X(3).
+      *                             IDENT. INTERNA COMPUTACIONAL
+                       08  RCO-IIC-IOPE.
+                       09  RCO-COD-OOPE.
+                       10  RCO-COD-SOPE
+                                    PICTURE X(2).
+                       10  RCO-IND-SOPE
+                                    PICTURE X(1).
+                       09  RCO-GLS-NOPE
+                                    PICTURE X(5).
+      *                             TIME STAMP TRANSACCION
+                       05  RCO-STP-ITRN.
+      *                             FECHA TRANSACCION
+                       06  RCO-FEC-FTRN.
+                       07  RCO-NUM-STRN
+                                    PICTURE 9(2).
+                       07  RCO-NUM-ATRN
+                                    PICTURE 9(2).
+                       07  RCO-NUM-MTRN
+                                    PICTURE 9(2).
+                       07  RCO-NUM-DTRN
+                                    PICTURE 9(2).
+      *                             HORA TRANSACCION
+                       06  RCO-HRA-HRTR.
+                       07  RCO-NUM-HHTR
+                                    PICTURE 9(2).
+                       07  RCO-NUM-MMTR
+                                    PICTURE 9(2).
+                       07  RCO-NUM-SSTR
+                                    PICTURE 9(2).
+      *                             INDICADOR TIPO ACCION
+                   04  RCO-MSC-TACC PICTURE X(1).
+      *                             INDICADOR STATUS
+                   04  RCO-MSC-STAT PICTURE X(1).
+      *                             CODIGO ORIGEN TRANSACCION
+                   04  RCO-COD-OTRN.
+      *                             INDICADOR TIPO ORIGEN
+                       05  RCO-MSC-TTRN
+                                    PICTURE X(1).
+      *                             CODIGO TIPO ORIGEN
+                       05  RCO-COD-TTRN
+                                    PICTURE X(3).
+      *                             AUTOR TRANSACCION
+                   04  RCO-COD-ATRN PICTURE X(12).
+      *                             CODIGO STATUS
+                   04  RCO-COD-STAT PICTURE X(3).
+      *                             COD RELACION CLIENTE OPERACION
+                   04  RCO-COD-RCOP PICTURE X(3).
+      *                             NUMERO DE DIRECCION
+                   04  RCO-NUM-DIRE PICTURE 9(2).
+      *                             PORCENTAJE RELACION
+                   04  RCO-VAL-PRCO PICTURE 9(3)V9(6)
+                                        COMPUTATIONAL.
+      *                             CODIGO CLASE OPERACION
+                   04  RCO-COD-COPR.
+      *                             CODIGO TIPO OPERACION
+                       05  RCO-COD-TOPR
+                                    PICTURE X(3).
+      *                             CODIGO AUXILIAR OPERACION
+                       05  RCO-COD-AOPR
+                                    PICTURE X(3).
+      *                             FECHA INICIO DE LA RELACION
+                   04  OPE-FEC-INI-REL.
+      *                             ANO INICIO DE LA RELACION
+                       05  OPE-FA-INI-REL
+                                    PICTURE X(4).
+      *                             MES INICIO DE LA RELACION
+                       05  OPE-FM-INI-REL
+                                    PICTURE X(2).
+      *                             DIA INICIO DE LA RELACION
+                       05  OPE-FD-INI-REL
+                                    PICTURE X(2).
+      *                             FECHA TERMINO DE LA RELACION
+                   04  OPE-FEC-TER-REL.
+      *                             ANO TERMINO DE LA RELACION
+                       05  OPE-FA-TER-REL
+                                    PICTURE X(4).
+      *                             MES TERMINO DE LA RELACION
+                       05  OPE-FM-TER-REL
+                                    PICTURE X(2).
+      *                             DIA TERMINO DE LA RELACION
+                       05  OPE-FD-TER-REL
+                                    PICTURE X(2).
+                   04  FILLER-1     PICTURE X(20).
+019800*Y2K COPY OPERRCOO.
+019900
+020000 01  ELEM-LIST-RCO.
+020100     05  ELEM-1                   PIC X(5) VALUE 'RCO00'.
+020200     05  ELEM-SEC                 PIC X(1).
+020300     05  FILLER                   PIC X(5) VALUE SPACES.
+020400/
+020500*---------------------------------------------------------------*
+020600*      REQUEST AREA / REGISTRO / ELEMENT LIST      TABLA OPE    *
+020700*---------------------------------------------------------------*
+020800 01  WR-REQ-OPE-AREA.
+020900     03 WR-REQ-OPE-COMMAND        PIC X(5).
+021000     03 WR-REQ-OPE-TABLE          PIC X(3)  VALUE 'OPE'.
+021100     03 WR-REQ-OPE-KEY            PIC X(5)  VALUE 'OPE00'.
+021200     03 WR-REQ-OPE-RTC            PIC X(2)  VALUE SPACES.
+021300     03 WR-REQ-OPE-INT-RC         PIC X(1).
+021400     03 WR-REQ-OPE-DB-ID          PIC S9(4) COMP VALUE +362.
+021500     03 WR-REQ-OPE-REC-ID         PIC X(7).
+021600     03 FILLER                    PIC X(25).
+021700     03 WR-REQ-OPE-CONT-MAX       PIC S9(4) COMP.
+021800     03 WR-REQ-OPE-CONT-IO        PIC S9(4) COMP.
+021900     03 FILLER                    PIC X(22).
+022000     03 WR-REQ-OPE-CIC-IOPE.
+022100        05 WR-REQ-OPE-CAI-IOPE    PIC X(04).
+022200        05 WR-REQ-OPE-IIC-IOPE    PIC X(08).
+022300
+022400 01  WR-OPE.
+022500*    COPYDD OPE-R-OPE.OPE-E-OPE00(PROD),1,D
+      *                             EQUIVALENTE AL REGISTRO OPE
+           02  OPE-E-OPE00.
+      *                             OPERACIONES
+               03  OPE.
+      *                             FILLER COMPATIBILIDAD VSAM/MVS
+                   04  OPE-GLS-FLAG PICTURE X(1).
+      *                             KEY CLAVE PRIMARIA REGISTRO
+                   04  OPE-KEY-IREG.
+      *                             IDENTIFICACION OPERACION
+                       05  OPE-KEY-IOPE.
+      *                             COD. INT. COMP. OPERACION
+                       06  OPE-CIC-IOPE.
+      *                             CENTRO ASIGNACION IDENTIFICACION
+                       07  OPE-CAI-IOPE.
+                       08  OPE-COD-TOPE
+                                    PICTURE X(1).
+                       08  OPE-COD-COPE
+                                    PICTURE X(3).
+      *                             IDENT. INTERNA COMPUTACIONAL
+                       07  OPE-IIC-IOPE.
+                       08  OPE-COD-OOPE.
+                       09  OPE-COD-SOPE
+                                    PICTURE X(2).
+                       09  OPE-IND-SOPE
+                                    PICTURE X(1).
+                       08  OPE-GLS-NOPE
+                                    PICTURE X(5).
+      *                             TIME STAMP TRANSACCION
+                       05  OPE-STP-ITRN.
+      *                             FECHA TRANSACCION
+                       06  OPE-FEC-FTRN.
+                       07  OPE-NUM-STRN
+                                    PICTURE 9(2).
+                       07  OPE-NUM-ATRN
+                                    PICTURE 9(2).
+                       07  OPE-NUM-MTRN
+                                    PICTURE 9(2).
+                       07  OPE-NUM-DTRN
+                                    PICTURE 9(2).
+      *                             HORA TRANSACCION
+                       06  OPE-HRA-HRTR.
+                       07  OPE-NUM-HHTR
+                                    PICTURE 9(2).
+                       07  OPE-NUM-MMTR
+                                    PICTURE 9(2).
+                       07  OPE-NUM-SSTR
+                                    PICTURE 9(2).
+      *                             INDICADOR TIPO ACCION
+                   04  OPE-MSC-TACC PICTURE X(1).
+      *                             INDICADOR STATUS
+                   04  OPE-MSC-STAT PICTURE X(1).
+      *                             CODIGO ORIGEN TRANSACCION
+                   04  OPE-COD-OTRN.
+      *                             INDICADOR TIPO ORIGEN
+                       05  OPE-MSC-TTRN
+                                    PICTURE X(1).
+      *                             CODIGO TIPO ORIGEN
+                       05  OPE-COD-TTRN
+                                    PICTURE X(3).
+      *                             AUTOR TRANSACCION
+                   04  OPE-COD-ATRN PICTURE X(12).
+      *                             CODIGO STATUS
+                   04  OPE-COD-STAT PICTURE X(3).
+      *                             VALOR DE CAMBIO OPERACION
+                   04  OPE-COD-VCOP.
+      *                             MISCELANEO TIPO VALOR
+                       05  OPE-MSC-TVOP
+                                    PICTURE X(1).
+      *                             CODIGO VALOR
+                       05  OPE-COD-CVOP
+                                    PICTURE X(3).
+      *                             CODIGO TIPO CAMBIO
+                       05  OPE-COD-TCOP
+                                    PICTURE X(2).
+      *                             CODIGO CLASE OPERACION
+                   04  OPE-COD-COPR.
+                       05  OPE-COD-TOPR
+                                    PICTURE X(3).
+                       05  OPE-COD-AOPR
+                                    PICTURE X(3).
+      *                             CODIGO OFICINA
+                   04  OPE-COD-OFOP PICTURE X(3).
+      *                             EJECUTIVO
+                   04  OPE-COD-EJOP PICTURE X(12).
+      *                             FECHA INICIO OPERACION
+                   04  OPE-FEC-FIOP.
+                       05  OPE-NUM-SIOP
+                                    PICTURE 9(2).
+                       05  OPE-NUM-AIOP
+                                    PICTURE 9(2).
+                       05  OPE-NUM-MIOP
+                                    PICTURE 9(2).
+                       05  OPE-NUM-DIOP
+                                    PICTURE 9(2).
+      *                             FECHA TERMINO OPERACION
+                   04  OPE-FEC-FTOP.
+                       05  OPE-NUM-STOP
+                                    PICTURE 9(2).
+                       05  OPE-NUM-ATOP
+                                    PICTURE 9(2).
+                       05  OPE-NUM-MTOP
+                                    PICTURE 9(2).
+                       05  OPE-NUM-DTOP
+                                    PICTURE 9(2).
+      *                             MOTIVO TERMINO OPERACION
+                   04  OPE-COD-MOTT PICTURE X(2).
+      *                             FECHA REAPERTURA OPERACION
+                   04  OPE-FEC-FROP.
+                       05  OPE-NUM-SROP
+                                    PICTURE 9(2).
+                       05  OPE-NUM-AROP
+                                    PICTURE 9(2).
+                       05  OPE-NUM-MROP
+                                    PICTURE 9(2).
+                       05  OPE-NUM-DROP
+                                    PICTURE 9(2).
+      *                             IND MULTIPLES CLIENTES ( Y, O, ETC)
+                   04  OPE-IND-MCLI PICTURE X(2).
+      *                             PRODUCTO DE MARKETING
+                   04  OPE-COD-PDT  PICTURE X(6).
+      *                             FUNCION (PARA COSTO POR FUNCION)
+                   04  OPE-COD-FCN  PICTURE X(3).
+      *                             CODIGO DE PLAZO DE LA OPERACION
+                   04  OPE-COD-PZO  PICTURE X(2).
+      *                             AREA DE GESTION 1
+                   04  OPE-COD-AGE-1
+                                    PICTURE X(4).
+      *                             CODIGO OPERACION RELACIONADA 1
+                   04  OPE-COP-REL-1.
+      *                             NUMERO DE SISTEMA OPERACION 1
+                       05  OPE-NUM-SIS-1
+                                    PICTURE X(4).
+      *                             CODIGO CORRELATIVO OPERACION 1
+                       05  OPE-COD-CRR-1
+                                    PICTURE X(8).
+      *                             CODIGO OPERACION RELACIONADA 2
+                   04  OPE-COP-REL-2.
+      *                             NUMERO DE SISTEMA OPERACION 2
+                       05  OPE-NUM-SIS-2
+                                    PICTURE X(4).
+      *                             CODIGO CORRELATIVO OPERACION 2
+                       05  OPE-COD-CRR-2
+                                    PICTURE X(8).
+      *                             CODIGO TIPO TASA
+                   04  OPE-TIP-TAS  PICTURE X(12).
+      *                             TASA
+                   04  OPE-TAS      PICTURE S9(3)V9(4)
+                                        COMPUTATIONAL-3.
+      *                             CODIGO 1
+                   04  OPE-COD-1    PICTURE X(3).
+      *                             CODIGO 2
+                   04  OPE-COD-2    PICTURE X(4).
+      *                             CODIGO 3
+                   04  OPE-COD-3    PICTURE X(5).
+      *                             INDICADOR 1
+                   04  OPE-IND-1    PICTURE X(1).
+      *                             FECHA 1
+                   04  OPE-FEC-1.
+      *                             FECHA (ANO) 1
+                       05  OPE-FA-1 PICTURE 9(4).
+      *                             FECHA (MES) 1
+                       05  OPE-FM-1 PICTURE 9(2).
+      *                             FECHA (MES) 1
+                       05  OPE-FD-1 PICTURE 9(2).
+      *                             EJECUTIVO 1
+                   04  OPE-COD-EJE-1
+                                    PICTURE X(12).
+      *                             MONTO 1
+                   04  OPE-VAL-1    PICTURE S9(12)V9(3)
+                                        COMPUTATIONAL-3.
+      *                             UTILIDAD DEL PERIODO
+                   04  OPE-VAL-UTL-PDO
+                                    PICTURE S9(12)V9(3)
+                                        COMPUTATIONAL-3.
+      *                             FECHA DE UTILIDAD DEL PERIODO
+                   04  OPE-FEC-UTL-PDO.
+      *                             FECHA (ANO) UTILIDAD DEL PERIODO
+                       05  OPE-FA-UTL-PDO
+                                    PICTURE 9(4).
+      *                             FECHA (MES) UTILIDAD DEL PERIODO
+                       05  OPE-FM-UTL-PDO
+                                    PICTURE 9(2).
+      *                             FECHA (DIA) UTILIDAD DEL PERIODO
+                       05  OPE-FD-UTL-PDO
+                                    PICTURE 9(2).
+                   04  FILLER-1     PICTURE X(4).
+022600*Y2K COPY OPEROPEO.
+022700
+022800 01  ELEM-LIST-OPE.
+022900     03 ELEM-1                    PIC X(5) VALUE 'OPE00'.
+023000     03 ELEM-SEC                  PIC X(1).
+023100     03 FILLER                    PIC X(5) VALUE SPACES.
+023200/
+023300*---------------------------------------------------------------*
+023400*      REQUEST AREA / REGISTRO / ELEMENT LIST      TABLA TAB    *
+023500*---------------------------------------------------------------*
+023600 01  WR-REQ-TAB-AREA.
+023700     03 WR-REQ-TAB-COMMAND        PIC X(5).
+023800     03 WR-REQ-TAB-TABLE          PIC X(3)  VALUE 'TAB'.
+023900     03 WR-REQ-TAB-KEY            PIC X(5)  VALUE 'TAB00'.
+024000     03 WR-REQ-TAB-RTC            PIC X(2)  VALUE SPACES.
+024100     03 WR-REQ-TAB-INT-RC         PIC X(1).
+024200     03 WR-REQ-TAB-DB-ID          PIC S9(4) COMP VALUE +150.
+024300     03 WR-REQ-TAB-REC-ID         PIC X(7).
+024400     03 FILLER                    PIC X(25).
+024500     03 WR-REQ-TAB-CONT-MAX       PIC S9(4) COMP.
+024600     03 WR-REQ-TAB-CONT-IO        PIC S9(4) COMP.
+024700     03 FILLER                    PIC X(22).
+024800     03 WR-REQ-TAB-VALUE.
+024900        05 WR-REQ-COD-TTAB        PIC X(03).
+025000        05 WR-REQ-COD-CTAB.
+025100           10 WR-REQ-COD-CTAB-1   PIC X(03).
+025200           10 WR-REQ-COD-CTAB-2   PIC X(03).
+025300           10 WR-REQ-COD-CTAB-3   PIC X(06).
+025400
+025500 01  WR-TAB.
+025600*    COPYDD TAB-R-TAB.TAB-E-TAB00(PROD),2,D
+      *                             EQUIVALENTE AL REGISTRO TAB
+           02  TAB-E-TAB00.
+      *                             REGISTRO GENERICO DE TABLAS
+               04  TAB.
+      *                             FILLER COMPATIBILIDAD VSAM/MVS
+                   06  TAB-GLS-FLAG PICTURE X(1).
+      *                             CLAVE PRIMARIA REGISTRO
+                   06  TAB-KEY-IREG.
+      *                             KEY     TIPO + CODIGO ( LLAVE PRIMAR
+                       08  TAB-COD-TABL.
+      *                             CODIGO TIPO TABLA
+                       10  TAB-COD-TTAB
+                                    PICTURE X(3).
+      *                             CODIGO TABLA
+                       10  TAB-COD-CTAB
+                                    PICTURE X(12).
+      *                             TIME STAMP TRANSACCION
+                       08  TAB-STP-ITRN.
+      *                             FECHA TRANSACCION
+                       10  TAB-FEC-FTRN.
+                       12  TAB-NUM-STRN
+                                    PICTURE 9(2).
+                       12  TAB-NUM-ATRN
+                                    PICTURE 9(2).
+                       12  TAB-NUM-MTRN
+                                    PICTURE 9(2).
+                       12  TAB-NUM-DTRN
+                                    PICTURE 9(2).
+      *                             HORA TRANSACCION
+                       10  TAB-HRA-HRTR.
+                       12  TAB-NUM-HHTR
+                                    PICTURE 9(2).
+                       12  TAB-NUM-MMTR
+                                    PICTURE 9(2).
+                       12  TAB-NUM-SSTR
+                                    PICTURE 9(2).
+      *                             INDICADOR TIPO ACCION
+                   06  TAB-MSC-TACC PICTURE X(1).
+      *                             INDICADOR STATUS
+                   06  TAB-MSC-STAT PICTURE X(1).
+      *                             INDICADOR VIGENCIA
+                   06  TAB-IND-VIGE
+                             REDEFINES TAB-MSC-STAT
+                                    PICTURE X(1).
+      *                             CODIGO ORIGEN TRANSACCION
+                   06  TAB-COD-OTRN.
+      *                             INDICADOR TIPO ORIGEN
+                       08  TAB-MSC-TTRN
+                                    PICTURE X(1).
+      *                             CODIGO TIPO ORIGEN
+                       08  TAB-COD-TTRN
+                                    PICTURE X(3).
+      *                             AUTOR TRANSACCION
+                   06  TAB-COD-ATRN PICTURE X(12).
+      *                             KEY TIPO + CODIGO ( INTERNO COMPUTAC
+                   06  TAB-CIC-TABL.
+      *                             CODIGO TIPO TABLA
+                       08  TAB-CIC-TTAB
+                                    PICTURE X(3).
+      *                             CODIGO TABLA
+                       08  TAB-CIC-CTAB
+                                    PICTURE X(12).
+      *                             CODIGO EXTERNO
+                   06  TAB-EXT-TABL.
+      *                             CODIGO TIPO TABLA
+                       08  TAB-EXT-TTAB
+                                    PICTURE X(3).
+      *                             CODIGO TABLA
+                       08  TAB-EXT-CTAB
+                                    PICTURE X(5).
+      *                             DESCRIPCION CORTA
+                   06  TAB-GLS-DCOR PICTURE X(12).
+      *                             ABREVIACION DESCRIPCION
+                   06  TAB-GLS-ABRV PICTURE X(5).
+      *                             DESCRIPCION DEL CODIGO
+                   06  TAB-GLS-DESC PICTURE X(40).
+      *                             DATOS ANEXOS
+                   06  TAB-GLS-DATA PICTURE X(60).
+      *                             CLAVE SOUNDEX
+                   06  TAB-SNX-TABL.
+                       08  TAB-SNX-TTAB
+                                    PICTURE X(3).
+                       08  TAB-SNX-CTAB
+                                    PICTURE X(3).
+               04  TAB-REDEF REDEFINES TAB
+                                    PICTURE X(194).
+025700*Y2K COPY TABRTABT.
+025800
+025900 01  ELEM-LIST-TAB.
+026000     05 ELEM-1                    PIC X(5) VALUE 'TAB00'.
+026100     05 ELEM-SEC                  PIC X(1).
+026200     05 FILLER                    PIC X(5) VALUE SPACES.
+026300/
+026400 PROCEDURE DIVISION.
+026500*===================
+026600 A-CONTROL SECTION.
+026700*------------------
+026800 AA-INICIALIZACION.
+026900     ENTRY 'DBMSCBL'.
+027000     PERFORM B-INICIALIZAR.
+027100 AB-PROCESAMIENTO.
+027200     IF (NOT WR-TERMINO-ERROR)
+027300         PERFORM C-PROCESAR
+027400     END-IF.
+027500 AC-TERMINACION.
+027600     PERFORM D-TERMINAR.
+027700 AZZ-FIN-DE-PROCESO.
+027800     GOBACK.
+027900
+028000/
+028100 B-INICIALIZAR SECTION.
+028200*----------------------
+028300 BA-ABRIR-ARCHIVOS.
+028400     OPEN INPUT PARAMT
+028500          I-O   MOVOPE.
+028500*         INPUT MOVOPE.
+028600     IF (FS-PARAMT  NOT = ZEROS)
+028700         MOVE 'B-INICIALIZAR'             TO WR-SECCION
+028800         MOVE 'BA-ABRIR-ARCHIVOS'         TO WR-PARRAFO
+028900         MOVE 'PARAMT '                   TO WR-ARCHIVO
+029000         MOVE 'OPEN'                      TO WR-OPERACI
+029100         MOVE FS-PARAMT                   TO WR-FILE-ST
+029200         MOVE 'SGCPGES8 '                 TO WR-MENSAJE
+029300         MOVE 3                           TO WR-TERMINO
+029400         GO TO BZ-FIN-DE-SECCION.
+029500
+M00001     IF FS-MOVOPE = '35'
+M00002      THEN DISPLAY '*******************************************'
+M00003           DISPLAY '***        ARCHIVO MOVOPE  VACIO          *'
+M00004           DISPLAY '***  AVISE AL EXPLOTADOR PARA SU REVISION *'
+M00005           DISPLAY '*******************************************'
+M00006           DISPLAY '*******************************************'
+M00007                   UPON CONSOLE
+M00008           DISPLAY '***        ARCHIVO MOVOPE  VACIO          *'
+M00009                   UPON CONSOLE
+M00010          DISPLAY '***  AVISE AL EXPLOTADOR PARA SU REVISION *'
+M00011                   UPON CONSOLE
+M00012          DISPLAY '*******************************************'
+M00013                   UPON CONSOLE
+M00014           MOVE 3                           TO WR-TERMINO
+M00016           DISPLAY '*******************************'
+M00017           DISPLAY '** SGCPGES8: TERMINO ANORMAL  *'
+M00018           DISPLAY '*******************************'
+M00019           GO TO BZ-FIN-DE-SECCION.
+029600     IF (FS-MOVOPE  NOT = ZEROS)
+029600*    IF (FS-MOVOPE  NOT = ZEROS) AND
+029600*       (FS-MOVOPE  NOT = '35')
+029700         MOVE 'B-INICIALIZAR'             TO WR-SECCION
+029800         MOVE 'BA-ABRIR-ARCHIVOS'         TO WR-PARRAFO
+029900         MOVE 'MOVOPE '                   TO WR-ARCHIVO
+030000         MOVE 'OPEN'                      TO WR-OPERACI
+030100         MOVE FS-MOVOPE                   TO WR-FILE-ST
+030200         MOVE 'SGCPGES8 '                 TO WR-MENSAJE
+030300         MOVE 3                           TO WR-TERMINO
+030400         GO TO BZ-FIN-DE-SECCION.
+030500
+030600 BB-VALIDA-FEC-PRO.
+030700     PERFORM BD-LEER-PARAMETRO.
+030800     MOVE WP-FECHA-PRO                    TO WR-FECHA-P
+030900
+031000     IF WP-FECHA-PRO = ZEROES
+031100           DISPLAY '*****************************************'
+031200           DISPLAY 'SGCPGES8. FECHA PARAMETRO = ZEROS        '
+031300           DISPLAY 'SGCPGES8. PROGRAMA CANCELADO'
+031400           DISPLAY '*****************************************'
+031500           MOVE 'B-INICIALIZAR'           TO WR-SECCION
+031600           MOVE 'BB-VALIDA-FEC-PRO'       TO WR-PARRAFO
+031700           MOVE 3                         TO WR-TERMINO
+031800           GO TO BZ-FIN-DE-SECCION.
+031900
+032000     MOVE 'CARGAR'                        TO CALEAREA-FUNCION.
+032100     MOVE ALL '0'                         TO CALEAREA-FECHA-1.
+032200     CALL 'RUTUCALE' USING RTNWCALE.
+032300     IF CALEAREA-FUNCION = 'CANCEL'
+032400           DISPLAY '*****************************************'
+032500           DISPLAY 'SGCPGES8. ERROR EN CARGA RUTINA FECHA    '
+032600           DISPLAY 'SGCPGES8. PROGRAMA CANCELADO'
+032700           DISPLAY '*****************************************'
+032800           MOVE 'B-INICIALIZAR'           TO WR-SECCION
+032900           MOVE 'BB-VALIDA-FEC-PRO'       TO WR-PARRAFO
+033000           MOVE 3                         TO WR-TERMINO
+033100           GO TO BZ-FIN-DE-SECCION
+033200     ELSE
+033300        MOVE 'INFO'                       TO CALEAREA-FUNCION
+033400        MOVE WP-FECHA-PRO                 TO CALEAREA-FECHA-1
+033500        CALL 'RUTUCALE' USING RTNWCALE
+033600        IF CALEAREA-COD-RET = 0
+033700           IF CALEAREA-TIP-DIA = 'F'
+033800              DISPLAY '*****************************************'
+033900              DISPLAY 'SGCPGES8. ERROR DIA FESTIVO '
+034000              DISPLAY 'SGCPGES8. PROGRAMA CANCELADO'
+034100              DISPLAY '*****************************************'
+034200              MOVE 'B-INICIALIZAR'        TO WR-SECCION
+034300              MOVE 'BB-VALIDA-FEC-PRO'    TO WR-PARRAFO
+034400              MOVE 3                      TO WR-TERMINO
+034500              GO TO BZ-FIN-DE-SECCION
+034600           ELSE
+034700              DISPLAY ' '
+034800              DISPLAY ' '
+034900              DISPLAY '** OK. DIA HABIL **'
+035000              DISPLAY ' '
+035100        ELSE
+035200              DISPLAY '*****************************************'
+035300              DISPLAY 'SGCPGES8. ERROR EN CHEQUEO FECHA'
+035400              DISPLAY 'SGCPGES8. FECHA = ' WP-FECHA-PRO
+035500              DISPLAY 'SGCPGES8. PROGRAMA CANCELADO'
+035600              DISPLAY '*****************************************'
+035700              MOVE 'B-INICIALIZAR'        TO WR-SECCION
+035800              MOVE 'BB-VALIDA-FEC-PRO'    TO WR-PARRAFO
+035900              MOVE 3                      TO WR-TERMINO
+036000              GO TO BZ-FIN-DE-SECCION.
+036100
+036200     MOVE WP-FECHA-PRO                    TO WR-FECHA-P
+036300     MOVE WR-FEC-SS-P                     TO WR-FEC-SS
+036400     MOVE WR-FEC-AA-P                     TO WR-FEC-AA
+036500     MOVE WR-FEC-MM-P                     TO WR-FEC-MM
+036600     MOVE WR-FEC-DD-P                     TO WR-FEC-DD.
+036700
+036800 BC-PROCESO-DE-TABLAS.
+036900     PERFORM BF-LIMPIA-TABLA-EST VARYING WI-IND FROM 1 BY 1 UNTIL
+037000                                         WI-IND > 5.
+037100     GO TO BZ-FIN-DE-SECCION.
+037200
+037300 BD-LEER-PARAMETRO.
+037400     READ PARAMT.
+037500     IF FS-PARAMT = '00' OR '10'
+037600        NEXT SENTENCE
+037700     ELSE
+037800        MOVE 'B-INICIALIZAR'              TO WR-SECCION
+037900        MOVE 'BD-LEER-PARAMETRO'          TO WR-PARRAFO
+038000        MOVE 'PARAMT '                    TO WR-ARCHIVO
+038100        MOVE 'READ'                       TO WR-OPERACI
+038200        MOVE FS-PARAMT                    TO WR-FILE-ST
+038300        MOVE 'SGCPGES8 '                  TO WR-MENSAJE
+038400        MOVE 3                            TO WR-TERMINO.
+038500
+038600 BF-LIMPIA-TABLA-EST.
+038700     MOVE 0                               TO  WA-LEIDO (WI-IND)
+038800                                              WA-CREAD (WI-IND)
+038900                                              WA-MODIF (WI-IND)
+039000                                              WA-ELIMI (WI-IND)
+039100                                              WA-RECHA (WI-IND).
+039200
+039300 BZ-FIN-DE-SECCION.
+039400     EXIT.
+039500
+039600/
+039700 C-PROCESAR SECTION.
+039800*-------------------
+039900 CA-PROCESO-CENTRAL.
+040000     PERFORM CB-LEER-MOVOPE.
+040100     PERFORM CC-PRINCIPAL      UNTIL (FS-MOVOPE NOT = '00') OR
+040200                                     (WR-TERMINO-ERROR).
+040300     GO TO CZ-FIN-DE-SECCION.
+040400
+040500 CB-LEER-MOVOPE.
+040600     READ MOVOPE NEXT.
+040700     IF FS-MOVOPE  = '00'
+040800        ADD   1                           TO WA-LEIDO(WI-MOP)
+040900     ELSE
+041000        IF FS-MOVOPE  = '10'
+041100           NEXT SENTENCE
+041200        ELSE
+041300           MOVE 'C-PROCESAR   '           TO WR-SECCION
+041400           MOVE 'CB-LEER-MOVOPE   '       TO WR-PARRAFO
+041500           MOVE 'MOVOPE '                 TO WR-ARCHIVO
+041600           MOVE 'READ'                    TO WR-OPERACI
+041700           MOVE FS-MOVOPE                 TO WR-FILE-ST
+041800           MOVE 'SGCPGES8 '               TO WR-MENSAJE.
+041900
+042000 CC-PRINCIPAL.
+042100     IF (MOP-COD-EST-ACT IN GESRMOP NOT = 'RPC'   AND
+042200         MOP-FEC-FTRN    IN GESRMOP     = WR-FECHA)
+042300         PERFORM CD-PROCESO
+042400         IF (NOT WR-TERMINO-ERROR)
+042500             PERFORM CB-LEER-MOVOPE
+042600         ELSE
+042700             NEXT SENTENCE
+042800     ELSE
+042900        ADD 1 TO WA-RECHA(WI-MOP)
+043000        PERFORM CB-LEER-MOVOPE.
+043100
+043200 CD-PROCESO.
+043300     IF MOP-COD-OPER IN GESRMOP = 'C'
+043400        ADD   1                           TO WA-CREA-MOP
+043500        PERFORM CF-CREACION
+043600     ELSE
+043700       IF MOP-COD-OPER IN GESRMOP = 'E'
+043800          ADD   1                         TO WA-ELIM-MOP
+043900          PERFORM CI-ELIMINAR
+044000       ELSE
+044100          IF MOP-COD-OPER IN GESRMOP = 'A'
+044200             ADD   1                      TO WA-ACTI-MOP
+044300             PERFORM CJ-ACTIVAR
+044400          ELSE
+044500             IF MOP-COD-OPER IN GESRMOP = 'D'
+044600                ADD   1                   TO WA-DESA-MOP
+044700                PERFORM CK-DESACTIVAR
+044800             ELSE
+044900                IF MOP-COD-OPER IN GESRMOP = 'M'
+045000                   ADD   1                TO WA-MODI-MOP
+045100                   PERFORM CE-MODIFICAR
+045200                ELSE
+045300                   ADD   1                TO WA-RECHA(WI-MOP).
+045400
+045500 CE-MODIFICAR.
+045600     PERFORM CQ-LEER-OPE
+045700     IF WR-REQ-OPE-RTC = SPACES
+045800        PERFORM CE2-MODIF-MCLI.
+045900
+046000 CE2-MODIF-MCLI.
+046100     PERFORM CL-LEER-RCO.
+046200
+046300     IF WR-REQ-RCO-RTC NOT = SPACES
+046400        MOVE  'NER'                       TO MOP-COD-EST-ACT
+046500        PERFORM CS-LIBERAR-OPE
+046600     ELSE
+046700        PERFORM CLL-LEER-RCO-NEXT UNTIL
+046800           (OPE-CIC-IOPE IN OPE NOT = RCO-CIC-IOPE IN RCO) OR
+046900           (RCO-COD-STAT            = 'VIG'              ) OR
+047000           (WR-REQ-RCO-RTC      NOT = SPACES)
+047100        IF (OPE-CIC-IOPE IN OPE NOT = RCO-CIC-IOPE IN RCO) OR
+047200           (WR-REQ-RCO-RTC      NOT = SPACES)
+047300           MOVE  'SRI'                    TO MOP-COD-EST-ACT
+047400           PERFORM CS-LIBERAR-OPE
+047500        ELSE
+047600           PERFORM CP1-REGRABA-OPE-X-MODI
+047700           IF WR-REQ-OPE-RTC = SPACES
+047800              MOVE  'RPC'                 TO MOP-COD-EST-ACT
+047900           ELSE
+048000              MOVE  'EAO'                 TO MOP-COD-EST-ACT.
+048100     IF (NOT WR-TERMINO-ERROR)
+048200        PERFORM CN-REGRABAR-MOP.
+048300
+048400 CF-CREACION.
+048500     PERFORM CL-LEER-RCO.
+048600
+048700     IF WR-REQ-RCO-RTC = '14'
+048800        MOVE  'NER'                       TO MOP-COD-EST-ACT
+048900     ELSE
+049000        IF RCO-COD-STAT NOT = 'VIG'
+049100           MOVE  'RNV'                    TO MOP-COD-EST-ACT
+049200        ELSE
+049300           PERFORM CG-VALIDAR
+049400           IF WS-HAY-ERROR = 'SI'
+049500              NEXT SENTENCE
+049600           ELSE
+049700              PERFORM CM-MOVER-MOP-A-OPE
+049800              PERFORM CO-GRABAR-OPE
+049900              IF WR-REQ-OPE-RTC = SPACES
+050000                 MOVE  'RPC'              TO MOP-COD-EST-ACT
+050100              ELSE
+050200                 MOVE  'EGO'              TO MOP-COD-EST-ACT.
+050300     IF (NOT WR-TERMINO-ERROR)
+050400        PERFORM CN-REGRABAR-MOP.
+050500
+050600 CG-VALIDAR.
+050700     MOVE  'SI'                           TO WS-HAY-ERROR
+050800     PERFORM CU-BUSCAR-TIO
+050900     IF WS-HAY-ERROR = 'SI'
+051000        MOVE  'NET'                       TO MOP-COD-EST-ACT
+051100     ELSE
+051200        MOVE  'SI'                        TO WS-HAY-ERROR
+051300        PERFORM CV-BUSCAR-AUX
+051400        IF WS-HAY-ERROR = 'SI'
+051500           MOVE  'NEA'                    TO MOP-COD-EST-ACT.
+051600
+051700 CI-ELIMINAR.
+051800     PERFORM CQ-LEER-OPE
+051900     IF WR-REQ-OPE-RTC = SPACES
+052000        PERFORM CI2-ELIMI-MCLI.
+052100
+052200 CI2-ELIMI-MCLI.
+052300     PERFORM CL-LEER-RCO.
+052400
+052500     IF WR-REQ-RCO-RTC NOT = SPACES
+052600        MOVE  'NER'                       TO MOP-COD-EST-ACT
+052700        PERFORM CS-LIBERAR-OPE
+052800     ELSE
+052900        PERFORM CLL-LEER-RCO-NEXT UNTIL
+053000           (OPE-CIC-IOPE IN OPE NOT = RCO-CIC-IOPE IN RCO) OR
+053100           (RCO-COD-STAT        NOT = 'ELI'              ) OR
+053200           (WR-REQ-RCO-RTC      NOT = SPACES)
+053300        IF (OPE-CIC-IOPE IN OPE     = RCO-CIC-IOPE IN RCO) AND
+053400           (WR-REQ-RCO-RTC          = SPACES)
+053500           MOVE  'SRI'                    TO MOP-COD-EST-ACT
+053600           PERFORM CS-LIBERAR-OPE
+053700        ELSE
+053800           PERFORM CP2-REGRABA-OPE-X-ELIM
+053900           IF WR-REQ-OPE-RTC = SPACES
+054000              MOVE  'RPC'                 TO MOP-COD-EST-ACT
+054100           ELSE
+054200              MOVE  'EAO'                 TO MOP-COD-EST-ACT.
+054300     IF (NOT WR-TERMINO-ERROR)
+054400        PERFORM CN-REGRABAR-MOP.
+054500
+054600 CJ-ACTIVAR.
+054700     PERFORM CQ-LEER-OPE
+054800     IF WR-REQ-OPE-RTC = SPACES
+054900        PERFORM CJ2-ACTIV-MCLI.
+055000
+055100 CJ2-ACTIV-MCLI.
+055200     PERFORM CL-LEER-RCO.
+055300
+055400     IF WR-REQ-RCO-RTC NOT = SPACES
+055500        MOVE  'NER'                       TO MOP-COD-EST-ACT
+055600        PERFORM CS-LIBERAR-OPE
+055700     ELSE
+055800        PERFORM CLL-LEER-RCO-NEXT UNTIL
+055900           (OPE-CIC-IOPE IN OPE NOT = RCO-CIC-IOPE IN RCO) OR
+056000           (RCO-COD-STAT            = 'VIG'              ) OR
+056100           (WR-REQ-RCO-RTC      NOT = SPACES)
+056200        IF (OPE-CIC-IOPE IN OPE NOT = RCO-CIC-IOPE IN RCO) OR
+056300           (WR-REQ-RCO-RTC      NOT = SPACES)
+056400           MOVE  'SRI'                    TO MOP-COD-EST-ACT
+056500           PERFORM CS-LIBERAR-OPE
+056600        ELSE
+056700           PERFORM CP3-REGRABA-OPE-X-ACTI
+056800           IF WR-REQ-OPE-RTC = SPACES
+056900              MOVE  'RPC'                 TO MOP-COD-EST-ACT
+057000           ELSE
+057100              MOVE  'EAO'                 TO MOP-COD-EST-ACT.
+057200     IF (NOT WR-TERMINO-ERROR)
+057300        PERFORM CN-REGRABAR-MOP.
+057400
+057500 CK-DESACTIVAR.
+057600     PERFORM CQ-LEER-OPE
+057700     IF WR-REQ-OPE-RTC = SPACES
+057800        PERFORM CK2-DESAC-MCLI.
+057900
+058000 CK2-DESAC-MCLI.
+058100     PERFORM CL-LEER-RCO.
+058200
+058300     IF WR-REQ-RCO-RTC NOT = SPACES
+058400        MOVE  'NER'                       TO MOP-COD-EST-ACT
+058500        PERFORM CS-LIBERAR-OPE
+058600     ELSE
+058700        PERFORM CLL-LEER-RCO-NEXT UNTIL
+058800           (OPE-CIC-IOPE IN OPE NOT = RCO-CIC-IOPE IN RCO) OR
+058900           (RCO-COD-STAT            = 'VIG'              ) OR
+059000           (WR-REQ-RCO-RTC      NOT = SPACES)
+059100        IF (OPE-CIC-IOPE IN OPE     = RCO-CIC-IOPE IN RCO) AND
+059200           (WR-REQ-RCO-RTC          = SPACES             ) AND
+059300           (RCO-COD-STAT            = 'VIG'              )
+059400           MOVE  'SRI'                    TO MOP-COD-EST-ACT
+059500           PERFORM CS-LIBERAR-OPE
+059600        ELSE
+059700           PERFORM CP4-REGRABA-OPE-X-DESA
+059800           IF WR-REQ-OPE-RTC = SPACES
+059900              MOVE  'RPC'                 TO MOP-COD-EST-ACT
+060000           ELSE
+060100              MOVE  'EAO'                 TO MOP-COD-EST-ACT.
+060200     IF (NOT WR-TERMINO-ERROR)
+060300        PERFORM CN-REGRABAR-MOP.
+060400
+060500 CL-LEER-RCO.
+060600     MOVE MOP-CIC-IOPE                    TO WR-REQ-RCO-CIC-IOPE
+060700     MOVE 'REDKY'                         TO WR-REQ-RCO-COMMAND.
+060800     CALL 'DBNTRY'  USING UIB
+060900                          WR-REQ-RCO-AREA
+061000                          WR-RCO
+061100                          ELEM-LIST-RCO.
+061200     IF WR-REQ-RCO-RTC = SPACES
+061300        ADD   1                           TO WA-LEIDO(WI-RCO)
+061400     ELSE
+061500        IF WR-REQ-RCO-RTC = '14'
+061600           ADD  1                         TO WA-RECHA(WI-RCO)
+061700        ELSE
+061800           MOVE 'C-PROCESAR   '           TO WR-SECCION
+061900           MOVE 'CL-LEER-RCO      '       TO WR-PARRAFO
+062000           MOVE 'RCO    '                 TO WR-ARCHIVO
+062100           MOVE WR-REQ-RCO-COMMAND        TO WR-OPERACI
+062200           MOVE WR-REQ-RCO-RTC            TO WR-FILE-ST
+062300           MOVE 'SGCPGES8 '               TO WR-MENSAJE
+062400           MOVE 3                         TO WR-TERMINO.
+062500
+062600 CLL-LEER-RCO-NEXT.
+062700     MOVE 'REDNX'                         TO WR-REQ-RCO-COMMAND.
+062800     CALL 'DBNTRY'  USING UIB
+062900                          WR-REQ-RCO-AREA
+063000                          WR-RCO
+063100                          ELEM-LIST-RCO.
+063200     IF WR-REQ-RCO-RTC = SPACES
+063300        ADD   1                           TO WA-LEIDO(WI-RCO)
+063400     ELSE
+063500        IF WR-REQ-RCO-RTC = '14'
+063600           NEXT SENTENCE
+063700        ELSE
+063800           MOVE 'C-PROCESAR   '           TO WR-SECCION
+063900           MOVE 'CLL-LEER-RCO-NEXT'       TO WR-PARRAFO
+064000           MOVE 'RCO    '                 TO WR-ARCHIVO
+064100           MOVE WR-REQ-RCO-COMMAND        TO WR-OPERACI
+064200           MOVE WR-REQ-RCO-RTC            TO WR-FILE-ST
+064300           MOVE 'SGCPGES8 '               TO WR-MENSAJE
+064400           MOVE 3                         TO WR-TERMINO.
+064500
+064600 CM-MOVER-MOP-A-OPE.
+064700     MOVE MOP-CIC-IOPE   IN GESRMOP       TO OPE-CIC-IOPE  IN OPE
+064800*
+064900     MOVE MOP-STM-TRN    IN GESRMOP       TO OPE-STP-ITRN  IN OPE
+065000     MOVE MOP-MSC-TACC   IN GESRMOP       TO OPE-MSC-TACC  IN OPE
+065100     MOVE MOP-COD-OTRN   IN GESRMOP       TO OPE-COD-OTRN  IN OPE
+065200     MOVE MOP-COD-ATRN   IN GESRMOP       TO OPE-COD-ATRN  IN OPE
+065300     MOVE MOP-COD-STAT   IN GESRMOP       TO OPE-COD-STAT  IN OPE
+065400     MOVE MOP-COD-VCOP   IN GESRMOP       TO OPE-COD-VCOP  IN OPE
+065500     MOVE MOP-COD-COPR   IN GESRMOP       TO OPE-COD-COPR  IN OPE
+065600     MOVE MOP-COD-OFOP   IN GESRMOP       TO OPE-COD-OFOP  IN OPE
+065700     MOVE MOP-COD-EJOP   IN GESRMOP       TO OPE-COD-EJOP  IN OPE
+065800     MOVE MOP-FEC-FIOP   IN GESRMOP       TO OPE-FEC-FIOP  IN OPE
+065900     MOVE MOP-FEC-FTOP   IN GESRMOP       TO OPE-FEC-FTOP  IN OPE
+066000     MOVE MOP-COD-MOTT   IN GESRMOP       TO OPE-COD-MOTT  IN OPE
+066100     MOVE MOP-FEC-FROP   IN GESRMOP       TO OPE-FEC-FROP  IN OPE
+066200     MOVE MOP-IND-MCLI   IN GESRMOP       TO OPE-IND-MCLI  IN OPE
+066300     MOVE MOP-COD-PDT    IN GESRMOP       TO OPE-COD-PDT   IN OPE
+066400     MOVE MOP-COD-FCN    IN GESRMOP       TO OPE-COD-FCN   IN OPE
+066500     MOVE MOP-COD-PZO    IN GESRMOP       TO OPE-COD-PZO   IN OPE
+066600     MOVE MOP-COD-AGE-1  IN GESRMOP       TO OPE-COD-AGE-1 IN OPE
+066700     MOVE MOP-COP-REL-1  IN GESRMOP       TO OPE-COP-REL-1 IN OPE
+066800     MOVE MOP-COP-REL-2  IN GESRMOP       TO OPE-COP-REL-2 IN OPE
+066900     MOVE MOP-TIP-TAS    IN GESRMOP       TO OPE-TIP-TAS   IN OPE
+067000     MOVE MOP-TAS        IN GESRMOP       TO OPE-TAS       IN OPE
+067100     MOVE MOP-COD-1      IN GESRMOP       TO OPE-COD-1     IN OPE
+067200     MOVE MOP-COD-2      IN GESRMOP       TO OPE-COD-2     IN OPE
+067300     MOVE MOP-COD-3      IN GESRMOP       TO OPE-COD-3     IN OPE
+067400     MOVE MOP-IND-1      IN GESRMOP       TO OPE-IND-1     IN OPE
+067500     MOVE MOP-FEC-1      IN GESRMOP       TO OPE-FEC-1     IN OPE
+067600     MOVE MOP-COD-EJE-1  IN GESRMOP       TO OPE-COD-EJE-1 IN OPE
+067700     MOVE MOP-VAL-1      IN GESRMOP       TO OPE-VAL-1     IN OPE
+067800     MOVE ZEROS                           TO OPE-FEC-UTL-PDO
+067900                                                           IN OPE
+068000     MOVE +0                              TO OPE-VAL-UTL-PDO
+068100                                                           IN OPE.
+068200
+068300 CN-REGRABAR-MOP.
+068400     REWRITE GESRMOP.
+068500     IF FS-MOVOPE = '00'
+068600        ADD  1                            TO WA-MODIF(WI-MOP)
+068700     ELSE
+068800        MOVE 'C-PROCESAR   '              TO WR-SECCION
+068900        MOVE 'CN-REGRABAR-MOP  '          TO WR-PARRAFO
+069000        MOVE 'MOVOPE '                    TO WR-ARCHIVO
+069100        MOVE 'REWRITE'                    TO WR-OPERACI
+069200        MOVE FS-MOVOPE                    TO WR-FILE-ST
+069300        MOVE 'SGCPGES8 '                  TO WR-MENSAJE
+069400        MOVE 3                            TO WR-TERMINO.
+069500
+069600 CO-GRABAR-OPE.
+069700     MOVE 'ADDIT'                         TO WR-REQ-OPE-COMMAND
+069800     CALL 'DBNTRY' USING UIB WR-REQ-OPE-AREA
+069900                             WR-OPE
+070000                             ELEM-LIST-OPE.
+070100     IF WR-REQ-OPE-RTC  = SPACES
+070200        ADD   1                           TO WA-CREAD(WI-OPE)
+070300     ELSE
+070400        IF WR-REQ-OPE-RTC  = '10'
+070500           ADD 1                          TO WA-RECHA(WI-OPE)
+070600        ELSE
+070700           MOVE 'C-PROCESAR   '           TO WR-SECCION
+070800           MOVE 'CO-GRABAR-OPE    '       TO WR-PARRAFO
+070900           MOVE 'OPE    '                 TO WR-ARCHIVO
+071000           MOVE WR-REQ-OPE-COMMAND        TO WR-OPERACI
+071100           MOVE WR-REQ-OPE-RTC            TO WR-FILE-ST
+071200           MOVE 'SGCPGES8 '               TO WR-MENSAJE
+071300           MOVE 3                         TO WR-TERMINO.
+071400
+071500 CP1-REGRABA-OPE-X-MODI.
+071600     MOVE MOP-COD-VCOP   IN GESRMOP       TO OPE-COD-VCOP  IN OPE
+071700     MOVE MOP-COD-TOPR   IN GESRMOP       TO OPE-COD-TOPR  IN OPE
+071800     MOVE MOP-COD-AOPR   IN GESRMOP       TO OPE-COD-AOPR  IN OPE
+071900     MOVE MOP-COD-OFOP   IN GESRMOP       TO OPE-COD-OFOP  IN OPE
+072000     MOVE MOP-COD-EJOP   IN GESRMOP       TO OPE-COD-EJOP  IN OPE
+072100     MOVE MOP-FEC-FROP   IN GESRMOP       TO OPE-FEC-FROP  IN OPE
+072200     MOVE MOP-IND-MCLI   IN GESRMOP       TO OPE-IND-MCLI  IN OPE
+072300     MOVE MOP-TIP-TAS    IN GESRMOP       TO OPE-TIP-TAS   IN OPE
+072400     MOVE MOP-TAS        IN GESRMOP       TO OPE-TAS       IN OPE
+072500     MOVE MOP-COD-1      IN GESRMOP       TO OPE-COD-1     IN OPE
+072600     MOVE MOP-COD-2      IN GESRMOP       TO OPE-COD-2     IN OPE
+072700     MOVE MOP-COD-3      IN GESRMOP       TO OPE-COD-3     IN OPE
+072800     MOVE MOP-IND-1      IN GESRMOP       TO OPE-IND-1     IN OPE
+072900     MOVE MOP-FEC-1      IN GESRMOP       TO OPE-FEC-1     IN OPE
+073000     MOVE MOP-COD-EJE-1  IN GESRMOP       TO OPE-COD-EJE-1 IN OPE
+073100     MOVE MOP-VAL-1      IN GESRMOP       TO OPE-VAL-1     IN OPE
+073200
+073300     IF MOP-FEC-FIOP IN GESRMOP IS NUMERIC
+073400        IF MOP-FEC-FIOP > ZEROS
+073500           MOVE MOP-FEC-FIOP IN GESRMOP   TO OPE-FEC-FIOP  IN OPE
+073600        END-IF
+073700     END-IF.
+073800
+073900     PERFORM CR-REGRABAR-OPE.
+074000
+074100 CP2-REGRABA-OPE-X-ELIM.
+074200     MOVE MOP-FEC-FTRN   IN GESRMOP       TO OPE-FEC-FTRN  IN OPE
+074300     MOVE MOP-HRA-HRTR   IN GESRMOP       TO OPE-HRA-HRTR  IN OPE
+074400     MOVE MOP-MSC-TACC   IN GESRMOP       TO OPE-MSC-TACC  IN OPE
+074500     MOVE MOP-MSC-STAT   IN GESRMOP       TO OPE-MSC-STAT  IN OPE
+074600     MOVE MOP-MSC-TTRN   IN GESRMOP       TO OPE-MSC-TTRN  IN OPE
+074700     MOVE MOP-COD-TTRN   IN GESRMOP       TO OPE-COD-TTRN  IN OPE
+074800     MOVE MOP-COD-ATRN   IN GESRMOP       TO OPE-COD-ATRN  IN OPE
+074900     MOVE MOP-COD-STAT   IN GESRMOP       TO OPE-COD-STAT  IN OPE
+075000     MOVE MOP-FEC-FTOP   IN GESRMOP       TO OPE-FEC-FTOP  IN OPE
+075100     MOVE MOP-COD-MOTT   IN GESRMOP       TO OPE-COD-MOTT  IN OPE
+075200     PERFORM CR-REGRABAR-OPE.
+075300
+075400 CP3-REGRABA-OPE-X-ACTI.
+075500     MOVE MOP-FEC-FTRN   IN GESRMOP       TO OPE-FEC-FTRN  IN OPE
+075600     MOVE MOP-HRA-HRTR   IN GESRMOP       TO OPE-HRA-HRTR  IN OPE
+075700     MOVE MOP-MSC-TACC   IN GESRMOP       TO OPE-MSC-TACC  IN OPE
+075800     MOVE MOP-MSC-STAT   IN GESRMOP       TO OPE-MSC-STAT  IN OPE
+075900     MOVE MOP-MSC-TTRN   IN GESRMOP       TO OPE-MSC-TTRN  IN OPE
+076000     MOVE MOP-COD-TTRN   IN GESRMOP       TO OPE-COD-TTRN  IN OPE
+076100     MOVE MOP-COD-ATRN   IN GESRMOP       TO OPE-COD-ATRN  IN OPE
+076200     MOVE MOP-COD-STAT   IN GESRMOP       TO OPE-COD-STAT  IN OPE
+076300     MOVE MOP-FEC-FROP   IN GESRMOP       TO OPE-FEC-FROP  IN OPE
+076400     MOVE MOP-FEC-FTOP   IN GESRMOP       TO OPE-FEC-FTOP  IN OPE
+076500     PERFORM CR-REGRABAR-OPE.
+076600
+076700 CP4-REGRABA-OPE-X-DESA.
+076800     MOVE MOP-FEC-FTRN   IN GESRMOP       TO OPE-FEC-FTRN  IN OPE
+076900     MOVE MOP-HRA-HRTR   IN GESRMOP       TO OPE-HRA-HRTR  IN OPE
+077000     MOVE MOP-MSC-TACC   IN GESRMOP       TO OPE-MSC-TACC  IN OPE
+077100     MOVE MOP-MSC-STAT   IN GESRMOP       TO OPE-MSC-STAT  IN OPE
+077200     MOVE MOP-MSC-TTRN   IN GESRMOP       TO OPE-MSC-TTRN  IN OPE
+077300     MOVE MOP-COD-TTRN   IN GESRMOP       TO OPE-COD-TTRN  IN OPE
+077400     MOVE MOP-COD-ATRN   IN GESRMOP       TO OPE-COD-ATRN  IN OPE
+077500     MOVE MOP-COD-STAT   IN GESRMOP       TO OPE-COD-STAT  IN OPE
+077600     PERFORM CR-REGRABAR-OPE.
+077700
+077800 CQ-LEER-OPE.
+077900     MOVE MOP-CIC-IOPE    IN GESRMOP      TO WR-REQ-OPE-CIC-IOPE
+078000     MOVE 'RDUKY'                         TO WR-REQ-OPE-COMMAND
+078100     CALL 'DBNTRY' USING UIB WR-REQ-OPE-AREA
+078200                             WR-OPE
+078300                             ELEM-LIST-OPE.
+078400     IF WR-REQ-OPE-RTC  = SPACES
+078500        ADD   1                           TO WA-LEIDO(WI-OPE)
+078600     ELSE
+078700        IF WR-REQ-OPE-RTC  = '14'
+078800           ADD 1                          TO WA-RECHA(WI-OPE)
+078900        ELSE
+079000           MOVE 'C-PROCESAR   '           TO WR-SECCION
+079100           MOVE 'CQ-LEER-OPE      '       TO WR-PARRAFO
+079200           MOVE 'OPE    '                 TO WR-ARCHIVO
+079300           MOVE WR-REQ-OPE-COMMAND        TO WR-OPERACI
+079400           MOVE WR-REQ-OPE-RTC            TO WR-FILE-ST
+079500           MOVE 'SGCPGES8 '               TO WR-MENSAJE
+079600           MOVE 3                         TO WR-TERMINO.
+079700
+079800 CR-REGRABAR-OPE.
+079900     MOVE 'UPDAT'                         TO WR-REQ-OPE-COMMAND
+080000     CALL 'DBNTRY' USING UIB WR-REQ-OPE-AREA
+080100                             WR-OPE
+080200                             ELEM-LIST-OPE.
+080300     IF WR-REQ-OPE-RTC  = SPACES
+080400        ADD   1                           TO WA-MODIF(WI-OPE)
+080500     ELSE
+080600        ADD   1                           TO WA-RECHA(WI-OPE).
+080700
+080800 CS-LIBERAR-OPE.
+080900     MOVE 'RELES'                         TO WR-REQ-OPE-COMMAND
+081000     CALL 'DBNTRY' USING UIB WR-REQ-OPE-AREA
+081100                             WR-OPE
+081200                             ELEM-LIST-OPE.
+081300
+081400 CU-BUSCAR-TIO.
+081500     MOVE 'TIO'                           TO WR-REQ-COD-TTAB
+081600     MOVE SPACES                          TO WR-REQ-COD-CTAB
+081700     MOVE MOP-COD-TOPR                    TO WR-REQ-COD-CTAB
+081800     MOVE 'REDKY'                         TO WR-REQ-TAB-COMMAND
+081900     CALL 'DBNTRY' USING UIB WR-REQ-TAB-AREA
+082000                             WR-TAB
+082100                             ELEM-LIST-TAB.
+082200     IF WR-REQ-TAB-RTC  = SPACES
+082300        ADD   1                           TO WA-LEIDO(WI-TIO)
+082400        MOVE 'NO'                         TO WS-HAY-ERROR
+082500     ELSE
+082600        IF WR-REQ-TAB-RTC  = '14'
+082700           ADD 1                          TO WA-RECHA(WI-TIO)
+082800        ELSE
+082900           MOVE 'C-PROCESAR   '           TO WR-SECCION
+083000           MOVE 'CU-BUSCAR-TIO    '       TO WR-PARRAFO
+083100           MOVE 'TAB (TIO)'               TO WR-ARCHIVO
+083200           MOVE WR-REQ-TAB-COMMAND        TO WR-OPERACI
+083300           MOVE WR-REQ-TAB-RTC            TO WR-FILE-ST
+083400           MOVE 'SGCPGES8 '               TO WR-MENSAJE
+083500           MOVE 3                         TO WR-TERMINO.
+083600
+083700 CV-BUSCAR-AUX.
+083800     MOVE 'AUX'                           TO WR-REQ-COD-TTAB
+083900     MOVE SPACES                          TO WR-REQ-COD-CTAB
+084000     MOVE MOP-COD-TOPR                    TO WR-REQ-COD-CTAB-1
+084100     MOVE MOP-COD-AOPR                    TO WR-REQ-COD-CTAB-2
+084200     MOVE 'REDKY'                         TO WR-REQ-TAB-COMMAND
+084300     CALL 'DBNTRY' USING UIB WR-REQ-TAB-AREA
+084400                             WR-TAB
+084500                             ELEM-LIST-TAB.
+084600     IF WR-REQ-TAB-RTC  = SPACES
+084700        ADD   1                           TO WA-LEIDO(WI-AUX)
+084800        MOVE 'NO'                         TO WS-HAY-ERROR
+084900     ELSE
+085000        IF WR-REQ-TAB-RTC  = '14'
+085100           ADD 1                          TO WA-RECHA(WI-AUX)
+085200        ELSE
+085300           MOVE 'C-PROCESAR   '           TO WR-SECCION
+085400           MOVE 'CV-BUSCAR-AUX    '       TO WR-PARRAFO
+085500           MOVE 'TAB (AUX)'               TO WR-ARCHIVO
+085600           MOVE WR-REQ-TAB-COMMAND        TO WR-OPERACI
+085700           MOVE WR-REQ-TAB-RTC            TO WR-FILE-ST
+085800           MOVE 'SGCPGES8 '               TO WR-MENSAJE
+085900           MOVE 3                         TO WR-TERMINO.
+086000
+086100 CZ-FIN-DE-SECCION.
+086200     EXIT.
+086300/
+086400 D-TERMINAR SECTION.
+086500*-------------------
+086600 DA-ESTADISTICAS.
+086700     ACCEPT WR-FECHA-HOY FROM DATE.
+086800     MOVE WR-DD-HOY                       TO WR-DD-HOY-D
+086900     MOVE WR-MM-HOY                       TO WR-MM-HOY-D
+087000     MOVE WR-AA-HOY                       TO WR-AA-HOY-D
+087100     DISPLAY ' '
+087200     DISPLAY ' '
+087300     DISPLAY ' '
+087400     DISPLAY 'ESTADISTICA DE PROCESO PROGRAMA SGCPGES8 FECHA '
+087500              WR-FECHA-HOY-D
+087600     DISPLAY
+087700         '-------------------------------------------------------'
+087800     DISPLAY '               ACTUALIZA OPE'
+087900     DISPLAY ' '
+088000     DISPLAY WR-LIN-TIT
+088100     DISPLAY ' '
+088200     PERFORM DC-ESTADISTICA VARYING WI-IND FROM 1 BY 1 UNTIL
+088300                                    WI-IND > 5
+088400     DISPLAY ' '
+088500     DISPLAY ' '
+088600     PERFORM DD-ESTADISTICA-MOP
+088700     DISPLAY 'CARACTERISTICAS DE LOS MOVIMIENTOS (MOP)'
+088800     DISPLAY '                CREACIONES     '  WR-CREA-MOP-S
+088900     DISPLAY '                ELIMINACIONES  '  WR-ELIM-MOP-S
+089000     DISPLAY '                ACTIVACIONES   '  WR-ACTI-MOP-S
+089100     DISPLAY '                DESACTIVACIONES'  WR-DESA-MOP-S
+089200     DISPLAY '                MODIFICACIONES '  WR-MODI-MOP-S
+089300     DISPLAY ' '
+089400     DISPLAY ' '
+089500     DISPLAY 'TARJETAS DE PARAMETROS'
+089600     DISPLAY '======================'
+089700     DISPLAY ' '
+089800     DISPLAY 'WR-FECHA-P: '  WR-FECHA-P
+089900     DISPLAY ' '
+090000     DISPLAY ' '
+090100     DISPLAY ' '
+090200     DISPLAY 'MENSAJES PARA EL EXPLOTADOR'
+090300     DISPLAY '---------------------------'
+090400     DISPLAY ' '
+090500     IF WR-HAY-MSG-WRN-OP OR WR-HAY-MSG-ERR-OP
+090600         DISPLAY 'HAY MENSAJES PARA EL EXPLOTADOR'
+090700     ELSE
+090800         DISPLAY 'NO HAY MENSAJES PARA EL EXPLOTADOR'.
+090900     DISPLAY ' '
+091000     DISPLAY ' '
+091100     DISPLAY ' '.
+091200
+091300 DB-TERMINO.
+091400     CLOSE MOVOPE  PARAMT.
+091500     IF WR-TERMINO-ANORMAL
+091600        MOVE 100                          TO RETURN-CODE
+091700        DISPLAY ' '
+091800        DISPLAY ' '
+091900        DISPLAY '**********************************************'
+092000        DISPLAY '**********************************************'
+092100        DISPLAY '********                              ********'
+092200        DISPLAY '******** TERMINO ERRONEO DEL PROCESO  ********'
+092300        DISPLAY '********                              ********'
+092400        DISPLAY '**********************************************'
+092500        DISPLAY '**********************************************'
+092600        DISPLAY ' '
+092700        DISPLAY 'EL ERROR FUE EN LA SECCION          ' WR-SECCION
+092800        DISPLAY '                   PARRAFO          ' WR-PARRAFO
+092900        DISPLAY '                   ARCHIVO          ' WR-ARCHIVO
+093000        DISPLAY '                   OPERACION        ' WR-OPERACI
+093100        DISPLAY '                   FILE STATUS      ' WR-FILE-ST
+093200        DISPLAY '                   MENSAJE DE ERROR ' WR-MENSAJE
+093300     ELSE
+093400        DISPLAY ' '
+093500        DISPLAY ' '
+093600        DISPLAY '*****PROCESO TERMINO EN FORMA NORMAL*****'.
+093700     GO TO DZ-FIN-DE-SECCION.
+093800
+093900 DC-ESTADISTICA.
+094000     MOVE WA-TIT-EST(WI-IND)              TO WR-LD-SUBTIT
+094100     MOVE WA-LEIDO  (WI-IND)              TO WR-LD-LEIDOS
+094200     MOVE WA-CREAD  (WI-IND)              TO WR-LD-CREADO
+094300     MOVE WA-MODIF  (WI-IND)              TO WR-LD-MODIFI
+094400     MOVE WA-ELIMI  (WI-IND)              TO WR-LD-ELIMIN
+094500     MOVE WA-RECHA  (WI-IND)              TO WR-LD-RECHAZ
+094600     DISPLAY WR-LIN-DET.
+094700
+094800 DD-ESTADISTICA-MOP.
+094900     MOVE WA-CREA-MOP                     TO WR-CREA-MOP-S
+095000     MOVE WA-ELIM-MOP                     TO WR-ELIM-MOP-S
+095100     MOVE WA-ACTI-MOP                     TO WR-ACTI-MOP-S
+095200     MOVE WA-DESA-MOP                     TO WR-DESA-MOP-S.
+095300     MOVE WA-MODI-MOP                     TO WR-MODI-MOP-S.
+095400
+095500 DZ-FIN-DE-SECCION.
+095600     EXIT.
+095700
+

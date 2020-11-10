@@ -1,0 +1,680 @@
+       IDENTIFICATION DIVISION.
+      *========================
+       PROGRAM-ID. SGCP172.
+       AUTHOR.     RENE MAHMUD V.
+       DATE-COMPILED.
+      *REMARKS.
+      ******************************************************************
+      *  INTERSOFT                                                     *
+      *  MIGRACION A COBOL OS/390                                      *
+      *  FECHA: 15 DE ABRIL DE 1998                                    *
+      ******************************************************************
+      ******************************************************************
+      *                                                                *
+      *  OBJETIVO :                                                    *
+      *           - VERIFICA QUE CADA OPERACION EXISTENTE EN LA        *
+      *             TABLA OPE EXISTE EN LA TABLA RCO Y VICEVERSA.      *
+      *             EMITE UN LISTADO DESPLEGANDO LOS REGISTROS DE LAS  *
+      *             TABLAS OPE O RCO PARA LAS OPERACIONES INEXISTENTES.*
+      *                                                                *
+      *  INPUT    :                                                    *
+      *             RCO     - TABLA RELACION CLIENTE OPERACION         *
+      *             OPE     - TABLA OPERACIONES                        *
+      *                                                                *
+      *  OUTPUT   :                                                    *
+      *             LSTERR  - LISTADO CON OPERACIONES NO UBICADAS.     *
+      *                                                                *
+      *  FECHA    : SET/89.                                            *
+      *                                                                *
+      ******************************************************************
+      *                                                                *
+      *   MODIFACION : ANTONIO MENARES O.                              *
+      *                                                                *
+      *   SE ELIMINO LA COMPARACION DE LAS OPERACIONES EXISTENTES      *
+      *   EN LA TABLA RCO, CUYO CODIGO DE OPERACION (RCO-COD-TOPE)     *
+      *   SEA IGUAL A 'Z' .                                            *
+      *                                                                *
+      ******************************************************************
+      *   MODIFICACION RMAHMUD MAY/91.                                 *
+      *                                                                *
+      *   SE CHEQUEA EL ESTADO DE LA OPERACION SI NO CORRESPONDE O     *
+      *   ES DIFERENTE ENTRE LAS TABLAS OPE Y RCO. SE LISTA.           *
+      *                                                                *
+      ******************************************************************
+
+      *
+       ENVIRONMENT DIVISION.
+      *=====================
+           SKIP1
+       CONFIGURATION SECTION.
+      *----------------------
+       SPECIAL-NAMES.
+           C01 IS CANAL-1
+           DECIMAL-POINT IS COMMA.
+
+       INPUT-OUTPUT SECTION.
+      *---------------------
+       FILE-CONTROL.
+
+           SELECT LSTERR         ASSIGN TO LSTERR.
+
+       DATA DIVISION.
+      *==============
+
+       FILE SECTION.
+      *=============
+
+       FD  LSTERR
+           LABEL RECORD OMITTED.
+
+       01  REG-LSTERR                   PIC X(132).
+
+       WORKING-STORAGE SECTION.
+      *========================
+
+       01  WV-VARIABLES.
+           03 BLANCO                 PIC X(12) VALUE SPACES.
+
+       01  WC-CONTADORES.
+           03 WC-LEI-OPE             PIC 9(06) VALUE 0.
+           03 WC-LEI-RCO             PIC 9(06) VALUE 0.
+           03 WC-UBI-OPE             PIC 9(06) VALUE 0.
+           03 WC-UBI-RCO             PIC 9(06) VALUE 0.
+           03 WC-NUB-OPE             PIC 9(06) VALUE 0.
+           03 WC-NUB-RCO             PIC 9(06) VALUE 0.
+           03 WC-EER-TAB             PIC 9(06) VALUE 0.
+           03 WC-EDI-TAB             PIC 9(06) VALUE 0.
+           03 WC-GRA-LERR            PIC 9(06) VALUE 0.
+           03 WC-CON-LERR            PIC 9(06).
+           03 WC-LEI-Z-RCO           PIC 9(06) VALUE 0.
+
+       01  WS-LERR-TI1.
+           03 FILLER                 PIC X(40) VALUE SPACES.
+           03 WS-LERR-TI1-GLS        PIC X(41).
+
+       01  WS-LERR-TI2.
+           03 FILLER                 PIC X(40) VALUE SPACES.
+           03 FILLER                 PIC X(41) VALUE ALL '-'.
+
+       01  WS-LERR-DAT.
+           03 FILLER                 PIC X(14) VALUE 'CIC EN RCO :  '.
+           03 WS-LERR-CIC-ICLI       PIC X(12).
+           03 FILLER                 PIC X(10) VALUE SPACES.
+           03 FILLER                 PIC X(20) VALUE
+              'OPERACION EN OPE :  '.
+           03 WS-LERR-CIC-IOPE       PIC X(12).
+           03 FILLER                 PIC X(10) VALUE SPACES.
+           03 FILLER                 PIC X(17) VALUE
+              'ESTADO EN OPE :  '.
+           03 WS-LERR-OPE-STAT       PIC X(03).
+           03 FILLER                 PIC X(10) VALUE SPACES.
+           03 FILLER                 PIC X(17) VALUE
+              'ESTADO EN RCO :  '.
+           03 WS-LERR-RCO-STAT       PIC X(03).
+
+      ******************************************************************
+      *      USER INFORMATION BLOCK                                    *
+      ******************************************************************
+      *
+       01  UIB.
+           03 FILLER                 PIC X(32) VALUE 'SGCP172'.
+      *
+      ******************************************************************
+      *      REQUEST AREA                                              *
+      ******************************************************************
+      *
+       01  REQ-RCO-AREA.
+           03 REQ-RCO-CMD              PIC X(5).
+           03 REQ-RCO-TBLNM            PIC X(3) VALUE 'RCO'.
+           03 REQ-RCO-KEYNM            PIC X(5) VALUE 'RCO01'.
+           03 REQ-RCO-RETURN-CODE      PIC X(2) VALUE SPACES.
+           03 REQ-RCO-INT-RTN-CD       PIC X(1).
+           03 REQ-RCO-DBID             PIC S9(4) COMP VALUE +100.
+           03 REQ-RCO-TBLID            PIC X(7).
+           03 FILLER                   PIC X(25).
+           03 REQ-RCO-COUNT-MAX        PIC S9(4) COMP.
+           03 REQ-RCO-IO-COUNT         PIC S9(4) COMP.
+           03 FILLER                   PIC X(22).
+           03 REQ-RCO-KEY-VALUE        PIC X(12).
+
+       01  REQ-OPE-AREA.
+           03 REQ-OPE-CMD              PIC X(5).
+           03 REQ-OPE-TBLNM            PIC X(3) VALUE 'OPE'.
+           03 REQ-OPE-KEYNM            PIC X(5) VALUE 'OPE00'.
+           03 REQ-OPE-RETURN-CODE      PIC X(2) VALUE SPACES.
+           03 REQ-OPE-INT-RTN-CD       PIC X(1).
+           03 REQ-OPE-DBID             PIC S9(4) COMP VALUE +100.
+           03 REQ-OPE-TBLID            PIC X(7).
+           03 FILLER                   PIC X(25).
+           03 REQ-OPE-COUNT-MAX        PIC S9(4) COMP.
+           03 REQ-OPE-IO-COUNT         PIC S9(4) COMP.
+           03 FILLER                   PIC X(22).
+           03 REQ-OPE-KEY-VALUE        PIC X(12).
+      *
+      ******************************************************************
+      *                   WORK AREA                                    *
+      ******************************************************************
+      *
+       01  REG-RCO.
+      *    COPYDD DGC-R-RCO.DGC-E-RCO00(PROD),01,D
+      *                             EQUIVALENTE AL REGISTRO RCO
+           02  DGC-E-RCO00.
+      *                             RELACION CLIENTE OPERACION
+               03  RCO.
+      *                             FILLER COMPATIBILIDAD VSAM/MVS
+                   04  RCO-GLS-FLAG PICTURE X(1).
+      *                             KEY CLAVE PRIMARIA REGISTRO
+                   04  RCO-KEY-IREG.
+      *                             IDENTIFICACION RELACION CLIENTE OPER
+                       05  RCO-KEY-IRCO.
+      *                             COD. INT. COMP. CLIENTE
+                       06  RCO-CIC-ICLI.
+      *                             CENTRO ASIGNACION IDENTIFICACION
+                       07  RCO-CAI-ICLI.
+                       08  RCO-COD-TCLI
+                                    PICTURE X(1).
+                       08  RCO-COD-CCLI
+                                    PICTURE X(3).
+      *                             IDENT. INTERNA COMPUTACIONAL
+                       07  RCO-IIC-ICLI
+                                    PICTURE X(8).
+      *                             IDENTIFICACION OPERACION RELACION
+                       06  RCO-KEY-IOPE.
+      *                             COD. INT. COMP. OPERACION
+                       07  RCO-CIC-IOPE.
+      *                             CENTRO ASIGNACION IDENTIFICACION
+                       08  RCO-CAI-IOPE.
+                       09  RCO-COD-TOPE
+                                    PICTURE X(1).
+                       09  RCO-COD-COPE
+                                    PICTURE X(3).
+      *                             IDENT. INTERNA COMPUTACIONAL
+                       08  RCO-IIC-IOPE.
+                       09  RCO-COD-OOPE.
+                       10  RCO-COD-SOPE
+                                    PICTURE X(2).
+                       10  RCO-IND-SOPE
+                                    PICTURE X(1).
+                       09  RCO-GLS-NOPE
+                                    PICTURE X(5).
+      *                             TIME STAMP TRANSACCION
+                       05  RCO-STP-ITRN.
+      *                             FECHA TRANSACCION
+                       06  RCO-FEC-FTRN.
+                       07  RCO-NUM-STRN
+                                    PICTURE 9(2).
+                       07  RCO-NUM-ATRN
+                                    PICTURE 9(2).
+                       07  RCO-NUM-MTRN
+                                    PICTURE 9(2).
+                       07  RCO-NUM-DTRN
+                                    PICTURE 9(2).
+      *                             HORA TRANSACCION
+                       06  RCO-HRA-HRTR.
+                       07  RCO-NUM-HHTR
+                                    PICTURE 9(2).
+                       07  RCO-NUM-MMTR
+                                    PICTURE 9(2).
+                       07  RCO-NUM-SSTR
+                                    PICTURE 9(2).
+      *                             INDICADOR TIPO ACCION
+                   04  RCO-MSC-TACC PICTURE X(1).
+      *                             INDICADOR STATUS
+                   04  RCO-MSC-STAT PICTURE X(1).
+      *                             CODIGO ORIGEN TRANSACCION
+                   04  RCO-COD-OTRN.
+      *                             INDICADOR TIPO ORIGEN
+                       05  RCO-MSC-TTRN
+                                    PICTURE X(1).
+      *                             CODIGO TIPO ORIGEN
+                       05  RCO-COD-TTRN
+                                    PICTURE X(3).
+      *                             AUTOR TRANSACCION
+                   04  RCO-COD-ATRN PICTURE X(12).
+      *                             CODIGO STATUS
+                   04  RCO-COD-STAT PICTURE X(3).
+      *                             COD RELACION CLIENTE OPERACION
+                   04  RCO-COD-RCOP PICTURE X(3).
+      *                             NUMERO DE DIRECCION
+                   04  RCO-NUM-DIRE PICTURE 9(2).
+      *                             PORCENTAJE RELACION
+                   04  RCO-VAL-PRCO PICTURE 9(3)V9(6)
+                                        COMPUTATIONAL.
+      *                             CODIGO CLASE OPERACION
+                   04  RCO-COD-COPR.
+      *                             CODIGO TIPO OPERACION
+                       05  RCO-COD-TOPR
+                                    PICTURE X(3).
+      *                             CODIGO AUXILIAR OPERACION
+                       05  RCO-COD-AOPR
+                                    PICTURE X(3).
+      *                             DISPONIBLE
+                   04  RCO-GLS-DISP PICTURE X(17).
+
+       01  REG-OPE.
+      *    COPYDD DGC-R-OPE.DGC-E-OPE00(PROD),01,D
+      *                             EQUIVALENTE AL REGISTRO OPE
+           02  DGC-E-OPE00.
+      *                             OPERACIONES
+               03  OPE.
+      *                             FILLER COMPATIBILIDAD VSAM/MVS
+                   04  OPE-GLS-FLAG PICTURE X(1).
+      *                             KEY CLAVE PRIMARIA REGISTRO
+                   04  OPE-KEY-IREG.
+      *                             IDENTIFICACION OPERACION
+                       05  OPE-KEY-IOPE.
+      *                             COD. INT. COMP. OPERACION
+                       06  OPE-CIC-IOPE.
+      *                             CENTRO ASIGNACION IDENTIFICACION
+                       07  OPE-CAI-IOPE.
+                       08  OPE-COD-TOPE
+                                    PICTURE X(1).
+                       08  OPE-COD-COPE
+                                    PICTURE X(3).
+      *                             IDENT. INTERNA COMPUTACIONAL
+                       07  OPE-IIC-IOPE.
+                       08  OPE-COD-OOPE.
+                       09  OPE-COD-SOPE
+                                    PICTURE X(2).
+                       09  OPE-IND-SOPE
+                                    PICTURE X(1).
+                       08  OPE-GLS-NOPE
+                                    PICTURE X(5).
+      *                             TIME STAMP TRANSACCION
+                       05  OPE-STP-ITRN.
+      *                             FECHA TRANSACCION
+                       06  OPE-FEC-FTRN.
+                       07  OPE-NUM-STRN
+                                    PICTURE 9(2).
+                       07  OPE-NUM-ATRN
+                                    PICTURE 9(2).
+                       07  OPE-NUM-MTRN
+                                    PICTURE 9(2).
+                       07  OPE-NUM-DTRN
+                                    PICTURE 9(2).
+      *                             HORA TRANSACCION
+                       06  OPE-HRA-HRTR.
+                       07  OPE-NUM-HHTR
+                                    PICTURE 9(2).
+                       07  OPE-NUM-MMTR
+                                    PICTURE 9(2).
+                       07  OPE-NUM-SSTR
+                                    PICTURE 9(2).
+      *                             INDICADOR TIPO ACCION
+                   04  OPE-MSC-TACC PICTURE X(1).
+      *                             INDICADOR STATUS
+                   04  OPE-MSC-STAT PICTURE X(1).
+      *                             CODIGO ORIGEN TRANSACCION
+                   04  OPE-COD-OTRN.
+      *                             INDICADOR TIPO ORIGEN
+                       05  OPE-MSC-TTRN
+                                    PICTURE X(1).
+      *                             CODIGO TIPO ORIGEN
+                       05  OPE-COD-TTRN
+                                    PICTURE X(3).
+      *                             AUTOR TRANSACCION
+                   04  OPE-COD-ATRN PICTURE X(12).
+      *                             CODIGO STATUS
+                   04  OPE-COD-STAT PICTURE X(3).
+      *                             VALOR DE CAMBIO OPERACION
+                   04  OPE-COD-VCOP.
+      *                             MISCELANEO TIPO VALOR
+                       05  OPE-MSC-TVOP
+                                    PICTURE X(1).
+      *                             CODIGO VALOR
+                       05  OPE-COD-CVOP
+                                    PICTURE X(3).
+      *                             CODIGO TIPO CAMBIO
+                       05  OPE-COD-TCOP
+                                    PICTURE X(2).
+      *                             CODIGO CLASE OPERACION
+                   04  OPE-COD-COPR.
+      *                             CODIGO TIPO OPERACION
+                       05  OPE-COD-TOPR
+                                    PICTURE X(3).
+      *                             CODIGO AUXILIAR OPERACION
+                       05  OPE-COD-AOPR
+                                    PICTURE X(3).
+      *                             CODIGO OFICINA
+                   04  OPE-COD-OFOP PICTURE X(3).
+      *                             EJECUTIVO
+                   04  OPE-COD-EJOP PICTURE X(12).
+      *                             FECHA INICIO OPERACION
+                   04  OPE-FEC-FIOP.
+                       05  OPE-NUM-SIOP
+                                    PICTURE 9(2).
+                       05  OPE-NUM-AIOP
+                                    PICTURE 9(2).
+                       05  OPE-NUM-MIOP
+                                    PICTURE 9(2).
+                       05  OPE-NUM-DIOP
+                                    PICTURE 9(2).
+      *                             FECHA TERMINO OPERACION
+                   04  OPE-FEC-FTOP.
+                       05  OPE-NUM-STOP
+                                    PICTURE 9(2).
+                       05  OPE-NUM-ATOP
+                                    PICTURE 9(2).
+                       05  OPE-NUM-MTOP
+                                    PICTURE 9(2).
+                       05  OPE-NUM-DTOP
+                                    PICTURE 9(2).
+      *                             MOTIVO TERMINO OPERACION
+                   04  OPE-COD-MOTT PICTURE X(2).
+      *                             FECHA REAPERTURA OPERACION
+                   04  OPE-FEC-FROP.
+                       05  OPE-NUM-SROP
+                                    PICTURE 9(2).
+                       05  OPE-NUM-AROP
+                                    PICTURE 9(2).
+                       05  OPE-NUM-MROP
+                                    PICTURE 9(2).
+                       05  OPE-NUM-DROP
+                                    PICTURE 9(2).
+      *                             IND MULTIPLES CLIENTES ( Y, O, ETC)
+                   04  OPE-IND-MCLI PICTURE X(2).
+      *                             CODIGO TIPO DE COMISION
+                   04  OPE-COD-TCOM PICTURE X(2).
+      *                             COD. INT. COMP. OPERACION DE CARGO
+                   04  OPE-CIC-ICAR.
+      *                             CENTRO ASIGNACION OPERACION CARGO
+                       05  OPE-CAI-ICAR
+                                    PICTURE X(4).
+      *                             IDENT. INT. COMP. OPERACION CARGO
+                       05  OPE-IIC-ICAR
+                                    PICTURE X(8).
+
+      ******************************************************************
+      *                 ELEMENT LIST                                   *
+      ******************************************************************
+      *
+       01  ELEM-LIST.
+           03 ELEM-1         PIC X(05).
+           03 ELEM-SEC       PIC X(01).
+           03 FILLER         PIC X(05) VALUE SPACES.
+      *-----------------------------------------------------------------
+           EJECT
+       PROCEDURE DIVISION.
+      *===================
+           ENTRY 'DBMSCBL'.
+       AA-INICIO.
+           PERFORM B-INICIAR.
+       AB-PROCESO.
+           PERFORM C-PROCESAR.
+       AC-FIN.
+           PERFORM D-TERMINAR.
+       AZ-FIN-PROGRAMA.
+           DISPLAY BLANCO.
+           DISPLAY BLANCO '*** PGM SGCP172 TERMINO NORMAL'.
+           GOBACK.
+
+       B-INICIAR SECTION.
+      *==================
+       BA-CONTROL-PROCESO.
+      *-------------------
+           PERFORM BB-ABRE-ARCHIVO.
+           GO TO BZ-FIN-SECTION.
+
+       BB-ABRE-ARCHIVO.
+      *----------------
+           OPEN OUTPUT LSTERR.
+
+       BZ-FIN-SECTION.
+      *---------------
+           EXIT.
+
+       C-PROCESAR SECTION.
+      *==================
+       CA-CONTROL-PROCESO.
+      *------------------
+           PERFORM CB-FIRST-OPE.
+           PERFORM CC-PROCESA-OPE UNTIL REQ-OPE-RETURN-CODE = '14'.
+           PERFORM CD-FIRST-RCO.
+           PERFORM CE-PROCESA-RCO UNTIL REQ-RCO-RETURN-CODE = '14'.
+           GO TO CZ-FIN-SECTION.
+
+       CB-FIRST-OPE.
+      *-------------
+           MOVE 'LOCKY'   TO REQ-OPE-CMD.
+           MOVE LOW-VALUE TO REQ-OPE-KEY-VALUE.
+           MOVE 'OPE00' TO ELEM-1.
+           CALL 'DBNTRY' USING UIB REQ-OPE-AREA.
+           IF REQ-OPE-RETURN-CODE NOT = '  '
+              DISPLAY BLANCO '**************************'
+              DISPLAY BLANCO '* ERROR: LOCKY TABLA OPE *'
+              DISPLAY BLANCO '* TABLA          : ' REQ-OPE-TBLNM
+              DISPLAY BLANCO '* REQ. AREA      : ' REQ-OPE-AREA
+              DISPLAY BLANCO '* PGM SGCP172 CANCELADO *'
+              DISPLAY BLANCO
+              DISPLAY BLANCO '* ERROR: LOCKY TABLA OPE *' UPON CONSOLE
+              DISPLAY BLANCO '* PGM SGCP172 CANCELADO *' UPON CONSOLE
+              PERFORM D-TERMINAR
+              GOBACK.
+           MOVE 'REDKY'   TO REQ-OPE-CMD.
+           CALL 'DBNTRY' USING UIB REQ-OPE-AREA OPE ELEM-LIST.
+           IF REQ-OPE-RETURN-CODE NOT = '  '
+              DISPLAY BLANCO '**************************'
+              DISPLAY BLANCO '* ERROR: REDKY TABLA OPE *'
+              DISPLAY BLANCO '* TABLA          : ' REQ-OPE-TBLNM
+              DISPLAY BLANCO '* REQ. AREA      : ' REQ-OPE-AREA
+              DISPLAY BLANCO '* PGM SGCP172 CANCELADO *'
+              DISPLAY BLANCO
+              DISPLAY BLANCO '* ERROR: REDKY TABLA OPE *' UPON CONSOLE
+              DISPLAY BLANCO '* PGM SGCP172 CANCELADO *' UPON CONSOLE
+              PERFORM D-TERMINAR
+              GOBACK.
+           ADD 1 TO WC-LEI-OPE.
+           MOVE 90 TO WC-CON-LERR.
+           MOVE 'OPERACIONES CON PROBLEMAS EN LA TABLA RCO'
+                                               TO WS-LERR-TI1-GLS.
+
+       CC-PROCESA-OPE.
+      *---------------
+           MOVE 'REDKY'   TO REQ-RCO-CMD.
+           MOVE 'RCO00' TO ELEM-1.
+           MOVE REQ-OPE-KEY-VALUE TO REQ-RCO-KEY-VALUE.
+           CALL 'DBNTRY' USING UIB REQ-RCO-AREA RCO ELEM-LIST.
+           IF REQ-RCO-RETURN-CODE NOT = '  ' AND NOT = '14'
+              DISPLAY BLANCO '**************************'
+              DISPLAY BLANCO '* ERROR: REDKY TABLA RCO *'
+              DISPLAY BLANCO '* TABLA          : ' REQ-RCO-TBLNM
+              DISPLAY BLANCO '* REQ. AREA      : ' REQ-RCO-AREA
+              DISPLAY BLANCO '* PGM SGCP172 CANCELADO *'
+              DISPLAY BLANCO
+              DISPLAY BLANCO '* ERROR: REDKY TABLA RCO *' UPON CONSOLE
+              DISPLAY BLANCO '* PGM SGCP172 CANCELADO *' UPON CONSOLE
+              PERFORM D-TERMINAR
+              GOBACK.
+           IF REQ-RCO-RETURN-CODE = '  '
+              ADD 1 TO WC-UBI-RCO.
+
+      * PROCESO CASOS QUE IMPLICAN ERROR.
+
+           IF REQ-RCO-RETURN-CODE = '14'
+              MOVE SPACES TO RCO-CIC-ICLI
+              MOVE SPACES TO RCO-COD-STAT
+              ADD 1 TO WC-NUB-RCO
+              PERFORM CF-GRABA-LSTERR
+           ELSE
+           IF OPE-COD-STAT NOT = 'VIG' AND OPE-COD-STAT NOT = 'ELI' AND
+              RCO-COD-STAT NOT = 'VIG' AND RCO-COD-STAT NOT = 'ELI' AND
+              OPE-CAI-IOPE = '0000'
+              ADD 1 TO WC-EER-TAB
+              PERFORM CF-GRABA-LSTERR
+           ELSE
+           IF OPE-COD-STAT NOT = RCO-COD-STAT AND
+              OPE-CAI-IOPE = '0000'
+              ADD 1 TO WC-EDI-TAB
+              PERFORM CF-GRABA-LSTERR.
+
+           MOVE 'REDNX'   TO REQ-OPE-CMD.
+           MOVE 'OPE00' TO ELEM-1.
+           CALL 'DBNTRY' USING UIB REQ-OPE-AREA OPE ELEM-LIST.
+           IF REQ-OPE-RETURN-CODE NOT = '  ' AND NOT = '14'
+              DISPLAY BLANCO '**************************'
+              DISPLAY BLANCO '* ERROR: REDNX TABLA OPE *'
+              DISPLAY BLANCO '* TABLA          : ' REQ-OPE-TBLNM
+              DISPLAY BLANCO '* REQ. AREA      : ' REQ-OPE-AREA
+              DISPLAY BLANCO '* PGM SGCP172 CANCELADO *'
+              DISPLAY BLANCO
+              DISPLAY BLANCO '* ERROR: REDNX TABLA OPE *' UPON CONSOLE
+              DISPLAY BLANCO '* PGM SGCP172 CANCELADO *' UPON CONSOLE
+              PERFORM D-TERMINAR
+              GOBACK.
+           IF REQ-OPE-RETURN-CODE = '  '
+              ADD 1 TO WC-LEI-OPE.
+
+       CD-FIRST-RCO.
+      *-------------
+           MOVE 'LOCKY'   TO REQ-RCO-CMD.
+           MOVE LOW-VALUE TO REQ-RCO-KEY-VALUE.
+           MOVE 'RCO00' TO ELEM-1.
+           CALL 'DBNTRY' USING UIB REQ-RCO-AREA RCO ELEM-LIST.
+           IF REQ-RCO-RETURN-CODE NOT = '  '
+              DISPLAY BLANCO '**************************'
+              DISPLAY BLANCO '* ERROR: LOCKY TABLA RCO *'
+              DISPLAY BLANCO '* TABLA          : ' REQ-RCO-TBLNM
+              DISPLAY BLANCO '* REQ. AREA      : ' REQ-RCO-AREA
+              DISPLAY BLANCO '* PGM SGCP172 CANCELADO *'
+              DISPLAY BLANCO
+              DISPLAY BLANCO '* ERROR: LOCKY TABLA RCO *' UPON CONSOLE
+              DISPLAY BLANCO '* PGM SGCP172 CANCELADO *' UPON CONSOLE
+              PERFORM D-TERMINAR
+              GOBACK.
+           MOVE 'REDKY'   TO REQ-RCO-CMD.
+           CALL 'DBNTRY' USING UIB REQ-RCO-AREA RCO ELEM-LIST.
+           IF REQ-RCO-RETURN-CODE NOT = '  '
+              DISPLAY BLANCO '**************************'
+              DISPLAY BLANCO '* ERROR: REDKY TABLA RCO *'
+              DISPLAY BLANCO '* TABLA          : ' REQ-RCO-TBLNM
+              DISPLAY BLANCO '* REQ. AREA      : ' REQ-RCO-AREA
+              DISPLAY BLANCO '* PGM SGCP172 CANCELADO *'
+              DISPLAY BLANCO
+              DISPLAY BLANCO '* ERROR: REDKY TABLA RCO *' UPON CONSOLE
+              DISPLAY BLANCO '* PGM SGCP172 CANCELADO *' UPON CONSOLE
+              PERFORM D-TERMINAR
+              GOBACK.
+           ADD 1 TO WC-LEI-RCO.
+           MOVE 90 TO WC-CON-LERR.
+           MOVE 'OPERACIONES CON PROBLEMAS EN LA TABLA OPE'
+                                               TO WS-LERR-TI1-GLS.
+
+       CE-PROCESA-RCO.
+      *---------------
+           IF RCO-COD-TOPE NOT = 'Z'
+              PERFORM CE-PROCESA-RCO-VAL
+           ELSE
+              ADD 1 TO WC-LEI-Z-RCO.
+
+           MOVE 'REDNX'   TO REQ-RCO-CMD.
+           MOVE 'RCO00' TO ELEM-1.
+           CALL 'DBNTRY' USING UIB REQ-RCO-AREA RCO ELEM-LIST.
+           IF REQ-RCO-RETURN-CODE NOT = '  ' AND NOT = '14'
+              DISPLAY BLANCO '**************************'
+              DISPLAY BLANCO '* ERROR: REDNX TABLA RCO *'
+              DISPLAY BLANCO '* TABLA          : ' REQ-RCO-TBLNM
+              DISPLAY BLANCO '* REQ. AREA      : ' REQ-RCO-AREA
+              DISPLAY BLANCO '* PGM SGCP172 CANCELADO *'
+              DISPLAY BLANCO
+              DISPLAY BLANCO '* ERROR: REDNX TABLA RCO *' UPON CONSOLE
+              DISPLAY BLANCO '* PGM SGCP172 CANCELADO *' UPON CONSOLE
+              PERFORM D-TERMINAR
+              GOBACK.
+           IF REQ-RCO-RETURN-CODE = '  '
+              ADD 1 TO WC-LEI-RCO.
+
+       CE-PROCESA-RCO-VAL.
+      *------------------
+           MOVE 'REDKY'   TO REQ-OPE-CMD.
+           MOVE REQ-RCO-KEY-VALUE TO REQ-OPE-KEY-VALUE.
+           MOVE 'OPE00' TO ELEM-1.
+           CALL 'DBNTRY' USING UIB REQ-OPE-AREA OPE ELEM-LIST.
+           IF REQ-OPE-RETURN-CODE NOT = '  ' AND NOT = '14'
+              DISPLAY BLANCO '**************************'
+              DISPLAY BLANCO '* ERROR: REDKY TABLA OPE *'
+              DISPLAY BLANCO '* TABLA          : ' REQ-OPE-TBLNM
+              DISPLAY BLANCO '* REQ. AREA      : ' REQ-OPE-AREA
+              DISPLAY BLANCO '* PGM SGCP172 CANCELADO *'
+              DISPLAY BLANCO
+              DISPLAY BLANCO '* ERROR: REDKY TABLA OPE *' UPON CONSOLE
+              DISPLAY BLANCO '* PGM SGCP172 CANCELADO *' UPON CONSOLE
+              PERFORM D-TERMINAR
+              GOBACK.
+           IF REQ-OPE-RETURN-CODE = '  '
+              ADD 1 TO WC-UBI-OPE.
+
+      * PROCESO CASOS QUE IMPLICAN ERROR.
+
+           IF REQ-OPE-RETURN-CODE = '14'
+              MOVE SPACES TO OPE-CIC-IOPE
+              MOVE SPACES TO OPE-COD-STAT
+              ADD 1 TO WC-NUB-OPE
+              PERFORM CF-GRABA-LSTERR
+           ELSE
+           IF OPE-COD-STAT NOT = 'VIG' AND OPE-COD-STAT NOT = 'ELI' AND
+              RCO-COD-STAT NOT = 'VIG' AND RCO-COD-STAT NOT = 'ELI' AND
+              OPE-CAI-IOPE = '0000'
+              ADD 1 TO WC-EER-TAB
+              PERFORM CF-GRABA-LSTERR
+           ELSE
+           IF OPE-COD-STAT NOT = RCO-COD-STAT AND
+              OPE-CAI-IOPE = '0000'
+              ADD 1 TO WC-EDI-TAB
+              PERFORM CF-GRABA-LSTERR.
+
+       CF-GRABA-LSTERR.
+      *----------------
+           IF WC-CON-LERR > 50
+              MOVE 0 TO WC-CON-LERR
+              WRITE REG-LSTERR FROM WS-LERR-TI1 AFTER PAGE
+              WRITE REG-LSTERR FROM WS-LERR-TI2 AFTER 1
+              MOVE SPACES TO REG-LSTERR
+              WRITE REG-LSTERR.
+           ADD 1 TO WC-CON-LERR.
+           ADD 1 TO WC-GRA-LERR.
+           MOVE RCO-CIC-ICLI TO WS-LERR-CIC-ICLI
+           MOVE OPE-CIC-IOPE TO WS-LERR-CIC-IOPE
+           MOVE OPE-COD-STAT TO WS-LERR-OPE-STAT
+           MOVE RCO-COD-STAT TO WS-LERR-RCO-STAT.
+           WRITE REG-LSTERR FROM WS-LERR-DAT.
+
+       CZ-FIN-SECTION.
+      *---------------
+           EXIT.
+           EJECT
+       D-TERMINAR SECTION.
+      *===================
+       DA-ESTADISTICAS.
+      *----------------
+           DISPLAY BLANCO.
+           DISPLAY BLANCO.
+           DISPLAY BLANCO '************************************'.
+           DISPLAY BLANCO '*                                  *'.
+           DISPLAY BLANCO '*     ESTADISTICAS DEL PROCESO     *'.
+           DISPLAY BLANCO '*                                  *'.
+           DISPLAY BLANCO '************************************'.
+           DISPLAY BLANCO.
+           DISPLAY BLANCO 'REG. LEIDOS   TABLA OPE : ' WC-LEI-OPE.
+           DISPLAY BLANCO 'REG. UBICADOS TABLA RCO : ' WC-UBI-RCO.
+           DISPLAY BLANCO 'REG. INEXIST. TABLA RCO : ' WC-NUB-RCO.
+           DISPLAY BLANCO.
+           DISPLAY BLANCO 'REG. LEIDOS   TABLA RCO : ' WC-LEI-RCO.
+           DISPLAY BLANCO 'REG. UBICADOS TABLA OPE : ' WC-UBI-OPE.
+           DISPLAY BLANCO 'REG. INEXIST. TABLA OPE : ' WC-NUB-OPE.
+           DISPLAY BLANCO.
+           DISPLAY BLANCO 'REG. ESTADO INV. OPE O RCO : ' WC-EER-TAB.
+           DISPLAY BLANCO 'REG. ESTADO DIF. OPE Y RCO : ' WC-EDI-TAB.
+           DISPLAY BLANCO.
+           DISPLAY BLANCO 'REG. -Z- UBI. EN TAB RCO: ' WC-LEI-Z-RCO.
+           DISPLAY BLANCO.
+           DISPLAY BLANCO 'REG. ERRONEOS  LISTADOS : ' WC-GRA-LERR.
+           DISPLAY BLANCO.
+           DISPLAY BLANCO '*****************************************'.
+
+       DB-CERRAR-ARCHIVOS.
+      *-------------------
+           CLOSE LSTERR.
+
+       DZ-FIN-SECTION.
+      *---------------
+           EXIT.

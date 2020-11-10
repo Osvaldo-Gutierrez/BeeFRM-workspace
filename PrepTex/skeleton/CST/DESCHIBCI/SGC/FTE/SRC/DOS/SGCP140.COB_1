@@ -1,0 +1,829 @@
+       IDENTIFICATION DIVISION.
+      *========================
+       PROGRAM-ID. SGCP140.
+       AUTHOR.     RENE MAHMUD V.
+      *REMARKS.
+      ******************************************************************
+      *  INTERSOFT                                                     *
+      *  MIGRACION A COBOL OS/390                                      *
+      *  FECHA: 15 DE ABRIL DE 1998                                    *
+      ******************************************************************
+      ******************************************************************
+      *                                                                *
+      *  OBJETIVO :                                                    *
+      *           - LEE CINTA CON RUTS PROVENIENTES DE UNA EMPRESA     *
+      *             EXTERNA, GRABANDO EN OTRA CINTA JUNTO CON EL RUT   *
+      *             UN INDICADOR '0' O '1' SI EL RUT TIENE ASOCIADO    *
+      *             UNA CUENTA CORRIENTE BCI VIGENTE.                  *
+      *             LA SELECCION SE EFECTUA CONSULTANDO LA TABLA RCO   *
+      *             POR OPERACION CON CAI = '0000'. LA VIGENCIA DE LA  *
+      *             CUENTA VERIFICANDO QUE RCO-COD-STAT NOT= 'ELI'.    *
+      *                                                                *
+      *  INPUT    :                                                    *
+      *             ARCINP  - CINTA CON RUT DESDE EMPRESA.             *
+      *             DBC     - TABLA DATOS BASICOS CLIENTES             *
+      *             RCO     - TABLA RELACION CLIENTE DBCRACION         *
+      *                                                                *
+      *  SORT     :                                                    *
+      *             SRTCIN  - SORT ARCHIVO RUT DE CINTA SELECCIONADOS. *
+      *                                                                *
+      *  OUTPUT   :                                                    *
+      *             CINOUT  - CINTA CON RUT HACIA EMPRESA.             *
+      *                                                                *
+      *  FECHA    : AGO/89.                                            *
+      *                                                                *
+      ******************************************************************
+      ******************************************************************
+      *      MANTENCIONES.
+      *      ==============
+      *
+      *      PROGRAMADOR : FORMAT 2000 INC.
+      *      FECHA       : 20.02.1998
+      *      CAMBIO      : SE APLICA TECNICA WINDOWING PARA CONVERSION
+      *                      2000 COMPLIANT.
+      ******************************************************************
+      *
+       ENVIRONMENT DIVISION.
+      *=====================
+
+       CONFIGURATION SECTION.
+      *----------------------
+       SPECIAL-NAMES.
+           C01 IS CANAL-1
+           DECIMAL-POINT IS COMMA.
+      *
+       INPUT-OUTPUT SECTION.
+      *=====================
+       FILE-CONTROL.
+           SELECT ARCINP         ASSIGN TO DA-S-ARCINP
+                                 FILE STATUS IS FS-ARCINP.
+           SELECT CINOUT         ASSIGN TO CINOUT
+                                 FILE STATUS IS FS-CINOUT.
+           SELECT SRTCIN         ASSIGN TO DA-S-SORTWK1.
+
+       DATA DIVISION.
+      *==============
+      *
+       FILE SECTION.
+      *=============
+
+       FD  ARCINP
+           RECORD CONTAINS 20 CHARACTERS
+           BLOCK CONTAINS 400 RECORDS
+           LABEL RECORD STANDARD.
+
+       01  REG-ARCINP.
+           03 AINP-RUT.
+              05 AINP-RUT-NUM        PIC X(09).
+              05 AINP-RUT-DV         PIC X(01).
+           03 FILLER                 PIC X(10).
+
+       FD  CINOUT
+           RECORD CONTAINS 20 CHARACTERS
+           BLOCK CONTAINS 400 RECORDS
+           LABEL RECORD OMITTED.
+
+       01  REG-CINOUT.
+           03 COUT-RUT.
+              05 COUT-RUT-NUM        PIC X(09).
+              05 COUT-RUT-DV         PIC X(01).
+           03 COUT-IND-CCTE          PIC X(01).
+           03 COUT-FILLER            PIC X(09).
+
+       SD  SRTCIN.
+
+       01  REG-SRTCIN.
+           03 SCIN-RUT.
+              05 SCIN-RUT-NUM        PIC X(09).
+              05 SCIN-RUT-DV         PIC X(01).
+           03 SCIN-IND-CCTE          PIC X(01).
+           03 SCIN-FILLER            PIC X(09).
+
+       WORKING-STORAGE SECTION.
+      *========================
+
+       01  WS-CONTADORES.
+           03 WS-LEI-AINP            PIC 9(06) VALUE 0.
+           03 WS-GRA-COUT            PIC 9(06) VALUE 0.
+           03 WS-LEI-SCIN            PIC 9(06) VALUE 0.
+           03 WS-GRA-SCIN            PIC 9(06) VALUE 0.
+           03 WS-UBI-RCO             PIC 9(06) VALUE 0.
+           03 WS-LEI-DBC             PIC 9(06) VALUE 0.
+           03 WS-INE-DBC             PIC 9(06) VALUE 0.
+           03 WS-CON-RCTL            PIC 9(06) VALUE 0.
+
+       01  WS-VARIABLES.
+           03 BLANCO                 PIC X(12) VALUE SPACES.
+           03 FS-ARCINP              PIC 9(02).
+           03 FS-SRTCIN              PIC 9(02) VALUE 0.
+           03 FS-CINOUT              PIC 9(02).
+           03 WS-IND-CCIC            PIC X(02).
+           03 WS-DBC-IDC             PIC X(12).
+           03 R-WS-DBC-IDC REDEFINES WS-DBC-IDC.
+              05 WS-DBC-RUT          PIC 9(08).
+              05 WS-DBC-EXT          PIC X(04).
+           03 WS-FEC-FCUR.
+              05 WS-NUM-MCUR         PIC X(02).
+              05 FILLER              PIC X(01).
+              05 WS-NUM-DCUR         PIC X(02).
+              05 FILLER              PIC X(01).
+              05 WS-NUM-ACUR         PIC X(02).
+           03 WS-FEC-FCAR.
+              05 WS-NUM-DCAR         PIC 9(02).
+              05 WS-NUM-MCAR         PIC 9(02).
+              05 WS-NUM-SCAR         PIC 9(02).
+              05 WS-NUM-ACAR         PIC 9(02).
+
+       01  WS-REG-CINCTL.
+           03 WS-CCTL-FCAR           PIC X(08).
+           03 WS-CCTL-RGRA           PIC X(06).
+           03 FILLER                 PIC X(06) VALUE SPACES.
+
+      ******************************************************************
+      *      USER INFORMATION BLOCK                                    *
+      ******************************************************************
+      *
+       01  UIB.
+           05 FILLER                 PIC X(32) VALUE 'SGCP140'.
+      *
+      ******************************************************************
+      *      REQUEST AREA                                              *
+      ******************************************************************
+      *
+       01  REQ-DBC-AREA.
+           02 REQ-DBC-CMD          PIC X(5).
+           02 REQ-DBC-TBLNM        PIC X(3) VALUE 'DBC'.
+           02 REQ-DBC-KEYNM        PIC X(5) VALUE 'DBC02'.
+           02 REQ-DBC-RETURN-CODE  PIC X(2) VALUE SPACES.
+           02 REQ-DBC-INT-RTN-CD   PIC X(1).
+           02 REQ-DBC-DBID         PIC S9(4) COMP VALUE +100.
+           02 REQ-DBC-TBLID        PIC X(7).
+           02 FILLER               PIC X(25).
+           02 REQ-DBC-COUNT-MAX    PIC S9(4) COMP.
+           02 REQ-DBC-IO-COUNT     PIC S9(4) COMP.
+           02 FILLER               PIC X(22).
+           02 REQ-DBC-KEY-VALUE    PIC X(12).
+
+       01  REQ-RCO-AREA.
+           02 REQ-RCO-CMD          PIC X(5).
+           02 REQ-RCO-TBLNM        PIC X(3) VALUE 'RCO'.
+           02 REQ-RCO-KEYNM        PIC X(5) VALUE 'RCO00'.
+           02 REQ-RCO-RETURN-CODE  PIC X(2) VALUE SPACES.
+           02 REQ-RCO-INT-RTN-CD   PIC X(1).
+           02 REQ-RCO-DBID         PIC S9(4) COMP VALUE +100.
+           02 REQ-RCO-TBLID        PIC X(7).
+           02 FILLER               PIC X(25).
+           02 REQ-RCO-COUNT-MAX    PIC S9(4) COMP.
+           02 REQ-RCO-IO-COUNT     PIC S9(4) COMP.
+           02 FILLER               PIC X(22).
+           02 REQ-RCO-KEY-VALUE.
+              03 REQ-RCO-CIC-ICLI  PIC X(12).
+              03 REQ-RCO-CAI-IOPE  PIC X(04).
+              03 REQ-RCO-IIC-IOPE  PIC X(08).
+
+      ******************************************************************
+      *                   WORK AREA                                    *
+      ******************************************************************
+      *
+       01  REG-RCO.
+      *    COPYDD DGC-R-RCO.DGC-E-RCO00(PROD),01,D.
+      *                             EQUIVALENTE AL REGISTRO RCO
+           02  DGC-E-RCO00.
+      *                             RELACION CLIENTE OPERACION
+               03  RCO.
+      *                             FILLER COMPATIBILIDAD VSAM/MVS
+                   04  RCO-GLS-FLAG PICTURE X(1).
+      *                             KEY CLAVE PRIMARIA REGISTRO
+                   04  RCO-KEY-IREG.
+      *                             IDENTIFICACION RELACION CLIENTE OPER
+                       05  RCO-KEY-IRCO.
+      *                             COD. INT. COMP. CLIENTE
+                       06  RCO-CIC-ICLI.
+      *                             CENTRO ASIGNACION IDENTIFICACION
+                       07  RCO-CAI-ICLI.
+                       08  RCO-COD-TCLI
+                                    PICTURE X(1).
+                       08  RCO-COD-CCLI
+                                    PICTURE X(3).
+      *                             IDENT. INTERNA COMPUTACIONAL
+                       07  RCO-IIC-ICLI
+                                    PICTURE X(8).
+      *                             IDENTIFICACION OPERACION RELACION
+                       06  RCO-KEY-IOPE.
+      *                             COD. INT. COMP. OPERACION
+                       07  RCO-CIC-IOPE.
+      *                             CENTRO ASIGNACION IDENTIFICACION
+                       08  RCO-CAI-IOPE.
+                       09  RCO-COD-TOPE
+                                    PICTURE X(1).
+                       09  RCO-COD-COPE
+                                    PICTURE X(3).
+      *                             IDENT. INTERNA COMPUTACIONAL
+                       08  RCO-IIC-IOPE.
+                       09  RCO-COD-OOPE.
+                       10  RCO-COD-SOPE
+                                    PICTURE X(2).
+                       10  RCO-IND-SOPE
+                                    PICTURE X(1).
+                       09  RCO-GLS-NOPE
+                                    PICTURE X(5).
+      *                             TIME STAMP TRANSACCION
+                       05  RCO-STP-ITRN.
+      *                             FECHA TRANSACCION
+                       06  RCO-FEC-FTRN.
+                       07  RCO-NUM-STRN
+                                    PICTURE 9(2).
+                       07  RCO-NUM-ATRN
+                                    PICTURE 9(2).
+                       07  RCO-NUM-MTRN
+                                    PICTURE 9(2).
+                       07  RCO-NUM-DTRN
+                                    PICTURE 9(2).
+      *                             HORA TRANSACCION
+                       06  RCO-HRA-HRTR.
+                       07  RCO-NUM-HHTR
+                                    PICTURE 9(2).
+                       07  RCO-NUM-MMTR
+                                    PICTURE 9(2).
+                       07  RCO-NUM-SSTR
+                                    PICTURE 9(2).
+      *                             INDICADOR TIPO ACCION
+                   04  RCO-MSC-TACC PICTURE X(1).
+      *                             INDICADOR STATUS
+                   04  RCO-MSC-STAT PICTURE X(1).
+      *                             CODIGO ORIGEN TRANSACCION
+                   04  RCO-COD-OTRN.
+      *                             INDICADOR TIPO ORIGEN
+                       05  RCO-MSC-TTRN
+                                    PICTURE X(1).
+      *                             CODIGO TIPO ORIGEN
+                       05  RCO-COD-TTRN
+                                    PICTURE X(3).
+      *                             AUTOR TRANSACCION
+                   04  RCO-COD-ATRN PICTURE X(12).
+      *                             CODIGO STATUS
+                   04  RCO-COD-STAT PICTURE X(3).
+      *                             COD RELACION CLIENTE OPERACION
+                   04  RCO-COD-RCOP PICTURE X(3).
+      *                             NUMERO DE DIRECCION
+                   04  RCO-NUM-DIRE PICTURE 9(2).
+      *                             PORCENTAJE RELACION
+                   04  RCO-VAL-PRCO PICTURE 9(3)V9(6)
+                                        COMPUTATIONAL.
+      *                             CODIGO CLASE OPERACION
+                   04  RCO-COD-COPR.
+      *                             CODIGO TIPO OPERACION
+                       05  RCO-COD-TOPR
+                                    PICTURE X(3).
+      *                             CODIGO AUXILIAR OPERACION
+                       05  RCO-COD-AOPR
+                                    PICTURE X(3).
+      *                             DISPONIBLE
+                   04  RCO-GLS-DISP PICTURE X(17).
+
+       01  REG-DBC.
+      *    COPYDD DGC-R-DBC.DGC-E-DBC00(PROD),01,D.
+      *                             EQUIVALENTE AL REGISTRO DBC
+           02  DGC-E-DBC00.
+      *                             DATOS BASICOS DEL CLIENTE
+               03  DBC.
+      *                             FILLER COMPATIBILIDAD VSAM/MVS
+                   04  DBC-GLS-FLAG PICTURE X(1).
+      *                             KEY CLAVE PRIMARIA REGISTRO
+                   04  DBC-KEY-IREG.
+      *                             IDENTIFICACION DATOS BASICOS CLIENTE
+                       05  DBC-KEY-IDBC.
+      *                             COD. INT. COMP. CLIENTE
+                       06  DBC-CIC-ICLI.
+      *                             CENTRO ASIGNACION IDENTIFICACION
+                       07  DBC-CAI-ICLI.
+                       08  DBC-COD-TCLI
+                                    PICTURE X(1).
+                       08  DBC-COD-CCLI
+                                    PICTURE X(3).
+      *                             IDENT. INTERNA COMPUTACIONAL
+                       07  DBC-IIC-ICLI
+                                    PICTURE X(8).
+      *                             TIME STAMP TRANSACCION
+                       05  DBC-STP-ITRN.
+      *                             FECHA TRANSACCION
+                       06  DBC-FEC-FTRN.
+                       07  DBC-NUM-STRN
+                                    PICTURE 9(2).
+                       07  DBC-NUM-ATRN
+                                    PICTURE 9(2).
+                       07  DBC-NUM-MTRN
+                                    PICTURE 9(2).
+                       07  DBC-NUM-DTRN
+                                    PICTURE 9(2).
+      *                             HORA TRANSACCION
+                       06  DBC-HRA-HRTR.
+                       07  DBC-NUM-HHTR
+                                    PICTURE 9(2).
+                       07  DBC-NUM-MMTR
+                                    PICTURE 9(2).
+                       07  DBC-NUM-SSTR
+                                    PICTURE 9(2).
+      *                             INDICADOR TIPO ACCION
+                   04  DBC-MSC-TACC PICTURE X(1).
+      *                             INDICADOR STATUS
+                   04  DBC-MSC-STAT PICTURE X(1).
+      *                             CODIGO ORIGEN TRANSACCION
+                   04  DBC-COD-OTRN.
+      *                             INDICADOR TIPO ORIGEN
+                       05  DBC-MSC-TTRN
+                                    PICTURE X(1).
+      *                             CODIGO TIPO ORIGEN
+                       05  DBC-COD-TTRN
+                                    PICTURE X(3).
+      *                             AUTOR TRANSACCION
+                   04  DBC-COD-ATRN PICTURE X(12).
+      *                             KEY RUT CLIENTE + INDICADOR O CALIFI
+                   04  DBC-IDC-ICLI.
+      *                             RUT CLIENTE
+                       05  DBC-NUM-ICLI
+                                    PICTURE X(8).
+      *                             INDICADOR TIPO RUT
+                       05  DBC-IND-ICLI
+                                    PICTURE X(1).
+      *                             EXTENSION DEL RUT
+                       05  DBC-GLS-ICLI
+                                    PICTURE X(3).
+      *                             KEY DIGITO VERIFICADOR DEL RUT
+                   04  DBC-VRF-ICLI PICTURE X(1).
+      *                             KEY NOMBRE CLIENTE GENERICO (PERSONA
+                   04  DBC-GLS-NOMC.
+                       05  DBC-GLS-APAT
+                                    PICTURE X(25).
+                       05  DBC-GLS-AMAT
+                                    PICTURE X(25).
+                       05  DBC-GLS-NOMB
+                                    PICTURE X(25).
+      *                             SOUNDEX DEL NOMBRE DE CLIENTE
+                   04  DBC-SNX-NOMC.
+                       05  DBC-SNX-APAT
+                                    PICTURE X(3).
+                       05  DBC-SNX-AMAT
+                                    PICTURE X(3).
+                       05  DBC-SNX-NOMB
+                                    PICTURE X(3).
+      *                             NUMERO DE DIRECCION DE ENVIO CORRESP
+                   04  DBC-NUM-DCOR PICTURE 9(2).
+      *                             OPR IND TIPO CLIENTE ( PERSONA O EMP
+                   04  DBC-IND-TICL PICTURE X(1).
+      *                             TIPO CLIENTE (POTENCIAL,NO CLIENTE,G
+                   04  DBC-COD-TICL PICTURE X(2).
+      *                             CODIGO CLASIFICACION COMERCIAL
+                   04  DBC-COD-CLCM PICTURE X(2).
+      *                             RCM CODIGO DEL EJECUTIVO ENCARGADO D
+                   04  DBC-COD-EJEC PICTURE X(12).
+      *                             OPR CODIGO DE OFICINA DONDE OPERA EL
+                   04  DBC-COD-OFIC PICTURE X(3).
+      *                             RCM INDICADOR SI OPERA EN OTRA OFICI
+                   04  DBC-IND-OOFI PICTURE X(1).
+      *                             EXT CODIGO ACTIVIDAD ECONOMICA
+                   04  DBC-COD-ACTI PICTURE X(9).
+      *                             EXT ORIGEN Y DESTINO SECT (COMP.INST
+                   04  DBC-COD-ODSE PICTURE X(3).
+      *                             INF FECHA INGRESO AL PLAN
+                   04  DBC-FEC-FPLN.
+                       05  DBC-NUM-SPLN
+                                    PICTURE 9(2).
+                       05  DBC-NUM-APLN
+                                    PICTURE 9(2).
+                       05  DBC-NUM-MPLN
+                                    PICTURE 9(2).
+                       05  DBC-NUM-DPLN
+                                    PICTURE 9(2).
+      *                             CODIGO DE SEGMENTO
+                   04  DBC-COD-SETO PICTURE X(5).
+      *                             PERIODO DE SEGMENTO (SSAAMM)
+                   04  DBC-PDO-SETO PICTURE X(6).
+      *                             INF INDICADOR DE MULTAS BANCO CENTRA
+                   04  DBC-IND-MUBC PICTURE X(1).
+      *                             INF INDICADOR DE JUICIOS BANCO CENTR
+                   04  DBC-IND-JUBC PICTURE X(1).
+      *                             EXT CODIGO ESTADO CLIENTE ( COMO DEU
+                   04  DBC-MSC-SCLI PICTURE X(1).
+      *                             FECHA ESTADO CLIENTE
+                   04  DBC-FEC-FSCL.
+                       05  DBC-NUM-SSCL
+                                    PICTURE 9(2).
+                       05  DBC-NUM-ASCL
+                                    PICTURE 9(2).
+                       05  DBC-NUM-MSCL
+                                    PICTURE 9(2).
+                       05  DBC-NUM-DSCL
+                                    PICTURE 9(2).
+      *                             CODIGO DE BLOQUEO DEL CLIENTE
+                   04  DBC-COD-BLOC PICTURE X(2).
+      *                             NUMERO TOTAL DE DIRECCIONES
+                   04  DBC-NUM-TDIR PICTURE 9(2).
+      *                             NUMERO TOTAL DE COMENTARIOS
+                   04  DBC-NUM-TCMT PICTURE 9(3).
+      *                             FECHA INICIO OPERACION
+                   04  DBC-FEC-FIOP.
+                       05  DBC-NUM-SIOP
+                                    PICTURE 9(2).
+                       05  DBC-NUM-AIOP
+                                    PICTURE 9(2).
+                       05  DBC-NUM-MIOP
+                                    PICTURE 9(2).
+                       05  DBC-NUM-DIOP
+                                    PICTURE 9(2).
+      *                             FECHA TERMINO OPERACION
+                   04  DBC-FEC-FTOP.
+                       05  DBC-NUM-STOP
+                                    PICTURE 9(2).
+                       05  DBC-NUM-ATOP
+                                    PICTURE 9(2).
+                       05  DBC-NUM-MTOP
+                                    PICTURE 9(2).
+                       05  DBC-NUM-DTOP
+                                    PICTURE 9(2).
+      *                             NUMERO OPERACIONES FECHA TERMINO NUL
+                   04  DBC-NUM-OFTN PICTURE 9(3).
+      *                             FECHA INGRESO DE DATOS A LA BASE DE
+                   04  DBC-FEC-FINP.
+                       05  DBC-NUM-SINP
+                                    PICTURE 9(2).
+                       05  DBC-NUM-AINP
+                                    PICTURE 9(2).
+                       05  DBC-NUM-MINP
+                                    PICTURE 9(2).
+                       05  DBC-NUM-DINP
+                                    PICTURE 9(2).
+
+      ******************************************************************
+      *                 ELEMENT LIST                                   *
+      ******************************************************************
+      *
+       01  ELEM-LIST.
+           03 ELEM-1         PIC X(05).
+           03 ELEM-SEC       PIC X(01).
+           03 FILLER         PIC X(05) VALUE SPACES.
+      *
+           COPY RLOVR001.
+       01  LEGA-DATE-BLOCK.
+           05 COBOL-II-DATE.
+              10 COBOL-II-YEAR
+                         PIC XX.
+              10 COBOL-II-MONTH
+                         PIC XX.
+              10 COBOL-II-DAY
+                         PIC XX.
+           05 OSVS-CURRENT-DATE.
+              10 CURRENT-DATE-MONTH
+                         PIC XX.
+              10 FILLER  PIC X         VALUE '/'.
+              10 CURRENT-DATE-DAY
+                         PIC XX.
+              10 FILLER  PIC X         VALUE '/'.
+              10 CURRENT-DATE-YEAR
+                         PIC XX.
+      *-----------------------------------------------------------------
+
+       PROCEDURE DIVISION.
+      *===================
+           ENTRY 'DBMSCBL'.
+       AA-INICIO.
+           PERFORM B-INICIAR.
+       AB-PROCESO.
+           PERFORM C-PROCESAR.
+       AC-FIN.
+           PERFORM D-TERMINAR.
+       AZ-FIN-PROGRAMA.
+           GOBACK.
+
+       B-INICIAR SECTION.
+      *==================
+       BA-CONTROL-PROCESO.
+      *-------------------
+           PERFORM BB-OPEN-ARCINP.
+           PERFORM BC-LEE-REGCTRL.
+           GO TO BZ-FIN-SECTION.
+
+       BB-OPEN-ARCINP.
+      *---------------
+           OPEN INPUT ARCINP.
+           IF FS-ARCINP = 0
+              NEXT SENTENCE
+           ELSE
+              DISPLAY BLANCO '**************************'
+              DISPLAY BLANCO '* ERROR: AL ABRIR ARCINP *'
+              DISPLAY BLANCO '* FILE STATUS    : ' FS-ARCINP
+              DISPLAY BLANCO '* PGM. SGCP140 CANCELADO *'
+              DISPLAY BLANCO
+              DISPLAY BLANCO '* ERROR: AL ABRIR ARCINP *' UPON CONSOLE
+              DISPLAY BLANCO '* PGM. SGCP140 CANCELADO *' UPON CONSOLE
+              PERFORM D-TERMINAR
+              GOBACK.
+
+       BC-LEE-REGCTRL.
+      *---------------
+           READ ARCINP INTO WS-REG-CINCTL.
+           DISPLAY 'REG.CONTROL : ' WS-REG-CINCTL.
+
+           IF WS-CCTL-FCAR NUMERIC AND
+              WS-CCTL-RGRA NUMERIC
+              ADD 1 TO WS-LEI-AINP
+           ELSE
+              DISPLAY BLANCO '**************************'
+              DISPLAY BLANCO '* ERROR: VAL. REG. CTROL *'
+              DISPLAY BLANCO '* PGM. SGCP140 CANCELADO *'
+              DISPLAY BLANCO
+              DISPLAY BLANCO '* ERROR: VAL. REG. CTROL *' UPON CONSOLE
+              DISPLAY BLANCO '* PGM. SGCP140 CANCELADO *' UPON CONSOLE
+              PERFORM D-TERMINAR
+              GOBACK.
+
+       BZ-FIN-SECTION.
+      *---------------
+           EXIT.
+
+       C-PROCESAR SECTION.
+      *===================
+       CA-CONTROL-PROCESO.
+      *-------------------
+           SORT SRTCIN ON ASCENDING KEY SCIN-RUT
+                       INPUT  PROCEDURE E-CARGA-SORT
+                       OUTPUT PROCEDURE F-PROCESO-SORT.
+
+       CZ-FIN-SECTION.
+      *---------------
+           EXIT.
+
+       D-TERMINAR SECTION.
+      *===================
+       DA-ESTADISTICAS.
+      *----------------
+           DISPLAY BLANCO.
+           DISPLAY BLANCO.
+           DISPLAY BLANCO '*****************************************'.
+           DISPLAY BLANCO '*                                       *'.
+           DISPLAY BLANCO '*        ESTADISTICAS DEL PROCESO       *'.
+           DISPLAY BLANCO '*                                       *'.
+           DISPLAY BLANCO '*****************************************'.
+           DISPLAY BLANCO.
+           DISPLAY BLANCO 'REG. LEIDOS  ARCHIVO INPUT :' WS-LEI-AINP.
+           DISPLAY BLANCO 'REG. LEIDOS      TABLA DBC :' WS-LEI-DBC.
+           DISPLAY BLANCO 'REG. INEXISTENTE TABLA DBC :' WS-INE-DBC.
+           DISPLAY BLANCO 'REG. CON CTACTE  TABLA RCO :' WS-UBI-RCO.
+           DISPLAY BLANCO 'REG. GRABADOS   ARCH. SORT :' WS-GRA-SCIN.
+           DISPLAY BLANCO.
+           DISPLAY BLANCO 'REG. LEIDOS     ARCH. SORT :' WS-LEI-SCIN.
+           DISPLAY BLANCO 'REG. GRABADOS CINTA OUTPUT :' WS-GRA-COUT.
+           DISPLAY BLANCO.
+           DISPLAY BLANCO '*****************************************'.
+
+       DB-CERRAR-ARCHIVOS.
+      *-------------------
+           CLOSE CINOUT.
+
+       DZ-FIN-SECTION.
+      *---------------
+           EXIT.
+
+       E-CARGA-SORT SECTION.
+      *=====================
+       EA-CONTROL-PROCESO.
+      *-------------------
+           PERFORM EB-LEE-ARCINP.
+           PERFORM EC-PROCESO UNTIL FS-ARCINP = 10.
+           PERFORM EH-CLOSE-ARCINP.
+           GO TO EZ-FIN-SECTION.
+
+       EB-LEE-ARCINP.
+      *--------------
+           READ ARCINP.
+           IF FS-ARCINP = 0
+              ADD 1 TO WS-LEI-AINP.
+
+           IF FS-ARCINP NOT = 0 AND NOT = 10
+              DISPLAY BLANCO '**************************'
+              DISPLAY BLANCO '* ERROR: AL LEER  ARCINP *'
+              DISPLAY BLANCO '* FILE STATUS    : ' FS-ARCINP
+              DISPLAY BLANCO '* PGM. SGCP140 CANCELADO *'
+              DISPLAY BLANCO
+              DISPLAY BLANCO '* ERROR: AL LEER ARCINP  *' UPON CONSOLE
+              DISPLAY BLANCO '* PGM. SGCP140 CANCELADO *' UPON CONSOLE
+              PERFORM D-TERMINAR
+              GOBACK.
+
+       EC-PROCESO.
+      *-----------
+           PERFORM ED-LEE-DBC.
+           IF REQ-DBC-RETURN-CODE = '  '
+              PERFORM EE-LEE-FIRST-RCO
+              IF REQ-RCO-CIC-ICLI    = DBC-CIC-ICLI AND
+                 RCO-COD-STAT    NOT = 'ELI' AND
+                 REQ-RCO-RETURN-CODE = '  '
+                 ADD 1 TO WS-UBI-RCO
+                 MOVE '1' TO SCIN-IND-CCTE
+                 PERFORM EG-GRABA-SRTCIN
+              ELSE
+                 MOVE '  ' TO WS-IND-CCIC
+                 PERFORM EF-LEE-NEXT-RCO UNTIL
+                         WS-IND-CCIC = 'SI'
+                 IF REQ-RCO-CIC-ICLI    = DBC-CIC-ICLI AND
+                    REQ-RCO-RETURN-CODE = '  '
+                    ADD 1 TO WS-UBI-RCO
+                    MOVE '1' TO SCIN-IND-CCTE
+                    PERFORM EG-GRABA-SRTCIN
+                 ELSE
+                    MOVE '0' TO SCIN-IND-CCTE
+                    PERFORM EG-GRABA-SRTCIN
+           ELSE
+              MOVE '0' TO SCIN-IND-CCTE
+              PERFORM EG-GRABA-SRTCIN.
+           PERFORM EB-LEE-ARCINP.
+
+       ED-LEE-DBC.
+      *-----------
+           MOVE 'REDKY' TO REQ-DBC-CMD.
+           MOVE AINP-RUT-NUM TO WS-DBC-RUT
+           MOVE SPACES       TO WS-DBC-EXT
+           MOVE WS-DBC-IDC   TO REQ-DBC-KEY-VALUE
+           MOVE 'DBC00' TO ELEM-1.
+           CALL 'DBNTRY' USING UIB REQ-DBC-AREA DBC ELEM-LIST.
+           IF REQ-DBC-RETURN-CODE NOT = '  ' AND NOT = '14'
+              DISPLAY BLANCO '**************************'
+              DISPLAY BLANCO '* ERROR: REDKY TABLA DBC *'
+              DISPLAY BLANCO '* TABLA          : ' REQ-DBC-TBLNM
+              DISPLAY BLANCO '* CODIGO RETORNO : ' REQ-DBC-RETURN-CODE
+              DISPLAY BLANCO '* REQ. DBC AREA  : ' REQ-DBC-AREA
+              DISPLAY BLANCO '* PGM. SGCP140 CANCELADO *'
+              DISPLAY BLANCO
+              DISPLAY BLANCO '* ERROR: REDKY TABLA DBC *' UPON CONSOLE
+              DISPLAY BLANCO '* PGM. SGCP140 CANCELADO *' UPON CONSOLE
+              PERFORM D-TERMINAR
+              GOBACK.
+           IF REQ-DBC-RETURN-CODE = '14'
+              ADD 1 TO WS-INE-DBC
+           ELSE
+              ADD 1 TO WS-LEI-DBC.
+
+       EE-LEE-FIRST-RCO.
+      *-----------------
+           MOVE 'LOCKY' TO REQ-RCO-CMD.
+           MOVE DBC-CIC-ICLI TO REQ-RCO-KEY-VALUE.
+           MOVE '0000'       TO REQ-RCO-CAI-IOPE.
+           CALL 'DBNTRY' USING UIB REQ-RCO-AREA.
+           IF REQ-RCO-RETURN-CODE NOT = '  ' AND NOT = '14'
+              DISPLAY BLANCO '**************************'
+              DISPLAY BLANCO '* ERROR: LOCKY TABLA RCO *'
+              DISPLAY BLANCO '* TABLA          : ' REQ-RCO-TBLNM
+              DISPLAY BLANCO '* CODIGO RETORNO : ' REQ-RCO-RETURN-CODE
+              DISPLAY BLANCO '* REQ. RCO AREA  : ' REQ-RCO-AREA
+              DISPLAY BLANCO '* PGM. SGCP140 CANCELADO *'
+              DISPLAY BLANCO
+              DISPLAY BLANCO '* ERROR: LOCKY TABLA RCO *' UPON CONSOLE
+              DISPLAY BLANCO '* PGM. SGCP140 CANCELADO *' UPON CONSOLE
+              PERFORM D-TERMINAR
+              GOBACK.
+
+           MOVE 'REDKY' TO REQ-RCO-CMD.
+           MOVE 'RCO00' TO ELEM-LIST.
+           CALL 'DBNTRY' USING UIB REQ-RCO-AREA RCO ELEM-LIST.
+           IF REQ-RCO-RETURN-CODE NOT = '  '
+              DISPLAY BLANCO '**************************'
+              DISPLAY BLANCO '* ERROR: REDKY TABLA RCO *'
+              DISPLAY BLANCO '* TABLA          : ' REQ-RCO-TBLNM
+              DISPLAY BLANCO '* CODIGO RETORNO : ' REQ-RCO-RETURN-CODE
+              DISPLAY BLANCO '* REQ. RCO AREA  : ' REQ-RCO-AREA
+              DISPLAY BLANCO '* PGM. SGCP140 CANCELADO *'
+              DISPLAY BLANCO
+              DISPLAY BLANCO '* ERROR: REDKY TABLA RCO *' UPON CONSOLE
+              DISPLAY BLANCO '* PGM. SGCP140 CANCELADO *' UPON CONSOLE
+              PERFORM D-TERMINAR
+              GOBACK.
+
+       EF-LEE-NEXT-RCO.
+      *----------------
+           MOVE 'REDNX' TO REQ-RCO-CMD.
+           CALL 'DBNTRY' USING UIB REQ-RCO-AREA RCO ELEM-LIST.
+           IF REQ-RCO-RETURN-CODE NOT = '  '
+              DISPLAY BLANCO '**************************'
+              DISPLAY BLANCO '* ERROR: REDKY TABLA RCO *'
+              DISPLAY BLANCO '* TABLA          : ' REQ-RCO-TBLNM
+              DISPLAY BLANCO '* CODIGO RETORNO : ' REQ-RCO-RETURN-CODE
+              DISPLAY BLANCO '* REQ. RCO AREA  : ' REQ-RCO-AREA
+              DISPLAY BLANCO '* PGM. SGCP140 CANCELADO *'
+              DISPLAY BLANCO
+              DISPLAY BLANCO '* ERROR: REDKY TABLA RCO *' UPON CONSOLE
+              DISPLAY BLANCO '* PGM. SGCP140 CANCELADO *' UPON CONSOLE
+              PERFORM D-TERMINAR
+              GOBACK.
+           IF REQ-RCO-CIC-ICLI    = DBC-CIC-ICLI AND
+              REQ-RCO-CAI-IOPE    = '0000'       AND
+              RCO-COD-STAT    NOT = 'ELI'        AND
+              REQ-RCO-RETURN-CODE = '  '
+              MOVE 'SI' TO WS-IND-CCIC.
+           IF REQ-RCO-CIC-ICLI NOT = DBC-CIC-ICLI OR
+              REQ-RCO-RETURN-CODE NOT = '  '
+              MOVE 'SI' TO WS-IND-CCIC.
+
+       EG-GRABA-SRTCIN.
+      *----------------
+           MOVE AINP-RUT TO SCIN-RUT.
+           RELEASE REG-SRTCIN
+           ADD 1 TO WS-CON-RCTL.
+           ADD 1 TO WS-GRA-SCIN.
+
+       EH-CLOSE-ARCINP.
+      *----------------
+           CLOSE ARCINP LOCK.
+
+       EZ-FIN-SECTION.
+      *---------------
+           EXIT.
+
+       F-PROCESO-SORT SECTION.
+      *=======================
+       FA-CONTROL-PROCESO.
+      *-------------------
+           PERFORM FB-OPEN-CINOUT.
+           PERFORM FC-GRABA-REGCTRL.
+           PERFORM FD-LEE-SRTCIN.
+           PERFORM FE-PROCESO UNTIL FS-SRTCIN = 10.
+           GO TO FZ-FIN-SECTION.
+
+       FB-OPEN-CINOUT.
+      *---------------
+           OPEN OUTPUT CINOUT.
+           IF FS-CINOUT = 0
+              NEXT SENTENCE
+           ELSE
+              DISPLAY BLANCO '**************************'
+              DISPLAY BLANCO '* ERROR: AL ABRIR CINOUT *'
+              DISPLAY BLANCO '* FILE STATUS    : ' FS-CINOUT
+              DISPLAY BLANCO '* PGM. SGCP140 CANCELADO *'
+              DISPLAY BLANCO
+              DISPLAY BLANCO '* ERROR: AL ABRIR CINOUT *' UPON CONSOLE
+              DISPLAY BLANCO '* PGM. SGCP140 CANCELADO *' UPON CONSOLE
+              PERFORM D-TERMINAR
+              GOBACK.
+
+       FC-GRABA-REGCTRL.
+           ACCEPT COBOL-II-DATE FROM DATE
+      *-----------------
+           MOVE COBOL-II-YEAR TO CURRENT-DATE-YEAR
+           MOVE COBOL-II-MONTH TO CURRENT-DATE-MONTH
+           MOVE COBOL-II-DAY TO CURRENT-DATE-DAY
+           MOVE OSVS-CURRENT-DATE TO WS-FEC-FCUR.
+           MOVE WS-NUM-DCUR  TO WS-NUM-DCAR.
+           MOVE WS-NUM-MCUR  TO WS-NUM-MCAR.
+      *****MOVE '19'         TO WS-NUM-SCAR.
+           MOVE WS-NUM-ACUR  TO WS-NUM-ACAR.
+           IF WS-NUM-ACAR < ROLL-YY
+              MOVE '20'      TO WS-NUM-SCAR
+           ELSE
+              MOVE '19'      TO WS-NUM-SCAR
+           END-IF.
+           MOVE WS-FEC-FCAR  TO WS-CCTL-FCAR.
+           MOVE WS-CON-RCTL  TO WS-CCTL-RGRA.
+           WRITE REG-CINOUT FROM WS-REG-CINCTL.
+           IF FS-CINOUT NOT = 0
+              DISPLAY BLANCO '**************************'
+              DISPLAY BLANCO '* ERROR: GRABANDO CINOUT *'
+              DISPLAY BLANCO '* FILE STATUS    : ' FS-CINOUT
+              DISPLAY BLANCO '* PGM. SGCP140 CANCELADO *'
+              DISPLAY BLANCO
+              DISPLAY BLANCO '* ERROR: GRABANDO CINOUT *' UPON CONSOLE
+              DISPLAY BLANCO '* PGM. SGCP140 CANCELADO *' UPON CONSOLE
+              PERFORM D-TERMINAR
+              GOBACK.
+           ADD 1 TO WS-GRA-COUT.
+
+       FD-LEE-SRTCIN.
+      *--------------
+           RETURN SRTCIN
+                  AT END MOVE 10 TO FS-SRTCIN.
+           IF FS-SRTCIN = 0
+              ADD 1 TO WS-LEI-SCIN.
+
+       FE-PROCESO.
+      *-----------
+           MOVE REG-SRTCIN TO REG-CINOUT.
+           PERFORM FF-GRABA-CINOUT.
+           PERFORM FD-LEE-SRTCIN.
+
+       FF-GRABA-CINOUT.
+      *----------------
+           WRITE REG-CINOUT.
+           IF FS-CINOUT NOT = 0
+              DISPLAY BLANCO '**************************'
+              DISPLAY BLANCO '* ERROR: GRABANDO CINOUT *'
+              DISPLAY BLANCO '* FILE STATUS    : ' FS-CINOUT
+              DISPLAY BLANCO '* PGM. SGCP140 CANCELADO *'
+              DISPLAY BLANCO
+              DISPLAY BLANCO '* ERROR: GRABANDO CINOUT *' UPON CONSOLE
+              DISPLAY BLANCO '* PGM. SGCP140 CANCELADO *' UPON CONSOLE
+              PERFORM D-TERMINAR
+              GOBACK.
+           ADD 1 TO WS-GRA-COUT.
+
+       FZ-FIN-SECTION.
+      *---------------
+           EXIT.
+

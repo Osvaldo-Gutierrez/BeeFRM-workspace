@@ -1,0 +1,1217 @@
+       IDENTIFICATION DIVISION.
+      *========================
+       PROGRAM-ID. GNSPPSXI.
+       AUTHOR. BEE.
+       DATE-WRITTEN.   23-JUN-2004 18:00:00.
+      *
+      * Segmentador Logico
+      *
+      *-----------------------------------------------------------------
+      *  MODIFICACIONES:
+      *  ---------------
+      *  AUTOR      : Cima-Ivan Silva
+      *  FECHA      : 2013-10-02 
+      *  ETIQUETA   : Cima-INI 02-OCT-2013 LOG MTI
+      *  PROYECTO   : Log MTI
+      *  CAMBIOS    : 1. Incorpora grabacion LOG MTI
+      *-----------------------------------------------------------------
+
+       ENVIRONMENT DIVISION.
+       CONFIGURATION SECTION.
+      *----------------------
+       SPECIAL-NAMES.
+               DECIMAL-POINT IS COMMA.
+       DATA DIVISION.
+
+       WORKING-STORAGE SECTION.
+      *========================
+       77  WSS-TAG-GNSPPSXI PIC X(0125) VALUE
+           '<IDNPGM NOM=$GNSPPSXI$ VSN=$13.10.24$ GEN=$17-08-05
+      -    '19:36$ FNC=$080817$/>'.
+
+       COPY GNSWGAMB.
+       COPY GNSWVIDD.
+
+       COPY GNSWCSXI.
+      *----------- INI VARIABLES MQ -----------*
+      **  Declare MQI structures needed
+      * MQI named constants
+      * 01 MY-MQ-CONSTANTS.
+      *    COPY CMQV.
+      * Object Descriptor
+      * 01 OBJECT-DESCRIPTOR.
+      *    COPY CMQODV.
+      * Message Descriptor
+      * 01 MESSAGE-DESCRIPTOR.
+      *    COPY CMQMDV.
+      * Get message options
+      * 01 GMOPTIONS.
+      *    COPY CMQGMOV.
+      * Put message options
+      * 01 PMOPTIONS.
+      *    COPY CMQPMOV.
+      ** note, sample uses defaults where it can
+      * 01 QM-NAME VALUE 'CICSQM'           PIC X(48).
+      * 01 HCONN                            PIC S9(9) BINARY.
+      * 01 Q-HANDLE-GET                     PIC S9(9) BINARY.
+      * 01 Q-HANDLE-PUT                     PIC S9(9) BINARY.
+      * 01 OPTIONS                          PIC S9(9) BINARY.
+      * 01 COMPLETION-CODE                  PIC S9(9) BINARY.
+      * 01 OPEN-CODE                        PIC S9(9) BINARY.
+      * 01 CON-REASON                       PIC S9(9) BINARY.
+      * 01 GET-REASON                       PIC S9(9) BINARY.
+      * 01 REASON                           PIC S9(9) BINARY.
+      * 01 BUFFER                           PIC X(42000).
+      * 01 BUFFER-LENGTH                    PIC S9(9) BINARY.
+      * 01 DATA-LENGTH                      PIC S9(9) BINARY.
+      * 01 SOURCE-QUEUE VALUE 'CICSBEEINPQ' PIC X(48).
+      * 01 TARGET-QUEUE VALUE 'CICSBEEOUTQ' PIC X(48).
+
+      * 01 WSS-COD-CREQ-BCI                 PIC X(15).
+      * COPY MTXWG001.
+
+      * LARGO MAXIMO DE RECEPCION +1731
+      *
+       77  WSS-IND-STAT     VALUE SPACES              PIC X(01).
+       77  WSS-MAX-RCV      VALUE +1731   COMP        PIC S9(04).
+       77  WSS-DBG-NUM      VALUE ZEROES              PIC 9(12).
+       77  WSS-DBG          VALUE 'ZZZZZZZZ'          PIC X(12).
+       01  WSS-INICIO-RECEP VALUE 'INICIO-RECEP'      PIC X(12).
+      * Estructura del mensaje de recepcion del MQ
+       01 WSS-RCV-MQ.
+          03 WSS-RCV-FILLER VALUE SPACES              PIC X(00031).
+          03 WSS-RCV-FIL1   VALUE SPACES              PIC X(00047).
+          03 WSS-RCV-PROG   VALUE SPACES              PIC X(00008).
+          03 WSS-RCV-DISP   VALUE SPACES              PIC X(00008).
+          03 WSS-RCV-MSJE.
+             05 WSS-RCV-MSJE-0                        PIC X(00001).
+             05 WSS-RCV-MSJE-REQ.
+                07 WSS-RCV-MSJE-1.
+                   09 WSS-RCV-MSJE-1-IDEN             PIC X(00004).
+                   09 WSS-RCV-MSJE-1-TSL.
+                      11 WSS-RCV-MSJE-1-BNCO          PIC X(00003).
+                      11 WSS-RCV-MSJE-1-MRCA          PIC X(00003).
+                      11 WSS-RCV-MSJE-1-CART          PIC X(00003).
+                      11 WSS-RCV-MSJE-1-LENG          PIC X(00002).
+                      11 WSS-RCV-MSJE-1-PAIS          PIC X(00002).
+                      11 WSS-RCV-MSJE-1-VRNT          PIC X(00001).
+                      11 WSS-RCV-MSJE-1-DISP          PIC X(00082).
+                07 WSS-RCV-MSJE-2  VALUE SPACES       PIC X(41836).
+
+       01 RCV-SEGM REDEFINES WSS-RCV-MQ.
+          03 RCV-TAB-SEGM-OCC.
+             05 RCV-TAB-SEGM OCCURS  00050  TIMES.
+                07 RCV-ELE-SEGM                       PIC X(01024).
+          03 RCV-ELE-SEGM-CPL                         PIC X(01040).
+
+      * se usa como area auxiliar de recepcion
+       01 WSS-SND-MQ.
+          03 WSS-SND-MSJE.
+             05 WSS-SND-MSJE-IDEN-TCPIP VALUE SPACES  PIC X(00006).
+             05 WSS-SND-MSJE-IND-MENS   VALUE SPACES  PIC X(00001).
+             05 WSS-SND-MSJE-GLS-DINP   VALUE SPACES  PIC X(41993).
+
+       01 SND-SEGM REDEFINES WSS-SND-MQ.
+          03 SND-TAB-SEGM-COMU                        PIC X(01).
+          03 SND-TAB-SEGM    OCCURS  00051  TIMES.
+             05 SND-ELE-SEGM                          PIC X(01024).
+          03 SND-ELE-SEGM-CPL                         PIC X(00015).
+
+       01 WSS-SGMT-OUT.
+          03 WSS-SGMT-OUT-COMU                        PIC X(00001).
+          03 WSS-SGMT-OUT-DATA                        PIC X(01024).
+      *----------- FIN VARIABLES MQ -----------*
+       01  WSS-ABS-TIME                PIC S9(15)     COMP-3.
+       01  WSS-NUM-NREQ                               PIC X(03).
+       01  WSS-REG-NLOM                VALUE 'N'      PIC X(01).
+       01  WSS-RECEIVE VALUE SPACES.
+      *       Header utilizado por el Driver de Comunicacion
+           03 WSS-HEAD-DRIVE                          PIC X(0031).
+      *       Identificacion del TCP-IP
+           03 WSS-IDEN-TCPIP                          PIC X(0006).
+      * Indicador de Mensajes: I=Inicio, C=Continua, F=Fin, X=Msg.Unico
+           03 WSS-IND-MENS                            PIC X(0001).
+      *    DATA a ser transmitida de INPUT
+           03 WSS-GLS-DINP.
+              05 WSS-GLS-DINP-01                      PIC X(0003).
+              05 WSS-GLS-DINP-02                      PIC X(0032).
+              05 WSS-GLS-DINP-USR                     PIC X(0012).
+              05 WSS-GLS-DINP-PGM                     PIC X(0008).
+              05 WSS-GLS-DINP-03                      PIC X(0969).
+      *                                                     ----
+      *                                                     1024
+      *                                              0038 + 1024 = 1062
+           03 WSS-GLS-DINP-MCI REDEFINES
+              WSS-GLS-DINP.
+              05 WSS-GLS-DINP-MCI-HDR.
+                 07 WSS-GLS-DINP-MCI-VERS.
+      * VERSION DE HEADER MCI (H = PRIMERA VERSION)
+                    09 WSS-GLS-DINP-MCI-VERS-1        PIC X(0001).
+      * INDICADOR DE HEADER MCI (MCI = HEADER MCI)
+                    09 WSS-GLS-DINP-MCI-VERS-2        PIC X(0003).
+      * RESTO DE HEADER MCI
+                 07 WSS-GLS-DINP-MCI-RHDR             PIC X(0096).
+              05 WSS-GLS-DINP-MCI-REQU                PIC X(0003).
+              05 WSS-GLS-DINP-MCI-DAT                 PIC X(0921).
+      *                                                     ----
+      *                                                     1024
+      *                                              0038 + 1024 = 1062
+
+      * COMPLEMENTO PARA MENSAJES DE LARGO > 1024
+           03 WSS-GLS-DINP-COL                        PIC X(0669).
+      *                                                     ----
+      *                                                     1024
+      *                                              0038 + 1024 = 1062
+      *                                              1062 + 0669 = 1731
+
+       01 WSS-RECIBE-TXD REDEFINES WSS-RECEIVE.
+          03 WSS-HEAD-DRIVE-TXD                       PIC X(0031).
+          03 WSS-MSG-TXD.
+             05 WSS-IDEN-TCPIP-TXD                    PIC X(0006).
+             05 WSS-IND-MENS-TXD                      PIC X(0001).
+             05 WSS-DATA-MSG-TXD                      PIC X(1024).
+
+       77  WSS-AJUS-HDR    VALUE ZEROES               PIC 9(0005).
+
+       01  WSS-GLS-DINP-HDR.
+      * COMUNICACION
+           03 WSS-GLS-DINP-HDR-1                      PIC X(0038).
+      * HDR
+           03 WSS-GLS-DINP-HDR-2                      PIC X(0100).
+      * REQUERIMIENTO
+           03 WSS-GLS-DINP-HDR-3                      PIC X(0003).
+      * DATA
+           03 WSS-GLS-DINP-HDR-4                      PIC X(1590).
+      *                                                     ----
+      *                                0038 + 0100 + 1593 = 1731
+
+       01  WSS-FIN-RECEP       VALUE 'FIN   -RECEP'   PIC X(12).
+       01  WSS-AJUS-LDC.
+           03 WSS-AJUS-LDC-HDR                        PIC X(100).
+           03 WSS-AJUS-LDC-DAT                        PIC X(924).
+      *
+       01  WSS-INI-VAR-RCV     VALUE 'INI-VAR-RCV:'   PIC X(12).
+       01  WSS-VAR-LEN-RCV     VALUE  ZEROES          PIC 9(05).
+       01  WSS-FIN-VAR-RCV     VALUE 'FIN-VAR-RCV:'   PIC X(12).
+       01  WSS-INDI-ABP                               PIC X(02).
+       01  WSS-KEY-ABP.
+           03 WSS-KEY-ABP-TSPT.
+              05 WSS-KEY-ABP-TERM     VALUE 'IX'      PIC X(02).
+              05 WSS-KEY-ABP-TYPE     VALUE SPACES    PIC X(06).
+
+       77  WSS-COD-PPTPG              VALUE SPACES    PIC X(08).
+
+       COPY GNSWGTSK.
+       COPY GNSWGHOY.
+       COPY GNSWGSYS.
+       COPY GNSWCFIO.
+       COPY GNSWVFIO.
+       COPY GNSWGQUE.
+       COPY GNSWGFRM.
+       COPY GNSWVSCR.
+      *
+       01  WSS-SEND VALUE SPACES.
+           03 WSS-HEAD-SEND.
+      *          Status Respuesta 0=OK ; 1=ERR
+              05 WSS-RES-STAT                         PIC X(0001).
+      *          Fecha Transaccion
+              05 WSS-FEC-FTRN                         PIC X(0008).
+      *          Hora Transaccion
+              05 WSS-HRS-HTRN                         PIC X(0006).
+      *          Indicador Mensajes Pendientes 0=NO ; 1=SI
+              05 WSS-IND-MSGP                         PIC X(0001).
+      *          Largo de la parte Variable del Mensaje
+              05 WSS-NUM-LENM                         PIC 9(0005).
+      *          Codigo Transaccion
+              05 WSS-COD-TRAN                         PIC X(0008).
+      *          Codigo Sistema
+              05 WSS-COD-SIST                         PIC X(0003).
+      *          Codigo Usuario
+              05 WSS-COD-USER                         PIC X(0012).
+      *          Password
+              05 WSS-COD-PASS                         PIC X(0008).
+      *          Filler Vacio y Fijo de 111 Caracteres
+           03 WSS-GLS-FILL                            PIC X(0111).
+      *          DATA a ser transmitida de OUTPUT
+           03 WSS-GLS-DOUT                            PIC X(1088).
+
+       77  WSS-MSG-OKS  PIC X(0118) VALUE
+           '0SEGMENTO ALMACENADO OKS                                   7
+      -    '2000M00000000000000000000000000000000000000000000000000000'.
+
+       77  WSS-RESPUESTA-INMEDIATA   VALUE 'N'       PIC X(01).
+
+       01  WSS-SERVICO-VIG                       VALUE SPACES PIC X(01).
+           88 SERVICIO-NO-DISPONIBLE              VALUE 'N'.
+
+       01  WSS-COD-VDS.
+           03 WSS-COD-VDS-SIST                  PIC X(03).
+           03 WSS-COD-VDS-CTAB.
+              05 WSS-COD-VDS-PROG               PIC X(05).
+              05 WSS-COD-VDS-CNAL               PIC X(03).
+              05 WSS-COD-VDS-REQU               PIC X(03).
+
+       77  WSS-MSG-VDS-N PIC X(0118) VALUE
+      * Cima-INI 02-OCT-2013 LOG MTI
+           '1Servicio no disponible...
+      -    '                                                          '.
+       77  WSS-CTE-1       VALUE 1                 PIC 9(05).
+       77  WSS-CTE-0       VALUE ZEROES            PIC 9(05).
+       77  WSS-CTE-99999   VALUE 99999             PIC 9(05).
+      * Cima-FIN 02-OCT-2013 LOG MTI
+       01  TSIDENT.
+           05 TRANS                    PIC X(04) VALUE 'PL01'.
+           05 TSKNO                    PIC S9(07) COMP-3.
+
+       01  VARIABLES.
+           05 TERM                     PIC X(04).
+           05 WS-LARGO                 PIC S9(04) COMP-4 VALUE +0.
+
+      * FIN VARIABLES AREA DE COMUNICACION BCI
+
+       01  WSS-VARI.
+      *                   LARGO RECEIVE = 31+ 6 + 1 + 1024 = 1062
+           03 WSS-LEN-RCV    VALUE +1062     COMP       PIC S9(04).
+           03 WSS-LEN-SND    VALUE +1166     COMP       PIC S9(04).
+           03 WSS-LENG       VALUE +1500     COMP       PIC S9(04).
+           03 WSS-CONTADOR                              PIC 9(05).
+      *
+           03 WSS-NITM       VALUE ZEROES               PIC 9(05).
+      *
+      *        STRING STANDARD PARA ENTREGAR MSG AL PC
+      *
+       01  WSS-SCR-OTRN         VALUE 'ABCD'            PIC X(04).
+       77  WSS-TERM-TR          VALUE 'TR'              PIC X(02).
+       77  WSS-TERM-TT          VALUE 'TT'              PIC X(02).
+       01  TSPT-VARI.
+           03 WSS-NOM-TSPT.
+      * TR = TS DE LARGO 1024
+      * TT = TS DE LARGO TEMPORAL SEGUN LO RECIBIDO
+              05 WSS-COD-TERM   VALUE 'TR'              PIC X(02).
+              05 WSS-COD-TYPE   VALUE SPACES            PIC X(06).
+           03 WSS-LENG-TSPT     VALUE +1025   COMP      PIC S9(04).
+           03 WSS-NITM-TSPT     VALUE ZEROES            PIC 9(05).
+           03 WSS-ITEM-TSPT-1025.
+               05 WSS-INDICA                            PIC X(0001).
+               05 WSS-DATA.
+                  07 WSS-DATA-ELM OCCURS 1024 TIMES     PIC X(01).
+
+       01  WSS-COLA-TT.
+           03 WSS-COLA-TT-TT                            PIC X(02).
+           03 WSS-COLA-TT-CORR                          PIC X(06).
+
+      * HASTA 2 SEGMENTOS
+       01  WSS-2048.
+           03 WSS-2048-TBL.
+               05  WSS-2048-DATA.
+                   07  WSS-2048-ELM  OCCURS 2048 TIMES  PIC X(0001).
+
+      * SEGMENTO COMPLETO
+       01 WSS-TREN.
+          03 WSS-TREN-1024 OCCURS 50 TIMES.
+             05 WSS-TREN-DATA.
+                07 WSS-TREN-ELM  OCCURS 1024 TIMES      PIC X(0001).
+
+       01 WSS-TT-TR.
+          03 WSS-TTR       OCCURS 50 TIMES.
+             05 WSS-TREN-TR.
+                07 WSS-IND-TREN                         PIC X(0001).
+                07 WSS-DAT-TREN                         PIC X(1024).
+
+       77 WSS-TREN-I       VALUE 1                      PIC 9(05).
+       77 WSS-TREN-J       VALUE ZEROES                 PIC 9(05).
+       77 WSS-TOT-SGMT-TR  VALUE ZEROES                 PIC 9(05).
+       77 WSS-II           VALUE ZEROES                 PIC 9(05).
+       77 WSS-LRG-2048-1   VALUE ZEROES                 PIC 9(05).
+       77 WSS-LRG-2048-2   VALUE ZEROES                 PIC 9(05).
+       77 SEG-MAX-ELEM     VALUE ZEROES                 PIC 9(05).
+
+       COPY GNSWGUIB.
+       COPY GNSWGELS.
+       COPY GNSWGRQA.
+      * Cima-INI 02-OCT-2013 LOG MTI
+      *COPY GNSBRLOM.
+      *COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-LOM-REQA==.
+      * Cima-FIN 02-OCT-2013 LOG MTI
+       COPY GNSBRTAB.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-TAB-REQA==.
+
+      * Cima-INI 02-OCT-2013 LOG MTI
+      *COPY GNSWGLOM.
+      * Cima-FIN 02-OCT-2013 LOG MTI
+      *
+      * Cima-INI 02-OCT-2013 LOG MTI
+       COPY GNSWGLGM.
+       COPY GNSWGCLM.
+       COPY GNSBRLGM.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-LGM-REQA==.
+       COPY GNSBRIDD.
+      * Cima-FIN 02-OCT-2013 LOG MTI
+       LINKAGE SECTION.
+      *----------------
+       01  DFHCOMMAREA.
+           02 FILLER                                    PIC X(01).
+       COPY GNSLGFIO.
+
+       PROCEDURE DIVISION.
+      *===================
+       MAIN SECTION.
+       INI-MAIN.
+      * Cima-INI 02-OCT-2013 LOG MTI
+       COPY GNSBGEDB.
+
+           PERFORM GNS-HDL-VSM.
+           PERFORM GET-FHOY.
+           
+           PERFORM INIT-LGM.
+
+           MOVE WSS-LGM-IND-SENT-INP TO WSS-LGM-IND-SENT.
+           MOVE WSS-LGM-IND-NIVE-SGM TO WSS-LGM-IND-NIVE.
+           MOVE WSS-LGM-COD-PROG-SXI TO WSS-LGM-COD-PROG.
+
+           EXEC CICS ASSIGN
+                 APPLID(LGM-COD-CICS)
+           END-EXEC.
+
+           EXEC CICS ASSIGN
+                 INVOKINGPROG(LGM-COD-IPRO)
+           END-EXEC.
+
+           EXEC CICS ASSIGN
+                 USERID(LGM-COD-USER)
+           END-EXEC.
+
+           EXEC CICS ASKTIME ABSTIME(WSS-LGM-ABSTIME)
+           END-EXEC.
+
+           MOVE WSS-LGM-ABSTIME TO LGM-NUM-TAIN.
+           
+           MOVE WSS-LGM-INVO-START TO WSS-LGM-INVO.
+           
+           PERFORM GET-FHOY.
+
+      * Cima-FIN 02-OCT-2013 LOG MTI
+           MOVE 51 TO SEG-MAX-ELEM.
+      * RECIBO IDENTIFICACION DEL PC QUE ENVIO EL MSG.
+           MOVE DFHCOMMAREA(1:EIBCALEN) TO WSS-IDEN-TCPIP.
+
+           EXEC CICS HANDLE CONDITION
+                          NOTALLOC(C-FINAL)
+           END-EXEC.
+
+           MOVE ZEROES TO WSS-AJUS-HDR.
+           MOVE SPACES TO WSS-TREN.
+           MOVE SPACES TO WSS-RCV-MQ.
+           MOVE SPACES TO WSS-SND-MQ.
+           PERFORM GNS-ERR-QUE.
+      * Cima-INI 02-OCT-2013 LOG MTI
+      *     PERFORM GET-FHOY.
+      *     PERFORM INIT-LOM.
+      * Cima-FIN 02-OCT-2013 LOG MTI
+      *----------- INI SXI BANCO -----------*
+           PERFORM PROCESO-GRABA-TS.
+      *----------- FIN SXI BANCO -----------*
+      *----------- INI MQSeries -----------*
+      *     PERFORM GET-MQ.
+      *     IF GET-REASON IS EQUAL TO MQRC-NO-MSG-AVAILABLE
+      *        GO TO FIN-MAIN.
+      *     PERFORM PROCESO-GRABA-TS.
+      *     PERFORM PUT-MQ.
+      *----------- FIN MQSeries -----------*
+       FIN-MAIN.
+           EXEC CICS RETURN END-EXEC.
+       EXT-MAIN.
+           EXIT.
+
+       VRF-SERV SECTION.
+       INI-VRF-SERV.
+      *    MOVE WSS-LOM-PROG TO SLM-NOM-PTPG.
+      *    MOVE WSS-LOM-CREQ TO SLM-NUM-NREQ.
+      *    MOVE SPACES       TO SLM-NUM-CORR-ALF.
+      
+           MOVE WSS-GLS-DINP-MCI-HDR TO WSS-HDR.
+           MOVE WSS-HDR-PROG TO WSS-COD-VDS.
+           MOVE WSS-HDR-CNAL TO WSS-COD-VDS-CNAL.
+           MOVE WSS-GLS-DINP-MCI-REQU TO WSS-COD-VDS-REQU.
+
+      * Cima-INI 02-OCT-2013 LOG MTI
+      *     IF WSS-HDR-PROG = 'DAPPPTPG'
+      * Cima-fin 02-OCT-2013 LOG MTI
+                PERFORM CRG-IDD.
+       FIN-VRF-SERV.
+            EXIT.
+
+       CRG-IDD SECTION.
+       INI-CRG-IDD.
+           MOVE 'GNS'      TO SCR-SIST.
+           MOVE 'GNSPPSXI' TO IDD-PROG FIO-PROG.
+      * Cima-INI 02-OCT-2013 LOG MTI
+      *     MOVE IDD-VARI   TO SYS-CMMA.
+      *     MOVE +507       TO SYS-TCMA.
+      *     MOVE 'GNSPPIDD' TO SYS-PROG.
+      *     MOVE SYS-LINK   TO SYS-CMND.
+      * Cima-INI 02-OCT-2013 LOG MTI
+      *     PERFORM GNS-PRO-SYS.
+      *     MOVE SYS-CMMA   TO IDD-VARI.
+           PERFORM LEE-IDD.
+      * Cima-FIN 02-OCT-2013 LOG MTI
+      
+           MOVE WSS-COD-VDS-SIST TO FIO-SIST.
+      * Cima-INI 02-OCT-2013 LOG MTI
+           MOVE WSS-CLM-COD-TTAB-VDS TO TAB-COD-TTAB IN TAB.
+      * Cima-FIN 02-OCT-2013 LOG MTI
+           MOVE WSS-COD-VDS-CTAB TO TAB-COD-CTAB IN TAB.
+           MOVE FIO-GET-KEY  TO FIO-CMND.
+
+            MOVE 'VDS1' TO QUE-COLA.
+            MOVE QUE-DEL TO QUE-CMND.
+            PERFORM GNX-PRO-QUE.
+            MOVE TAB TO QUE-ITEM.
+            MOVE +100 TO QUE-LITM.
+            MOVE QUE-PUT TO QUE-CMND.
+            PERFORM GNX-PRO-QUE.
+
+              MOVE 'VDS1.1' TO QUE-COLA
+              MOVE QUE-DEL TO QUE-CMND
+              PERFORM GNX-PRO-QUE
+              MOVE FIO-SIST TO QUE-ITEM
+              MOVE +100 TO QUE-LITM
+              MOVE QUE-PUT TO QUE-CMND
+              PERFORM GNX-PRO-QUE
+
+           PERFORM GNS-FIO-TAB.
+           IF FIO-STAT-OKS
+      * Cima-INI 02-OCT-2013 LOG MTI
+              MOVE TAB-GLS-DATA TO WSS-CLM-GLS-DATA
+      * Cima-FIN 02-OCT-2013 LOG MTI
+
+              MOVE 'VDS2' TO QUE-COLA
+              MOVE QUE-DEL TO QUE-CMND
+              PERFORM GNX-PRO-QUE
+              MOVE TAB TO QUE-ITEM
+              MOVE +100 TO QUE-LITM
+              MOVE QUE-PUT TO QUE-CMND
+              PERFORM GNX-PRO-QUE
+
+               IF TAB-IND-VIGE IN TAB = 'N'
+
+                  MOVE 'VDS3' TO QUE-COLA
+                  MOVE QUE-DEL TO QUE-CMND
+                  PERFORM GNX-PRO-QUE
+                  MOVE TAB-IND-VIGE TO QUE-ITEM
+                  MOVE +100 TO QUE-LITM
+                  MOVE QUE-PUT TO QUE-CMND
+                  PERFORM GNX-PRO-QUE
+                   MOVE 'N' TO WSS-SERVICO-VIG
+               ELSE
+                  MOVE 'VDS4' TO QUE-COLA
+                  MOVE QUE-DEL TO QUE-CMND
+                  PERFORM GNX-PRO-QUE
+                  MOVE TAB-GLS-DATA TO QUE-ITEM
+                  MOVE +100 TO QUE-LITM
+                  MOVE QUE-PUT TO QUE-CMND
+                  PERFORM GNX-PRO-QUE
+                   MOVE TAB-GLS-DATA TO WSS-HDR-MODO
+                   MOVE WSS-HDR TO WSS-GLS-DINP-MCI-HDR.
+       FIN-IDD-CRG.
+           EXIT.
+
+       PROCESO-GRABA-TS SECTION.
+       INI-PROCESO-GRABA-TS.
+      *----------- INI SXI BANCO -----------*
+           PERFORM RCV-MSG-INP-HST.
+      *----------- FIN SXI BANCO -----------*
+           MOVE WSS-IDEN-TCPIP TO WSS-KEY-ABP-TYPE.
+           MOVE WSS-IDEN-TCPIP TO WSS-COD-TYPE.
+      * Cima-INI 02-OCT-2013 LOG MTI
+
+           MOVE WSS-COD-TYPE   TO  WSS-LGM-COD-ORGN.           
+
+      * Cima-FIN 02-OCT-2013 LOG MTI
+           MOVE WSS-IND-MENS   TO WSS-SEGMENTO-VALIDO.
+           MOVE WSS-IND-MENS   TO WSS-DEBE-LIMPIAR-TS.
+           MOVE WSS-IND-MENS   TO WSS-DEBE-ACUMULAR.
+           MOVE WSS-IND-MENS   TO WSS-DEBE-LLAMAR-TPG.
+           MOVE WSS-IND-MENS   TO WSS-DEBE-RESPONDER-ESTADO.
+
+           IF NOT SEGMENTO-VALIDO
+              MOVE ' 1 IDENTIFICADOR DE SEGMENTO ERRONEO' TO
+                   WSS-MSG-OKS
+              GO TO LNK-PROCESO-GRABA-TS.
+
+           IF SERVICIO-NO-DISPONIBLE
+              MOVE '1 Servicio no disponible' TO
+                   WSS-MSG-OKS
+              MOVE 'S' TO WSS-RESPUESTA-INMEDIATA
+              GO TO LNK-PROCESO-GRABA-TS.
+
+           IF DEBE-LIMPIAR-TS
+              PERFORM DEL-TS-ABP
+              PERFORM PUT-TS-ABP
+              PERFORM DEL-TT
+              PERFORM DEL-TR.
+
+      * HAY MENSAJES DE LARGO MAYOR QUE 1024, LOS CUALES DEBEN
+      * SER ALMACENADOS EN SEGMENTOS FISICOS DE 1024 COMO POR
+      * EJEMPLO LOS MENSAJES DE BCI CORP PARA INGRESO DE CREDITOS
+      * HAY OTROS DE LARGO MAYOR QUE 1024 Y SON SEGMENTOS LOGICOS
+      * LOS CUALES DEBEN SER ALMACENADOS EN SEGMENTOS DEL LARGO
+      * RECEPCIONADO EJEMPLO SEGMENTOS LDC NUEVA FUNCIONALIDAD
+      * LA FORMA DE DISTINGUIRLOS POR EL HEADER 'HMCI'
+      *
+      * LOS SEGMENTO ASOCIADOS A HEADER MCI LOS ALAMACENA SIEMPRE
+      * CON EL LARGO RECIBIDO
+           COMPUTE WSS-LENG-TSPT = WSS-LEN-RCV - 38.
+           IF DEBE-ACUMULAR
+              IF AGRUPACION-FISICA
+                 MOVE WSS-RECEIVE TO WSS-GLS-DINP-HDR
+                 MOVE WSS-GLS-DINP-HDR-4 TO WSS-GLS-DINP
+              ELSE
+                 MOVE 103 TO WSS-AJUS-HDR.
+      * Cima-INI 02-OCT-2013 LOG MTI
+      *     MOVE ZEROES TO LOM-NUM-CORR.
+      * Cima-FIN 02-OCT-2013 LOG MTI
+      * Cima-INI 02-OCT-2013 LOG MTI
+           MOVE ZEROES TO LGM-NUM-CORR.
+      * Cima-FIN 02-OCT-2013 LOG MTI
+           IF AGRUPACION-FISICA
+              MOVE WSS-TERM-TT TO WSS-COD-TERM
+           ELSE
+              MOVE WSS-TERM-TR TO WSS-COD-TERM.
+           PERFORM PUT-SGMT-TR-O-TT.
+       LNK-PROCESO-GRABA-TS.
+           IF DEBE-LLAMAR-TPG AND
+              WSS-RESPUESTA-INMEDIATA NOT = 'S'
+
+              PERFORM CALL-TPG
+      *----------- INI SXI BANCO -----------*
+              PERFORM PROCESO-GRABA-TS
+      *----------- FIN SXI BANCO -----------*
+      *----------- INI MQSeries -----------*
+      *        PERFORM READ-TO-MSSG
+      *----------- FIN MQSeries -----------*
+           ELSE
+      * SOLO RESPONDE CON MENSAJES, PUES SIEMPRE LA
+      * RESPUESTA DE DATOS VA VIA GNSPPSGO
+               MOVE '0'         TO WSS-RES-STAT
+               MOVE HOY-FHOY    TO WSS-FEC-FTRN
+               MOVE HOY-HHOY    TO WSS-HRS-HTRN
+               MOVE '0'         TO WSS-IND-MSGP
+               MOVE +1166       TO WSS-NUM-LENM
+               MOVE SPACES      TO WSS-COD-TRAN
+               MOVE SPACES      TO WSS-COD-SIST
+               MOVE SPACES      TO WSS-COD-USER
+               MOVE SPACES      TO WSS-COD-PASS
+               MOVE SPACES      TO WSS-GLS-FILL
+               MOVE WSS-MSG-OKS TO WSS-GLS-DOUT
+               MOVE +1187       TO WSS-LEN-SND
+      *         MOVE WSS-SEND    TO SND-SEGM.
+               MOVE WSS-MSG-OKS TO SND-SEGM
+               PERFORM ENV-MSG-OUT-HST-ULT.
+           GO TO FIN-PROCESO-GRABA-TS.
+       FIN-PROCESO-GRABA-TS.
+           EXIT.
+
+       CALL-TPG SECTION.
+       INI-CALL-TPG.
+      * ESTA PREGUNTA SIGNIFICA QUE EXISTE MAS DE UN REGISTRO 'TR'
+           IF WSS-COD-TERM = WSS-TERM-TT
+              PERFORM MOD-TR.
+           PERFORM INV-TPG.
+       FIN-CALL-TPG.
+           EXIT.
+
+       MOD-TR SECTION.
+       INI-MOD-TR.
+           MOVE ZEROES TO QUE-NITM.
+       CIC-MOD-TR.
+           ADD 1 TO QUE-NITM.
+           MOVE WSS-TERM-TT  TO WSS-COD-TERM.
+           MOVE WSS-NOM-TSPT TO QUE-COLA.
+           MOVE +9999        TO QUE-LITM.
+           MOVE QUE-GET      TO QUE-CMND.
+           PERFORM GNS-PRO-QUE.
+           IF QUE-STAT = QUE-STAT-OKS
+              PERFORM PRO-TR
+              GO TO CIC-MOD-TR.
+           PERFORM DEL-TR.
+           PERFORM PUT-TR VARYING WSS-II FROM 1 BY 1 UNTIL
+                   WSS-II > WSS-TOT-SGMT-TR.
+       FIN-MOD-TR.
+           EXIT.
+
+       PRO-TR SECTION.
+       INI-PRO-TR.
+      * LOS SEGMENTOS GUARDADOS CON LARGO > 1024 PUEDEN TENER UN
+      * LARGO MAXIMO DE 1731 (RECEPCION)
+           MOVE QUE-ITEM TO WSS-2048.
+      *     MOVE SPACES TO WSS-ITEM-TSPT-1025.
+           MOVE QUE-ITEM TO WSS-TTR(QUE-NITM).
+           MOVE ZEROES   TO WSS-LRG-2048-1.
+           MOVE ZEROES   TO WSS-LRG-2048-2.
+
+           MOVE QUE-LITM TO WSS-DBG-NUM.
+           MOVE WSS-DBG-NUM TO WSS-DBG.
+           PERFORM MOV-TR VARYING WSS-II FROM 1 BY 1 UNTIL
+                   WSS-II > QUE-LITM.
+       FIN-PRO-TR.
+           EXIT.
+
+       MOV-TR SECTION.
+       INI-MOV-TR.
+           ADD 1 TO WSS-TREN-J.
+           IF WSS-TREN-J = 1025
+              MOVE 1 TO WSS-TREN-J
+              ADD  1 TO WSS-TREN-I.
+           MOVE WSS-2048-ELM(WSS-II) TO
+                WSS-TREN-ELM(WSS-TREN-I, WSS-TREN-J).
+           IF WSS-TREN-J = 1
+              ADD 1 TO WSS-TOT-SGMT-TR.
+       FIN-MOV-TR.
+           EXIT.
+
+       DEL-TR SECTION.
+       INI-DEL-TR.
+           MOVE WSS-NOM-TSPT TO QUE-COLA.
+           MOVE QUE-DEL      TO QUE-CMND.
+           PERFORM GNS-PRO-QUE.
+       FIN-DEL-TR.
+           EXIT.
+
+       DEL-TT SECTION.
+       INI-DEL-TT.
+           MOVE WSS-NOM-TSPT TO WSS-COLA-TT.
+           MOVE 'TT'         TO WSS-COLA-TT-TT.
+           MOVE WSS-COLA-TT  TO QUE-COLA.
+           MOVE QUE-DEL      TO QUE-CMND.
+           PERFORM GNS-PRO-QUE.
+       FIN-DEL-TT.
+           EXIT.
+
+       PUT-TR SECTION.
+       INI-PUT-TR.
+           IF AGRUPACION-FISICA
+              MOVE WSS-TREN-DATA(WSS-II) TO WSS-DATA
+      * PARA SETEAR PROGRAMA
+              IF WSS-II = 1
+                 MOVE WSS-TREN-DATA(WSS-II) TO WSS-GLS-DINP
+           ELSE
+              MOVE WSS-TTR(WSS-II) TO WSS-ITEM-TSPT-1025.
+           MOVE 1025   TO WSS-LENG-TSPT.
+           MOVE ZEROES TO WSS-AJUS-HDR.
+
+           MOVE WSS-TERM-TR TO WSS-COD-TERM.
+           PERFORM PUT-SGMT-TR-O-TT.
+       FIN-PUT-TR.
+           EXIT.
+
+       PUT-SGMT-TR-O-TT SECTION.
+       INI-PUT-SGMT-TR-O-TT.
+           MOVE WSS-NOM-TSPT   TO QUE-COLA.
+      *    COMPUTE WSS-LENG-TSPT = WSS-LENG-TSPT - WSS-AJUS-HDR.
+           ADD 1 TO WSS-LENG-TSPT
+           MOVE WSS-LENG-TSPT  TO QUE-LITM.
+
+      *    IF WSS-COD-TERM = WSS-TERM-TT
+              MOVE WSS-IND-MENS TO WSS-INDICA
+              MOVE WSS-GLS-DINP TO WSS-DATA.
+
+           MOVE WSS-ITEM-TSPT-1025 TO QUE-ITEM.
+           MOVE QUE-PUT TO QUE-CMND.
+           PERFORM GNS-PRO-QUE.
+      * Cima-INI 02-OCT-2013 LOG MTI
+
+
+           MOVE WSS-LENG-TSPT  TO WSS-LGM-NUM-LMSG.
+
+           MOVE WSS-RECEIVE TO LGM-GLS-REQU IN LGM.
+           IF WSS-CLM-FRM-COD-LGMG = WSS-CLM-FRM-COD-LGMG-S
+               PERFORM INV-LGM.
+
+
+      * GRABA LOG LOM
+      *     MOVE HOY-FHOY TO LOM-FEC-FTRN.
+      *     MOVE HOY-HHOY TO LOM-HRA-HRTR.
+      *     MOVE EIBTASKN TO LOM-NUM-TASK.
+      *     ADD  1 TO LOM-NUM-CORR.
+      *     MOVE QUE-ITEM TO LOM-GLS-REQU.
+      *     MOVE '10' TO LOM-IND-NIVE.
+      *     MOVE 'I'  TO LOM-IND-SENT.
+      *     MOVE FIO-PUT TO FIO-CMND.
+      *     PERFORM GNS-FIO-LOM.
+      * Cima-FIN 02-OCT-2013 LOG MTI
+       FIN-PUT-SGMT-TR-O-TT.
+           EXIT.
+      * Cima-INI 02-OCT-2013 LOG MTI
+
+
+       INV-LGM SECTION.
+       INI-INV-LGM.
+      * GRABA LOG LGM
+
+
+
+
+           EXEC CICS ASKTIME ABSTIME(WSS-LGM-ABSTIME)
+           END-EXEC.
+
+           MOVE WSS-LGM-ABSTIME TO LGM-NUM-TAWR IN LGM.
+           
+           MOVE WSS-CLM-GLS-DATA TO WSS-LGM-COD-OTRN.
+           
+           MOVE WSS-CLM-TS-VDS-COLA TO QUE-COLA.
+           MOVE QUE-DEL TO QUE-CMND.
+           PERFORM GNS-PRO-QUE.
+           
+           MOVE WSS-CLM-TS-VDS-COLA TO QUE-COLA.
+           MOVE WSS-CLM-TS-VDS-LITM TO QUE-LITM.
+           MOVE QUE-PUT TO QUE-CMND.
+           MOVE WSS-CLM-GLS-DATA TO QUE-ITEM.
+           PERFORM GNS-PRO-QUE.
+           
+           
+           PERFORM WRT-LGM.
+
+           IF WSS-LGM-INVO = WSS-LGM-INVO-START
+                EXEC CICS START
+                    TRANSID( WSS-LMG-TRAN-WRT )
+                    FROM   ( SYS-CMMA )
+                    LENGTH ( SYS-TCMA )
+                END-EXEC
+           ELSE
+                MOVE 'GNSPULGM' TO SYS-PROG
+                MOVE SYS-LINK   TO SYS-CMND
+                PERFORM GNS-PRO-SYS.
+       
+       FIN-INV-LGM.
+           EXIT.
+
+
+      * Cima-FIN 02-OCT-2013 LOG MTI
+
+       INV-TPG SECTION.
+       INI-INV-TPG.
+      * Cima-INI 02-OCT-2013 LOG MTI       
+           IF WSS-CLM-FRM-COD-LGMG = WSS-CLM-FRM-COD-LGMG-L
+                PERFORM LGM-EN-LINK.
+                
+      * Cima-FIN 02-OCT-2013 LOG MTI                
+                
+           PERFORM DEL-TS-ABP.
+           MOVE 'OK' TO QUE-ITEM.
+           PERFORM PUT-TS-ABP.
+           MOVE SYS-LINK         TO SYS-CMND.
+           MOVE WSS-IDEN-TCPIP   TO SYS-CMMA.
+           MOVE +6               TO SYS-TCMA.
+           MOVE WSS-GLS-DINP-PGM TO SYS-PROG.
+           PERFORM GNS-PRO-SYS.
+
+      *----------- INI SXI BANCO -----------*
+           IF DEBE-LLAMAR-TPG
+              PERFORM DEL-TT.
+           MOVE SYS-XCTL       TO SYS-CMND.
+           MOVE WSS-IDEN-TCPIP TO SYS-CMMA.
+           MOVE +6             TO SYS-TCMA.
+           MOVE 'GNSPPSGO'     TO SYS-PROG.
+           PERFORM GNS-PRO-SYS.
+      *----------- FIN SXI BANCO -----------*
+       FIN-INV-TPG.
+           EXIT.
+
+      *----------- INI SXI BANCO -----------*
+       RCV-MSG-INP-HST SECTION.
+       INI-RCV-MSG-INP-HST.
+           MOVE SPACES TO WSS-RECEIVE.
+           MOVE WSS-MAX-RCV TO WSS-LEN-RCV.
+           EXEC CICS RECEIVE
+                     INTO(WSS-RECEIVE)
+                     LENGTH(WSS-LEN-RCV)
+                     CONVID(EIBTRMID)
+           END-EXEC.
+           MOVE WSS-LEN-RCV TO WSS-VAR-LEN-RCV.
+           PERFORM VRF-SERV.
+
+           MOVE EIBTRMID    TO TERM.
+           MOVE EIBTASKN    TO TSKNO.
+           PERFORM GET-TSK-TERM.
+      * Cima-INI 02-OCT-2013 LOG MTI
+      *    MOVE TSK-TERM-ALF TO WSS-LOM-TERM.
+      * Cima-FIN 02-OCT-2013 LOG MTI
+      * Cima-INI 02-OCT-2013 LOG MTI
+           MOVE TSK-TERM-ALF TO WSS-CLM-TS-VDS-COLA-TERM.
+      * Cima-FIN 02-OCT-2013 LOG MTI
+           PERFORM GNS-ERR-QUE.
+
+           MOVE 'LOGSXI' TO QUE-COLA.
+           MOVE QUE-GET TO QUE-CMND.
+           MOVE 1 TO QUE-NITM.
+           MOVE +2 TO QUE-LITM.
+           PERFORM GNS-PRO-QUE.
+           IF QUE-STAT = QUE-STAT-OKS
+               MOVE 'RCVSXI' TO QUE-COLA
+               IF QUE-ITEM = 'BR'
+                   MOVE QUE-DEL TO QUE-CMND
+                   PERFORM GNS-PRO-QUE
+               END-IF
+               MOVE WSS-RECEIVE TO QUE-ITEM
+               MOVE +1024 TO QUE-LITM
+               MOVE 'RCVSXI' TO QUE-COLA
+               MOVE QUE-PUT TO QUE-CMND
+               PERFORM GNS-PRO-QUE.
+
+      *    MOVE 'RCVPVG' TO QUE-COLA.
+      *    MOVE QUE-PUT TO QUE-CMND.
+      *    PERFORM GNS-PRO-QUE.
+
+           IF EIBCONF  = HIGH-VALUES
+              EXEC CICS ISSUE CONFIRMATION
+                        CONVID(TERM)
+              END-EXEC.
+       FIN-RCV-MSG-INP-HST.
+           EXIT.
+
+       ENV-MSG-OUT-HST-ULT SECTION.
+       INI-ENV-MSG-OUT-HST-ULT.
+      * Cima-INI 02-OCT-2013 LOG MTI
+       
+           MOVE WSS-LGM-IND-SENT-OUT TO WSS-LGM-IND-SENT.
+           EXEC CICS ASKTIME ABSTIME(WSS-LGM-ABSTIME)
+           END-EXEC.
+
+           MOVE WSS-LGM-ABSTIME TO LGM-NUM-TAIN.
+
+           MOVE WSS-COD-TYPE   TO  WSS-LGM-COD-ORGN.
+           
+           MOVE WSS-LEN-SND    TO WSS-LGM-NUM-LMSG.
+           
+           MOVE WSS-SEND   TO LGM-GLS-REQU IN LGM.           
+           
+           
+           IF WSS-CLM-FRM-COD-LGMV = WSS-CLM-FRM-COD-LGMV-S
+                PERFORM INV-LGM.
+
+      * Cima-FIN 02-OCT-2013 LOG MTI
+           EXEC CICS SEND
+                     LENGTH(WSS-LEN-SND)
+                     FROM(WSS-SEND)
+                     CONVID(TERM)
+                     LAST
+           END-EXEC.
+           IF DEBE-LLAMAR-TPG
+              MOVE WSS-NOM-TSPT TO QUE-COLA
+              MOVE QUE-DEL      TO QUE-CMND
+              PERFORM GNS-PRO-QUE.
+       FIN-ENV-MSG-OUT-HST-ULT.
+           EXIT.
+      *----------- FIN SXI BANCO -----------*
+
+       KEY-ABP SECTION.
+       INI-KEY-ABP.
+           MOVE WSS-KEY-ABP TO QUE-COLA.
+       FIN-KEY-ABP.
+           EXIT.
+
+       DEL-TS-ABP SECTION.
+       INI-DEL-TS-ABP.
+       FIN-DEL-TS-ABP.
+           EXIT.
+
+       PUT-TS-ABP SECTION.
+       INI-PUT-TS-ABP.
+       FIN-PUT-TS-ABP.
+           EXIT.
+
+      *COPY GNSBATAB.
+       COPY GNSBFTAB.
+
+       COPY GNSBGDTC.
+       COPY GNSBGEND.
+       COPY GNSBGHOY.
+       COPY GNSBHSYS.
+       COPY GNSBGSYS.
+       COPY GNSBIABT.
+       COPY GNSBHVSM.
+       COPY GNSBGVSM.
+       COPY GNSBGQUE.
+       COPY GNSBGTSK.
+      * Cima-INI 02-OCT-2013 LOG MTI
+      * INIT-LOM SECTION.
+      * INI-INIT-LOM.
+      *     MOVE SPACES TO LOM.
+      *     MOVE ZEROES TO LOM-FEC-FTRN
+      *                    LOM-HRA-HRTR
+      *                    LOM-NUM-TASK
+      *                    LOM-NUM-CORR
+      *                    LOM-FEC-FTRO
+      *                    LOM-HRA-HRTO.
+      *     MOVE EIBTRNID TO LOM-COD-OTRN.
+      * FIN-INIT-LOM.
+      *     EXIT.
+      *
+      * PUT-QUE-SLO SECTION.
+      * INI-PUT-QUE-SLO.
+      *     MOVE WSS-LOM-COLA TO QUE-COLA.
+      *     MOVE WSS-LOM-LITM TO QUE-LITM.
+      *     MOVE QUE-DEL TO QUE-CMND.
+      *     PERFORM GNS-PRO-QUE.
+      *     MOVE LOM-FEC-FTRN TO WSS-LOM-FEC-FTRN.
+      *     MOVE LOM-HRA-HRTR TO WSS-LOM-HRA-HRTR.
+      *     MOVE LOM-NUM-TASK TO WSS-LOM-NUM-TASK.
+      *     MOVE LOM-NUM-CORR TO WSS-LOM-NUM-CORR.
+      *     MOVE WSS-LOM-ITEM TO QUE-ITEM.
+      *     MOVE QUE-PUT TO QUE-CMND.
+      *     PERFORM GNS-PRO-QUE.
+      * FIN-PUT-QUE-SLO.
+      *     EXIT.
+
+      **COPY GNSBFLOM.
+      * GNS-FIO-LOM SECTION.
+      * INI-GNS-FIO-LOM.
+      *     MOVE '00' TO FIO-STAT.
+      *     MOVE SPACES TO FIO-AKEY.
+      * FIN-GNS-FIO-LOM.
+      *     EXIT.
+      * Cima-FIN 02-OCT-2013 LOG MTI
+       READ-TO-MSSG SECTION.
+       INI-READ-TO-MSSG.
+           MOVE SPACES TO WSS-IND-STAT.
+           MOVE 1 TO WSS-NITM.
+       LUP-LEE-TO.
+           MOVE 'TO'         TO QUE-COLA.
+           MOVE WSS-NOM-TSPT TO QUE-COLA.
+           MOVE +3500        TO QUE-LITM.
+           MOVE WSS-NITM     TO QUE-NITM.
+           MOVE QUE-GET      TO QUE-CMND.
+           IF WSS-NITM > SEG-MAX-ELEM
+              GO TO FIN-READ-TO-MSSG.
+           PERFORM GNS-PRO-QUE.
+           IF QUE-STAT = QUE-STAT-OKS
+              PERFORM CHK-STAT
+              PERFORM PRO-SGMT
+              MOVE SPACES   TO QUE-ITEM
+              ADD 1         TO WSS-NITM
+              GO TO LUP-LEE-TO.
+       FIN-READ-TO-MSSG.
+           EXIT.
+
+       PRO-SGMT SECTION.
+       INI-PRO-SGMT.
+           MOVE QUE-ITEM TO WSS-SGMT-OUT.
+           IF QUE-ITEM = 1
+              MOVE WSS-SGMT-OUT-COMU TO SND-TAB-SEGM-COMU.
+           MOVE WSS-SGMT-OUT-DATA TO SND-ELE-SEGM(WSS-NITM).
+       FIN-PRO-SGMT.
+           EXIT.
+
+       CHK-STAT SECTION.
+       INI-CHK-STAT.
+           IF WSS-NITM = 1
+              MOVE QUE-ITEM TO WSS-IND-STAT.
+       FIN-CHK-STAT.
+           EXIT.
+
+       C-FINAL SECTION.
+       INI-C-FINAL.
+           EXEC CICS RETURN END-EXEC.
+       FIN-C-FINAL.
+           EXIT.
+      *==============================================================*
+      * CAF : 23-06-2004                                             *
+      * Se incorpora funcionalidad que                               *
+      * permite interaccion con MQSeries.                            *
+      *==============================================================*
+      * GET-MQ SECTION.
+      * INI-GET-MQ.
+      ****************************************************************
+      *   Connect to default queue manager                           *
+      ****************************************************************
+      *     MOVE SPACES      TO BUFFER.
+      *     MOVE SPACES      TO SND-SEGM.
+      *     IF CON-REASON IS NOT EQUAL TO MQRC-ALREADY-CONNECTED
+      *        CALL 'MQCONN'
+      *              USING QM-NAME, HCONN,
+      *              COMPLETION-CODE, CON-REASON
+      *        IF COMPLETION-CODE IS EQUAL TO MQCC-FAILED
+      *           DISPLAY 'MQCONN ended with reason code ' CON-REASON
+      *           MOVE CON-REASON TO RETURN-CODE
+      *           EXEC CICS RETURN END-EXEC.
+      *     DISPLAY 'GNSPPSGT GET CONECTADO A QM-NAME=' QM-NAME.
+      ****************************************************************
+      *   Open the message queue (and fail if MQM is quiescing)      *
+      ****************************************************************
+      * OPENS-GET.
+      *     MOVE SOURCE-QUEUE TO MQOD-OBJECTNAME.
+      *     ADD MQOO-INPUT-AS-Q-DEF MQOO-FAIL-IF-QUIESCING
+      *         GIVING OPTIONS.
+      *     CALL 'MQOPEN'
+      *          USING HCONN, OBJECT-DESCRIPTOR,
+      *          OPTIONS, Q-HANDLE-GET,
+      *          OPEN-CODE, REASON
+      *      report reason, if any; stop if failed
+      *     IF REASON IS NOT EQUAL TO MQRC-NONE
+      *        DISPLAY 'MQOPEN ended with reason code ' REASON.
+
+      *     IF OPEN-CODE IS EQUAL TO MQCC-FAILED
+      *        DISPLAY 'unable to open queue for input'
+      *        MOVE REASON TO RETURN-CODE
+      *        EXEC CICS RETURN END-EXEC.
+      *
+      ****************************************************************
+      *   Get one message                                            *
+      ****************************************************************
+      * GETR.
+      *     MOVE MQMI-NONE  TO MQMD-MSGID.
+      *     MOVE MQCI-NONE  TO MQMD-CORRELID.
+      *     MOVE SPACES     TO BUFFER.
+      *     MOVE MQGMO-WAIT TO MQGMO-OPTIONS.
+      *     MOVE  1500      TO MQGMO-WAITINTERVAL.
+      *     MOVE 42000      TO BUFFER-LENGTH.
+
+      *     CALL 'MQGET'
+      *          USING HCONN, Q-HANDLE-GET,
+      *          MESSAGE-DESCRIPTOR, GMOPTIONS,
+      *          BUFFER-LENGTH, BUFFER, DATA-LENGTH,
+      *          COMPLETION-CODE, GET-REASON.
+      *
+      *     MOVE BUFFER     TO WSS-RCV-MQ.
+      *     MOVE WSS-RCV-MQ TO WSS-SND-MQ.
+      *     MOVE WSS-RCV-MQ TO WSS-MSG-TXD.
+      *     MOVE WSS-SND-MSJE-GLS-DINP TO WSS-RCV-MQ.
+      *     MOVE SPACES TO WSS-SND-MQ.
+      ****************************************************************
+      *  Report reason, if any                                       *
+      ****************************************************************
+      * DISPR.
+      *     IF GET-REASON IS NOT EQUAL TO MQRC-NONE
+      *        IF GET-REASON IS EQUAL TO MQRC-NO-MSG-AVAILABLE
+      *           GO TO CLOSES-GET
+      *        ELSE
+      *           DISPLAY 'MQGET ended with reason code ' GET-REASON.
+
+      ****************************************************************
+      *   Close the source queue                                     *
+      ****************************************************************
+      *     DISPLAY 'GNSPPSXI::ENTRADA [2] =' WSS-RCV-MQ.
+      * CLOSES-GET.
+      *     MOVE MQCO-NONE TO OPTIONS.
+      *     CALL 'MQCLOSE'
+      *          USING HCONN, Q-HANDLE-GET, OPTIONS,
+      *          COMPLETION-CODE, REASON
+      *      report reason, if any
+      *     IF REASON IS NOT EQUAL TO MQRC-NONE
+      *        DISPLAY 'MQCLOSE ended with reason code ' REASON.
+      * FIN-GET-MQ.
+      *     EXIT.
+
+      * PUT-MQ SECTION.
+      * INI-PUT-MQ.
+      ****************************************************************
+      *   Open the target message queue for output (and fail if      *
+      *   MQM is quiescing)                                          *
+      ****************************************************************
+      * OPENS-PUT.
+      *     MOVE TARGET-QUEUE TO MQOD-OBJECTNAME.
+      *     ADD MQOO-OUTPUT MQOO-FAIL-IF-QUIESCING
+      *               GIVING OPTIONS.
+      *     CALL 'MQOPEN'
+      *          USING HCONN, OBJECT-DESCRIPTOR,
+      *          OPTIONS, Q-HANDLE-PUT,
+      *          OPEN-CODE, REASON
+      **      report reason, if any; stop if failed
+      *     IF REASON IS NOT EQUAL TO MQRC-NONE
+      *        DISPLAY 'MQOPEN ended with reason code ' REASON.
+
+      *     IF OPEN-CODE IS EQUAL TO MQCC-FAILED
+      *        DISPLAY 'unable to open target queue for output'
+      *        MOVE REASON TO RETURN-CODE
+      *        EXEC CICS RETURN END-EXEC.
+      ****************************************************************
+      *   Put one request to the target queue                        *
+      ****************************************************************
+      * PUTR.
+      *     MOVE SPACES   TO BUFFER.
+      *     MOVE SND-SEGM TO BUFFER.
+
+      * PUTIT.
+      *     MOVE 42000 to BUFFER-LENGTH.
+      *     CALL 'MQPUT'
+      *          USING HCONN, Q-HANDLE-PUT,
+      *          MESSAGE-DESCRIPTOR, PMOPTIONS,
+      *          BUFFER-LENGTH, BUFFER,
+      *          COMPLETION-CODE, REASON
+      **      report reason, if any
+      *     IF REASON IS NOT EQUAL TO MQRC-NONE
+      *        DISPLAY 'MQPUT ended with reason code ' REASON
+      *     ELSE
+      *        DISPLAY 'SXI : Envio a la cola de salida correcto'.
+
+      ****************************************************************
+      *   Close the target queue                                     *
+      ****************************************************************
+      *     DISPLAY 'GNSPPSXI::SALIDA  [2] =' BUFFER.
+      * CLOSES-PUT.
+      *     MOVE MQCO-NONE TO OPTIONS.
+      *     CALL 'MQCLOSE'
+      *          USING HCONN, Q-HANDLE-PUT, OPTIONS,
+      *          COMPLETION-CODE, REASON
+      **      report reason, if any
+      *     IF REASON IS NOT EQUAL TO MQRC-NONE
+      *        DISPLAY 'MQCLOSE ended with reason code ' REASON.
+      * FIN-PUT-MQ.
+      *     EXIT.
+      *****************************************************************
+       GNX-PRO-QUE SECTION.
+       INI-GNX-PRO-QUE.
+      *    PERFORM GNS-PRO-QUE.
+       FIN-GNX-PRO-QUE.
+           EXIT.
+      * Cima-INI 02-OCT-2013 LOG MTI
+       COPY GNSBGLGM.
+       COPY GNSBFIDD.
+       
+       LEE-IDD SECTION.
+       INI-LEE-IDD.
+
+           MOVE IDD-PROG TO IDD-COD-CIDD IN IDD.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM GNS-FIO-IDD.
+           IF NOT FIO-STAT-OKS
+               MOVE 'DEFAULT' TO IDD-COD-CIDD IN IDD
+               MOVE FIO-GET-KEY TO FIO-CMND
+               PERFORM GNS-FIO-IDD
+               IF NOT FIO-STAT-OKS
+                   MOVE
+                   'NO EXISTE REGISTRO IDD CON LLAVE : '
+                       TO SYS-MEN1
+                   MOVE IDD-COD-CIDD IN IDD TO SYS-MEN2
+                   MOVE SYS-ABOR TO SYS-CMND
+                   PERFORM GNS-PRO-SYS
+               ELSE
+                   MOVE IDD TO IDD-REGI
+           ELSE
+               MOVE IDD TO IDD-REGI.
+
+       FIN-LEE-IDD.
+           EXIT.
+
+       LGM-EN-LINK SECTION.
+       INI-LGM-EN-LINK.
+           MOVE WSS-CTE-0 TO QUE-NITM.
+           MOVE WSS-CTE-0 TO LGM-NUM-CORR IN LGM.
+       CIC-LGM-EN-LINK.
+           PERFORM GET-FHOY.
+           ADD WSS-CTE-1 TO QUE-NITM.
+           ADD WSS-CTE-1 TO LGM-NUM-CORR IN LGM.
+           MOVE WSS-NOM-TSPT TO QUE-COLA.
+           MOVE WSS-CTE-99999  TO QUE-LITM.
+           MOVE QUE-GET        TO QUE-CMND.
+           PERFORM GNS-PRO-QUE.
+           IF QUE-STAT = QUE-STAT-OKS
+                PERFORM INV-LGM
+                GO TO CIC-LGM-EN-LINK.
+           
+       FIN-LGM-EN-LINK.
+           EXIT.
+       
+       
+      * Cima-FIN 02-OCT-2013 LOG MTI

@@ -1,0 +1,792 @@
+       IDENTIFICATION DIVISION.
+      *========================
+       PROGRAM-ID.    SGCP0MCA.
+       AUTHOR.        ELIANA CONTRERAS H.
+       DATE-WRITTE.   12/01/96.
+       DATE-COMPILED.
+      *REMARKS.
+      ******************************************************************
+      *  INTERSOFT                                                     *
+      *  MIGRACION A COBOL OS/390                                      *
+      *  FECHA: 15 DE ABRIL DE 1998                                    *
+      ******************************************************************
+      ******************************************************************
+      *      SISTEMA    : GENERAL DE CLIENTES                          *
+      *      SUBSISTEMA : ----                                         *
+      *      ANALISTA   : JUAN DE DIOS HERNANDEZ                       *
+      *      OBJETIVO   : ACTUALIZACION DE CUENTAS DE CARGO, INGRESADAS*
+      *                   POR RANGO                                    *
+      *      ARCHIVOS   :                                              *
+      *           ENTRADA   : PARAM   ARCHIVO DE PARAMETROS            *
+      *                                                                *
+      *           SALIDA    : OPE      OPERACIONES                     *
+      *                                                                *
+      *      MANTENCIONES                                              *
+      *      ============                                              *
+      ******************************************************************
+      ******************************************************************
+      *      MANTENCIONES.
+      *      ==============
+      *
+      *      PROGRAMADOR : FORMAT 2000 INC.
+      *      FECHA       : 20.02.1998
+      *      CAMBIO      : SE APLICA TECNICA WINDOWING PARA CONVERSION
+      *                      2000 COMPLIANT.
+      ******************************************************************
+           EJECT
+       ENVIRONMENT DIVISION.
+      *=====================
+
+       CONFIGURATION SECTION.
+       SPECIAL-NAMES.   DECIMAL-POINT IS COMMA
+                        C01 IS CANAL-1.
+       INPUT-OUTPUT SECTION.
+      *---------------------
+       FILE-CONTROL.
+
+           SELECT PARAM        ASSIGN DA-S-PARAM.
+
+           SELECT LISTADO      ASSIGN UT-S-LISTADO.
+
+           EJECT
+       DATA DIVISION.
+      *==============
+       FILE SECTION.
+      *-------------
+
+       FD  PARAM
+           LABEL RECORD IS STANDARD
+           RECORDING MODE F
+           BLOCK CONTAINS 0 RECORDS
+           RECORD CONTAINS 80 CHARACTERS.
+
+       01  REG-PARAM.
+           02 FILLER                      PIC X(01).
+           02 PAR-CTA1                    PIC 9(07).
+           02 PAR-FIL1                    PIC X(01).
+           02 FILLER                      PIC X(01).
+           02 PAR-CTA2                    PIC 9(07).
+           02 PAR-FIL2                    PIC X(01).
+           02 FILLER                      PIC X(01).
+           02 PAR-CTACARGO                PIC 9(08).
+           02 FILLER                      PIC X(01).
+           02 PAR-COMISION                PIC 9(02).
+           02 FILLER                      PIC X(50).
+
+       FD  LISTADO
+           RECORDING MODE F
+           LABEL RECORD IS OMITTED.
+
+       01  REG-LISTADO                    PIC X(132).
+
+       WORKING-STORAGE SECTION.
+      *-----------------------
+           COPY BIBBAUD1.
+
+       01  TARJ-PARAM.
+           05 FILLER                     PIC X(01).
+           05 TARJ-IDENT                 PIC X(08).
+               88  VAL-TARJ-IDENT        VALUE  'SGCP0MCA'.
+           05 FILLER                     PIC X(01).
+           05 TARJ-FECHA.
+               10  DIA                   PIC X(2).
+               88  VAL-DIA               VALUE  '01' THRU '31'.
+               10  FILLER                PIC X.
+               10  MES                   PIC X(2).
+               88  VAL-MES               VALUE  '01' THRU '12'.
+               10  FILLER                PIC X.
+               10  ANO                   PIC X(2).
+           05 FILLER                     PIC X(62).
+
+       01  F-FILE-STATUS.
+           02  FS-PARAM                    PIC  9(02)    VALUE 0.
+
+       01  W-CONTADORES-ACUMULADORES.
+           02  WA-LEIDOS                    PIC  9(06)    VALUE 0.
+           02  WA-DEL                       PIC  9(06)    VALUE 0.
+           02  WA-ACT-OPE                   PIC  9(06)    VALUE 0.
+           02  WA-NOT-FOUND-OPE             PIC  9(06)    VALUE 0.
+           02  WA-NOT-FOUND-RCO             PIC  9(06)    VALUE 0.
+           02  WA-PAGINA                    PIC  9(06)    VALUE 0.
+           02  WA-IMPRIME                   PIC  9(06)    VALUE 0.
+           02  WA-LINEAS                    PIC  9(06)    VALUE 60.
+           02  WA-LIN-DAT                   PIC  9(06)    VALUE 60.
+
+       01  W-SWITCHES.
+           02  WS-EOF-PARAM                 PIC  9(01)    VALUE 0.
+           02  WS-TERMINO-OK                PIC  9(01)    VALUE 0.
+           02  WS-ERROR                     PIC  9(01)    VALUE 0.
+           02  WS-COD-RCO                   PIC  X(12)    VALUE SPACES.
+           02  WS-COM-AUX                   PIC  X(02)    VALUE SPACES.
+           02  WS-FECHA-TOTAL.
+      *********04  WS-FECHA-SIGLO           PIC  9(2)     VALUE 19.
+               04  WS-FECHA-SIGLO           PIC  9(2).
+               04  WS-FECHA-CURR.
+                   06 WS-ANO-CURR           PIC  9(2).
+                   06 WS-MES-CURR           PIC  9(2).
+                   06 WS-DIA-CURR           PIC  9(2).
+           02  WS-FECHA-TITULO.
+               03 WS-DIA-TITULO             PIC  9(2).
+               03 FILLER                    PIC  X(1)  VALUE '/'.
+               03 WS-MES-TITULO             PIC  9(2).
+               03 FILLER                    PIC  X(1)  VALUE '/'.
+               03 WS-SSAA-TITULO.
+      ************05 WS-SIGLO               PIC  9(2)  VALUE 19.
+                  05 WS-SIGLO               PIC  9(2).
+                  05 WS-ANO-TITULO          PIC  9(2).
+           02  WS-FECHA.
+               03 WS-DIA                    PIC  9(2).
+               03 WS-MES                    PIC  9(2).
+               03 WS-ANO                    PIC  9(4).
+           02  WS-FEC-VAL                   PIC  9(01)    VALUE 0.
+           02  WS-COP-CTE                   PIC X(08).
+           02  WS-CIC-ICLI                  PIC  X(12).
+           02  WS-RUT.
+               03 WS-RUT-NUMERO             PIC  9(8)  VALUE 0.
+               03 WS-RUT-DV                 PIC  X(1)  VALUE ' '.
+           02  WS-CTA-INICIO.
+               03 WS-CTA-1                  PIC  9(7)  VALUE 0.
+               03 WS-FIL-1                  PIC  9(1)  VALUE 0.
+           02  WS-CTA-FINAL.
+               03 WS-CTA-2                  PIC  9(7)  VALUE 0.
+               03 WS-FIL-2                  PIC  9(1)  VALUE 0.
+           02  WS-CTA-FIN-OPE.
+               03 WS-CEROS                  PIC  X(4)  VALUE '0000'.
+               03 WS-CTA-FIN                PIC  X(8)  VALUE SPACES.
+           02  WS-RUT-NUM                   PIC  9(9)  VALUE 0.
+           02  WS-VOL                       PIC  X(6).
+           02  WS-HORA-PROC.
+               03 WS-HORA.
+                  04 WS-HOR                 PIC  9(2).
+                  04 WS-MIN                 PIC  9(2).
+                  04 WS-SEG                 PIC  9(2).
+               03 WS-CEN                    PIC  9(2).
+           02  WS-IND                       PIC  9(02)  VALUE 0.
+           02  WS-RUT-99                    PIC  9(09)  VALUE 0.
+           02  WS-RUT-98                    PIC  9(08)  VALUE 0.
+           02  WS-RUT-X8                    PIC  X(08)  VALUE SPACES.
+           02  WS-LEIDO-DBC                 PIC  X(02)  VALUE SPACES.
+
+       01  REG-TABLA-DE-ERRORES.
+           03 WT-CODIGO-ERROR               PIC  X(16).
+           03 WT-CODIGO-ERROR-R REDEFINES WT-CODIGO-ERROR.
+              05 WT-COD-ERROR OCCURS 16 TIMES.
+                 07 WT-LETRA-ERROR          PIC  X(01).
+
+       01  TITULO1.
+           02 FILLER           PIC X(30) VALUE
+              'BANCO DE CREDITO E INVERSIONES'.
+           02 FILLER           PIC X(84) VALUE  SPACES.
+           02 FILLER           PIC X(11) VALUE 'PAGINA:    '.
+           02 TITULO1-PAGINA   PIC ZZ.ZZ9.
+           02 FILLER           PIC X(01) VALUE  SPACE.
+
+       01  TITULO2.
+           02 FILLER           PIC X(26) VALUE
+              'GENERAL DE CLIENTES'.
+           02 FILLER           PIC X(88) VALUE  SPACES.
+           02 FILLER           PIC X(07) VALUE 'FECHA :'.
+           02 TITULO2-FECHA    PIC X(10).
+           02 FILLER           PIC X(01) VALUE  SPACE.
+
+       01  TITULO2-1.
+           02 FILLER           PIC X(13) VALUE
+              'PGR: SGCP0MCA'.
+           02 FILLER           PIC X(119) VALUE  SPACES.
+
+       01  TITULO3.
+           02 FILLER           PIC X(23) VALUE  SPACES.
+           02 FILLER           PIC X(47) VALUE
+              'R E G I S T R O S  N O  E X I S T E N T E N    '.
+           02 FILLER           PIC X(72) VALUE  SPACES.
+
+       01  TITULO4.
+           02 FILLER           PIC X(23) VALUE  SPACES.
+           02 FILLER           PIC X(47) VALUE
+              '==========================================='.
+           02 FILLER           PIC X(72) VALUE  SPACES.
+
+       01  TITULO5.
+           02 FILLER           PIC X(20) VALUE
+              '  RANGO DE CUENTAS  '.
+           02 FILLER           PIC X(18) VALUE  SPACES.
+           02 FILLER           PIC X(30) VALUE  'MENSAJE'.
+           02 FILLER           PIC X(64) VALUE  SPACES.
+
+       01  TITULO6.
+           02 FILLER           PIC X(20) VALUE
+              ' ================== '.
+           02 FILLER           PIC X(18) VALUE  SPACES.
+           02 FILLER           PIC X(30) VALUE  ALL '='.
+           02 FILLER           PIC X(64) VALUE  SPACES.
+
+       01  TITULO7.
+           02 FILLER           PIC X(18) VALUE
+              'TOTAL  RECHAZOS : '.
+           02 TITULO7-RECH     PIC ZZZ.ZZ9.
+           02 FILLER           PIC X(107) VALUE  SPACES.
+       01  LST-DETALLE.
+           02 FILLER                      PIC X(01).
+           02 LST-INICIO                  PIC X(08).
+           02 FILLER                      PIC X(03) VALUE ' - '.
+           02 LST-FINAL                   PIC X(08).
+           02 FILLER                      PIC X(17).
+           02 LST-MENSAJE                 PIC X(30).
+           02 FILLER                      PIC X(64).
+
+
+      ********************************************
+      *     USER INFORMATION BLOCK
+      ********************************************
+       01  UIB.
+           02 FILLER         PIC X(32) VALUE 'SGCP0MCA'.
+
+      ********************************************
+      *      REQUEST AREA
+      ********************************************
+       01  REQ-AREA.
+           02 REQ-CMD            PIC X(5).
+           02 REQ-TBLNM          PIC X(3) VALUE 'OPE'.
+           02 REQ-KEYNM          PIC X(5) VALUE 'OPE00'.
+           02 REQ-RETURN-CODE    PIC X(2) VALUE SPACES.
+           02 REQ-INT-RTN-CD     PIC X(1).
+           02 REQ-DBID           PIC S9(4) COMP VALUE 100.
+           02 REQ-TBLID          PIC X(7).
+           02 FILLER             PIC X(25).
+           02 REQ-COUNT-MAX      PIC S9(4) COMP.
+           02 REQ-IO-COUNT       PIC S9(4) COMP.
+           02 FILLER             PIC X(22).
+           02 REQ-KEY-VALUE      PIC X(24).
+           02 REQ-LLAVE-OPE    REDEFINES REQ-KEY-VALUE.
+              03 REQ-CAI-IOPE    PIC X(04).
+              03 REQ-IIC-IOPE    PIC X(08).
+              03 FILLER          PIC X(12).
+
+      ********************************************
+      *          ELEMENT LIST
+      ********************************************
+       01  ELEM-LIST.
+           02 ELEM-1              PIC X(5) VALUE 'OPE00'.
+           02 ELEM-SEC            PIC X(1).
+           02 FILLER              PIC X(5) VALUE SPACES.
+
+       01  ELEM-LIST3.
+           02 NOM-ELEM3         PIC X(11).
+
+      ********************************************
+      *          WORK AREA
+      ********************************************
+
+       01  REG-OPE.
+      *    COPYDD DGC-R-OPE.DGC-E-OPE00(PROD),01,D
+      *                             EQUIVALENTE AL REGISTRO OPE
+           02  DGC-E-OPE00.
+      *                             OPERACIONES
+               03  OPE.
+      *                             FILLER COMPATIBILIDAD VSAM/MVS
+                   04  OPE-GLS-FLAG PICTURE X(1).
+      *                             KEY CLAVE PRIMARIA REGISTRO
+                   04  OPE-KEY-IREG.
+      *                             IDENTIFICACION OPERACION
+                       05  OPE-KEY-IOPE.
+      *                             COD. INT. COMP. OPERACION
+                       06  OPE-CIC-IOPE.
+      *                             CENTRO ASIGNACION IDENTIFICACION
+                       07  OPE-CAI-IOPE.
+                       08  OPE-COD-TOPE
+                                    PICTURE X(1).
+                       08  OPE-COD-COPE
+                                    PICTURE X(3).
+      *                             IDENT. INTERNA COMPUTACIONAL
+                       07  OPE-IIC-IOPE.
+                       08  OPE-COD-OOPE.
+                       09  OPE-COD-SOPE
+                                    PICTURE X(2).
+                       09  OPE-IND-SOPE
+                                    PICTURE X(1).
+                       08  OPE-GLS-NOPE
+                                    PICTURE X(5).
+      *                             TIME STAMP TRANSACCION
+                       05  OPE-STP-ITRN.
+      *                             FECHA TRANSACCION
+                       06  OPE-FEC-FTRN.
+                       07  OPE-NUM-STRN
+                                    PICTURE 9(2).
+                       07  OPE-NUM-ATRN
+                                    PICTURE 9(2).
+                       07  OPE-NUM-MTRN
+                                    PICTURE 9(2).
+                       07  OPE-NUM-DTRN
+                                    PICTURE 9(2).
+      *                             HORA TRANSACCION
+                       06  OPE-HRA-HRTR.
+                       07  OPE-NUM-HHTR
+                                    PICTURE 9(2).
+                       07  OPE-NUM-MMTR
+                                    PICTURE 9(2).
+                       07  OPE-NUM-SSTR
+                                    PICTURE 9(2).
+      *                             INDICADOR TIPO ACCION
+                   04  OPE-MSC-TACC PICTURE X(1).
+      *                             INDICADOR STATUS
+                   04  OPE-MSC-STAT PICTURE X(1).
+      *                             CODIGO ORIGEN TRANSACCION
+                   04  OPE-COD-OTRN.
+      *                             INDICADOR TIPO ORIGEN
+                       05  OPE-MSC-TTRN
+                                    PICTURE X(1).
+      *                             CODIGO TIPO ORIGEN
+                       05  OPE-COD-TTRN
+                                    PICTURE X(3).
+      *                             AUTOR TRANSACCION
+                   04  OPE-COD-ATRN PICTURE X(12).
+      *                             CODIGO STATUS
+                   04  OPE-COD-STAT PICTURE X(3).
+      *                             VALOR DE CAMBIO OPERACION
+                   04  OPE-COD-VCOP.
+      *                             MISCELANEO TIPO VALOR
+                       05  OPE-MSC-TVOP
+                                    PICTURE X(1).
+      *                             CODIGO VALOR
+                       05  OPE-COD-CVOP
+                                    PICTURE X(3).
+      *                             CODIGO TIPO CAMBIO
+                       05  OPE-COD-TCOP
+                                    PICTURE X(2).
+      *                             CODIGO CLASE OPERACION
+                   04  OPE-COD-COPR.
+      *                             CODIGO TIPO OPERACION
+                       05  OPE-COD-TOPR
+                                    PICTURE X(3).
+      *                             CODIGO AUXILIAR OPERACION
+                       05  OPE-COD-AOPR
+                                    PICTURE X(3).
+      *                             CODIGO OFICINA
+                   04  OPE-COD-OFOP PICTURE X(3).
+      *                             EJECUTIVO
+                   04  OPE-COD-EJOP PICTURE X(12).
+      *                             FECHA INICIO OPERACION
+                   04  OPE-FEC-FIOP.
+                       05  OPE-NUM-SIOP
+                                    PICTURE 9(2).
+                       05  OPE-NUM-AIOP
+                                    PICTURE 9(2).
+                       05  OPE-NUM-MIOP
+                                    PICTURE 9(2).
+                       05  OPE-NUM-DIOP
+                                    PICTURE 9(2).
+      *                             FECHA TERMINO OPERACION
+                   04  OPE-FEC-FTOP.
+                       05  OPE-NUM-STOP
+                                    PICTURE 9(2).
+                       05  OPE-NUM-ATOP
+                                    PICTURE 9(2).
+                       05  OPE-NUM-MTOP
+                                    PICTURE 9(2).
+                       05  OPE-NUM-DTOP
+                                    PICTURE 9(2).
+      *                             MOTIVO TERMINO OPERACION
+                   04  OPE-COD-MOTT PICTURE X(2).
+      *                             FECHA REAPERTURA OPERACION
+                   04  OPE-FEC-FROP.
+                       05  OPE-NUM-SROP
+                                    PICTURE 9(2).
+                       05  OPE-NUM-AROP
+                                    PICTURE 9(2).
+                       05  OPE-NUM-MROP
+                                    PICTURE 9(2).
+                       05  OPE-NUM-DROP
+                                    PICTURE 9(2).
+      *                             IND MULTIPLES CLIENTES ( Y, O, ETC)
+                   04  OPE-IND-MCLI PICTURE X(2).
+      *                             CODIGO TIPO DE COMISION
+                   04  OPE-COD-TCOM PICTURE X(2).
+      *                             COD. INT. COMP. OPERACION DE CARGO
+                   04  OPE-CIC-ICAR.
+      *                             CENTRO ASIGNACION OPERACION CARGO
+                       05  OPE-CAI-ICAR
+                                    PICTURE X(4).
+      *                             IDENT. INT. COMP. OPERACION CARGO
+                       05  OPE-IIC-ICAR
+                                    PICTURE X(8).
+      *
+           COPY RLOVR001.
+
+       EJECT
+
+       PROCEDURE DIVISION.
+      *===================
+           ENTRY 'DBMSCBL'.
+
+       AA-PRINCIPAL.
+      *-------------
+           PERFORM B-INICIALIZAR.
+
+       BB-PROCESAR.
+      *------------
+           IF WS-TERMINO-OK = 0
+              PERFORM C-PROCESAR
+           END-IF.
+
+       CC-TERMINAR.
+      *------------
+           PERFORM D-TERMINAR.
+
+       ZZ-FIN-PROGRAMA.
+      *----------------
+           GOBACK.
+           EJECT
+
+       B-INICIALIZAR SECTION.
+      *======================
+
+       BB-CONTROL.
+      *-----------
+           PERFORM BC-VALIDA-PARAMETRO
+           PERFORM BD-ABRIR-ARCHIVOS
+           PERFORM BE-MUEVE-FECHAS
+           GO TO BZ-FIN-DE-SECCION.
+
+       BC-VALIDA-PARAMETRO.
+      *--------------------
+           ACCEPT TARJ-PARAM
+           DISPLAY ' '
+           DISPLAY 'TARJ.PARAMETRO: ' TARJ-PARAM
+           DISPLAY ' '
+           IF NOT VAL-TARJ-IDENT
+              DISPLAY ' '
+              DISPLAY '** ERROR. NOMBRE PROG. EN TARJETA PARAMETROS'
+              DISPLAY ' '
+              MOVE 1 TO WS-ERROR
+           END-IF.
+           IF NOT VAL-DIA  MOVE 1 TO WS-ERROR
+                           DISPLAY  ' DIA DE LA FECHA FUERA DE RANGO '.
+           IF NOT VAL-MES  MOVE 1 TO WS-ERROR
+                           DISPLAY  ' MES DE LA FECHA FUERA DE RANGO '.
+           IF ANO NOT NUMERIC MOVE 1 TO WS-ERROR
+                              DISPLAY  ' ANO DE LA FECHA NO NUMERICO '.
+           IF WS-ERROR   = 1
+              DISPLAY ' '
+              DISPLAY '***  PROGRAMA SGCP0MCA CANCELADO ***'
+              DISPLAY ' '
+              DISPLAY ' ******************************** '
+              DISPLAY ' ERROR EN LA TARJETA DE PARAMETRO '
+              DISPLAY ' ******************************** '
+              MOVE 1 TO WS-TERMINO-OK
+           END-IF.
+           IF WS-ERROR NOT = 0
+              MOVE 1 TO WS-TERMINO-OK
+              DISPLAY ' '
+              DISPLAY 'ERROR EN LA SECCION  B-INICIALIZAR'
+              DISPLAY 'PARRAFO   : BC-VALIDA-PARAMETRO'
+              DISPLAY 'ERROR EN LA TARJETA DE PARAMETROS'
+              DISPLAY ' '
+           END-IF.
+           MOVE   0     TO WA-LIN-DAT.
+
+       BD-ABRIR-ARCHIVOS.
+      *------------------
+           OPEN INPUT   PARAM
+                OUTPUT  LISTADO.
+           IF FS-PARAM  NOT = 0
+              MOVE 1 TO WS-TERMINO-OK
+              DISPLAY ' '
+              DISPLAY 'ERROR EN LA SECCION  B-INICIALIZAR'
+              DISPLAY 'PARRAFO   : BD-ABRIR-ARCHIVOS'
+              DISPLAY 'OPERACION : OPEN'
+              DISPLAY 'F.STATUS PARAM  : ' FS-PARAM
+              DISPLAY ' '
+           END-IF.
+
+       BE-MUEVE-FECHAS.
+      *----------------
+           MOVE DIA             TO  WS-DIA-CURR WS-DIA-TITULO
+           MOVE MES             TO  WS-MES-CURR WS-MES-TITULO
+           MOVE ANO             TO  WS-ANO-CURR WS-ANO-TITULO
+           IF WS-ANO-CURR < ROLL-YY
+              MOVE 20           TO  WS-FECHA-SIGLO WS-SIGLO
+           ELSE
+              MOVE 19           TO  WS-FECHA-SIGLO WS-SIGLO
+           END-IF
+           MOVE WS-FECHA-TITULO TO TITULO2-FECHA.
+
+       BZ-FIN-DE-SECCION.
+      *------------------
+           EXIT.
+           EJECT
+
+       C-PROCESAR SECTION.
+      *===================
+
+       CA-LEE-PARAM.
+      *--------------
+           READ PARAM  AT END MOVE 1 TO WS-EOF-PARAM.
+           IF WS-EOF-PARAM  NOT = 1
+              ADD 1 TO WA-LEIDOS
+           END-IF.
+
+       CB-CLASIFICACION.
+      *-----------------
+           PERFORM CC-LLAMA-LOOP UNTIL WS-EOF-PARAM = 1 OR
+                                       WS-TERMINO-OK = 1
+           GO TO CZ-FIN-SECCION.
+
+       CC-LLAMA-LOOP.
+      *--------------
+           PERFORM CD-VALIDA-PARAM
+           IF WS-TERMINO-OK NOT = 1
+              MOVE '0000'         TO REQ-CAI-IOPE
+              MOVE WS-CTA-INICIO  TO REQ-IIC-IOPE
+              MOVE 'LOCKG'        TO REQ-CMD
+              MOVE WS-CTA-FINAL   TO WS-CTA-FIN
+
+              PERFORM CE-LEE-OPE
+              MOVE 'RDUKY'        TO REQ-CMD
+              PERFORM CE-LEE-OPE
+              PERFORM CF-LOOP-ACT UNTIL REQ-RETURN-CODE NOT = SPACES OR
+                                  OPE-KEY-IOPE > WS-CTA-FIN-OPE
+              IF REQ-RETURN-CODE = SPACES
+                 MOVE 'RELES'        TO REQ-CMD
+                 PERFORM CJ-RELES-OPE
+              END-IF
+              PERFORM CA-LEE-PARAM
+           END-IF.
+
+       CD-VALIDA-PARAM.
+      *---------------
+           IF PAR-CTA1 NOT NUMERIC
+              DISPLAY  ' CTA INICIO NO NUMERICA '
+              MOVE 1 TO WS-TERMINO-OK
+           ELSE
+              MOVE PAR-CTA1     TO WS-CTA-1
+           END-IF.
+           IF PAR-FIL1 NOT NUMERIC
+              MOVE 0            TO WS-FIL-1
+           ELSE
+              MOVE PAR-FIL1     TO WS-FIL-1
+           END-IF.
+      *
+           IF PAR-CTA2 NOT NUMERIC
+              DISPLAY  ' CTA INICIO NO NUMERICA '
+              MOVE 1 TO WS-TERMINO-OK
+           ELSE
+              MOVE PAR-CTA2     TO WS-CTA-2
+           END-IF.
+           IF PAR-FIL2 NOT NUMERIC
+              MOVE 9            TO WS-FIL-2
+           ELSE
+              MOVE PAR-FIL2     TO WS-FIL-2
+           END-IF.
+      *
+           IF PAR-CTACARGO NOT NUMERIC
+              DISPLAY  ' CTA CARGO NO NUMERICA '
+              MOVE 1 TO WS-TERMINO-OK
+           END-IF.
+      *
+           IF PAR-COMISION  NOT NUMERIC
+              MOVE '99'         TO WS-COM-AUX
+           ELSE
+              MOVE PAR-COMISION TO WS-COM-AUX
+           END-IF.
+      *
+
+       CE-LEE-OPE.
+      *-----------
+           CALL 'DBNTRY'   USING UIB
+                                 REQ-AREA
+                                 OPE
+                                 ELEM-LIST.
+           IF REQ-RETURN-CODE NOT = SPACES
+              IF REQ-RETURN-CODE  = '14'
+                 IF REQ-CMD = 'LOCKG'
+                    ADD 1            TO WA-NOT-FOUND-OPE
+                    MOVE SPACES      TO REG-LISTADO
+                    MOVE 'REG. NO EXISTE EN OPE' TO LST-MENSAJE
+                    PERFORM CI-GENERA-INFORME-NOTFOUND
+                 END-IF
+              ELSE
+                 MOVE 1          TO WS-TERMINO-OK
+                 DISPLAY ' '
+                 DISPLAY 'ERROR EN LA SECCION  C-PROCESAR'
+                 DISPLAY 'PARRAFO   : CE-LEE-OPE'
+                 DISPLAY 'CODIGO DE RETORNO: ' REQ-RETURN-CODE
+                 DISPLAY 'REQUEST AREA     : ' REQ-AREA
+                 DISPLAY ' '
+              END-IF
+           ELSE
+              IF OPE-KEY-IOPE  > WS-CTA-FIN-OPE AND
+                 REQ-CMD NOT = 'LOCKG'
+      *          DISPLAY 'ENTRE A IF ...'
+                 ADD 1            TO WA-NOT-FOUND-OPE
+                 MOVE SPACES      TO REG-LISTADO
+                 MOVE 'REG. NO EXISTE EN OPE' TO LST-MENSAJE
+                 PERFORM CI-GENERA-INFORME-NOTFOUND
+      *       ELSE
+      *          DISPLAY ' OPE-KEY ' OPE-KEY-IOPE
+      *                  'WS-CTA-FIN-IOPE ' WS-CTA-FIN-OPE
+              END-IF
+           END-IF.
+
+       CF-LOOP-ACT.
+      *-----------
+           PERFORM CG-UPDATE-OPE
+           MOVE 'RDUNX'        TO REQ-CMD.
+           PERFORM CH-NEXT-OPE.
+
+       CG-UPDATE-OPE.
+      *-------------
+           MOVE '0000'            TO OPE-CAI-ICAR
+           MOVE PAR-CTACARGO      TO OPE-IIC-ICAR
+           MOVE WS-COM-AUX        TO OPE-COD-TCOM
+           MOVE WS-FECHA-TOTAL    TO OPE-FEC-FTRN
+           MOVE 'SGCP0MCA  '      TO OPE-COD-ATRN
+           MOVE 'UPDAT'      TO REQ-CMD
+           CALL 'DBNTRY'   USING UIB
+                                 REQ-AREA
+                                 OPE
+                                 ELEM-LIST
+           IF REQ-RETURN-CODE NOT = SPACES
+              DISPLAY ' '
+              DISPLAY 'ERROR EN LA SECCION  C-PROCESAR'
+              DISPLAY 'PARRAFO   : CG-UPDATE-OPE'
+              DISPLAY 'CODIGO DE RETORNO: ' REQ-RETURN-CODE
+              DISPLAY 'REQUEST AREA     : ' REQ-AREA
+              DISPLAY ' '
+              MOVE 1          TO WS-TERMINO-OK
+           ELSE
+              ADD 1 TO WA-ACT-OPE
+           END-IF.
+
+
+       CH-NEXT-OPE.
+      *-----------
+           CALL 'DBNTRY'   USING UIB
+                                 REQ-AREA
+                                 OPE
+                                 ELEM-LIST.
+           IF REQ-RETURN-CODE NOT = SPACES
+              IF REQ-RETURN-CODE  NOT = '14'
+                 MOVE 1          TO WS-TERMINO-OK
+                 DISPLAY ' '
+                 DISPLAY 'ERROR EN LA SECCION  C-PROCESAR'
+                 DISPLAY 'PARRAFO   : CH-NEXT-OPE'
+                 DISPLAY 'CODIGO DE RETORNO: ' REQ-RETURN-CODE
+                 DISPLAY 'REQUEST AREA     : ' REQ-AREA
+                 DISPLAY ' '
+              END-IF
+           END-IF.
+
+       CI-GENERA-INFORME-NOTFOUND.
+      *---------------------------
+           IF WA-LINEAS > 55
+              IF WA-LIN-DAT   > 0
+                 MOVE WA-LIN-DAT    TO TITULO7-RECH
+                 WRITE REG-LISTADO  FROM TITULO7 AFTER 2
+                 MOVE 0             TO  WA-LIN-DAT
+              END-IF
+              PERFORM CI-IMPRIME-TITULOS
+           END-IF.
+           MOVE WS-CTA-INICIO   TO LST-INICIO.
+           MOVE WS-CTA-FINAL    TO LST-FINAL.
+           WRITE REG-LISTADO FROM LST-DETALLE
+           ADD 1 TO WA-IMPRIME WA-LINEAS WA-LIN-DAT.
+
+       CI-IMPRIME-TITULOS.
+      *-------------------
+           ADD  1          TO WA-PAGINA
+           MOVE WA-PAGINA  TO TITULO1-PAGINA
+           WRITE REG-LISTADO  FROM TITULO1    AFTER PAGE
+           WRITE REG-LISTADO  FROM TITULO2    AFTER 1
+           WRITE REG-LISTADO  FROM TITULO2-1  AFTER 1
+           WRITE REG-LISTADO  FROM TITULO3    AFTER 1
+           WRITE REG-LISTADO  FROM TITULO4    AFTER 1
+           WRITE REG-LISTADO  FROM TITULO6    AFTER 3
+           WRITE REG-LISTADO  FROM TITULO5    AFTER 1
+           WRITE REG-LISTADO  FROM TITULO6    AFTER 1
+           MOVE 10 TO WA-LINEAS.
+
+       CJ-RELES-OPE.
+      *-------------
+           CALL 'DBNTRY'   USING UIB
+                                 REQ-AREA
+                                 OPE
+                                 ELEM-LIST.
+           IF REQ-RETURN-CODE NOT = SPACES
+                 MOVE 1          TO WS-TERMINO-OK
+                 DISPLAY ' '
+                 DISPLAY 'ERROR EN LA SECCION  C-PROCESAR'
+                 DISPLAY 'PARRAFO   : CE-LEE-OPE'
+                 DISPLAY 'CODIGO DE RETORNO: ' REQ-RETURN-CODE
+                 DISPLAY 'REQUEST AREA     : ' REQ-AREA
+                 DISPLAY ' '
+           END-IF.
+
+       CZ-FIN-SECCION.
+      *---------------
+           EXIT.
+
+       D-TERMINAR SECTION.
+      *===================
+
+       DA-CONTROL.
+      *-----------
+           IF WA-LIN-DAT > 0
+              MOVE WA-LIN-DAT    TO TITULO7-RECH
+              WRITE REG-LISTADO  FROM TITULO7 AFTER 2.
+           PERFORM DB-CIERRA-ARCHIVOS
+           PERFORM DC-ESTADISTICAS
+           IF WS-TERMINO-OK = 0
+              PERFORM DD-DESPLIEGA-CORRECTO
+           ELSE
+              PERFORM DE-DESPLIEGA-ERROR
+              MOVE 100 TO RETURN-CODE
+           END-IF.
+           GO TO DZ-FIN-TERMINAR.
+
+       DB-CIERRA-ARCHIVOS.
+      *-------------------
+           CLOSE  PARAM  LISTADO.
+
+       DC-ESTADISTICAS.
+      *----------------
+           DISPLAY ' '
+           DISPLAY '************************************'
+           DISPLAY ' T O T A L E S   D E   C O N T R O L'
+           DISPLAY '************************************'
+           DISPLAY ' REG. LEIDOS PARAM         : ' WA-LEIDOS
+           DISPLAY ' REG. ACTUALIZADOS OPE      : ' WA-ACT-OPE
+           DISPLAY ' REG. NO EXISTENTES OPE     : ' WA-NOT-FOUND-OPE
+           DISPLAY ' REG. IMPRIMIDOS            : ' WA-IMPRIME
+           DISPLAY ' '.
+
+       DD-DESPLIEGA-CORRECTO.
+      *----------------------
+           DISPLAY ' '
+           DISPLAY '***  MENSAJES PARA EL EXPLOTADOR  ***'
+           DISPLAY ' '
+           DISPLAY '  NO HAY MENSAJES PARA EL EXPLOTADOR'
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY ' '
+           DISPLAY '*** PROGRAMA SGCP0MCA TERMINO EN FORMA NORMAL ***'
+           DISPLAY ' '.
+
+       DE-DESPLIEGA-ERROR.
+      *-------------------
+           DISPLAY ' '
+           DISPLAY '**********************************************'
+           DISPLAY '**********************************************'
+           DISPLAY '****                                      ****'
+           DISPLAY '****     TERMINO ERRONEO DEL PROCESO      ****'
+           DISPLAY '****                                      ****'
+           DISPLAY '**********************************************'
+           DISPLAY '**********************************************'
+           DISPLAY ' '.
+
+       DZ-FIN-TERMINAR.
+      *----------------
+           EXIT.
+           EJECT
+
+**********     FIN PROGRAMA SGCP0MCA    **********
+

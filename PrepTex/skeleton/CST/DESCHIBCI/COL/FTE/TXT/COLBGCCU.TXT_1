@@ -1,0 +1,643 @@
+       CCU-POR-CLI SECTION.
+       INI-CCU-POR-CLI.
+      *FLB CST  28-APR-1994 MODIFICADO PARA APROBACION TELEFONICA
+           IF CCU-EOPC = 'N'
+               MOVE CCU-CIC-ICLI IN CCU-VARI TO DBC-CIC-ICLI IN DBC
+               MOVE FIO-GET-KEY TO FIO-CMND
+               PERFORM SGC-FIO-DBC
+               IF FIO-STAT-OKS
+                   GO TO PRO-SIN-OPC
+               ELSE
+                   MOVE 'TAB'        TO MSG-COD-SIST
+                   MOVE 'CLI    NEX' TO MSG-COD-MENS
+                   GO TO FIN-CCU-POR-CLI.
+
+      * LOOP SOBRE LOS RDC'S DE LA OPC
+
+           MOVE CCU-CAI-IOPC IN CCU-VARI(1) TO
+                RDC-CAI-IOPC IN RDC.
+           MOVE CCU-IIC-IOPC IN CCU-VARI(1) TO
+                RDC-IIC-IOPC IN RDC.
+           MOVE ZEROES              TO RDC-NUM-IDLC IN RDC.
+           MOVE 'RDC-KEY-IDLC' TO FIO-AKEY.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM COL-FIO-RDC.
+           IF NOT
+              ( FIO-STAT-OKS AND
+                RDC-CAI-IOPC IN RDC = CCU-CAI-IOPC IN CCU-VARI(1)
+                    AND
+                RDC-IIC-IOPC IN RDC = CCU-IIC-IOPC IN CCU-VARI(1)
+                    AND
+                RDC-NUM-IDLC IN RDC = ZEROES
+              )
+               MOVE 'COL'        TO MSG-COD-SIST
+               MOVE 'RDC    NEX' TO MSG-COD-MENS
+               GO TO FIN-CCU-POR-CLI.
+       LUP-CCU-POR-CLI.
+           MOVE RDC-CAI-ICLI IN RDC TO DBC-CAI-ICLI IN DBC.
+           MOVE RDC-IIC-ICLI IN RDC TO DBC-IIC-ICLI IN DBC.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM SGC-FIO-DBC.
+           IF NOT FIO-STAT-OKS
+               MOVE 'TAB'        TO MSG-COD-SIST
+               MOVE 'CLI    NEX' TO MSG-COD-MENS
+               GO TO FIN-CCU-POR-CLI.
+
+           MOVE 1 TO CCU-J.
+      * SALVA LA LLAVE
+           MOVE RDC-KEY-IRDC IN RDC TO CCU-KEY-IRDC.
+
+           MOVE RDC-CIC-ICLI IN RDC TO CCU-CIC-ICLI IN CCU-VARI.
+           MOVE SPACES              TO CCU-CIC-ICLF IN CCU-VARI.
+
+           IF RDC-VAL-LIMD IN RDC < 100
+               COMPUTE PES-SGV-DECI IN PES-VARI ROUNDED =
+                           CCU-VAL-SCRE IN CCU-VARI(1) *
+                           RDC-VAL-LIMD IN RDC / 100
+               MOVE RDC-CAI-IOPC IN RDC TO OPC-CAI-IOPC IN OPC
+               MOVE RDC-IIC-IOPC IN RDC TO OPC-IIC-IOPC IN OPC
+               MOVE FIO-GET-KEY TO FIO-CMND
+               PERFORM COL-FIO-OPC
+               MOVE OPC-COD-VCOC IN OPC TO PES-COD-VCAM IN PES-VARI
+               PERFORM PES-SCTV
+               MOVE PES-SGV-ENTE IN PES-VARI TO
+                    CCU-VAL-SCRE IN CCU-VARI(1).
+
+      *DETERMINA EL SALDO DE LOS DLC'S RENOVADOS, LO QUE AUN NO HA SIDO
+      *  GRABADO EN EL ARCHIVO. PARA LLENAR VARIABLES CCU
+           PERFORM COL-BUS-CCU.
+           IF MSG-COD-MENS > SPACES
+               GO TO FIN-CCU-POR-CLI.
+
+       PRO-SIN-OPC.
+
+      * MENSAJE DE LINEAS DE CREDITO, EN ARCHIVO DE DEUDORES
+           MOVE 'DEU' TO MSG-COD-SIST.
+
+      *    Para clientes que pertenecen a un Grupo economico, no debe
+      *    validar contra CEM si el monto del credito es menor que un
+      *    minimo definido en tabla CAM.
+
+           MOVE SPACES TO GRP-VARI.
+           MOVE DBC-CIC-ICLI IN DBC TO GRP-ICLI.
+           PERFORM SGC-BUS-GRP.
+           IF GRP-NOMG IN GRP-VARI NOT > SPACES
+               GO TO CAL-CCU-POR-CLI.
+           MOVE '19000101'              TO CAM-FEC-FCAM IN CAM(1)
+           MOVE '19000101'              TO CAM-FEC-FCAM IN CAM(2)
+           MOVE 'MCEM'                  TO CAM-COD-VCAM IN CAM(1)
+           MOVE CCU-VOPR                TO CAM-COD-VCAM IN CAM(2)
+           MOVE FIO-GET-KEY TO FIO-CMND
+           PERFORM TAB-FIO-CAM
+           IF NOT ( FIO-STAT-OKS AND CAM-IND-VIGE IN CAM = 'S' )
+               GO TO CAL-CCU-POR-CLI.
+
+      *FLB CST  28-APR-1994 MODIFICADO PARA APROBACION TELEFONICA
+           IF CCU-EOPC = 'N' AND CCU-SCRE < CAM-SGV-VCAM IN CAM
+      *FLB CST 10-MAY-1994 SE CONSIDERA QUE NO EXISTE CLF
+               MOVE 'S' TO CCU-COD-1NEX
+               GO TO FIN-CCU-POR-CLI
+           ELSE
+           IF CCU-EOPC NOT = 'N' AND
+              CCU-VAL-SCRE IN CCU-VARI(1) < CAM-SGV-VCAM IN CAM
+      *FLB CST 10-MAY-1994 SE CONSIDERA QUE NO EXISTE CLF
+               MOVE 'S' TO CCU-COD-1NEX
+               GO TO FIN-CCU-POR-CLI.
+       CAL-CCU-POR-CLI.
+           PERFORM COL-PRO-CCU.
+
+      *HPM ini 11-MAY-1994
+           IF NO-CALCULO-POR-NO-EXISTIR AND
+              ERROR-POR-NO-EXISTIR
+      *  termina, hay un error FATAL; no existe CLF
+               MOVE 'S' TO CCU-COD-ERRF
+               PERFORM VER-CCU-MENS
+               GO TO FIN-CCU-POR-CLI.
+      *HPM fin 11-MAY-1994
+
+      *FLB CST  28-APR-1994 MODIFICADO PARA APROBACION TELEFONICA
+           IF NO-CALC-ERROR-OPCS-ANTIGUAS OR
+              NO-CALC-ERROR-OPC-EN-CURSE
+               IF NO-CALCULO-POR-NO-EXISTIR AND
+                  NOT LLAMADA-APROBACION-TELEFONICA
+      *            debe seguir para otro RDC, aun no se sabe si hay erro
+                   MOVE SPACES TO FRM-MENS
+                   MOVE SPACES TO MSG-COD-MENS
+                   MOVE 'S' TO CCU-COD-1NEX
+               ELSE
+      *            termina, hay un error FATAL desde CLF no vigente
+      *            hasta otros graves de inconsistencia de datos
+                   MOVE 'S' TO CCU-COD-ERRF
+                   PERFORM VER-CCU-MENS
+                   GO TO FIN-CCU-POR-CLI
+           ELSE
+           MOVE 'S' TO CCU-COD-1EXI
+           IF EXCESO-OPCS-ANTIGUAS OR EXCESO-OPC-EN-CURSE
+               MOVE 'S' TO CCU-COD-1EXC
+               IF NOT ( SCR-CMND = 'ASC' OR 'ASO' )
+      *            termina, hay al menos una causa para comando no ASC
+      *            ni ASO
+                   PERFORM VER-CCU-MENS
+                   GO TO FIN-CCU-POR-CLI
+               ELSE
+      *            termina, hay al menos una causa para comando ASC
+      *            o ASO
+                   MOVE SPACES TO MSG-COD-MENS
+                   MOVE SPACES TO FRM-MENS
+                   GO TO FIN-CCU-POR-CLI
+           ELSE
+               PERFORM VER-CCU-MENS
+               IF ( OK-CON-MENSAJE-OPCS-ANTIGUAS OR
+                    OK-CON-MENSAJE-OPC-EN-CURSE ) AND
+                  CCU-MSG-WARN NOT > SPACES
+                   MOVE FRM-MENS TO CCU-MSG-WARN
+                   MOVE SPACES TO MSG-COD-MENS
+                                  FRM-MENS
+               ELSE
+               IF OK-OPCS-ANTIGUAS AND OK-OPC-EN-CURSE
+                   MOVE SPACES TO MSG-COD-MENS
+                                  FRM-MENS.
+
+      *FLB CST  28-APR-1994 MODIFICADO PARA APROBACION TELEFONICA
+           IF CCU-EOPC = 'N'
+               GO TO FIN-CCU-POR-CLI.
+
+      * REPOSICIONA EN REGISTRO RDC POR LLAVE SECUNDARIA
+           PERFORM REPOS-RDC.
+
+           MOVE 'RDC-KEY-IDLC' TO FIO-AKEY.
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM COL-FIO-RDC.
+           IF FIO-STAT-OKS AND
+              RDC-CAI-IOPC IN RDC = CCU-CAI-IOPC IN CCU-VARI(1)
+                    AND
+              RDC-IIC-IOPC IN RDC = CCU-IIC-IOPC IN CCU-VARI(1)
+                    AND
+              RDC-NUM-IDLC IN RDC = ZEROES
+               GO TO LUP-CCU-POR-CLI.
+
+       FIN-CCU-POR-CLI.
+           EXIT.
+
+       REPOS-RDC SECTION.
+       INI-REPOS-RDC.
+           MOVE CCU-KEY-IRDC TO RDC-KEY-IRDC IN RDC.
+           MOVE 'RDC-KEY-IDLC' TO FIO-AKEY.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM COL-FIO-RDC.
+       LUP-REPOS-RDC.
+           IF NOT ( FIO-STAT-OKS AND
+              RDC-CAI-IOPC IN RDC = CCU-CAI-IOPC IN CCU-VARI(1)
+                    AND
+              RDC-IIC-IOPC IN RDC = CCU-IIC-IOPC IN CCU-VARI(1)
+                    AND
+              RDC-NUM-IDLC IN RDC = ZEROES )
+               MOVE 'COL'    TO MSG-COD-SIST
+               MOVE 'PGMERR' TO MSG-COD-MENS
+               GO TO FIN-REPOS-RDC.
+           IF RDC-KEY-IRDC IN RDC = CCU-KEY-IRDC
+               GO TO FIN-REPOS-RDC.
+           MOVE 'RDC-KEY-IDLC' TO FIO-AKEY.
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM COL-FIO-RDC.
+           GO TO LUP-REPOS-RDC.
+       FIN-REPOS-RDC.
+           EXIT.
+
+       VER-CCU-MENS SECTION.
+       INI-VER-CCU-MENS.
+           IF CCU-MEN1 > SPACES AND CCU-MEN2 > SPACES
+               MOVE CCU-MENS TO FRM-MENS
+           ELSE
+           IF CCU-MEN1 > SPACES
+               MOVE CCU-MEN1 TO FRM-MEN2
+           ELSE
+           IF CCU-MEN2 > SPACES
+               MOVE CCU-MEN2 TO FRM-MEN2.
+       FIN-VER-CCU-MENS.
+           EXIT.
+
+       COL-BUS-CCU SECTION.
+       INI-COL-BUS-CCU.
+           MOVE 0 TO CCU-K.
+
+           MOVE CCU-CAI-IOPC IN CCU-VARI(1) TO
+                ROV-CAI-IOPC IN ROV.
+           MOVE CCU-IIC-IOPC IN CCU-VARI(1) TO
+                ROV-IIC-IOPC IN ROV.
+      *FLB CST  9-FEB-1994 PARA ARGENTINA ES DIFERENTE EL NOMBRE
+      *    MOVE SPACES                  TO ROV-KEY-ICAN IN ROV.
+           MOVE SPACES                  TO ROV-KEY-IVCT IN ROV.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+       LU1-COL-BUS-CCB.
+           PERFORM COL-FIO-ROV.
+           IF NOT ( FIO-STAT-OKS AND
+                    ROV-CAI-IOPC IN ROV =
+                    CCU-CAI-IOPC IN CCU-VARI(1) AND
+                    ROV-IIC-IOPC IN ROV =
+                    CCU-IIC-IOPC IN CCU-VARI(1) )
+               GO TO CON-COL-BUS-CCB.
+
+      *FLB CST  2-MAY-1994 MODIFICADO PARA ENVIAR LLAVE OPC ANTIGUA
+      *                    EN PRORROGA
+           MOVE ROV-CIC-IOPC IN ROV TO OPC-CIC-IOPC IN OPC.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM COL-FIO-OPC.
+           IF NOT FIO-STAT-OKS
+               MOVE 'COL'        TO MSG-COD-SIST
+               MOVE 'OPC    NEX' TO MSG-COD-MENS
+               GO TO FIN-COL-BUS-CCU.
+
+           MOVE OPC-IND-RENO IN OPC TO CCU-IND-RENO.
+      *FLB CST  2-MAY-1994 FIN
+
+      *FLB CST  12-MAY-1994 MODIFICA PROCESO DE ROV'S
+           ADD 1 TO CCU-K.
+           MOVE ROV-CAI-IOPV IN ROV TO CCU-CAI-DCAN(CCU-K).
+           MOVE ROV-IIC-IOPV IN ROV TO CCU-IIC-DCAN(CCU-K).
+      *FLB CST  9-FEB-1994 PARA ARGENTINA ES DIFERENTE EL NOMBRE
+      *    MOVE ROV-NUM-ICAN IN ROV TO CCU-NUM-DCAN(CCU-K).
+           MOVE ROV-NUM-IVCT IN ROV TO CCU-NUM-DCAN(CCU-K).
+
+           MOVE ROV-CIC-IOPV IN ROV TO OPC-CIC-IOPC IN OPC.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM COL-FIO-OPC.
+           IF NOT FIO-STAT-OKS
+               GO TO NXT-COL-BUS-CCB.
+
+           MOVE OPC-VAL-SCRE IN OPC TO CCU-VAL-SDLC(CCU-K).
+           MOVE OPC-COD-VCOC IN OPC TO CCU-VCOC(CCU-K).
+
+      * PARA Determinar si opera como DOCUMENTO DESCONTADO
+           MOVE 'TOC'               TO TOC-COD-TTAB IN TOC.
+           MOVE OPC-COD-TOOC IN OPC TO TOC-COD-TOCR IN TOC.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM COL-FIO-TOC.
+           IF ( NOT FIO-STAT-OKS OR TOC-MSC-STAT IN TOC = 'N' )
+               MOVE 'TOC    NEX' TO MSG-COD-MENS
+               GO TO FIN-COL-BUS-CCU.
+           MOVE TOC-MSC-OPEC IN TOC TO CCU-OPEC(CCU-K).
+
+           IF CCU-K = CCU-TCAN
+               GO TO CON-COL-BUS-CCB.
+
+      *FLB CST  12-MAY-1994 La posible afectacion por RDC-VAL-LIMD
+      * se hace despues, al procesar los RCV.
+      * Podria suceder que un VEN se renovara en OPC de otro CLI
+
+      *    MOVE DBC-CAI-ICLI IN DBC TO RDC-CAI-ICLI IN RDC
+      *    MOVE DBC-IIC-ICLI IN DBC TO RDC-IIC-ICLI IN RDC
+      *    MOVE OPC-CIC-IOPC IN OPC TO RDC-CIC-IOPC IN RDC
+      *    MOVE 0                   TO RDC-NUM-IDLC IN RDC
+      *    MOVE FIO-GET-NLS TO FIO-CMND
+      *    PERFORM COL-FIO-RDC
+      *    IF FIO-STAT-OKS AND
+      *       RDC-CAI-ICLI IN RDC = DBC-CAI-ICLI IN DBC AND
+      *       RDC-IIC-ICLI IN RDC = DBC-IIC-ICLI IN DBC AND
+      *       RDC-CIC-IOPC IN RDC = OPC-CIC-IOPC IN OPC
+      *        ADD 1 TO CCU-K
+      *        MOVE ROV-CAI-IOPV IN ROV TO CCU-CAI-DCAN(CCU-K)
+      *        MOVE ROV-IIC-IOPV IN ROV TO CCU-IIC-DCAN(CCU-K)
+      *FLB CST  9-FEB-1994 PARA ARGENTINA ES DIFERENTE EL NOMBRE
+      *        MOVE ROV-NUM-ICAN IN ROV TO CCU-NUM-DCAN(CCU-K)
+      *        MOVE ROV-NUM-IVCT IN ROV TO CCU-NUM-DCAN(CCU-K)
+      *        IF RDC-VAL-LIMD IN RDC = 100
+      *            MOVE OPC-VAL-SCRE IN OPC TO
+      *                 CCU-VAL-SDLC(CCU-K)
+      *            IF CCU-K = CCU-TCAN
+      *                GO TO CON-COL-BUS-CCB
+      *            ELSE
+      *                NEXT SENTENCE
+      *        ELSE
+      *            COMPUTE PES-SGV-DECI IN PES-VARI ROUNDED =
+      *                    OPC-VAL-SCRE IN OPC *
+      *                    RDC-VAL-LIMD IN RDC / 100
+      *            MOVE OPC-COD-VCOC IN OPC TO
+      *                 PES-COD-VCAM IN PES-VARI
+      *            PERFORM PES-SCTV
+      *            MOVE PES-SGV-ENTE IN PES-VARI TO
+      *                 CCU-VAL-SDLC(CCU-K)
+      *            IF CCU-K = CCU-TCAN
+      *                GO TO CON-COL-BUS-CCB.
+      *FLB CST 17-FEB-1994 FIN CARGA EL SCRE AFECTADO POR LIMD
+      *FLB CST  12-MAY-1994 fin
+
+
+       NXT-COL-BUS-CCB.
+      *FLB CST  2-MAY-1994 FIN ENVIAR LLAVE OPC ANTIGUA EN PRORROGA
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           GO TO LU1-COL-BUS-CCB.
+       CON-COL-BUS-CCB.
+           MOVE 1 TO CCU-I.
+       LU2-COL-BUS-CCB.
+           IF CCU-I > CCU-K
+               GO TO SEG-COL-BUS-CCU.
+           MOVE CCU-CAI-DCAN(CCU-I) TO ROV-CAI-IOPV IN ROV.
+           MOVE CCU-IIC-DCAN(CCU-I) TO ROV-IIC-IOPV IN ROV.
+      *FLB CST  9-FEB-1994 PARA ARGENTINA ES DIFERENTE EL NOMBRE
+      *    MOVE CCU-NUM-DCAN(CCU-I) TO ROV-NUM-ICAN IN ROV.
+           MOVE CCU-NUM-DCAN(CCU-I) TO ROV-NUM-IVCT IN ROV.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+       LU3-COL-BUS-CCB.
+           MOVE 'ROV-KEY-IVCT' TO FIO-AKEY.
+           PERFORM COL-FIO-ROV.
+           IF NOT ( FIO-STAT-OKS AND
+                    ROV-CAI-IOPV IN ROV = CCU-CAI-DCAN(CCU-I) AND
+                    ROV-IIC-IOPV IN ROV = CCU-IIC-DCAN(CCU-I) AND
+      *FLB CST  9-FEB-1994 PARA ARGENTINA ES DIFERENTE EL NOMBRE
+      *             ROV-NUM-ICAN IN ROV = CCU-NUM-DCAN(CCU-I) )
+                    ROV-NUM-IVCT IN ROV = CCU-NUM-DCAN(CCU-I) )
+               ADD 1 TO CCU-I
+               GO TO LU2-COL-BUS-CCB.
+
+           MOVE 1 TO CCU-L.
+       LU4-COL-BUS-CCU.
+           IF CCU-L NOT > CCU-J
+               IF ROV-CIC-IOPC IN ROV = CCU-CIC-IOPC(CCU-L)
+                   MOVE FIO-GET-NXT TO FIO-CMND
+                   GO TO LU3-COL-BUS-CCB
+               ELSE
+                   ADD 1 TO CCU-L
+                   GO TO LU4-COL-BUS-CCU.
+
+           MOVE ROV-CIC-IOPC IN ROV TO OPC-CIC-IOPC IN OPC.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM COL-FIO-OPC.
+      *    IF FIO-STAT-OKS AND OPC-MSC-STAT IN OPC = 'L'
+           IF FIO-STAT-OKS AND OPC-LIQUIDADA
+               MOVE DBC-CAI-ICLI IN DBC TO RDC-CAI-ICLI IN RDC
+               MOVE DBC-IIC-ICLI IN DBC TO RDC-IIC-ICLI IN RDC
+               MOVE OPC-CIC-IOPC IN OPC TO RDC-CIC-IOPC IN RDC
+               MOVE 0                   TO RDC-NUM-IDLC IN RDC
+               MOVE FIO-GET-NLS TO FIO-CMND
+               PERFORM COL-FIO-RDC
+               IF FIO-STAT-OKS AND
+                  RDC-CAI-ICLI IN RDC = DBC-CAI-ICLI IN DBC AND
+                  RDC-IIC-ICLI IN RDC = DBC-IIC-ICLI IN DBC AND
+                  RDC-CIC-IOPC IN RDC = OPC-CIC-IOPC IN OPC
+                   ADD 1 TO CCU-J
+                   MOVE OPC-CIC-IOPC IN OPC TO
+                        CCU-CIC-IOPC IN CCU-VARI(CCU-J)
+      *FLB CST 17-FEB-1994 CARGA EL SCRE AFECTADO POR LIMD
+                   IF RDC-VAL-LIMD IN RDC = 100
+                       MOVE OPC-VAL-SCRE IN OPC TO
+                            CCU-VAL-SCRE IN CCU-VARI(CCU-J)
+                       IF CCU-J = CCU-TOPC
+                           GO TO SEG-COL-BUS-CCU
+                       ELSE
+                           NEXT SENTENCE
+                   ELSE
+                       COMPUTE PES-SGV-DECI IN PES-VARI ROUNDED =
+                           OPC-VAL-SCRE IN OPC *
+                           RDC-VAL-LIMD IN RDC / 100
+                       MOVE OPC-COD-VCOC IN OPC TO
+                            PES-COD-VCAM IN PES-VARI
+                       PERFORM PES-SCTV
+                       MOVE PES-SGV-ENTE IN PES-VARI TO
+                            CCU-VAL-SCRE IN CCU-VARI(CCU-J)
+                       IF CCU-J = CCU-TOPC
+                           GO TO SEG-COL-BUS-CCU.
+      *FLB CST 17-FEB-1994 FIN
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           GO TO LU3-COL-BUS-CCB.
+       SEG-COL-BUS-CCU.
+           MOVE 1 TO CCU-I.
+       LU5-COL-BUS-CCU.
+           IF CCU-I > CCU-K
+               GO TO BLK-COL-BUS-CCU.
+           MOVE CCU-CAI-DCAN(CCU-I) TO RCV-CAI-IOPC IN RCV.
+           MOVE CCU-IIC-DCAN(CCU-I) TO RCV-IIC-IOPC IN RCV.
+           MOVE CCU-NUM-DCAN(CCU-I) TO RCV-NUM-ICAN IN RCV.
+           MOVE SPACES              TO RCV-KEY-IVCT IN RCV.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM COL-FIO-RCV.
+           IF FIO-STAT-OKS AND
+              RCV-CAI-IOPC IN RCV = CCU-CAI-DCAN(CCU-I) AND
+              RCV-IIC-IOPC IN RCV = CCU-IIC-DCAN(CCU-I) AND
+              RCV-NUM-ICAN IN RCV = CCU-NUM-DCAN(CCU-I)
+      *FLB CST  11-MAY-1994 INI
+               PERFORM CCU-OBT-SDLC
+               IF MSG-COD-MENS > SPACES
+                   GO TO FIN-COL-BUS-CCU.
+      *FLB CST  11-MAY-1994 FIN
+
+           ADD 1 TO CCU-I.
+           GO TO LU5-COL-BUS-CCU.
+       BLK-COL-BUS-CCU.
+           IF CCU-J < CCU-TOPC
+               ADD 1 TO CCU-J
+               MOVE SPACES TO CCU-CAI-IOPC IN CCU-VARI(CCU-J)
+               MOVE ZEROES TO CCU-IIC-IOPC IN CCU-VARI(CCU-J).
+           IF CCU-K < CCU-TCAN
+               ADD 1 TO CCU-K
+               MOVE SPACES TO CCU-CAI-DCAN IN CCU-VARI(CCU-K)
+               MOVE ZEROES TO CCU-IIC-DCAN IN CCU-VARI(CCU-K)
+               MOVE ZEROES TO CCU-NUM-DCAN IN CCU-VARI(CCU-K)
+               MOVE 0      TO CCU-VAL-SDLC IN CCU-VARI(CCU-K).
+           MOVE SPACES TO CCU-OPE-INDS IN CCU-VARI.
+       FIN-COL-BUS-CCU.
+           EXIT.
+
+      *FLB CST  11-MAY-1994
+       CCU-OBT-SDLC SECTION.
+       INI-CCU-OBT-SDLC.
+
+           MOVE RCV-CAI-IOPC IN RCV TO DLC-CAI-IOPC IN DLC.
+           MOVE RCV-IIC-IOPC IN RCV TO DLC-IIC-IOPC IN DLC.
+           MOVE RCV-NUM-IDLC IN RCV TO DLC-NUM-IDLC IN DLC.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM COL-FIO-DLC.
+           IF NOT FIO-STAT-OKS
+               MOVE 'DLC    NEX' TO MSG-COD-MENS
+               GO TO FIN-CCU-OBT-SDLC.
+
+      *FLB CST  11-MAY-1994 MODIFICADA LA FORMA DE OBTENER SDLC
+      *FLB CST 17-FEB-1994 CARGA EL SDLC AFECTADO POR LIMD
+
+      *FLB CST  9-JUN-1994 ARREGLO PARA NOVACIONES
+           MOVE DBC-CIC-ICLI IN DBC TO RDC-CIC-ICLI IN RDC.
+           MOVE DLC-CAI-IOPC IN DLC TO RDC-CAI-IOPC IN RDC.
+           MOVE DLC-IIC-IOPC IN DLC TO RDC-IIC-IOPC IN RDC.
+           MOVE ZEROES              TO RDC-NUM-IDLC IN RDC.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM COL-FIO-RDC.
+           IF NOT ( FIO-STAT-OKS OR
+                    CCU-IND-RENO = 'NOV' )
+               MOVE 'RDC    NEX' TO MSG-COD-MENS
+               GO TO FIN-CCU-OBT-SDLC.
+      *FLB CST  9-JUN-1994 FIN ARREGLO PARA NOVACIONES
+
+           MOVE RCV-CAI-IOPC IN RCV TO CCU-CAI-DCAN(CCU-I).
+           MOVE RCV-IIC-IOPC IN RCV TO CCU-IIC-DCAN(CCU-I).
+
+      *    Si "opera como" Documento Descontado,
+      *       deja SDLC con SCRE de la OPC cancelada
+      *       fuerza CCU-NUM-DCAN = ZEROES
+           IF CCU-OPEC(CCU-I) = 'D'
+               MOVE CCU-I TO CCU-M
+               PERFORM CCU-BUS-DCAN
+               SUBTRACT RCV-SGV-CAPI IN RCV FROM CCU-VAL-SDLC(CCU-I)
+               MOVE ZEROES TO CCU-NUM-DCAN(CCU-I)
+               PERFORM REDONDEA-CCU-VAL-SDLC
+               MOVE CCU-M TO CCU-I
+               GO TO FIN-CCU-OBT-SDLC.
+
+           MOVE RCV-NUM-IDLC IN RCV TO CCU-NUM-DCAN(CCU-I).
+
+      *    Basado en que NO "opera como" Documento Descontado, solo se
+      *    permite una cancelacion a un DLC, como parte de, p. ej. la
+      *    renovacion de varios VEN
+           SUBTRACT RCV-SGV-CAPI IN RCV FROM DLC-VAL-SDLC IN DLC
+                GIVING CCU-VAL-SDLC(CCU-I).
+
+       REDONDEA-CCU-VAL-SDLC.
+
+      *FLB CST  9-JUN-1994 ARREGLO PARA NOVACIONES
+      *    IF RDC-VAL-LIMD IN RDC < 100
+           IF RDC-CIC-ICLI IN RDC = DBC-CIC-ICLI IN DBC AND
+              RDC-VAL-LIMD IN RDC < 100
+      *FLB CST  9-JUN-1994 FIN ARREGLO PARA NOVACIONES
+
+               COMPUTE PES-SGV-DECI IN PES-VARI ROUNDED =
+                       CCU-VAL-SDLC(CCU-I) *
+                       RDC-VAL-LIMD IN RDC / 100
+               MOVE CCU-VCOC(CCU-I) TO PES-COD-VCAM IN PES-VARI
+               PERFORM PES-SCTV
+               MOVE PES-SGV-ENTE IN PES-VARI TO CCU-VAL-SDLC(CCU-I).
+       FIN-CCU-OBT-SDLC.
+           EXIT.
+
+      *FLB CST  11-MAY-1994
+       CCU-BUS-DCAN SECTION.
+       INI-CCU-BUS-DCAN.
+           MOVE 0 TO CCU-I.
+       LUP-CCU-BUS-DCAN.
+           ADD 1 TO CCU-I.
+           IF CCU-I > CCU-TCAN OR
+              CCU-IIC-DCAN IN CCU-VARI(CCU-I) = ZEROES
+               MOVE CCU-M TO CCU-I
+               GO TO FIN-CCU-BUS-DCAN.
+
+           IF CCU-CAI-DCAN(CCU-I) = CCU-CAI-DCAN(CCU-M) AND
+              CCU-IIC-DCAN(CCU-I) = CCU-IIC-DCAN(CCU-M)
+               GO TO FIN-CCU-BUS-DCAN.
+
+           GO TO LUP-CCU-BUS-DCAN.
+       FIN-CCU-BUS-DCAN.
+           EXIT.
+
+       COL-PRO-CCU SECTION.
+       INI-COL-PRO-CCU.
+      * CALCULA CUPOS DE LINEAS DE CREDITO Y CLF
+      *FLB CST 11-MAR-1994 REVISADO FLB Y JSS
+           MOVE SPACES TO CCU-MENS.
+           MOVE ZEROES TO CCU-NUM-MENS.
+           MOVE ZEROES TO CCU-NUM-MEN2.
+           PERFORM LDC-LNK-CCU.
+           IF NO-CALC-ERROR-OPCS-ANTIGUAS OR
+              NO-CALC-ERROR-OPC-EN-CURSE
+
+      *FLB CST   29-APR-1994 MODIFICADO PARA APROBACION TELEFONICA
+               IF LLAMADA-APROBACION-TELEFONICA AND
+                  NO-CALCULO-POR-NO-EXISTIR
+      *   termina, hay un error FATAL, CLF debe existir
+                   GO TO CON-COL-PRO-CCU
+               ELSE
+               IF NO-CALCULO-POR-NO-EXISTIR
+      *HPM ini 11-MAY-1994
+                   IF ERROR-POR-NO-EXISTIR
+                       GO TO CON-COL-PRO-CCU
+                   ELSE
+      *HPM fin 11-MAY-1994
+                   MOVE CCU-CMMA TO CEG-CMMA
+      *FLB CST  26-MAY-1994
+                   MOVE SPACES TO CEG-CAI-ICLF
+                   MOVE ZEROES TO CEG-IIC-ICLF
+      *FLB CST  26-MAY-1994
+                   PERFORM LDC-LNK-CEG
+      *FLB CST  5-JUL-1994
+                   IF CEG-OK-OPCS-ANTIGUAS AND CEG-OK-OPC-EN-CURSE
+                       NEXT SENTENCE
+                   ELSE
+                   IF CEG-ERROR-OPCS-ANTIGUAS OR
+                      CEG-ERROR-OPC-EN-CURSE
+                       IF CEG-NO-CALCULO-POR-NO-EXISTIR
+                           NEXT SENTENCE
+                       ELSE
+                           MOVE CEG-CMMA TO CCU-CMMA
+                           GO TO CON-COL-PRO-CCU
+                   ELSE
+                   IF CEG-EXCESO-OPCS-ANTIGUAS OR
+                      CEG-EXCESO-OPC-EN-CURSE
+                       MOVE CEG-CMMA TO CCU-CMMA
+                       GO TO CON-COL-PRO-CCU
+                   ELSE
+                   IF OK-OPCS-ANTIGUAS AND OK-OPC-EN-CURSE
+                       MOVE CEG-CMMA TO CCU-CMMA
+                   ELSE
+                       NEXT SENTENCE
+      *FLB CST  5-JUL-1994
+               ELSE
+                   GO TO CON-COL-PRO-CCU
+      *FLB CST   29-APR-1994 FIN
+           ELSE
+           IF EXCESO-OPCS-ANTIGUAS OR EXCESO-OPC-EN-CURSE
+               GO TO CON-COL-PRO-CCU
+           ELSE
+               MOVE CCU-CMMA TO CEG-CMMA
+      *FLB CST  26-MAY-1994
+               MOVE SPACES TO CEG-CAI-ICLF
+               MOVE ZEROES TO CEG-IIC-ICLF
+      *FLB CST  26-MAY-1994
+               PERFORM LDC-LNK-CEG
+               IF CEG-OK-OPCS-ANTIGUAS AND CEG-OK-OPC-EN-CURSE
+                   NEXT SENTENCE
+               ELSE
+               IF CEG-ERROR-OPCS-ANTIGUAS OR
+                  CEG-ERROR-OPC-EN-CURSE
+                   IF CEG-NO-CALCULO-POR-NO-EXISTIR
+                       NEXT SENTENCE
+                   ELSE
+                       MOVE CEG-CMMA TO CCU-CMMA
+                       GO TO CON-COL-PRO-CCU
+               ELSE
+      *FLB CST  5-JUL-1994 MENSAJES EN CASO DE EXCESOS
+               IF CEG-EXCESO-OPCS-ANTIGUAS OR
+                  CEG-EXCESO-OPC-EN-CURSE
+                   MOVE CEG-CMMA TO CCU-CMMA
+                   GO TO CON-COL-PRO-CCU
+               ELSE
+      *FLB CST  5-JUL-1994
+               IF OK-OPCS-ANTIGUAS AND OK-OPC-EN-CURSE
+                   MOVE CEG-CMMA TO CCU-CMMA.
+
+           IF ( OK-OPCS-ANTIGUAS AND OK-OPC-EN-CURSE ) OR
+              NO-CALCULO-POR-NO-EXISTIR
+               MOVE SPACES TO MSG-COD-MENS
+               GO TO FIN-COL-PRO-CCU.
+
+       CON-COL-PRO-CCU.
+           MOVE CCU-COD-SIST IN CCU-VARI TO MSG-COD-SIST.
+           IF CCU-NUM-MENS > ZEROES AND
+              ( CCU-NUM-MEN2 > ZEROES OR CCU-CAMB > SPACES )
+               MOVE CCU-COD-MENS IN CCU-VARI TO MSG-COD-MENS
+               PERFORM GET-MSG
+               MOVE MSG-GLS-DESC TO CCU-MEN1
+               IF CCU-CAMB > SPACES
+                   MOVE CCU-CAMB TO CCU-MEN2
+               ELSE
+                   MOVE CCU-COD-MEN2 IN CCU-VARI TO MSG-COD-MENS
+                   PERFORM GET-MSG
+                   MOVE MSG-GLS-DESC TO CCU-MEN2
+           ELSE
+           IF CCU-NUM-MENS > ZEROES
+               MOVE CCU-COD-MENS IN CCU-VARI TO MSG-COD-MENS
+               PERFORM GET-MSG
+               MOVE MSG-GLS-DESC TO CCU-MEN2
+           ELSE
+               MOVE CCU-COD-MEN2 IN CCU-VARI TO MSG-COD-MENS
+               PERFORM GET-MSG
+               MOVE MSG-GLS-DESC TO CCU-MEN2.
+       FIN-COL-PRO-CCU.
+           EXIT.
+

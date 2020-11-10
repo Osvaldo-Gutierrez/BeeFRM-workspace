@@ -1,0 +1,586 @@
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. COLPGCTB.
+      *AUTHOR.         ZAPATA FUENTES HUGO.
+      *                DATE-WRITTEN,  01/06/92.
+      *COMPILED.                      10.07.98.
+      ******************************************************************
+      *  INTERSOFT                                                     *
+      *  MIGRACION A COBOL OS/390                                      *
+      *  FECHA: 30 DE MARZO DE 1998                                    *
+      ******************************************************************
+      ******************************************************************
+      *  SISTEMA  : SISTEMA COLOCACIONES                               *
+      *  PROGRAM. : HUGO ZAPATA                                        *
+      *  OBJETIVO :GENERAR MOV. A CONTABILIDAD  POR CONCEPTO           *
+      *            DE COBRO DE IMPUESTOS.                              *
+      *  Archivos :                                                    *
+      *   ENTRADA : LDA-390, LINEAS DE AVANCE.                         *
+      *             COLVIMO,  ARCHIVO DE IMPUESTOS. SAM                *
+      *   SALIDA  : COLVCTB   ARCHIVO PARA CONTABILIDADA.              *
+      *             COLVTOT   ARCHIVO PARA REPORTE REMOTO.             *
+      *                                                                *
+      *   Ent/Sal :                                                    *
+      *                                                                *
+      *   Trabajo :                                                    *
+      *                                                                *
+      *  Mantenciones                                                  *
+      *  ============                                                  *
+      *            Programador: ...........................            *
+      *            Fecha      : dd/mm/aa                               *
+      *            Cambio     : ...........................            *
+      *                                                                *
+      ******************************************************************
+       ENVIRONMENT DIVISION.
+      **********************
+       CONFIGURATION SECTION.
+      *=====================
+       SPECIAL-NAMES.
+           C01 IS CANAL-1
+           DECIMAL-POINT IS COMMA.
+       INPUT-OUTPUT SECTION.
+       FILE-CONTROL.
+           SELECT COLVIMO  ASSIGN TO DA-S-COLVIMO.
+           SELECT COLVCTB  ASSIGN TO DA-S-COLVCTB.
+           SELECT COLVTOT  ASSIGN TO  AS-COLVTOT
+                  ORGANIZATION IS SEQUENTIAL
+                  FILE STATUS IS FS-COLVTOT.
+           SELECT SOR-SORT ASSIGN TO SYS001-DA-S-SORTWK1.
+       DATA DIVISION.
+       FILE SECTION.
+       FD  COLVIMO
+           RECORD  CONTAINS 128 CHARACTERS
+           BLOCK   CONTAINS 0   RECORDS
+           LABEL RECORDS IS STANDARD.
+      ******************************************************************
+      *             DESCRIPCION DE REGISTRO (COLVIMO)
+      *             ----------------------------------
+      *
+      *    ARCHIVO   : MOVTOS. DE CARGOS, ABONOS E IMPUESTO
+      *              : GENERADO POR PGM COLPGIMP.
+      *    FD        : COLVIMO
+      *    PREFIJO   : 'IMO'
+      *    LARGO REG.: 128
+      *    ORGANIZAC.: SAM
+      *    BLOQUEO   : NO
+      *
+      ******************************************************************
+      *
+       01  IMO-REGISTRO.
+
+           05  IMO-CLAVE-LDA                   PIC  X(12).
+           05  IMO-CIC-IOPC                    PIC  X(12).
+           05  IMO-TIPO-MOV                    PIC  X(01).
+           05  IMO-FEC-MOV.
+               10  IMO-FEC-MOV-SS              PIC  X(02).
+               10  IMO-FEC-MOV-AA              PIC  X(02).
+               10  IMO-FEC-MOV-MM              PIC  X(02).
+               10  IMO-FEC-MOV-DD              PIC  X(02).
+           05  IMO-MONTO                       PIC S9(11)V9999.
+           05  IMO-INTERES                     PIC S9(11)V9999.
+           05  IMO-REAJUSTES                   PIC S9(11)V9999.
+           05  IMO-SDO-AVANCE                  PIC S9(11)V9999.
+           05  IMO-TASA                        PIC S9(04)V9999.
+           05  IMO-IND-VENCIDA                 PIC  X(01).
+           05  IMO-FILLER                      PIC  X(26).
+
+       FD  COLVCTB
+           RECORD  CONTAINS  80 CHARACTERS
+           BLOCK   CONTAINS 0   RECORDS
+           LABEL RECORDS IS STANDARD.
+      ******************************************************************
+      *             DESCRIPCION DE REGISTRO (COLVCTB)
+      *             ----------------------------------
+      *
+      *    ARCHIVO   : MOVTOS. CARGOS, ABONOS A CTAS. CTES. X IMPTO.
+      *              : GENERADO POR PGM COLPGCTB.
+      *    FD        : COLVCTB
+      *    PREFIJO   : 'CTB'
+      *    LARGO REG.: 80
+      *    ORGANIZAC.: SAM
+      *    BLOQUEO   : NO
+      *
+      ******************************************************************
+       01  CTB-REGISTRO.
+           05 CTB-TIPO-DOCTO      PIC 9(01).
+           05 CTB-SUC-MVTO        PIC 9(03).
+           05 CTB-COD-CTA         PIC 9(09).
+           05 CTB-COD-MONEDA      PIC 9(02).
+           05 FILLER              PIC X(01).
+           05 CTB-VALOR           PIC 9(13)V99.
+           05 CTB-NUM-DOCTO       PIC X(06).
+           05 CTB-GLOSA           PIC X(30).
+           05 FILLER              PIC X(13).
+
+
+       FD  COLVTOT
+           RECORD  CONTAINS 100 CHARACTERS
+           BLOCK   CONTAINS 0   RECORDS
+           LABEL RECORDS IS STANDARD.
+      ******************************************************************
+      *             DESCRIPCION DE REGISTRO (COLVTOT)
+      *             ----------------------------------
+      *
+      *    ARCHIVO   : TOTALES REFERENCIALES
+      *              : ACTUALIZADO POR  PGM COLPGCTB.
+      *    FD        : COLVTOT
+      *    PREFIJO   : 'TOT'
+      *    LARGO REG.: XXX
+      *    ORGANIZAC.: VSAM ESDS.
+      *    BLOQUEO   : NO
+      *
+      ******************************************************************
+       01  TOT-REGISTRO.
+           02 TOT-CLAVE.
+              03 TOT-OFICINA PIC 9(3).
+              03 TOT-SIST    PIC 9(2).
+              03 TOT-NROLINEA PIC 9(2).
+           02 TOT-FECHA      PIC 9(6).
+           02 TOT-FILLER     PIC X(6).
+           02 TOT-LINEA      PIC X(81).
+       SD  SOR-SORT
+           RECORD CONTAINS 18 CHARACTERS.
+       01  SORT-REG.
+           10 SOR-MONTO         PIC S9(11)V9999.
+           10 SOR-OFICINA       PIC X(03).
+       WORKING-STORAGE SECTION.
+      *-----------------------
+       01  TAR-TARJETA.
+           10 TAR-FECHA.
+              20  TAR-FECHA-AA          PIC 9(02).
+              20  TAR-FECHA-MM          PIC 9(02).
+              20  TAR-FECHA-DD          PIC 9(02).
+           10 TAR-NADA                  PIC X(74).
+       01  VARIABLES.
+           10 FS-COLVTOT        PIC 9(02)  VALUE 0.
+           10 W-OFICINA         PIC X(03).
+           10 I                 PIC 9(02) VALUE 0.
+       01  SW-SWITCHES-OPC.
+           20 SW-LDA                 PIC 9(01) VALUE 0.
+              88 CON-LDA             VALUE 0.
+              88 SIN-LDA             VALUE 1.
+           20 SW-SORT                PIC 9(01) VALUE 0.
+              88 SORT-OK             VALUE 0.
+              88 FIN-SORT            VALUE 1.
+           20 SW-COLVIMO             PIC 9(01) VALUE 0.
+              88 COLVIMO-OK          VALUE 0.
+              88 FIN-COLVIMO         VALUE 1.
+       01  W-STATUS-ERRORES.
+           20 WR-SECCION             PIC X(30).
+           20 WR-PARRAFO             PIC X(30).
+           20 WR-COMANDO             PIC X(30).
+           20 WR-ARCHIVO             PIC X(30).
+           20 WR-STATUS              PIC X(30).
+           20 WR-TERMINAR            PIC X(01)  VALUE SPACES.
+       01  W-ACUMULADORES.
+           10 W-MONTO                PIC S9(12)V9999 VALUE 0.
+           10 WA-SEL                 PIC 9(06)    VALUE 0.
+           10 WA-GRA-CTB             PIC 9(06)    VALUE 0.
+           10 WA-GRA-TOT             PIC 9(06)    VALUE 0.
+           10 WA-SIN-LDA             PIC 9(06)    VALUE 0.
+       01  LINEAS-IMPRESION.
+           05 LINEA-01.
+              10 FILLER       PIC X VALUE IS '1'.
+              10 FILLER       PIC X(20) VALUE IS SPACES.
+              10 FILLER       PIC X(47) VALUE IS
+                    'MOVIMIENTO CONTABILIZADO LINEAS DE AVANCE      '.
+              10 FILLER       PIC X(14) VALUE IS SPACES.
+
+           05 LINEA-02.
+              10 FILLER       PIC X VALUE IS '-'.
+              10 FILLER       PIC X(50) VALUE IS SPACES.
+              10 FILLER       PIC X(04) VALUE IS 'DEBE'.
+              10 FILLER       PIC X(15) VALUE IS SPACES.
+              10 FILLER       PIC X(05) VALUE IS 'HABER'.
+              10 FILLER       PIC X(06) VALUE IS SPACES.
+
+           05 LINEA-03.
+              10 FILLER        PIC X VALUE IS ' '.
+              10 FILLER        PIC X(04) VALUE IS SPACES.
+              10 FILLER        PIC X(16) VALUE IS 'MVTOS. IMPUESTOS'.
+              10 FILLER        PIC X(19) VALUE IS SPACES.
+              10 DEBE-LIN03    PIC ZZZ.ZZZ.ZZZ.ZZ9,99.
+              10 FILLER        PIC X(02) VALUE IS SPACES.
+              10 HABER-LIN03   PIC ZZZ.ZZZ.ZZZ.ZZ9,99.
+              10 FILLER        PIC X(03) VALUE IS SPACES.
+
+           05 LINEA-04.
+              10 FILLER       PIC X VALUE IS ' '.
+              10 FILLER       PIC X(04) VALUE IS SPACES.
+              10 FILLER       PIC X(74) VALUE IS ALL '-'.
+              10 FILLER       PIC X(02) VALUE IS SPACES.
+
+           05 LINEA-05.
+              10 FILLER       PIC X VALUE IS '0'.
+              10 FILLER       PIC X(04) VALUE IS SPACES.
+              10 FILLER       PIC X(45) VALUE IS
+                    'MVTO. A CTAS.CTES. DESDE LINEAS DE AVANCE    '.
+              10 FILLER       PIC X(31) VALUE IS SPACES.
+
+           05 LINEA-06.
+              10 FILLER       PIC X VALUE IS '0'.
+              10 FILLER       PIC X(04) VALUE IS SPACES.
+              10 FILLER       PIC X(16) VALUE IS 'IMPUESTO        '.
+              10 FILLER       PIC X(23) VALUE IS SPACES.
+              10 DEBE-LIN06   PIC ZZZ.ZZZ.ZZ9,99.
+              10 FILLER       PIC X(23) VALUE IS SPACES.
+
+           05 LINEA-07.
+              10 FILLER       PIC X VALUE IS ' '.
+              10 FILLER       PIC X(04) VALUE IS SPACES.
+              10 FILLER       PIC X(74) VALUE IS ALL '-'.
+              10 FILLER       PIC X(02) VALUE IS SPACES.
+      *
+       01  LINEAS-DE-IMPRESION REDEFINES LINEAS-IMPRESION.
+           05 LINEAS          PIC X(81) OCCURS 7 TIMES.
+
+      *****************************************************************
+      *          USER INFORMATION BLOCK
+      *****************************************************************
+       01  UIB.
+           05 FILLER                 PIC X(32) VALUE 'COLPGCTB'.
+      *****************************************************************
+      *           REQUEST AREA
+      *****************************************************************
+       01  REQ-AREA-LDA.
+           03 LDA-COMMAND         PIC X(5)     VALUE 'REDKY'.
+           03 LDA-TABLE           PIC X(3)     VALUE 'LDA'.
+           03 LDA-KEY             PIC X(5)     VALUE 'LDA01'.
+           03 LDA-RET-COD         PIC X(2)     VALUE SPACES.
+           03 LDA-INT-RC          PIC X(1).
+           03 LDA-DB-ID           PIC S9(4)    COMP VALUE +390.
+           03 LDA-REC-ID          PIC X(7).
+           03 FILLER              PIC X(25).
+           03 LDA-CONT-MAX        PIC S9(4)    COMP.
+           03 LDA-CONT-ID         PIC S9(4)    COMP.
+           03 FILLER              PIC X(22).
+           03 LDA-VALUE           PIC X(50).
+      *01  REG-LDA.
+      *    COPYDD COL-R-LDA.COL-E-LDA00(PROD),01,D
+      *                             LINEA DE AVANCES
+       01  LDA.
+      *                   CLAVE
+                   04  LDA-CLV-LDA-1.
+      *                             CIC CLIENTE
+                       05  CLI-CIC      PICTURE X(12).
+      *                             CODIGO OPERACION (CLAVE PRIMARIA)
+                       05  LDA-COP.
+      *                             NUMERO SISTEMA
+                           06  LDA-NUM-SIS
+                                    PICTURE X(4).
+      *                             CODIGO CORRELATIVO
+                           06  LDA-COD-CRR
+                                    PICTURE X(8).
+      *                             CODIGO OFICINA
+                   04  LDA-COD-OFI  PICTURE X(3).
+      *                             ESTADO OPERACION
+                   04  LDA-COD-EST  PICTURE X(3).
+      *                             VALOR DE CAMBIO (MONEDA)
+                   04  LDA-VCB      PICTURE X(6).
+      *                             CODIGO EJECUTIVO
+                   04  LDA-COD-EJE  PICTURE X(12).
+      *                             FECHA INGRESO COMPUTACIONAL
+                   04  LDA-FEC-ING-CMP.
+      *                             FECHA (ANO) INGRESO COMPUT.
+                       05  LDA-FA-ING-CMP
+                                    PICTURE 9(4).
+      *                             FECHA (MES) INGRESO COMPUT.
+                       05  LDA-FM-ING-CMP
+                                    PICTURE 9(2).
+      *                             FECHA (MES) INGRESO COMPUT.
+                       05  LDA-FD-ING-CMP
+                                    PICTURE 9(2).
+      *                             FECHA CURSE REAL
+                   04  LDA-FEC-CUR-REA.
+      *                             FECHA (ANO) CURSE REAL
+                       05  LDA-FA-CUR-REA
+                                    PICTURE 9(4).
+      *                             FECHA (MES) CURSE REAL
+                       05  LDA-FM-CUR-REA
+                                    PICTURE 9(2).
+      *                             FECHA (MES) CURSE REAL
+                       05  LDA-FD-CUR-REA
+                                    PICTURE 9(2).
+      *                             FECHA RENOVACION
+                   04  LDA-FEC-REN-LIN.
+      *                             FECHA (ANO) RENOVACION
+                       05  LDA-FA-REN-LIN
+                                    PICTURE 9(4).
+      *                             FECHA (MES) RENOVACION
+                       05  LDA-FM-REN-LIN
+                                    PICTURE 9(2).
+      *                             FECHA (DIA) RENOVACION
+                       05  LDA-FD-REN-LIN
+                                    PICTURE 9(2).
+      *                             FECHA VENCIMIENTO LINEA
+                   04  LDA-FEC-VTO-LIN.
+      *                             FECHA (ANO) VENCIMIENTO LINEA
+                       05  LDA-FA-VTO-LIN
+                                    PICTURE 9(4).
+      *                             FECHA (MES) VENCIMIENTO LINEA
+                       05  LDA-FM-VTO-LIN
+                                    PICTURE 9(2).
+      *                             FECHA (DIA) VENCIMIENTO LINEA
+                       05  LDA-FD-VTO-LIN
+                                    PICTURE 9(2).
+      *                             MONTO AUTORIZADO LINEA
+                   04  LDA-VAL-AUT  PICTURE S9(11)V9(4).
+      *                             FECHA ULTIMA ACTUALIZACION
+                   04  LDA-FEC-ULT-ACT.
+      *                             FECHA (ANO) ULTIMA ACTUALIZ.
+                       05  LDA-FA-ULT-ACT
+                                    PICTURE 9(4).
+      *                             FECHA (MES) ULTIMA ACTUALIZ.
+                       05  LDA-FM-ULT-ACT
+                                    PICTURE 9(2).
+      *                             FECHA (DIA) ULTIMA ACTUALIZ.
+                       05  LDA-FD-ULT-ACT
+                                    PICTURE 9(2).
+      *                             HORA ULTIMA ACTUALIZACION
+                   04  LDA-HOR-ACT  PICTURE 9(6).
+      *                             TERMINAL ULTIMA ACTUALIZACION
+                   04  LDA-TML-ACT  PICTURE X(4).
+      *                             ID. USUARIO ULT ACTUALIZACION
+                   04  LDA-IDN-USU-ACT
+                                    PICTURE X(12).
+      *                             CUENTA CORRIENTE
+                   04  CCT-COP.
+      *                             NUMERO DE SISTEMA
+                       05  CCT-NUM-SIS
+                                    PICTURE X(4).
+      *                             CODIGO CORRELATIVO
+                       05  CCT-COD-CRR
+                                    PICTURE X(8).
+                   04  FILLER1      PICTURE X(20).
+
+      ******************************************************************
+      *                     ELEMENT LIST
+      ******************************************************************
+
+
+       01  ELEM-LIST-LDA.
+           05 ELEM-1          PIC X(5) VALUE 'LDA01'.
+           05 ELEM-SEC        PIC X(1).
+           05 FILLER          PIC X(5) VALUE SPACES.
+       PROCEDURE DIVISION.
+      *------------------
+       A-CONTROL SECTION.
+           ENTRY  'DBMSCBL'.
+       AA-INICIALIZACION.
+           PERFORM B-INICIO.
+       AB-PROCESAMIENTO.
+           PERFORM C-PROCESAR.
+       AC-TERMINACION.
+           PERFORM D-TERMINAR.
+       AZ-FIN-DE-PROCESO.
+           GOBACK.
+
+       B-INICIO SECTION.
+
+       B0-CONTROL.
+      *-----------
+           PERFORM BA-ABRIR-ARCHIVOS.
+           GO TO   BZ-FIN-SECCION.
+
+       BA-ABRIR-ARCHIVOS.
+      *-----------------
+             ACCEPT   TAR-TARJETA    FROM SYSIN.
+             OPEN INPUT    COLVIMO
+                  EXTEND   COLVTOT
+                  OUTPUT   COLVCTB.
+
+           IF FS-COLVTOT = 35
+              CLOSE COLVTOT
+              OPEN OUTPUT COLVTOT
+           END-IF.
+
+             IF FS-COLVTOT NOT = 0
+                MOVE 'BA-ABRIR-ARCHI'      TO WR-PARRAFO
+                MOVE 'B-INICIO          '  TO WR-SECCION
+                MOVE 'OPEN OUTPUT'         TO WR-COMANDO
+                MOVE 'COLVTOT           '  TO WR-ARCHIVO
+                MOVE FS-COLVTOT            TO WR-STATUS
+                MOVE 'S'                   TO WR-TERMINAR
+           END-IF.
+
+
+       BZ-FIN-SECCION.
+      *---------------
+           EXIT.
+
+       C-PROCESAR SECTION.
+      *-----------------
+       C0-CONTROL.
+      *-----------
+           IF WR-TERMINAR = 'S'
+              GO TO CZ-FIN-SECCION
+           END-IF.
+           SORT SOR-SORT ON ASCENDING  KEY SOR-OFICINA
+           INPUT  PROCEDURE E-ENTRADA
+           OUTPUT PROCEDURE S-SALIDA.
+           GO TO CZ-FIN-SECCION.
+
+       CZ-FIN-SECCION.
+      *---------------
+           EXIT.
+
+
+       E-ENTRADA SECTION.
+      *------------------
+           PERFORM EA-LEER-COLVIMO.
+           PERFORM EB-LLENAR-SORT UNTIL FIN-COLVIMO.
+           GO TO EZ-FIN-SECCION.
+
+       EA-LEER-COLVIMO.
+      *------------------
+           READ COLVIMO AT END SET FIN-COLVIMO TO TRUE.
+
+       EB-LLENAR-SORT.
+      *------------------
+           IF IMO-TIPO-MOV = 'I'
+           AND IMO-MONTO > 0
+               PERFORM EC-SELECCINADO.
+           PERFORM EA-LEER-COLVIMO.
+
+       EC-SELECCINADO.
+      *------------------
+           MOVE  IMO-CLAVE-LDA                  TO LDA-VALUE.
+           PERFORM ED-ACCESAR-LDA.
+           IF CON-LDA
+              ADD  1                            TO WA-SEL
+              PERFORM EE-LLENAR-CAMPOS
+              RELEASE SORT-REG
+           ELSE
+              ADD  1                            TO WA-SIN-LDA
+           END-IF.
+
+       ED-ACCESAR-LDA.
+      *---------------
+           CALL 'DBNTRY' USING UIB REQ-AREA-LDA LDA ELEM-LIST-LDA
+           IF        LDA-RET-COD = 14
+                     SET SIN-LDA         TO   TRUE
+           ELSE      IF     LDA-RET-COD = SPACES
+                            SET CON-LDA         TO   TRUE
+                     ELSE
+                            MOVE 'CA-ACCESAR-LDA'      TO WR-PARRAFO
+                            MOVE 'C-PROCESAR        '  TO WR-SECCION
+                            MOVE LDA-COMMAND           TO WR-COMANDO
+                            MOVE 'TABLA LDA         '  TO WR-ARCHIVO
+                            MOVE LDA-RET-COD           TO WR-STATUS
+                            MOVE 'S'                   TO WR-TERMINAR
+                     END-IF
+           END-IF.
+
+       EE-LLENAR-CAMPOS.
+      *------------------
+           MOVE IMO-MONTO        TO SOR-MONTO.
+           MOVE LDA-COD-OFI      TO SOR-OFICINA.
+
+       EZ-FIN-SECCION.
+      *------------------
+           EXIT.
+
+       S-SALIDA SECTION.
+      *------------------
+           PERFORM SA-LEER-SORT
+           IF  NOT FIN-SORT
+               MOVE SOR-OFICINA        TO W-OFICINA
+               PERFORM SB-PROCESO-SORT UNTIL FIN-SORT
+               PERFORM SC-GRABAR
+           ELSE
+               MOVE '090'            TO W-OFICINA
+               MOVE ZEROES           TO W-MONTO
+               PERFORM SE-GRABAR-TOT
+           END-IF.
+           GO TO SZ-FIN-SECCION.
+
+       SA-LEER-SORT.
+      *----------
+           RETURN SOR-SORT AT END SET  FIN-SORT   TO TRUE.
+
+       SB-PROCESO-SORT.
+      *----------------
+           IF W-OFICINA NOT = SOR-OFICINA
+               PERFORM SC-GRABAR
+               MOVE SOR-OFICINA      TO W-OFICINA
+               MOVE ZEROES           TO W-MONTO
+           END-IF.
+               ADD SOR-MONTO         TO W-MONTO
+           PERFORM SA-LEER-SORT.
+
+       SC-GRABAR.
+      *----------
+           PERFORM SD-GRABAR-CTB.
+           PERFORM SE-GRABAR-TOT.
+
+       SD-GRABAR-CTB.
+      *--------------
+           MOVE 2                           TO CTB-TIPO-DOCTO.
+           MOVE W-OFICINA                   TO CTB-SUC-MVTO.
+           MOVE 301002087                   TO CTB-COD-CTA.
+           MOVE 00                          TO CTB-COD-MONEDA.
+           MOVE W-MONTO                     TO CTB-VALOR.
+           MOVE SPACES                      TO CTB-NUM-DOCTO.
+           MOVE 'MVTO. IMPTO. DIARIO LDA'   TO CTB-GLOSA.
+           WRITE CTB-REGISTRO.
+           ADD   1                 TO  WA-GRA-CTB.
+
+       SE-GRABAR-TOT.
+      *---------------
+           MOVE W-OFICINA          TO TOT-OFICINA.
+           MOVE 05                 TO TOT-SIST.
+           MOVE TAR-FECHA          TO TOT-FECHA.
+           MOVE SPACES             TO TOT-FILLER.
+           MOVE W-MONTO            TO HABER-LIN03.
+           MOVE W-MONTO            TO DEBE-LIN06.
+           MOVE ZEROES             TO DEBE-LIN03.
+           PERFORM CF-GRABAR-TOT VARYING I FROM 1 BY 1 UNTIL I > 7.
+
+       CF-GRABAR-TOT.
+      *---------------
+           MOVE  I                 TO  TOT-NROLINEA.
+           MOVE LINEAS (I)         TO  TOT-LINEA
+           WRITE TOT-REGISTRO.
+           IF FS-COLVTOT NOT = 0
+                MOVE 'BA-ABRIR-ARCHI'      TO WR-PARRAFO
+                MOVE 'B-INICIO          '  TO WR-SECCION
+                MOVE 'OPEN OUTPUT'         TO WR-COMANDO
+                MOVE 'COLVTOT           '  TO WR-ARCHIVO
+                MOVE FS-COLVTOT            TO WR-STATUS
+                MOVE 'S'                   TO WR-TERMINAR
+           ELSE
+                ADD   1                    TO  WA-GRA-TOT
+           END-IF.
+
+       SZ-FIN-SECCION.
+      *---------------
+           EXIT.
+       D-TERMINAR SECTION.
+      *-------------------
+      *
+           DISPLAY '*'
+           IF WR-TERMINAR = 'S'
+              DISPLAY  'PARRAFO            '     WR-PARRAFO
+              DISPLAY  'SECCION            '     WR-SECCION
+              DISPLAY  'PARRAFO            '     WR-COMANDO
+              DISPLAY  'ARCHIVO            '     WR-ARCHIVO
+              DISPLAY  'STATUS             '     WR-STATUS
+              MOVE 100                       TO RETURN-CODE
+           END-IF.
+           DISPLAY '*'
+           DISPLAY '*           ESTADISTICAS'
+           DISPLAY '*'
+           DISPLAY '*       PROCESO AL: '  TAR-FECHA.
+           DISPLAY '*'
+           DISPLAY '*'
+           DISPLAY '* REGISTROS SELECCIONADOS.........' WA-SEL.
+           DISPLAY '* REGISTROS GRABADOS EN CTB.......' WA-GRA-CTB.
+           DISPLAY '* REGISTROS GRABADOS EN TOT.......' WA-GRA-TOT.
+           DISPLAY '* REGISTROS SIN LDA...............' WA-SIN-LDA.
+      *
+           CLOSE COLVIMO COLVCTB COLVTOT.
+      *
+       DZ-FIN-SECCION.
+      *---------------
+           EXIT.
+      *
+      *

@@ -1,0 +1,196 @@
+       IDENTIFICATION DIVISION.
+      *=======================
+       PROGRAM-ID.   GNSSECPRV.
+       AUTHOR.       CONSIST.
+       
+      * Genera Archivo Temporal PRV para Manejo de Privilegios
+       
+       ENVIRONMENT DIVISION.
+      *====================
+       
+       DATA DIVISION.
+      *=============
+       
+       WORKING-STORAGE SECTION.
+      *-----------------------
+       COPY GNSBRSEC REPLACING ==SEC== BY ==SEC EXTERNAL==.
+       COPY GNSBRPRV REPLACING ==PRV== BY ==PRV EXTERNAL==.
+       COPY GNSWCFIO.
+       COPY GNSWVFIO.
+       COPY GNSWGPRV.
+       COPY GNSWGSTR.
+
+      *    Variables para Rutinas del Sistema.
+       01  SYS-VARI.
+      
+      *    Variables para Obtener Usuario
+           03 SYS-IUSE.
+              05 FILLER COMP                      PIC S9(04)
+                        VALUE 12.
+              05 FILLER COMP                      PIC S9(04)
+                        VALUE EXTERNAL JPI$_USERNAME.
+              05 FILLER POINTER
+                        VALUE REFERENCE SYS-USER.
+              05 FILLER COMP           VALUE 0    PIC S9(04).
+
+      *    Variables para Obtener UIC
+           03 SYS-IUIC.
+              05 FILLER COMP                      PIC S9(04)
+                        VALUE 12.
+              05 FILLER COMP                      PIC S9(04)
+                        VALUE EXTERNAL JPI$_UIC.
+              05 FILLER POINTER
+                        VALUE REFERENCE SYS-UUIC.
+              05 FILLER COMP           VALUE 0    PIC S9(04).
+
+      *    Usuario
+           03 SYS-USER                            PIC X(12).
+
+      *    UIC
+           03 SYS-UUIC  COMP                      PIC S9(09).
+
+      *    Owner ( Identificador )
+           03 SYS-OWNE                            PIC X(12).
+
+      *    Largo de Identificador
+           03 SYS-LOWN  COMP                      PIC 9(04)
+                        VALUE 12.
+      *    Rights_id
+           03 SYS-RESI  COMP                      PIC 9(09).
+
+      *    Resid
+           03 SYS-ATTR  COMP                      PIC 9(09).
+
+      *    Context
+           03 SYS-CNTX  COMP           VALUE 0    PIC 9(09).
+
+       01  WSS-VARI.
+           03 WSS-ZERO          COMP  VALUE 0             PIC 9(04).
+           03 WSS-AUXI          COMP                      PIC 9(04).
+       
+       PROCEDURE DIVISION.
+      *==================
+       
+       MAIN SECTION.
+      *------------
+       INI-MAIN.
+           MOVE FIO-IFNF-PGM TO FIO-IFNF.
+           MOVE FIO-FNF TO FIO-CMND.
+           PERFORM GNS-FIO-SEC.
+
+           MOVE FIO-INP TO FIO-CMND.
+           PERFORM GNS-FIO-SEC.
+           IF NOT FIO-STAT-OKS
+               MOVE FIO-OUT TO FIO-CMND
+               PERFORM GNS-FIO-PRV
+               MOVE FIO-CLO TO FIO-CMND
+               PERFORM GNS-FIO-PRV
+               STOP RUN.
+
+           MOVE FIO-OUT TO FIO-CMND
+           PERFORM GNS-FIO-PRV.
+
+      *     CALL 'SYS$GETJPI'          USING
+      *             BY VALUE           0 0 0
+      *             BY REFERENCE SYS-IUSE
+      *             BY VALUE           0 0 0.
+           CALL 'LIB$GET_SYMBOL' USING
+                    BY DESCRIPTOR      'GNS$SYS'
+                                       SYS-USER.
+
+           CALL 'SYS$GETJPI'          USING
+                   BY VALUE           0 0 0
+                   BY REFERENCE SYS-IUIC
+                   BY VALUE           0 0 0.
+
+           CALL 'SYS$IDTOASC'          USING
+                   BY VALUE            SYS-UUIC
+                   BY REFERENCE        SYS-LOWN
+                   BY DESCRIPTOR       SYS-OWNE
+                   BY REFERENCE        SYS-RESI
+                                       SYS-ATTR
+                                       SYS-CNTX.
+       LUP-MAIN.
+           MOVE SPACES TO SEC.
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM GNS-FIO-SEC.
+
+           IF NOT FIO-STAT-OKS
+               GO TO FIN-MAIN.
+           MOVE SPACES TO PRV-USER PRV-OWNE.
+           UNSTRING SEC DELIMITED BY '/' INTO
+                    PRV-USER PRV-OWNE PRV-NEMO PRV-CMND PRV-STAT.
+           MOVE SYS-USER TO STR-CAND.
+           MOVE PRV-USER TO STR-PATT.
+           PERFORM PRV-MTCH.
+           IF NOT STR-MTCH-YES
+               GO TO LUP-MAIN.
+           MOVE SYS-OWNE TO STR-CAND.
+           MOVE PRV-OWNE TO STR-PATT.
+           PERFORM PRV-MTCH.
+           IF NOT STR-MTCH-YES
+               GO TO LUP-MAIN.
+           MOVE SEC TO PRV.
+           MOVE FIO-PUT TO FIO-CMND.
+           PERFORM GNS-FIO-PRV.
+           IF NOT FIO-STAT-OKS
+               DISPLAY 'ERROR al crear registro en archivo PRV : ABORTO'
+               DIVIDE WSS-ZERO INTO WSS-AUXI.
+               GO TO LUP-MAIN.
+       FIN-MAIN.
+           MOVE FIO-CLO TO FIO-CMND.
+           PERFORM GNS-FIO-SEC.
+           MOVE FIO-CLO TO FIO-CMND.
+           PERFORM GNS-FIO-PRV.
+           STOP RUN.
+
+       PRV-MTCH SECTION.
+      *----------------
+       INI-PRV-MTCH.
+           IF SPACES = STR-PATT OR STR-CAND OR NOT STR-PCHR(STR-ILIM)
+               GO TO MTC-PRV-MTCH.
+           PERFORM BUS-CHAR VARYING STR-IAST FROM STR-ILIM BY -1
+                   UNTIL STR-IAST < 1 OR STR-PCHR(STR-IAST) = '*'.
+           IF STR-IAST < 1
+               GO TO MTC-PRV-MTCH.
+           PERFORM BUS-CHAR VARYING STR-IMAX FROM STR-ILIM BY -1
+                   UNTIL STR-CCHR(STR-IMAX) NOT = SPACES
+           PERFORM BUS-CHAR VARYING STR-INBL FROM STR-ILIM BY -1
+                   UNTIL STR-PCHR(STR-INBL) NOT = SPACES.
+           IF STR-INBL NOT < STR-IMAX
+               GO TO MTC-PRV-MTCH.
+           PERFORM MOV-CHAR VARYING STR-ISTR FROM 1 BY 1
+                   UNTIL STR-ISTR > STR-INBL - STR-IAST.
+           PERFORM PUT-ASTE VARYING STR-ISTR FROM 1 BY 1
+                   UNTIL STR-ISTR > STR-IMAX - STR-INBL.
+       MTC-PRV-MTCH.
+           CALL 'STR$MATCH_WILD'          USING
+                BY DESCRIPTOR             STR-CAND
+                BY DESCRIPTOR             STR-PATT
+                GIVING                    STR-MTCH.
+       FIN-PRV-MTCH.
+           EXIT.
+       
+       BUS-CHAR SECTION.
+      *----------------
+       INI-BUS-CHAR.
+       FIN-BUS-CHAR.
+           EXIT.
+       
+       MOV-CHAR SECTION.
+      *----------------
+       INI-MOV-CHAR.
+           MOVE STR-PCHR( STR-INBL - STR-ISTR + 1 ) TO
+                STR-PCHR( STR-IMAX - STR-ISTR + 1 ).
+       FIN-MOV-CHAR.
+           EXIT.
+       
+       PUT-ASTE SECTION.
+      *----------------
+       INI-PUT-ASTE.
+           MOVE '*' TO STR-PCHR( STR-IAST + STR-ISTR ).
+       FIN-PUT-ASTE.
+           EXIT.
+
+       COPY GNSBFSEC.
+       COPY GNSBFPRV.

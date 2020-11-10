@@ -1,0 +1,1033 @@
+       IDENTIFICATION DIVISION.
+      *========================
+       PROGRAM-ID.      COLPBOPC.
+       AUTHOR.          CONSIST.
+       DATE-WRITTEN.    08-AGO-1994     (Ultima Modificacion).
+      * ACTUALIZA OPERACIONES DE COLOCACIONES EN FORMA BATCH.
+
+       ENVIRONMENT DIVISION.
+      *=====================
+       CONFIGURATION SECTION.
+      *----------------------
+       SPECIAL-NAMES.
+               DECIMAL-POINT IS COMMA.
+       DATA DIVISION.
+      *=============
+       WORKING-STORAGE SECTION.
+      *------------------------
+       COPY COLBROPC.
+       COPY COLBRRDC.
+       COPY COLBRDLC.
+       COPY COLBRICG.
+       COPY COLBRCYA.
+       COPY COLBRVEN.
+       COPY COLBRROV.
+       COPY COLBRRCE.
+       COPY GNSWVFIO.
+       COPY GNSWCFIO.
+       COPY GNSWVIDD.
+       COPY GNSWGHOY.
+       COPY GNSWGFEC.
+       COPY GNSWGSYS.
+       COPY GNSWGRQA.
+       COPY GNSWGUIB.
+       COPY GNSWGELS.
+       COPY GNSBRMSG.
+       COPY GNSBRTAB.
+       COPY GNSBRERR.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-OPC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-ICG-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-CYA-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-ROV-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-RDC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-DLC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-VEN-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-RCE-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-MSG-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-TAB-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-AUX-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-DBI-REQA==.
+      *COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-ERR-REQA==.
+       01  WSS-VARI.
+           03  WSS-NUM-TVEN                     PIC 9(03).
+           03  WSS-NUM-DBIN                     PIC 9(03).
+           03  WSS-NUM-DBOU                     PIC 9(03).
+           03  WSS-CIC-DBIN                     PIC X(12).
+           03  WSS-CIC-DBOU                     PIC X(12).
+           03  WSS-REGI.
+               05  FILLER                       PIC X(27).
+               05  OPC-MSC-TACC                 PIC X(01).
+               05  FILLER                       PIC X(02).
+               05  VEN-MSC-TACC                 PIC X(01).
+               05  FILLER                       PIC X(187).
+           03  WSS-FEC-FPRO.
+               05  WSS-NUM-DPRO                 PIC 9(02).
+               05  WSS-NUM-MPRO                 PIC 9(02).
+               05  WSS-NUM-SPRO                 PIC 9(02).
+               05  WSS-NUM-APRO                 PIC 9(02).
+           03  WSS-I            VALUE ZEROES    PIC 9(03).
+           03  WSS-K            VALUE ZEROES    PIC 9(03).
+           03  WSS-IMAX         VALUE 50        PIC 9(03).
+           03  WSS-KMAX         VALUE 50        PIC 9(03).
+           03  WSS-TREG                         PIC X(03).
+           03  WSS-TACC                         PIC X(01).
+           03  RDC-TAB-DDIR VALUE SPACES.
+               05  RDC-VEC-DDIR OCCURS 50.
+                   07  RDC-CIC-DDIR             PIC X(12).
+           03  WSS-TAB-ESTD.
+               05  WSS-VEC-ESTD OCCURS 50.
+                   07  WSS-IND-TREG             PIC X(03).
+                   07  WSS-IND-TACC             PIC X(01).
+                   07  WSS-NUM-RRCH             PIC 9(06).
+                   07  WSS-NUM-RLEI             PIC 9(06).
+                   07  WSS-NUM-RPRO             PIC 9(06).
+      *JSS PARA V3.1
+      *( IDBM = INDICE DE BASE DE DATOS MAESTRA,       ANTES=13 )
+      *( IDBT = INDICE DE BASE DE DATOS TRANSACCIONES, ANTES=14 )
+      *EN VERSION 3.1 SE DETERMINAN CON UN SEARC SOBRE IDD
+           03  WSS-IDBM                         PIC 9(03).
+           03  WSS-IDBT                         PIC 9(03).
+      *
+
+       PROCEDURE DIVISION.
+      *===================
+       MAIN SECTION.
+       INI-MAIN.
+       COPY GNSBGEDB.
+           PERFORM INI.
+           IF NOT FIO-STAT-OKS
+               GO TO FIN-MAIN.
+           MOVE WSS-NUM-DBIN IN WSS-VARI TO IDD-IENT(WSS-IDBM).
+           MOVE FIO-GET-FST TO FIO-CMND.
+           PERFORM COL-FIO-OPC.
+           IF NOT FIO-STAT-OKS
+               MOVE ERR-SVRT-ADV IN ERR-VARI TO ERR-IND-SVRT IN ERR
+               PERFORM PRO-ERR
+               MOVE ERR-SVRT-REC IN ERR-VARI TO ERR-IND-SVRT IN ERR
+               GO TO FIN-MAIN.
+       LUP-MAIN.
+           MOVE 'OPC'               TO WSS-TREG IN WSS-VARI.
+           MOVE OPC-MSC-TACC IN OPC TO WSS-TACC IN WSS-VARI.
+           MOVE OPC-MSC-TACC IN OPC TO ERR-MSC-TACC IN ERR.
+           PERFORM GEN-ESTD.
+           IF OPC-MSC-STAT > SPACES OR
+              OPC-MSC-TACC IN OPC  = 'N'    OR
+              OPC-MSC-TACC IN OPC  = 'O'
+               GO TO OPC-MAIN.
+           PERFORM CHK-PNT.
+           IF NOT FIO-STAT-OKS
+               GO TO FIN-MAIN.
+           MOVE OPC-CIC-IOPC IN OPC TO RCE-KEY-DISP IN RCE.
+           MOVE 'RCE-KEY-DISP' TO FIO-AKEY.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM COL-FIO-RCE.
+           IF FIO-STAT-OKS
+               MOVE RCE-CIC-IOPC IN RCE TO WSS-CIC-DBOU IN WSS-VARI
+               MOVE RCE-KEY-DISP IN RCE TO WSS-CIC-DBIN IN WSS-VARI
+           ELSE
+               MOVE OPC-CIC-IOPC IN OPC TO WSS-CIC-DBIN IN WSS-VARI
+               MOVE OPC-CIC-IOPC IN OPC TO WSS-CIC-DBOU IN WSS-VARI.
+           MOVE 'OPC'               TO WSS-TREG IN WSS-VARI.
+           MOVE OPC-MSC-TACC IN OPC TO WSS-TACC IN WSS-VARI.
+           MOVE ADR-OPC-REQA TO ADR-DBI-REQA.
+           MOVE WSS-NUM-DBOU IN WSS-VARI TO IDD-IENT(WSS-IDBM).
+           MOVE WSS-CIC-DBOU IN WSS-VARI TO OPC-CIC-IOPC IN OPC.
+       ING-MAIN.
+           IF OPC-MSC-TACC IN OPC = 'I'
+               MOVE 'A' TO OPC-MSC-STAT IN OPC
+               MOVE HOY-STP-ITRN IN HOY-VARI TO OPC-STP-ITRN IN OPC
+               MOVE WSS-NUM-SPRO IN WSS-VARI TO OPC-NUM-SINP IN OPC
+               MOVE WSS-NUM-APRO IN WSS-VARI TO OPC-NUM-AINP IN OPC
+               MOVE WSS-NUM-MPRO IN WSS-VARI TO OPC-NUM-MINP IN OPC
+               MOVE WSS-NUM-DPRO IN WSS-VARI TO OPC-NUM-DINP IN OPC
+               MOVE OPC-FEC-FINP IN OPC      TO OPC-FEC-FTRN IN OPC
+               MOVE FIO-PUT TO FIO-CMND
+               PERFORM COL-FIO-OPC
+               IF NOT FIO-STAT-OKS
+                   PERFORM GEN-ESTD
+                   PERFORM PRO-ERR
+                   GO TO NXT-MAIN
+               ELSE
+                   PERFORM GEN-ESTD
+                   GO TO NXT-MAIN.
+           MOVE OPC TO WSS-REGI.
+           MOVE FIO-GET-KEY-UPD TO FIO-CMND.
+           PERFORM COL-FIO-OPC.
+           IF NOT FIO-STAT-OKS
+               IF OPC-MSC-TACC IN OPC = 'M'
+                   MOVE WSS-REGI TO OPC
+                   MOVE 'I' TO OPC-MSC-TACC IN OPC
+                   GO TO ING-MAIN
+               ELSE
+                   PERFORM GEN-ESTD
+                   PERFORM PRO-ERR
+                   GO TO NXT-MAIN.
+           MOVE OPC-MSC-TACC IN WSS-REGI TO OPC-MSC-TACC IN OPC.
+           IF OPC-MSC-TACC IN OPC = 'M' OR
+              OPC-MSC-TACC IN OPC = 'R' OR
+              OPC-MSC-TACC IN OPC = 'A' OR
+              OPC-MSC-TACC IN OPC = 'C' OR
+              OPC-MSC-TACC IN OPC = 'D'
+               MOVE WSS-REGI TO OPC
+               MOVE HOY-STP-ITRN IN HOY-VARI TO OPC-STP-ITRN IN OPC
+               MOVE WSS-NUM-SPRO IN WSS-VARI TO OPC-NUM-STRN IN OPC
+               MOVE WSS-NUM-APRO IN WSS-VARI TO OPC-NUM-ATRN IN OPC
+               MOVE WSS-NUM-MPRO IN WSS-VARI TO OPC-NUM-MTRN IN OPC
+               MOVE WSS-NUM-DPRO IN WSS-VARI TO OPC-NUM-DTRN IN OPC
+               MOVE 'A' TO OPC-MSC-STAT IN OPC
+               MOVE FIO-MOD TO FIO-CMND
+               PERFORM COL-FIO-OPC
+               IF NOT FIO-STAT-OKS
+                   PERFORM GEN-ESTD
+                   PERFORM PRO-ERR
+               ELSE
+                   PERFORM GEN-ESTD
+           ELSE
+           IF OPC-MSC-TACC IN OPC = 'E'
+               MOVE FIO-DEL TO FIO-CMND
+               PERFORM COL-FIO-OPC
+               IF NOT FIO-STAT-OKS
+                   PERFORM GEN-ESTD
+                   PERFORM PRO-ERR
+               ELSE
+                   PERFORM GEN-ESTD
+           ELSE
+               MOVE ERR-TERR-VLD IN ERR-VARI TO ERR-COD-TERR IN ERR
+               MOVE 'MSCTACCNEX'             TO ERR-COD-MENS IN ERR
+               MOVE 'OPC-MSC-TACC'           TO ERR-COD-CMPO IN ERR
+               MOVE ADR-DBI-REQA             TO ADR-REQA
+               PERFORM PRO-ERR
+               MOVE ERR-TERR-LGC IN ERR-VARI TO ERR-COD-TERR IN ERR.
+       NXT-MAIN.
+           PERFORM PRO-ICG.
+           PERFORM PRO-CYA.
+           PERFORM PRO-ROV.
+           PERFORM PRO-RDC.
+           PERFORM PRO-DLC.
+           PERFORM PRO-VEN.
+       RBCK-MAIN.
+           IF ERR-IND-RBCK IN ERR-VARI = ERR-RBCK-YES IN ERR-VARI
+               PERFORM BCK-OUT
+               IF NOT FIO-STAT-OKS
+                   GO TO FIN-MAIN
+               ELSE
+                   NEXT SENTENCE
+           ELSE
+               MOVE WSS-NUM-DBIN IN WSS-VARI TO IDD-IENT(WSS-IDBM)
+               MOVE WSS-CIC-DBIN IN WSS-VARI TO OPC-CIC-IOPC IN OPC
+               MOVE FIO-GET-KEY-UPD TO FIO-CMND
+               PERFORM COL-FIO-OPC
+               IF NOT FIO-STAT-OKS
+                   PERFORM PRO-ERR
+               ELSE
+                   MOVE 'A' TO OPC-MSC-STAT IN OPC
+                   MOVE FIO-MOD TO FIO-CMND
+                   PERFORM COL-FIO-OPC
+                   IF NOT FIO-STAT-OKS
+                       PERFORM PRO-ERR.
+           MOVE ADR-DBI-REQA TO ADR-OPC-REQA.
+       OPC-MAIN.
+           MOVE WSS-NUM-DBIN IN WSS-VARI TO IDD-IENT(WSS-IDBM).
+           MOVE FIO-KDEF-S TO FIO-KDEF.
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM COL-FIO-OPC.
+           IF FIO-STAT-OKS
+              GO TO LUP-MAIN.
+       FIN-MAIN.
+           PERFORM IMP-ESTD.
+           PERFORM CLO-FIL.
+       COPY GNSBGGBK.
+
+       INI SECTION.
+       INI-INI.
+           MOVE 'COLPBOPC' TO FIO-PROG.
+           PERFORM GNS-BUS-IDD.
+      *BUSCA LA POSICION EN IDD DONDE SE ENCUENTRA EL NUMERO DE
+      *LA BASE DE DATOS DE TRANSACCIONES
+           MOVE 'T' TO IDD-GAUX.
+           PERFORM BUS-IND-BDATOS.
+      *DAD ini  08-AGO-1994   (Memo.08-08-94 Pto.1)
+      *     MOVE ADR-DBID IN ADR-REQA TO WSS-IDBT.
+           MOVE IDD-IAUX TO WSS-IDBT.
+      *DAD fin  08-AGO-1994
+      *BUSCA LA POSICION EN IDD DONDE SE ENCUENTRA EL NUMERO DE
+      *LA BASE DE DATOS MAESTRA
+           MOVE 'M' TO IDD-GAUX.
+           PERFORM BUS-IND-BDATOS.
+      *DAD ini  08-AGO-1994   (Memo.08-08-94 Pto.1)
+      *     MOVE ADR-DBID IN ADR-REQA TO WSS-IDBM.
+           MOVE IDD-IAUX TO WSS-IDBM.
+      *DAD fin  08-AGO-1994
+      *
+           PERFORM GET-FHOY.
+      *Captura Fecha de Proceso
+           DISPLAY 'FECHA PROCESO ( DDMMAAAA ) : '.
+           ACCEPT  WSS-FEC-FPRO IN WSS-VARI.
+           DISPLAY WSS-FEC-FPRO IN WSS-VARI.
+      *VAL-FEC Valida Fecha de Proceso
+           MOVE WSS-FEC-FPRO IN WSS-VARI TO FEC-FECH.
+           MOVE FEC-FORM-FEC TO FEC-FORM.
+           MOVE FEC-FBLK-N   TO FEC-FBLK.
+           MOVE FEC-CHOY-LE  TO FEC-CHOY.
+           MOVE FEC-VHBL-S   TO FEC-VHBL.
+           MOVE FEC-VAL-FEC  TO FEC-CMND.
+           PERFORM PRO-FEC.
+           IF NOT FEC-STAT-OKS
+               DISPLAY FEC-MENS
+               MOVE FIO-STAT-NEX TO FIO-STAT
+               GO TO FIN-INI.
+           PERFORM INI-ESTD VARYING WSS-I FROM 1 BY 1
+                   UNTIL WSS-I > WSS-IMAX.
+           MOVE ERR-TERR-LGC IN ERR-VARI TO ERR-COD-TERR IN ERR.
+           MOVE 'COLPBOPC'               TO ERR-COD-ATRN IN ERR.
+           MOVE ERR-TTRN-BAT IN ERR-VARI TO ERR-MSC-TTRN IN ERR.
+           MOVE ERR-SVRT-FAT IN ERR-VARI TO ERR-IND-SVRT IN ERR.
+           MOVE IDD-IENT(WSS-IDBT) TO WSS-NUM-DBIN.
+           MOVE IDD-IENT(WSS-IDBM) TO WSS-NUM-DBOU.
+           MOVE WSS-NUM-DBIN TO IDD-IENT(WSS-IDBM).
+           MOVE FIO-UPD TO FIO-CMND.
+           PERFORM COL-FIO-OPC.
+           IF NOT FIO-STAT-OKS
+               PERFORM PRO-ERR
+               GO TO FIN-INI.
+           MOVE FIO-UPD TO FIO-CMND.
+           PERFORM COL-FIO-ICG.
+           IF NOT FIO-STAT-OKS
+               PERFORM PRO-ERR
+               GO TO FIN-INI.
+           MOVE FIO-UPD TO FIO-CMND.
+           PERFORM COL-FIO-ROV.
+           IF NOT FIO-STAT-OKS
+               PERFORM PRO-ERR
+               GO TO FIN-INI.
+           MOVE FIO-UPD TO FIO-CMND.
+           PERFORM COL-FIO-RDC.
+           IF NOT FIO-STAT-OKS
+               PERFORM PRO-ERR
+               GO TO FIN-INI.
+           MOVE FIO-UPD TO FIO-CMND.
+           PERFORM COL-FIO-DLC.
+           IF NOT FIO-STAT-OKS
+               PERFORM PRO-ERR
+               GO TO FIN-INI.
+           MOVE FIO-UPD TO FIO-CMND.
+           PERFORM COL-FIO-VEN.
+           IF NOT FIO-STAT-OKS
+               PERFORM PRO-ERR
+               GO TO FIN-INI.
+           MOVE WSS-NUM-DBOU TO IDD-IENT(WSS-IDBM).
+           MOVE FIO-UPD TO FIO-CMND.
+           PERFORM COL-FIO-OPC.
+           IF NOT FIO-STAT-OKS
+               PERFORM PRO-ERR
+               GO TO FIN-INI.
+           MOVE FIO-UPD TO FIO-CMND.
+           PERFORM COL-FIO-ICG.
+           IF NOT FIO-STAT-OKS
+               PERFORM PRO-ERR
+               GO TO FIN-INI.
+           MOVE FIO-UPD TO FIO-CMND.
+           PERFORM COL-FIO-ROV.
+           IF NOT FIO-STAT-OKS
+               PERFORM PRO-ERR
+               GO TO FIN-INI.
+           MOVE FIO-UPD TO FIO-CMND.
+           PERFORM COL-FIO-RDC.
+           IF NOT FIO-STAT-OKS
+               PERFORM PRO-ERR
+               GO TO FIN-INI.
+           MOVE FIO-UPD TO FIO-CMND.
+           PERFORM COL-FIO-DLC.
+           IF NOT FIO-STAT-OKS
+               PERFORM PRO-ERR
+               GO TO FIN-INI.
+           MOVE FIO-UPD TO FIO-CMND.
+           PERFORM COL-FIO-VEN.
+           IF NOT FIO-STAT-OKS
+               PERFORM PRO-ERR
+               GO TO FIN-INI.
+      *    MOVE FIO-UPD TO FIO-CMND.
+      *    PERFORM GNS-FIO-ERR.
+      *    IF NOT FIO-STAT-OKS
+      *        PERFORM PRO-ERR
+      *        GO TO FIN-INI.
+           MOVE ERR-SVRT-REC IN ERR-VARI TO ERR-IND-SVRT IN ERR.
+       FIN-INI.
+           EXIT.
+
+       CHK-PNT SECTION.
+       INI-CHK-PNT.
+           MOVE SPACES TO ERR-COD-MENS IN ERR.
+           MOVE SPACES TO ERR-IND-RBCK IN ERR-VARI.
+           MOVE WSS-NUM-DBOU IN WSS-VARI TO ADR-DBID IN ADR-REQA.
+           MOVE FIO-CHK-PNT TO FIO-CMND.
+           PERFORM GNS-FIO-DTC.
+           IF NOT FIO-STAT-OKS
+               MOVE ERR-SVRT-FAT IN ERR-VARI TO ERR-IND-SVRT IN ERR
+               PERFORM PRO-ERR.
+       FIN-CHK-PNT.
+           EXIT.
+
+       PRO-CYA SECTION.
+       INI-PRO-CYA.
+           MOVE WSS-NUM-DBIN IN WSS-VARI TO IDD-IENT(WSS-IDBM).
+           MOVE WSS-CIC-DBIN IN WSS-VARI TO OPC-CIC-IOPC IN OPC.
+           MOVE OPC-CIC-IOPC IN OPC TO CYA-CIC-IOPC IN CYA.
+           MOVE 'AUT'               TO CYA-NUM-ICAN IN CYA.
+           MOVE ZEROES              TO CYA-NUM-ICYA IN CYA.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM COL-FIO-CYA.
+           IF NOT (FIO-STAT-OKS AND
+              CYA-CIC-IOPC IN CYA = OPC-CIC-IOPC IN OPC AND
+              CYA-NUM-ICAN IN CYA = 'AUT')
+               GO TO FIN-PRO-CYA.
+           MOVE WSS-NUM-DBIN IN WSS-VARI TO IDD-IENT(WSS-IDBM).
+           MOVE WSS-CIC-DBIN IN WSS-VARI TO OPC-CIC-IOPC IN OPC.
+           MOVE OPC-CIC-IOPC IN OPC TO CYA-CIC-IOPC IN CYA.
+           MOVE 'AUT'               TO CYA-NUM-ICAN IN CYA.
+           MOVE ZEROES              TO CYA-NUM-ICYA IN CYA.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM COL-FIO-CYA.
+           IF NOT ( FIO-STAT-OKS AND
+                    CYA-CIC-IOPC IN CYA = OPC-CIC-IOPC IN OPC AND
+                    CYA-NUM-ICAN IN CYA = 'AUT' )
+               IF OPC-MSC-TACC IN OPC = 'I' OR
+                  OPC-MSC-TACC IN OPC = 'M'
+                   MOVE OPC-CIC-IOPC IN OPC TO ADR-VKEY IN ADR-REQA
+                   PERFORM PRO-ERR
+                   GO TO FIN-PRO-CYA
+               ELSE
+                   GO TO FIN-PRO-CYA.
+           MOVE 'CYA'               TO WSS-TREG IN WSS-VARI.
+           MOVE OPC-MSC-TACC IN OPC TO WSS-TACC IN WSS-VARI.
+       LUP-PRO-CYA.
+           PERFORM GEN-ESTD.
+           MOVE ADR-CYA-REQA TO ADR-AUX-REQA.
+           MOVE WSS-NUM-DBOU IN WSS-VARI TO IDD-IENT(WSS-IDBM).
+           MOVE WSS-CIC-DBOU IN WSS-VARI TO CYA-CIC-IOPC IN CYA.
+           IF OPC-MSC-TACC IN OPC = 'I'
+               MOVE FIO-PUT TO FIO-CMND
+               PERFORM COL-FIO-CYA
+               IF NOT FIO-STAT-OKS
+                   PERFORM GEN-ESTD
+                   PERFORM PRO-ERR
+               ELSE
+                   PERFORM GEN-ESTD
+           ELSE
+           IF OPC-MSC-TACC IN OPC = 'M' OR
+              OPC-MSC-TACC IN OPC = 'R' OR
+              OPC-MSC-TACC IN OPC = 'A' OR
+              OPC-MSC-TACC IN OPC = 'C' OR
+              OPC-MSC-TACC IN OPC = 'D' OR
+              OPC-MSC-TACC IN OPC = 'E'
+               MOVE CYA TO WSS-REGI
+               MOVE FIO-GET-KEY-UPD TO FIO-CMND
+               PERFORM COL-FIO-CYA
+               IF NOT FIO-STAT-OKS
+                   PERFORM GEN-ESTD
+                   PERFORM PRO-ERR
+               ELSE
+                   IF OPC-MSC-TACC IN OPC = 'E'
+                       MOVE FIO-DEL TO FIO-CMND
+                       PERFORM COL-FIO-CYA
+                       IF NOT FIO-STAT-OKS
+                           PERFORM GEN-ESTD
+                           PERFORM PRO-ERR
+                       ELSE
+                           PERFORM GEN-ESTD
+                   ELSE
+                       MOVE WSS-REGI TO CYA
+                       MOVE FIO-MOD TO FIO-CMND
+                       PERFORM COL-FIO-CYA
+                       IF NOT FIO-STAT-OKS
+                           PERFORM GEN-ESTD
+                           PERFORM PRO-ERR
+                       ELSE
+                           PERFORM GEN-ESTD.
+       NXT-PRO-CYA.
+           MOVE ADR-AUX-REQA TO ADR-CYA-REQA.
+           MOVE WSS-NUM-DBIN IN WSS-VARI TO IDD-IENT(WSS-IDBM).
+           MOVE FIO-KDEF-S TO FIO-KDEF.
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM COL-FIO-CYA.
+           IF FIO-STAT-OKS AND
+              CYA-CIC-IOPC IN CYA = OPC-CIC-IOPC IN OPC AND
+              CYA-NUM-ICAN IN CYA = 'AUT'
+      * No se pueden mezclar tasas de ingresos con tasas de cancelacione
+               GO TO LUP-PRO-CYA.
+       FIN-PRO-CYA.
+           EXIT.
+
+       PRO-ICG SECTION.
+       INI-PRO-ICG.
+           MOVE WSS-NUM-DBIN IN WSS-VARI TO IDD-IENT(WSS-IDBM).
+           MOVE WSS-CIC-DBIN IN WSS-VARI TO OPC-CIC-IOPC IN OPC.
+           MOVE OPC-CIC-IOPC IN OPC TO ICG-CIC-IOPC IN ICG.
+           MOVE ZEROES TO ICG-NUM-ICAN IN ICG.
+           MOVE SPACES TO ICG-KEY-IVCT IN ICG.
+           MOVE SPACES TO ICG-IND-TTAS IN ICG.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM COL-FIO-ICG.
+           IF NOT ( FIO-STAT-OKS AND
+                    ICG-CIC-IOPC IN ICG = OPC-CIC-IOPC IN OPC AND
+                    ICG-NUM-ICAN IN ICG = ZEROES )
+      *ALD/ Conversar con PGV.
+      *         IF OPC-MSC-TACC IN OPC = 'I' OR
+      *            OPC-MSC-TACC IN OPC = 'M'
+               IF OPC-MSC-TACC IN OPC = 'I'
+                   MOVE OPC-CIC-IOPC IN OPC TO ADR-VKEY IN ADR-REQA
+                   PERFORM PRO-ERR
+                   GO TO FIN-PRO-ICG
+               ELSE
+                   GO TO FIN-PRO-ICG.
+           MOVE 'ICG'               TO WSS-TREG IN WSS-VARI.
+           MOVE OPC-MSC-TACC IN OPC TO WSS-TACC IN WSS-VARI.
+       LUP-PRO-ICG.
+           PERFORM GEN-ESTD.
+           MOVE ADR-ICG-REQA TO ADR-AUX-REQA.
+           MOVE WSS-NUM-DBOU IN WSS-VARI TO IDD-IENT(WSS-IDBM).
+           MOVE WSS-CIC-DBOU IN WSS-VARI TO ICG-CIC-IOPC IN ICG.
+           IF OPC-MSC-TACC IN OPC = 'I'
+               MOVE FIO-PUT TO FIO-CMND
+               PERFORM COL-FIO-ICG
+               IF NOT FIO-STAT-OKS
+                   PERFORM GEN-ESTD
+                   PERFORM PRO-ERR
+               ELSE
+                   PERFORM GEN-ESTD
+           ELSE
+           IF OPC-MSC-TACC IN OPC = 'M' OR
+              OPC-MSC-TACC IN OPC = 'R' OR
+              OPC-MSC-TACC IN OPC = 'A' OR
+              OPC-MSC-TACC IN OPC = 'C' OR
+              OPC-MSC-TACC IN OPC = 'D' OR
+              OPC-MSC-TACC IN OPC = 'E'
+               MOVE ICG TO WSS-REGI
+               MOVE FIO-GET-KEY-UPD TO FIO-CMND
+               PERFORM COL-FIO-ICG
+               IF NOT FIO-STAT-OKS
+                   PERFORM GEN-ESTD
+                   PERFORM PRO-ERR
+               ELSE
+                   IF OPC-MSC-TACC IN OPC = 'E'
+                       MOVE FIO-DEL TO FIO-CMND
+                       PERFORM COL-FIO-ICG
+                       IF NOT FIO-STAT-OKS
+                           PERFORM GEN-ESTD
+                           PERFORM PRO-ERR
+                       ELSE
+                           PERFORM GEN-ESTD
+                   ELSE
+                       MOVE WSS-REGI TO ICG
+                       MOVE FIO-MOD TO FIO-CMND
+                       PERFORM COL-FIO-ICG
+                       IF NOT FIO-STAT-OKS
+                           PERFORM GEN-ESTD
+                           PERFORM PRO-ERR
+                       ELSE
+                           PERFORM GEN-ESTD.
+       NXT-PRO-ICG.
+           MOVE ADR-AUX-REQA TO ADR-ICG-REQA.
+           MOVE WSS-NUM-DBIN IN WSS-VARI TO IDD-IENT(WSS-IDBM).
+           MOVE FIO-KDEF-S TO FIO-KDEF.
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM COL-FIO-ICG.
+           IF FIO-STAT-OKS AND
+              ICG-CIC-IOPC IN ICG = OPC-CIC-IOPC IN OPC AND
+              ICG-NUM-ICAN IN ICG = ZEROES
+      * No se pueden mezclar tasas de ingresos con tasas de cancelacione
+               GO TO LUP-PRO-ICG.
+       FIN-PRO-ICG.
+           EXIT.
+
+       PRO-ROV SECTION.
+       INI-PRO-ROV.
+           IF OPC-IND-RENO IN OPC = SPACES
+               GO TO FIN-PRO-ROV.
+           MOVE WSS-NUM-DBIN IN WSS-VARI TO IDD-IENT(WSS-IDBM).
+           MOVE WSS-CIC-DBIN IN WSS-VARI TO OPC-CIC-IOPC IN OPC.
+           MOVE OPC-CIC-IOPC IN OPC TO ROV-CIC-IOPC IN ROV.
+           MOVE SPACES              TO ROV-KEY-IVCT IN ROV.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM COL-FIO-ROV.
+           IF NOT FIO-STAT-OKS
+               PERFORM PRO-ERR
+               GO TO FIN-PRO-ROV.
+           MOVE 'ROV'               TO WSS-TREG IN WSS-VARI.
+           MOVE OPC-MSC-TACC IN OPC TO WSS-TACC IN WSS-VARI.
+       LUP-PRO-ROV.
+           IF NOT ( FIO-STAT-OKS AND
+                    ROV-CIC-IOPC IN ROV = OPC-CIC-IOPC IN OPC )
+               IF OPC-MSC-TACC IN OPC = 'I' OR
+                  OPC-MSC-TACC IN OPC = 'M'
+                   MOVE OPC-CIC-IOPC IN OPC TO ADR-VKEY IN ADR-REQA
+                   PERFORM PRO-ERR
+                   GO TO FIN-PRO-ROV
+               ELSE
+                   GO TO FIN-PRO-ROV.
+           PERFORM GEN-ESTD.
+           MOVE ADR-ROV-REQA TO ADR-AUX-REQA.
+           MOVE WSS-NUM-DBOU IN WSS-VARI TO IDD-IENT(WSS-IDBM).
+           MOVE WSS-CIC-DBOU IN WSS-VARI TO ROV-CIC-IOPC IN ROV.
+           IF OPC-MSC-TACC IN OPC = 'I'
+               MOVE FIO-PUT TO FIO-CMND
+               PERFORM COL-FIO-ROV
+               IF NOT FIO-STAT-OKS
+                   PERFORM GEN-ESTD
+                   PERFORM PRO-ERR
+               ELSE
+                   PERFORM GEN-ESTD
+           ELSE
+           IF OPC-MSC-TACC IN OPC = 'M' OR
+              OPC-MSC-TACC IN OPC = 'R' OR
+              OPC-MSC-TACC IN OPC = 'A' OR
+              OPC-MSC-TACC IN OPC = 'C' OR
+              OPC-MSC-TACC IN OPC = 'D' OR
+              OPC-MSC-TACC IN OPC = 'E'
+               MOVE ROV TO WSS-REGI
+               MOVE FIO-GET-KEY-UPD TO FIO-CMND
+               PERFORM COL-FIO-ROV
+               IF NOT FIO-STAT-OKS
+                   PERFORM GEN-ESTD
+                   PERFORM PRO-ERR
+               ELSE
+                   IF OPC-MSC-TACC IN OPC = 'E'
+                       MOVE FIO-DEL TO FIO-CMND
+                       PERFORM COL-FIO-ROV
+                       IF NOT FIO-STAT-OKS
+                           PERFORM GEN-ESTD
+                           PERFORM PRO-ERR
+                       ELSE
+                           PERFORM GEN-ESTD
+                   ELSE
+                       MOVE WSS-REGI TO ROV
+                       MOVE FIO-MOD TO FIO-CMND
+                       PERFORM COL-FIO-ROV
+                       IF NOT FIO-STAT-OKS
+                           PERFORM GEN-ESTD
+                           PERFORM PRO-ERR
+                       ELSE
+                           PERFORM GEN-ESTD.
+       NXT-PRO-ROV.
+           MOVE ADR-AUX-REQA TO ADR-ROV-REQA.
+           MOVE WSS-NUM-DBIN IN WSS-VARI TO IDD-IENT(WSS-IDBM).
+           MOVE FIO-KDEF-S TO FIO-KDEF.
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM COL-FIO-ROV.
+           IF FIO-STAT-OKS AND
+              ROV-CIC-IOPC IN ROV = OPC-CIC-IOPC IN OPC
+               GO TO LUP-PRO-ROV.
+       FIN-PRO-ROV.
+           EXIT.
+
+       PRO-RDC SECTION.
+       INI-PRO-RDC.
+           MOVE WSS-NUM-DBIN IN WSS-VARI TO IDD-IENT(WSS-IDBM).
+           MOVE 'RDC-KEY-IDLC' TO FIO-AKEY.
+           MOVE WSS-CIC-DBIN IN WSS-VARI TO OPC-CIC-IOPC IN OPC.
+           MOVE OPC-CIC-IOPC IN OPC TO RDC-CIC-IOPC IN RDC.
+           MOVE ZEROES              TO RDC-NUM-IDLC IN RDC.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM COL-FIO-RDC.
+           IF NOT ( FIO-STAT-OKS AND
+                    RDC-CIC-IOPC IN RDC = OPC-CIC-IOPC IN OPC AND
+                    RDC-NUM-IDLC IN RDC = ZEROES )
+      *ALD/ Conversar con PGV.
+      *         IF OPC-MSC-TACC IN OPC = 'I' OR
+      *            OPC-MSC-TACC IN OPC = 'M'
+               IF OPC-MSC-TACC IN OPC = 'I'
+                   MOVE OPC-CIC-IOPC IN OPC TO ADR-VKEY IN ADR-REQA
+                   PERFORM PRO-ERR
+                   GO TO FIN-PRO-RDC
+               ELSE
+                   GO TO FIN-PRO-RDC.
+           MOVE 'RDC'               TO WSS-TREG IN WSS-VARI.
+           MOVE OPC-MSC-TACC IN OPC TO WSS-TACC IN WSS-VARI.
+           MOVE ZEROES TO WSS-K.
+           MOVE SPACES TO RDC-TAB-DDIR.
+       LUP-PRO-RDC.
+           MOVE ADR-RDC-REQA TO ADR-AUX-REQA.
+           IF RDC-NUM-IDLC IN RDC NOT > ZEROES
+               ADD 1 TO WSS-K IN WSS-VARI
+               IF WSS-K IN WSS-VARI NOT > WSS-KMAX IN WSS-VARI
+                   MOVE RDC-CIC-ICLI IN RDC TO RDC-CIC-DDIR(WSS-K)
+               ELSE
+                   MOVE WSS-KMAX IN WSS-VARI TO WSS-K IN WSS-VARI
+           ELSE
+               PERFORM EQL-DDYI VARYING WSS-I FROM 1 BY 1
+                   UNTIL WSS-I > WSS-K OR
+                   RDC-CIC-ICLI IN RDC = RDC-CIC-DDIR(WSS-I)
+               IF WSS-I NOT > WSS-K
+                   PERFORM GEN-ESTD
+                   MOVE FIO-STAT-NEX TO FIO-STAT
+                   PERFORM GEN-ESTD
+                   GO TO NXT-PRO-RDC.
+           PERFORM GEN-ESTD.
+           MOVE WSS-NUM-DBOU IN WSS-VARI TO IDD-IENT(WSS-IDBM).
+           MOVE WSS-CIC-DBOU IN WSS-VARI TO RDC-CIC-IOPC IN RDC.
+           IF OPC-MSC-TACC IN OPC = 'I'
+               MOVE FIO-PUT TO FIO-CMND
+               PERFORM COL-FIO-RDC
+               IF NOT FIO-STAT-OKS
+                   PERFORM GEN-ESTD
+                   PERFORM PRO-ERR
+               ELSE
+                   PERFORM GEN-ESTD
+           ELSE
+           IF OPC-MSC-TACC IN OPC = 'M' OR
+              OPC-MSC-TACC IN OPC = 'R' OR
+              OPC-MSC-TACC IN OPC = 'A' OR
+              OPC-MSC-TACC IN OPC = 'C' OR
+              OPC-MSC-TACC IN OPC = 'D' OR
+              OPC-MSC-TACC IN OPC = 'E'
+               MOVE RDC TO WSS-REGI
+               MOVE FIO-GET-KEY-UPD TO FIO-CMND
+               PERFORM COL-FIO-RDC
+               IF NOT FIO-STAT-OKS
+                   PERFORM GEN-ESTD
+                   PERFORM PRO-ERR
+               ELSE
+                   IF OPC-MSC-TACC IN OPC = 'E'
+                       MOVE FIO-DEL TO FIO-CMND
+                       PERFORM COL-FIO-RDC
+                       IF NOT FIO-STAT-OKS
+                           PERFORM GEN-ESTD
+                           PERFORM PRO-ERR
+                       ELSE
+                           PERFORM GEN-ESTD
+                   ELSE
+                       MOVE WSS-REGI TO RDC
+                       MOVE FIO-MOD TO FIO-CMND
+                       PERFORM COL-FIO-RDC
+                       IF NOT FIO-STAT-OKS
+                           PERFORM GEN-ESTD
+                           PERFORM PRO-ERR
+                       ELSE
+                           PERFORM GEN-ESTD.
+       NXT-PRO-RDC.
+           MOVE ADR-AUX-REQA TO ADR-RDC-REQA.
+           MOVE WSS-NUM-DBIN IN WSS-VARI TO IDD-IENT(WSS-IDBM).
+           MOVE 'RDC-KEY-IDLC' TO FIO-AKEY.
+           MOVE FIO-KDEF-S TO FIO-KDEF.
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM COL-FIO-RDC.
+           IF FIO-STAT-OKS AND
+              RDC-CIC-IOPC IN RDC = OPC-CIC-IOPC IN OPC
+               GO TO LUP-PRO-RDC.
+       FIN-PRO-RDC.
+           EXIT.
+
+       PRO-DLC SECTION.
+       INI-PRO-DLC.
+           MOVE WSS-NUM-DBIN IN WSS-VARI TO IDD-IENT(WSS-IDBM).
+           MOVE WSS-CIC-DBIN IN WSS-VARI TO OPC-CIC-IOPC IN OPC.
+           MOVE OPC-CIC-IOPC IN OPC TO DLC-CIC-IOPC IN DLC.
+           MOVE ZEROES              TO DLC-NUM-IDLC IN DLC.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM COL-FIO-DLC.
+           IF NOT ( FIO-STAT-OKS AND
+                    OPC-CIC-IOPC IN OPC = DLC-CIC-IOPC IN DLC )
+               IF OPC-MSC-TACC IN OPC = 'I' OR
+                  OPC-MSC-TACC IN OPC = 'M'
+                   MOVE OPC-CIC-IOPC IN OPC TO ADR-VKEY IN ADR-REQA
+                   PERFORM PRO-ERR
+                   GO TO FIN-PRO-DLC
+               ELSE
+                   GO TO FIN-PRO-DLC.
+           MOVE 'DLC'               TO WSS-TREG IN WSS-VARI.
+           MOVE OPC-MSC-TACC IN OPC TO WSS-TACC IN WSS-VARI.
+       LUP-PRO-DLC.
+           PERFORM GEN-ESTD.
+           MOVE ADR-DLC-REQA TO ADR-AUX-REQA.
+           MOVE WSS-NUM-DBOU IN WSS-VARI TO IDD-IENT(WSS-IDBM).
+           MOVE WSS-CIC-DBOU IN WSS-VARI TO DLC-CIC-IOPC IN DLC.
+           IF OPC-MSC-TACC IN OPC = 'I'
+               MOVE FIO-PUT TO FIO-CMND
+               PERFORM COL-FIO-DLC
+               IF NOT FIO-STAT-OKS
+                   PERFORM GEN-ESTD
+                   PERFORM PRO-ERR
+               ELSE
+                   PERFORM GEN-ESTD
+           ELSE
+           IF OPC-MSC-TACC IN OPC = 'M' OR
+              OPC-MSC-TACC IN OPC = 'R' OR
+              OPC-MSC-TACC IN OPC = 'A' OR
+              OPC-MSC-TACC IN OPC = 'C' OR
+              OPC-MSC-TACC IN OPC = 'D' OR
+              OPC-MSC-TACC IN OPC = 'E'
+               MOVE DLC TO WSS-REGI
+               MOVE FIO-GET-KEY-UPD TO FIO-CMND
+               PERFORM COL-FIO-DLC
+               IF NOT FIO-STAT-OKS
+                   PERFORM GEN-ESTD
+                   PERFORM PRO-ERR
+               ELSE
+                   IF OPC-MSC-TACC IN OPC = 'E'
+                       MOVE FIO-DEL TO FIO-CMND
+                       PERFORM COL-FIO-DLC
+                       IF NOT FIO-STAT-OKS
+                           PERFORM GEN-ESTD
+                           PERFORM PRO-ERR
+                       ELSE
+                           PERFORM GEN-ESTD
+                   ELSE
+                       MOVE WSS-REGI TO DLC
+                       MOVE FIO-MOD TO FIO-CMND
+                       PERFORM COL-FIO-DLC
+                       IF NOT FIO-STAT-OKS
+                           PERFORM GEN-ESTD
+                           PERFORM PRO-ERR
+                       ELSE
+                           PERFORM GEN-ESTD.
+       NXT-PRO-DLC.
+           MOVE ADR-AUX-REQA TO ADR-DLC-REQA.
+           MOVE WSS-NUM-DBIN IN WSS-VARI TO IDD-IENT(WSS-IDBM).
+           MOVE FIO-KDEF-S TO FIO-KDEF.
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM COL-FIO-DLC.
+           IF FIO-STAT-OKS AND
+              DLC-CIC-IOPC IN DLC = OPC-CIC-IOPC IN OPC
+               GO TO LUP-PRO-DLC.
+       FIN-PRO-DLC.
+           EXIT.
+
+       PRO-VEN SECTION.
+       INI-PRO-VEN.
+           MOVE ZEROES TO WSS-NUM-TVEN.
+           MOVE WSS-NUM-DBIN IN WSS-VARI TO IDD-IENT(WSS-IDBM).
+           MOVE WSS-CIC-DBIN IN WSS-VARI TO OPC-CIC-IOPC IN OPC.
+           MOVE OPC-CIC-IOPC IN OPC TO VEN-CIC-IOPC IN VEN.
+           MOVE ZEROES              TO VEN-NUM-IVEN IN VEN.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM COL-FIO-VEN.
+           IF NOT ( FIO-STAT-OKS AND
+                    VEN-CIC-IOPC IN VEN = OPC-CIC-IOPC IN OPC )
+               MOVE OPC-CIC-IOPC IN OPC TO ADR-VKEY IN ADR-REQA
+               PERFORM PRO-ERR
+               GO TO FIN-PRO-VEN.
+           MOVE 'VEN'               TO WSS-TREG IN WSS-VARI.
+           MOVE OPC-MSC-TACC IN OPC TO WSS-TACC IN WSS-VARI.
+       LUP-PRO-VEN.
+           PERFORM GEN-ESTD.
+           MOVE ADR-VEN-REQA TO ADR-AUX-REQA.
+           MOVE WSS-NUM-DBOU IN WSS-VARI TO IDD-IENT(WSS-IDBM).
+           MOVE WSS-CIC-DBOU IN WSS-VARI TO VEN-CIC-IOPC IN VEN.
+           IF OPC-MSC-TACC IN OPC = 'I' OR
+              OPC-MSC-TACC IN OPC = 'A' OR
+            ( OPC-MSC-TACC IN OPC = 'R' AND
+              VEN-MSC-TACC IN VEN = 'A' )
+               MOVE FIO-PUT TO FIO-CMND
+               PERFORM COL-FIO-VEN
+               IF NOT FIO-STAT-OKS
+                   PERFORM GEN-ESTD
+                   PERFORM PRO-ERR
+               ELSE
+                   PERFORM GEN-ESTD
+           ELSE
+           IF OPC-MSC-TACC IN OPC = 'M' OR
+              OPC-MSC-TACC IN OPC = 'C' OR
+              OPC-MSC-TACC IN OPC = 'D' OR
+              OPC-MSC-TACC IN OPC = 'E' OR
+            ( OPC-MSC-TACC IN OPC = 'R' AND
+            ( VEN-MSC-TACC IN VEN = 'C' OR
+              VEN-MSC-TACC IN VEN = 'D' ))
+               MOVE VEN TO WSS-REGI
+               MOVE FIO-GET-KEY-UPD TO FIO-CMND
+               PERFORM COL-FIO-VEN
+               IF NOT FIO-STAT-OKS
+                   PERFORM GEN-ESTD
+                   PERFORM PRO-ERR
+               ELSE
+                   MOVE VEN-MSC-TACC IN WSS-REGI TO VEN-MSC-TACC IN VEN
+                   IF OPC-MSC-TACC IN OPC = 'D' OR
+                    ( OPC-MSC-TACC IN OPC = 'R' AND
+                      VEN-MSC-TACC IN VEN = 'D' )
+                       MOVE FIO-DEL TO FIO-CMND
+                       PERFORM COL-FIO-VEN
+                       IF NOT FIO-STAT-OKS
+                           PERFORM GEN-ESTD
+                           PERFORM PRO-ERR
+                       ELSE
+                           PERFORM GEN-ESTD
+                   ELSE
+                   IF OPC-MSC-TACC IN OPC = 'E'
+                       MOVE FIO-DEL TO FIO-CMND
+                       PERFORM COL-FIO-VEN
+                       IF NOT FIO-STAT-OKS
+                           PERFORM GEN-ESTD
+                           PERFORM PRO-ERR
+                       ELSE
+                           PERFORM GEN-ESTD
+                   ELSE
+                       MOVE WSS-REGI TO VEN
+                       MOVE FIO-MOD TO FIO-CMND
+                       PERFORM COL-FIO-VEN
+                       IF NOT FIO-STAT-OKS
+                           PERFORM GEN-ESTD
+                           PERFORM PRO-ERR
+                       ELSE
+                           PERFORM GEN-ESTD.
+       NXT-PRO-VEN.
+           IF OPC-MSC-TACC IN OPC = 'I' OR
+              OPC-MSC-TACC IN OPC = 'M'
+               ADD 1 TO WSS-NUM-TVEN.
+           MOVE ADR-AUX-REQA TO ADR-VEN-REQA.
+           MOVE WSS-NUM-DBIN IN WSS-VARI TO IDD-IENT(WSS-IDBM).
+           MOVE FIO-KDEF-S TO FIO-KDEF.
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM COL-FIO-VEN.
+           IF FIO-STAT-OKS AND
+              VEN-CIC-IOPC IN VEN = OPC-CIC-IOPC IN OPC
+               GO TO LUP-PRO-VEN.
+       TOT-PRO-VEN.
+           IF ( OPC-MSC-TACC IN OPC = 'I' OR
+                OPC-MSC-TACC IN OPC = 'M' ) AND
+                WSS-NUM-TVEN IN WSS-VARI NOT = OPC-NUM-VCVG IN OPC
+               MOVE ERR-TERR-VLD IN ERR-VARI TO ERR-COD-TERR IN ERR
+               MOVE 'NUMVCVGNTVEN' TO ERR-COD-MENS IN ERR
+               MOVE 'OPC-NUM-VCVG' TO ERR-COD-CMPO IN ERR
+               MOVE ADR-AUX-REQA   TO ADR-REQA
+               PERFORM PRO-ERR
+               MOVE ERR-TERR-LGC IN ERR-VARI TO ERR-COD-TERR IN ERR.
+       FIN-PRO-VEN.
+           EXIT.
+
+       BCK-OUT SECTION.
+       INI-BCK-OUT.
+           MOVE WSS-NUM-DBOU IN WSS-VARI TO ADR-DBID IN ADR-REQA.
+           MOVE FIO-BCK-OUT TO FIO-CMND.
+           PERFORM GNS-FIO-DTC.
+           IF NOT FIO-STAT-OKS
+               MOVE ERR-SVRT-FAT IN ERR-VARI TO ERR-IND-SVRT IN ERR
+               PERFORM PRO-ERR.
+       FIN-BCK-OUT.
+           EXIT.
+
+       CLO-FIL SECTION.
+       INI-CLO-FIL.
+           MOVE ERR-SVRT-ADV IN ERR-VARI TO ERR-IND-SVRT IN ERR.
+           MOVE WSS-NUM-DBIN TO IDD-IENT(WSS-IDBM).
+           MOVE FIO-CLO TO FIO-CMND.
+           PERFORM COL-FIO-OPC.
+           PERFORM COL-FIO-ICG.
+           PERFORM COL-FIO-ROV.
+           PERFORM COL-FIO-RDC.
+           PERFORM COL-FIO-DLC.
+           PERFORM COL-FIO-VEN.
+           MOVE WSS-NUM-DBOU TO IDD-IENT(WSS-IDBM).
+           PERFORM COL-FIO-OPC.
+           PERFORM COL-FIO-ICG.
+           PERFORM COL-FIO-ROV.
+           PERFORM COL-FIO-RDC.
+           PERFORM COL-FIO-DLC.
+           PERFORM COL-FIO-VEN.
+      *    PERFORM GNS-FIO-ERR.
+       FIN-CLO-FIL.
+           EXIT.
+
+       EQL-DDYI SECTION.
+       INI-EQL-DDYI.
+       FIN-EQL-DDYI.
+           EXIT.
+
+       GEN-ESTD SECTION.
+       INI-GEN-ESTD.
+           MOVE 1 TO WSS-I.
+       LUP-GEN-ESTD.
+           IF WSS-IND-TREG IN WSS-VARI(WSS-I) NOT > SPACES
+               MOVE WSS-TREG IN WSS-VARI TO
+                           WSS-IND-TREG IN WSS-VARI(WSS-I)
+               MOVE WSS-TACC IN WSS-VARI TO
+                           WSS-IND-TACC IN WSS-VARI(WSS-I)
+               GO TO CON-GEN-ESTD.
+           IF WSS-TREG IN WSS-VARI = WSS-IND-TREG IN WSS-VARI(WSS-I) AND
+              WSS-TACC IN WSS-VARI = WSS-IND-TACC IN WSS-VARI(WSS-I)
+               GO TO CON-GEN-ESTD.
+           ADD 1 TO WSS-I.
+           IF WSS-I IN WSS-VARI > WSS-IMAX IN WSS-VARI
+               GO TO FIN-GEN-ESTD.
+           GO TO LUP-GEN-ESTD.
+       CON-GEN-ESTD.
+           IF NOT FIO-STAT-OKS
+               ADD 1 TO WSS-NUM-RRCH IN WSS-VARI(WSS-I)
+               GO TO FIN-GEN-ESTD.
+           IF FIO-CMND = FIO-GET-NLS OR
+              FIO-CMND = FIO-GET-NXT OR
+              FIO-CMND = FIO-GET-FST
+               ADD 1 TO WSS-NUM-RLEI IN WSS-VARI(WSS-I)
+               GO TO FIN-GEN-ESTD.
+           IF FIO-CMND = FIO-PUT OR
+              FIO-CMND = FIO-MOD OR
+              FIO-CMND = FIO-DEL
+               ADD 1 TO WSS-NUM-RPRO IN WSS-VARI(WSS-I)
+               GO TO FIN-GEN-ESTD.
+       FIN-GEN-ESTD.
+           EXIT.
+       IMP-ESTD SECTION.
+       INI-IMP-ESTD.
+           MOVE 1 TO WSS-I IN WSS-VARI.
+       LUP-IMP-ESTD.
+           IF WSS-IND-TREG(WSS-I) NOT > SPACES
+               GO TO FIN-IMP-ESTD.
+           DISPLAY 'EN REGISTRO          : ' WSS-IND-TREG(WSS-I).
+           DISPLAY 'TIPO DE  ACCION      : ' WSS-IND-TACC(WSS-I).
+           DISPLAY 'REGISTROS LEIDOS     : ' WSS-NUM-RLEI(WSS-I).
+           DISPLAY 'REGISTROS RECHAZADOS : ' WSS-NUM-RRCH(WSS-I).
+           DISPLAY 'REGISTROS PROCESADOS : ' WSS-NUM-RPRO(WSS-I).
+           ADD 1 TO WSS-I IN WSS-VARI.
+           IF WSS-I IN WSS-VARI > WSS-IMAX IN WSS-VARI
+               GO TO FIN-IMP-ESTD.
+           GO TO LUP-IMP-ESTD.
+       FIN-IMP-ESTD.
+           EXIT.
+       INI-ESTD SECTION.
+       INI-INI-ESTD.
+           MOVE SPACES TO WSS-IND-TREG(WSS-I).
+           MOVE SPACES TO WSS-IND-TACC(WSS-I).
+           MOVE ZEROES TO WSS-NUM-RLEI(WSS-I).
+           MOVE ZEROES TO WSS-NUM-RRCH(WSS-I).
+           MOVE ZEROES TO WSS-NUM-RPRO(WSS-I).
+       FIN-INI-ESTD.
+           EXIT.
+       COPY COLBFOPC.
+       COPY COLBFCYA.
+       COPY COLBFICG.
+       COPY COLBFRDC.
+       COPY COLBFDLC.
+       COPY COLBFVEN.
+       COPY COLBFROV.
+       COPY COLBFRCE.
+
+       COPY GNSBBMSG.
+       COPY GNSBFMSG.
+       COPY GNSBFTAB.
+      *COPY GNSBFERR.
+       COPY GNSBGERR.
+       COPY GNSBGDTC.
+       COPY GNSBGIDD.
+       COPY GNSBTABT.
+       COPY GNSBBSYS.
+       COPY GNSBGHOY.
+       COPY GNSBGFEC.
+
+       BUS-IND-BDATOS SECTION.
+       INI-BUS-IND-BDATOS.
+      *RECIBE COMO INPUT EL GRUPO DE BASE DE DATOS EN IDD-GAUX
+           MOVE 'COL'  TO IDD-SAUX.
+      *    MOVE 'M'    TO IDD-GAUX.
+           MOVE SPACES TO IDD-RAUX.
+           MOVE 1 TO IDD-IAUX.
+           SET IDD-ITBL TO 1.
+           SEARCH IDD-VSIS VARYING IDD-IAUX
+             AT END
+               GO TO NEX-BUS-IND-BDATOS
+             WHEN IDD-DENT( IDD-ITBL ) = IDD-DAUX
+               MOVE IDD-IENT( IDD-ITBL) TO ADR-DBID IN ADR-REQA
+               GO TO FIN-BUS-IND-BDATOS.
+       NEX-BUS-IND-BDATOS.
+           MOVE 'En BUS-IND-BDATOS, NO existe en IDD:' TO FIO-MEN1.
+           MOVE IDD-DAUX                               TO FIO-MEN2.
+           PERFORM PRG-ABT.
+       FIN-BUS-IND-BDATOS.
+           EXIT.

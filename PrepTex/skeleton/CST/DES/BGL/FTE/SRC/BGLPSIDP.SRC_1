@@ -1,0 +1,390 @@
+       IDENTIFICATION DIVISION.
+      *=======================
+       PROGRAM-ID.     GARPSIDP.
+       AUTHOR.          CONSIST.
+       
+      * Subrutina Escribe Registros Asociados a un Deposito a Plazo de la
+      *    propia institucion
+      * Es invocado desde GARPPAGDG (VMS) o GARPUGDG (Ibm)
+      * Escribe registros GDO, GVT necesariamente
+      *   utilizando el CIC de la Garantia 
+      *      GDG-NUM-SIS IN IDP-VARI
+      *      GDG-COD-CRR IN IDP-VARI
+      *   utilizando el CIC de la Garantia y el CIC del Deposito
+      *      FRM-CAI-IOPD IN IDP-VARI
+      *      FRM-IIC-IOPD IN IDP-VARI
+      * Escribe registros GDD, opcionalmente, de acuerdo al parametro
+      *  de llamada FRM-COD-DEUD ('S'= si lo hace, 'N' no lo hace )
+      * Si hay un error devuelve MSG-COD-MENS con el codigo del mensaje error
+      * El error se maneja en programa llamador
+       
+       ENVIRONMENT DIVISION.
+      *====================
+       CONFIGURATION SECTION.
+      *----------------------
+       SPECIAL-NAMES.
+               DECIMAL-POINT IS COMMA.
+       
+       DATA DIVISION.
+      *=============
+
+       WORKING-STORAGE SECTION.
+      *-----------------------
+       COPY GNSBRTAB.
+       COPY GNSBRMSC.
+       COPY GNSBRMSG.
+       COPY GNSWCFIO.
+       COPY GNSWVFIO.
+       COPY GNSWGHOY.
+       COPY GNSWGSYS.
+       COPY GNSWGPES.
+       COPY GNSWGFRM.
+*% IF NOT PGM_VMS
+       COPY GNSWVIDD.
+       01  SCR-VARI.
+           03 SCR-SIST             VALUE 'GAR' PIC X(03).
+           03 SCR-QIDD                         PIC X(08).
+           03 SCR-LIDD                    COMP PIC S9(04).
+*% ELSE
+       01  SCR-VARI.
+*% END
+      * Para utilizar codigo estandar .SRC
+           03 SCR-CCPP             VALUE 'ING' PIC X(03).
+
+       COPY GARBRGDD.
+       COPY GARBRGDO.
+       COPY GARBRGVT.
+
+       COPY DAPBROPD.
+       COPY DAPBRRCC.
+
+*% IF NOT PGM_VMS
+       COPY GARWGIDP.
+*% END
+
+       01  WSS-VARI.
+           03 WSS-IMAL                  VALUE 0           PIC 9(01).
+           03 CIV-SIV-EMI.
+              05 GAR-CIV-EMI                              PIC X(03).
+              05 GAR-SIV-EMI                              PIC X(03).
+           03 GAR-VCB              VALUE SPACES           PIC X(06).
+
+*% IF PGM_DTC
+       COPY GNSWGRQA.
+       COPY GNSWGUIB.
+       COPY GNSWGELS.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-TAB-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-MSG-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-MSC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-GDD-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-GVT-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-GDO-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-RCC-REQA==.
+*% END
+
+       LINKAGE SECTION.
+      *---------------
+*% IF PGM_VMS
+       COPY GARWGIDP.
+*% ELSE
+       01  DFHCOMMAREA.
+           02 FILLER                               PIC X(430).
+       COPY GNSLGFIO.
+*% END
+       
+*% IF PGM_VMS
+       PROCEDURE DIVISION USING IDP-VARI.
+      *=================================
+*% ELSE
+       PROCEDURE DIVISION.
+      *===================
+*% END
+       MAIN SECTION.
+      *------------
+       INI-MAIN.
+           PERFORM INI.
+
+      * Graba GDD si corresponde
+           IF FRM-COD-DEUD IN IDP-VARI NOT = 'S'
+               GO TO ESC-GDO.
+
+      * Busca Cliente(s) del OPD de DAP mediante RCC
+           MOVE FRM-CAI-IOPD IN IDP-VARI TO RCC-CAI-IOPD IN RCC.
+           MOVE FRM-IIC-IOPD IN IDP-VARI TO RCC-IIC-IOPD IN RCC.
+           MOVE 'RCC-KEY-IOPD' TO FIO-AKEY.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM DAP-FIO-RCC.
+           IF NOT (
+                  FIO-STAT-OKS AND
+                  FRM-CAI-IOPD IN IDP-VARI = RCC-CAI-IOPD IN RCC AND
+                  FRM-IIC-IOPD IN IDP-VARI = RCC-IIC-IOPD IN RCC
+                  )
+               MOVE 'GAR'          TO MSG-COD-SIST
+               MOVE 'RCC    NEX'   TO MSG-COD-MENS
+               GO TO EXT-MAIN.
+
+      * Graba GDD
+*% REG = 'GDD'
+*% INCLUDE 'GARSRC:LIMFLD.SRC'
+*% INCLUDE 'GARSRC:STDFLD.SRC'
+           PERFORM LUP-ESC-GDD UNTIL
+              NOT (
+                  FIO-STAT-OKS AND
+                  FRM-CAI-IOPD IN IDP-VARI = RCC-CAI-IOPD IN RCC AND
+                  FRM-IIC-IOPD IN IDP-VARI = RCC-IIC-IOPD IN RCC
+                  ).
+
+      * Graba GDO
+       ESC-GDO.
+*% REG = 'GDO'
+*% INCLUDE 'GARSRC:LIMFLD.SRC'
+*% INCLUDE 'GARSRC:STDFLD.SRC'
+           MOVE FRM-CAI-IOPD IN IDP-VARI TO GAR-NUM-SIS IN GDO.
+           MOVE FRM-IIC-IOPD IN IDP-VARI TO GAR-COD-CRR IN GDO.
+           MOVE GAR-CLV-GDO-1 IN GDO     TO GAR-COD-DOC IN GDO.
+           MOVE GAR-ID IN IDP-VARI       TO GAR-CLV-GDO-1 IN GDO.
+           MOVE OPD-COD-COPD IN OPD      TO GAR-TIP-DOC IN GDO.
+           MOVE OPD-FEC-FREA IN OPD      TO GAR-FEC-CAP IN GDO.
+
+      *BUS-TAB Busca codigo del propio Banco
+           MOVE 'TAB' TO TAB-COD-SIST.
+           MOVE 'BCO' TO TAB-CIC-TTAB IN TAB.
+           MOVE '016' TO TAB-CIC-CTAB IN TAB.
+           MOVE 'TAB-CIC-TABL' TO FIO-AKEY.
+           PERFORM BUS-TAB.
+           IF MSG-COD-MENS = SPACES
+               MOVE 'BCO'                   TO GAR-TIV-EMI IN GDO
+               MOVE TAB-COD-CTAB IN TAB     TO CIV-SIV-EMI IN WSS-VARI
+               MOVE GAR-CIV-EMI IN WSS-VARI TO GAR-CIV-EMI IN GDO
+               MOVE GAR-SIV-EMI IN WSS-VARI TO GAR-SIV-EMI IN GDO
+           ELSE
+               MOVE 'GNS' TO MSG-COD-SIST
+               GO TO EXT-MAIN.
+
+           MOVE FIO-PUT TO FIO-CMND.
+           PERFORM GAR-FIO-GDO.
+           IF NOT FIO-STAT-OKS
+               MOVE 'GAR'        TO MSG-COD-SIST
+               MOVE 'GDO    PUT' TO MSG-COD-MENS
+               GO TO EXT-MAIN.
+
+      * Graba GVT
+       ESC-GVT.
+*% REG = 'GVT'
+*% INCLUDE 'GARSRC:LIMFLD.SRC'
+*% INCLUDE 'GARSRC:STDFLD.SRC'
+           MOVE GAR-NUM-SIS  IN IDP-VARI TO GAR-NUM-SIS IN GVT.
+           MOVE GAR-COD-CRR  IN IDP-VARI TO GAR-COD-CRR IN GVT.
+           MOVE +1                       TO GAR-COD-TSN IN GVT.
+           MOVE OPD-FEC-FREA IN OPD      TO GAR-FEC-TSN IN GVT.
+
+           MOVE OPD-VAL-SCAP IN OPD      TO GAR-VAL-CML-TSN IN GVT.
+           MOVE OPD-VAL-SCAP IN OPD      TO GAR-VAL-LIQ-TSN IN GVT.
+
+           MOVE GAR-PCT-PON  IN IDP-VARI TO GAR-PCT-PON     IN GVT.
+      * Calcula Valor Ponderado
+           COMPUTE GAR-VAL-PON IN GVT ROUNDED =
+                   GAR-VAL-LIQ-TSN IN GVT *
+                   GAR-PCT-PON IN IDP-VARI / 100.
+
+           IF GAR-VCB IN IDP-VARI = GAR-VCB IN WSS-VARI
+               MOVE GAR-VAL-PON  IN GVT TO 
+                    PES-SGV-DECI IN PES-VARI
+               PERFORM PES-SCTV
+               MOVE PES-SGV-ENTE IN PES-VARI TO
+                    GAR-VAL-PON  IN GVT.
+
+           MOVE GAR-PCT-AJT-SUP IN IDP-VARI TO GAR-PCT-AJT-SUP IN GVT.
+      * Calcula Valor Ajustado SBIF
+           COMPUTE   GAR-VAL-AJT-SUP IN GVT ROUNDED =
+                     GAR-VAL-CML-TSN IN GVT -
+                   ( GAR-VAL-CML-TSN IN GVT *
+                     GAR-PCT-AJT-SUP IN IDP-VARI / 100 ).
+
+           IF GAR-VCB IN IDP-VARI = GAR-VCB IN WSS-VARI
+               MOVE GAR-VAL-AJT-SUP IN GVT TO 
+                    PES-SGV-DECI    IN PES-VARI
+               PERFORM PES-SCTV
+               MOVE PES-SGV-ENTE    IN PES-VARI TO
+                    GAR-VAL-AJT-SUP IN GVT.
+
+      * Se contabiliza por valor ajustado, luego debe ser > 0
+      *    salvo en el ingreso con Tasaciones Parciales
+           IF GAR-VAL-AJT-SUP IN GVT NOT > ZEROES
+               MOVE 'GAR'      TO MSG-COD-SIST
+               MOVE 'GVTAJT=0' TO MSG-COD-MENS
+               GO TO EXT-MAIN.
+
+      *    Obtiene Codigo Tasador = Ejecutivo Mediante CIC  '997'
+           MOVE 'TAB'          TO FIO-SIST.
+           MOVE 'TAS'          TO TAB-CIC-TTAB IN TAB.
+           MOVE '997'          TO TAB-CIC-CTAB IN TAB.
+           MOVE 'TAB-CIC-TABL' TO FIO-AKEY.
+           MOVE FIO-GET-KEY    TO FIO-CMND.
+           PERFORM GNS-FIO-TAB.
+           IF NOT FIO-STAT-OKS
+               MOVE 'TAB'          TO MSG-COD-SIST
+               MOVE 'TAS997 NEX'   TO MSG-COD-MENS
+               GO TO EXT-MAIN
+           ELSE
+               MOVE TAB-COD-CTAB IN TAB TO GAR-IIV-TSD  IN GVT
+               MOVE SPACES              TO GAR-IIV-SVS  IN GVT.
+
+           MOVE 'A'                     TO GVT-MSC-STAT IN GVT.
+           MOVE SPACES                  TO GAR-TIP-CTR  IN GVT.
+           MOVE ZEROES                  TO GAR-M2-TRR   IN GVT.
+           MOVE SPACES                  TO GAR-COD-UMD  IN GVT.
+           MOVE GAR-FEC-TSN IN GVT      TO GAR-FEC-RVL  IN GVT.
+           MOVE ZEROES                  TO GAR-M2-CTR   IN GVT.
+           MOVE SPACES                  TO GAR-TIP-MAQ-EQP IN GVT.
+
+           MOVE FIO-PUT TO FIO-CMND.
+           PERFORM GAR-FIO-GVT.
+           IF NOT FIO-STAT-OKS
+               MOVE 'GAR'          TO MSG-COD-SIST
+               MOVE 'GVT    PUT'   TO MSG-COD-MENS
+               GO TO EXT-MAIN.
+
+       EXT-MAIN.
+           PERFORM FIN.
+       FIN-MAIN.
+           EXIT.
+
+       INI SECTION.
+       INI-INI.
+*% IF PGM_DTC
+       COPY GNSBGEDB.
+*% END
+*% IF PGM_VSI
+      *Handler para manejar VSAM
+           PERFORM GNS-HDL-VSM.
+*% END
+*% IF NOT PGM_VMS
+           MOVE DFHCOMMAREA          TO IDP-CMMA IN IDP-VARI.
+           MOVE IDP-PROG             TO FIO-PROG.
+      *Buscar Independencia de Datos
+           MOVE IDP-QIDD TO SCR-QIDD.
+           MOVE IDP-LIDD TO SCR-LIDD.
+           PERFORM GNS-BUS-IDD.
+*% END
+      *Carga
+           MOVE IDP-ROPD IN IDP-VARI TO OPD.
+      * Limpia Variables de Retorno
+           MOVE SPACES  TO MSG-COD-SIST
+                           MSG-COD-MENS.
+*% IF PGM_VMS
+       OPE-GVT.
+           MOVE 'GAR'   TO FIO-SIST.
+           MOVE FIO-ACCS-UPD TO FIO-ACCS.
+           MOVE FIO-ACC      TO FIO-CMND.
+           PERFORM GAR-FIO-GVT.
+           MOVE FIO-UPD TO FIO-CMND.
+           PERFORM GAR-FIO-GVT.
+*% END
+
+      *    Obtiene Codigo Valor de Cambio de Pesos Mediante CIC de Moneda '0999'
+           MOVE 'TAB'          TO FIO-SIST.
+           MOVE 'VLR'          TO TAB-CIC-TTAB IN TAB.
+           MOVE '0999  '       TO TAB-CIC-CTAB IN TAB.
+           MOVE 'TAB-CIC-TABL' TO FIO-AKEY.
+           MOVE FIO-GET-KEY    TO FIO-CMND.
+           PERFORM GNS-FIO-TAB.
+           IF NOT FIO-STAT-OKS
+               MOVE 'TAB'          TO MSG-COD-SIST
+               MOVE 'CIC0999  NEX' TO MSG-COD-MENS
+               GO TO EXT-MAIN
+           ELSE
+               MOVE TAB-COD-CTAB IN TAB TO GAR-VCB IN WSS-VARI.
+       FIN-INI.
+           EXIT.
+
+       FIN SECTION.
+       INI-FIN.
+*% IF PGM_VMS
+
+       CLO-GVT.
+           MOVE FIO-ACCS-UPD TO FIO-ACCS.
+           MOVE FIO-ACC      TO FIO-CMND.
+           MOVE 'GAR'        TO FIO-SIST.
+           PERFORM GAR-FIO-GVT.
+           MOVE FIO-CLO TO FIO-CMND.
+           PERFORM GAR-FIO-GVT.
+
+*% END
+           MOVE MSG-COD-SIST TO IDP-COD-SIST IN IDP-VARI.
+           MOVE MSG-COD-MENS TO IDP-COD-MENS IN IDP-VARI.
+*% IF PGM_VMS
+
+           EXIT PROGRAM.
+*% ELSE
+           MOVE IDP-CMMA IN IDP-VARI TO DFHCOMMAREA.
+           MOVE +0 TO EIBRESP.
+
+       COPY GNSBGGBK.
+*% END
+       FIN-FIN.
+           EXIT.
+
+       LUP-ESC-GDD SECTION.
+       INI-LUP-ESC-GDD.
+           MOVE GAR-NUM-SIS  IN IDP-VARI TO GAR-NUM-SIS       IN GDD.
+           MOVE GAR-COD-CRR  IN IDP-VARI TO GAR-COD-CRR       IN GDD.
+           MOVE RCC-CIC-ICLI IN RCC      TO GDD-CIC-ICLI      IN GDD.
+
+           MOVE ZEROES                     TO GAR-VAL-LIM-DDR IN GDD.
+           IF RCC-VAL-PRCO IN RCC NOT > ZEROES
+               MOVE +100                   TO GAR-PCT-LIM-DDR IN GDD
+           ELSE
+               MOVE RCC-VAL-PRCO IN RCC    TO GAR-PCT-LIM-DDR IN GDD.
+
+           MOVE FIO-PUT TO FIO-CMND.
+           PERFORM GAR-FIO-GDD.
+           IF NOT FIO-STAT-OKS
+               MOVE 'GAR'        TO MSG-COD-SIST
+               MOVE 'GDD    PUT' TO MSG-COD-MENS
+               GO TO FIN-LUP-ESC-GDD.
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM DAP-FIO-RCC.
+       FIN-LUP-ESC-GDD.
+           EXIT.
+
+       COPY GNSBGSYS.
+       COPY GNSBGHOY.
+       COPY GNSBGPES.
+       COPY GNSBBTAB.
+*% IF NOT PGM_VMS
+       COPY GNSBBIDD.
+*% END
+*% IF PGM_VSI
+       COPY GNSBHVSM.
+       COPY GNSBGVSM.
+*% END
+*% IF PGM_DTC
+       COPY GNSBGDTC.
+*% END
+       COPY GNSBGMSG.
+       COPY GNSBIABT.
+
+       COPY GNSBFTAB.
+       COPY GNSBFMSC.
+       COPY GNSBFMSG.
+
+           COPY GARBFGDD.
+           COPY GARBFGDO.
+           COPY GARBFGVT.
+
+           COPY DAPBFRCC.
+
+*% IF PGM_DTC
+       BCK-OUT SECTION.
+       INI-BCK-OUT.
+           MOVE FIO-BCK-OUT TO FIO-CMND.
+           PERFORM GAR-FIO-GDO.
+           IF FIO-STAT-OKS
+               MOVE 'GAR'    TO MSG-COD-SIST
+               MOVE 'BCKOUT' TO MSG-COD-MENS
+               MOVE '49'     TO FIO-STAT.
+       FIN-BCK-OUT.
+           EXIT.
+
+*% END

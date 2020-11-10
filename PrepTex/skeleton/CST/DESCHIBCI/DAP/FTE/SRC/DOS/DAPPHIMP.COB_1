@@ -1,0 +1,1488 @@
+000000 IDENTIFICATION DIVISION.
+000000 PROGRAM-ID. DAPPHIMP.
+000000*AUTHOR. P CONCHA L.
+000000******************************************************************
+000000*  SISTEMA     : DAP                                             *
+000000*  SUBSISTEMA  : LINEA                                           *
+000000*  TRANSACCION : 5890                                            *
+000000*  DESCRIPCION : TRANSACCION   DE IMPRESION   DAP                *
+000000*  ANALISTA    : H.ARAVENA R.                                    *
+000000*                                                                *
+000000*  ARCHIVOS :                                                    *
+000000*   I-O     :IMP-370                                             *
+000000*            OPD-370                                             *
+000000*                                                                *
+000000*  MANTENCIONES                                                  *
+000000*  ============                                                  *
+000000*            PROGRAMADOR: PCONCHA                                *
+000000*            FECHA      : 19/08/1998                             *
+000000*            CAMBIO     : CORRECCION EN IMPRESION DE FORMULARIO  *
+000000*                                                                *
+000000*            PROGRAMADOR: PCONCHA                                *
+000000*            FECHA      : 27/08/1998                             *
+000000*            CAMBIO     : SE INCORPORA IMPRESION DE FORMULARIO   *
+000000*                         DAP-US$-IND-NOENDOSABLE                *
+000000*                         SE AGREGA VALIDACION DE MONEDA CONTRA  *
+000000*                         OPD ANTES DE IMPRIMIR.                 *
+000000*                         0=$(999), 1=UF(998), 2=US$(013)        *
+000000*                                                                *
+000000*            PROGRAMADOR: PCONCHA                                *
+000000*            FECHA      : 22/06/1999                             *
+000000*            CAMBIO     : SE INCORPORA VALIDACION DE CODIGO DE   *
+000000*                         CUSTODIA.  NO SE PUEDEN IMPRIMIR DAP   *
+000000*                         SI TIENEN CODIGO DE CUSTODIA EN 'E'    *
+000000*                         (CUSTODIA ELECTRONICA)                 *
+000000*                                                                *
+000000******************************************************************
+000000 ENVIRONMENT DIVISION.
+000000 CONFIGURATION SECTION.
+000000 SPECIAL-NAMES.
+000000     DECIMAL-POINT IS COMMA.
+000000     EJECT
+000000 DATA DIVISION.
+000000 WORKING-STORAGE SECTION.
+000000*-----------------------
+000000*
+000000     COPY MSGINP47.
+000000*
+000000     EJECT
+000000     COPY MSGOUT47.
+000000*
+000000     EJECT
+000000 01  VARIOS.
+000000*  AREA CONVERSION DSP <-> BIN
+000000     05 DSPBIN-VAL-DSP           PIC 9(4) COMP.
+000000     05 DSPBIN-VAL-DSP-R         REDEFINES DSPBIN-VAL-DSP.
+000000        10 DSPBIN-LOWVAL            PIC X.
+000000        10 DSPBIN-VAL-BIN           PIC X.
+000000*  VALOR X'15' PARA SALTO DE LINEA EN MENSAJE
+000000     05 WS-HEX15                 PIC X(01).
+000000*  VALOR X'FF' PARA TERMINO DE MENSAJE
+000000     05 WS-HEXFF                 PIC X(01).
+000000*  VALOR A SER IMPRESO
+000000     05 WS-VAL-IMPR              PIC 9(11)V9(04).
+000000*
+000000 01  WR-REGISTROS-DE-TRABAJO.
+000000* CAMPO CUENTA
+000000     05 WX-CUENT-X                    PIC X(08).
+000000     05 WX-CUENT-N REDEFINES WX-CUENT-X  PIC 9(15)       COMP-3.
+000000     05 WW-CUENT-N                    PIC 9(15).
+000000     05 WW-CUENT-X REDEFINES WW-CUENT-N.
+000000        10 WW-CUENT-FILLER               PIC X(03).
+000000        10 WW-CUENT-CLAVE                PIC X(12).
+000000* CAMPO SERIAL
+000000     05 WX-SERIA-X                    PIC X(08).
+000000     05 WX-SERIA-N REDEFINES WX-SERIA-X  PIC 9(15)       COMP-3.
+000000     05 WW-SERIA-N                    PIC 9(15).
+000000     05 WW-SERIA-X REDEFINES WW-SERIA-N.
+000000        10 WW-SERIA-FILLER               PIC X(03).
+000000        10 WW-SERIA-CLAVE.
+000000           15 WW-SERIA-CLAVE-FILLER      PIC X(01).
+000000           15 WW-SERIA-CLAVE-SUCURS      PIC X(03).
+000000           15 WW-SERIA-CLAVE-MONEDA      PIC X(01).
+000000           15 WW-SERIA-CLAVE-NUMDOC      PIC X(06).
+000000           15 WW-SERIA-CLAVE-TIPDOC      PIC X(01).
+000000     05 WS-LLAVE-SUPER                PIC 9(01) VALUE 0.
+000000     05 WS-SGV-TANU              PIC S9(03)V9999.
+000000*
+000000* AREA DE COMUNICACION CON SUBRUTINA RUTUTBYT
+000000 01  AREAS-RUTUTBYT.
+000000     05 BYTE-D          PIC X.
+000000     05 FUNC-E          PIC 9.
+000000     05 BIT-MD          PIC 9.
+000000     05 TABLA.
+000000       10 TB-BITS       OCCURS 8 TIMES.
+000000         15 BIT-1-8     PIC 9.
+000000*
+000000     EJECT
+000000* AREA MONTO ESCRITO 2 DECIMALES   (RUTINA RUTUOESM)
+000000 01  NUMERO2                     PIC 9(12)V99.
+000000*
+000000* AREA MONTO ESCRITO 4 DECIMALES   (RUTINA RUTUOES2)
+000000 01  NUMERO4                     PIC 9(12)V9999.
+000000*
+000000 01  PALABRA.
+000000     05 WS-PALABRA               PIC X(163).
+000000     05 WS-PALABRA-R             REDEFINES WS-PALABRA.
+000000        10 WS-PALABRA1              PIC X(56).
+000000        10 WS-PALABRA2              PIC X(56).
+000000        10 WS-PALABRA3              PIC X(51).
+000000*
+000000     EJECT
+000000****************************************************************
+000000*
+000000 01  W-MSG.
+000000     05 W-MSGCOD.
+000000        10 W-MSGCOD-LARGO             PIC 9(04) VALUE 16.
+000000        10 W-MSGCOD-MENSAJE.
+000000           15 W-MSGCOD-FMH            PIC X(03).
+000000           15 W-MSGCOD-CODIGO         PIC X(01).
+000000           15 W-MSGCOD-ESTADO         PIC X(01).
+000000           15 W-MSGCOD-NRO-MENSAJ     PIC X(03).
+000000           15 W-MSGCOD-NRO-RUTCMD     PIC X(03).
+000000           15 W-MSGCOD-COD-OFIC       PIC X(03).
+000000           15 W-MSGCOD-DST-MENSAJ     PIC X(01).
+000000           15 W-MSGCOD-FIN-MENSAJ     PIC X(01).
+000000*
+000000     05 W-MSGTXT.
+000000        10 W-MSGTXT-LARGO             PIC 9(04) VALUE 76.
+000000        10 W-MSGTXT-MENSAJE.
+000000           15 W-MSGTXT-FMH            PIC X(03).
+000000           15 W-MSGTXT-CODIGO         PIC X(01).
+000000           15 W-MSGTXT-ESTADO         PIC X(01).
+000000           15 W-MSGTXT-NRO-MENSAJ     PIC X(03).
+000000           15 W-MSGTXT-NRO-RUTCMD     PIC X(03).
+000000           15 W-MSGTXT-COD-OFIC       PIC X(03).
+000000           15 W-MSGTXT-DST-MENSAJ     PIC X(01).
+000000           15 W-MSGTXT-GLS-MENSAJ     PIC X(60).
+000000           15 W-MSGTXT-FIN-MENSAJ     PIC X(01).
+000000*
+000000     05 W-MSGIMP.
+000000        10 W-MSGIMP-LARGO             PIC 9(04) VALUE 826.
+000000        10 W-MSGIMP-MENSAJE.
+000000           15 W-MSGIMP-FMH            PIC X(03).
+000000           15 W-MSGIMP-CODIGO         PIC X(01).
+000000           15 W-MSGIMP-ESTADO         PIC X(01).
+000000           15 W-MSGIMP-NRO-MENSAJ     PIC X(03).
+000000           15 W-MSGIMP-NRO-RUTCMD     PIC X(03).
+000000           15 W-MSGIMP-COD-OFIC       PIC X(03).
+000000           15 W-MSGIMP-DST-MENSAJ     PIC X(01).
+000000           15 W-MSGIMP-DAT-MENSAJ     PIC X(810).
+000000           15 W-MSGIMP-FIN-MENSAJ     PIC X(01).
+000000*
+000000     EJECT
+000000 01  TABLA-DOCUMENTOS.
+000000     05 WS-MDC.
+000000        10 WS-MDC-MONEDA              PIC X(01).
+000000        10 WS-MDC-TIPDOC              PIC X(01).
+000000        10 WS-MDC-CERTIF              PIC X(03).
+000000        10 WS-MDC-MDAOPD              PIC X(03).
+000000     05 TAB-DOCUMENTOS.
+000000* FORMATO IMPRESION  (TIPO DE DOCUMENTO A IMPRIMIR) ------+
+000000* CODIGO MONEDA DE OPD (COD-CVAL) ---------------------+  |
+000000* TIPO CERTIFICADO   (IMP-COD-TCDP) ---------------+   |  |
+000000* TIPO DOCUMENTO     (BYTE 12 DE SERIAL)--------+  |   |  |
+000000* MONEDA             (BYTE  5 DE SERIAL)------+ |  |   |  |
+000000*    0=$$, 1=UF, 2=US                         | |  |   |  |
+000000*                                             | |  |   |  |
+000000        10 FILLER            PIC X(13) VALUE '0-1-001-999-A'.
+000000        10 FILLER            PIC X(13) VALUE '0-4-004-999-A'.
+000000        10 FILLER            PIC X(13) VALUE '0-2-003-999-B'.
+000000        10 FILLER            PIC X(13) VALUE '0-3-003-999-B'.
+000000        10 FILLER            PIC X(13) VALUE '1-1-005-998-C'.
+000000        10 FILLER            PIC X(13) VALUE '1-3-003-998-B'.
+000000        10 FILLER            PIC X(13) VALUE '1-4-006-998-C'.
+000000        10 FILLER            PIC X(13) VALUE '1-5-006-998-C'.
+000000        10 FILLER            PIC X(13) VALUE '2-1-007-013-A'.
+000000        10 FILLER            PIC X(13) VALUE '2-2-008-013-B'.
+000000        10 FILLER            PIC X(13) VALUE '2-3-008-013-B'.
+000000     05 TB-DOCTOS            REDEFINES TAB-DOCUMENTOS
+000000                             OCCURS 11 TIMES
+000000                             INDEXED BY IX-DOCTOS.
+000000        10 TB-DOCTOS-REG.
+000000           15 TB-DOCTOS-MONEDA      PIC X(01).
+000000           15 FILLER                PIC X(01).
+000000           15 TB-DOCTOS-TIPDOC      PIC X(01).
+000000           15 FILLER                PIC X(01).
+000000           15 TB-DOCTOS-CERTIF      PIC X(03).
+000000           15 FILLER                PIC X(01).
+000000           15 TB-DOCTOS-MDAOPD      PIC X(03).
+000000           15 FILLER                PIC X(01).
+000000           15 TB-DOCTOS-FRMIMP      PIC X(01).
+000000*
+000000 01  TABLA-MESES.
+000000     05 TAB-MESES.
+000000        10 FILLER                PIC X(03) VALUE 'ENE'.
+000000        10 FILLER                PIC X(03) VALUE 'FEB'.
+000000        10 FILLER                PIC X(03) VALUE 'MAR'.
+000000        10 FILLER                PIC X(03) VALUE 'ABR'.
+000000        10 FILLER                PIC X(03) VALUE 'MAY'.
+000000        10 FILLER                PIC X(03) VALUE 'JUN'.
+000000        10 FILLER                PIC X(03) VALUE 'JUL'.
+000000        10 FILLER                PIC X(03) VALUE 'AGO'.
+000000        10 FILLER                PIC X(03) VALUE 'SEP'.
+000000        10 FILLER                PIC X(03) VALUE 'OCT'.
+000000        10 FILLER                PIC X(03) VALUE 'NOV'.
+000000        10 FILLER                PIC X(03) VALUE 'DIC'.
+000000     05 TB-MESES                 REDEFINES TAB-MESES
+000000                                 OCCURS 12 TIMES.
+000000        10 TB-MESES-MES             PIC X(03).
+000000*
+000000     EJECT
+000000* AREA DE IMPRESION (FORMATEO MENSAJE DEFINITIVO DE 17 LINEAS)
+000000 01  WS-LINIMP.
+000000     05 WS-LINIMP-01.
+000000        10 WS-LINIMP-01-DAT      PIC X(70).
+000000        10 WS-LINIMP-01-IND      PIC X(01).
+000000     05 WS-LINIMP-02.
+000000        10 WS-LINIMP-02-IND      PIC X(01).
+000000     05 WS-LINIMP-03.
+000000        10 WS-LINIMP-03-IND      PIC X(01).
+000000     05 WS-LINIMP-04.
+000000        10 WS-LINIMP-04-DAT      PIC X(23).
+000000        10 WS-LINIMP-04-IND      PIC X(01).
+000000     05 WS-LINIMP-05.
+000000        10 WS-LINIMP-05-IND      PIC X(01).
+000000     05 WS-LINIMP-06.
+000000        10 WS-LINIMP-06-DAT      PIC X(70).
+000000        10 WS-LINIMP-06-IND      PIC X(01).
+000000     05 WS-LINIMP-07.
+000000        10 WS-LINIMP-07-IND      PIC X(01).
+000000     05 WS-LINIMP-08.
+000000        10 WS-LINIMP-08-DAT      PIC X(70).
+000000        10 WS-LINIMP-08-IND      PIC X(01).
+000000     05 WS-LINIMP-09.
+000000        10 WS-LINIMP-09-IND      PIC X(01).
+000000     05 WS-LINIMP-10.
+000000        10 WS-LINIMP-10-DAT      PIC X(70).
+000000        10 WS-LINIMP-10-IND      PIC X(01).
+000000     05 WS-LINIMP-11.
+000000        10 WS-LINIMP-11-DAT      PIC X(70).
+000000        10 WS-LINIMP-11-IND      PIC X(01).
+000000     05 WS-LINIMP-12.
+000000        10 WS-LINIMP-12-DAT      PIC X(70).
+000000        10 WS-LINIMP-12-IND      PIC X(01).
+000000     05 WS-LINIMP-13.
+000000        10 WS-LINIMP-13-DAT      PIC X(70).
+000000        10 WS-LINIMP-13-IND      PIC X(01).
+000000     05 WS-LINIMP-14.
+000000        10 WS-LINIMP-14-DAT      PIC X(70).
+000000        10 WS-LINIMP-14-IND      PIC X(01).
+000000     05 WS-LINIMP-15.
+000000        10 WS-LINIMP-15-DAT      PIC X(70).
+000000        10 WS-LINIMP-15-IND      PIC X(01).
+000000     05 WS-LINIMP-16.
+000000        10 WS-LINIMP-16-DAT      PIC X(70).
+000000        10 WS-LINIMP-16-IND      PIC X(01).
+000000     05 WS-LINIMP-17.
+000000        10 WS-LINIMP-17-DAT      PIC X(70).
+000000        10 WS-LINIMP-17-IND      PIC X(01).
+000000*
+000000     EJECT
+000000* LINEAS COMUNES A LOS DOCUMENTOS
+000000 01  WS-IDDOC.
+000000     05 FILLER                     PIC X(03)  VALUE SPACES.
+000000     05 WS-IDDOC-CLAVE             PIC X(12).
+000000     05 FILLER                     PIC X(38)  VALUE SPACES.
+000000     05 WS-IDDOC-VAL-VFIN          PIC X(17).
+000000     05 WS-IDDOC-VAL-VFIN-2DEC     REDEFINES
+000000        WS-IDDOC-VAL-VFIN             PIC ******.***.**9,99.
+000000     05 WS-IDDOC-VAL-VFIN-4DEC     REDEFINES
+000000        WS-IDDOC-VAL-VFIN             PIC ****.***.**9,9999.
+000000*
+000000 01  WS-IDOFI.
+000000     05 FILLER                     PIC X(03)  VALUE SPACES.
+000000     05 FILLER                     PIC X(06)  VALUE SPACES.
+000000     05 WS-IDOFI-GLS-OFIC          PIC X(14).
+000000*
+000000 01  WS-IDCLI1.
+000000     05 FILLER                     PIC X(03)  VALUE SPACES.
+000000     05 FILLER                     PIC X(09)  VALUE SPACES.
+000000     05 WS-IDCLI1-GLS-NOM1         PIC X(30).
+000000     05 FILLER                     PIC X(16)  VALUE SPACES.
+000000     05 WS-IDCLI1-NUM-ICL1         PIC 9(08).
+000000     05 WS-IDCLI1-VRF-ICL1         PIC X(01).
+000000     05 FILLER                     PIC X(03)  VALUE SPACES.
+000000*
+000000 01  WS-IDCLI2.
+000000     05 FILLER                     PIC X(03)  VALUE SPACES.
+000000     05 FILLER                     PIC X(09)  VALUE SPACES.
+000000     05 WS-IDCLI2-GLS-NOM2         PIC X(30).
+000000     05 FILLER                     PIC X(16)  VALUE SPACES.
+000000     05 WS-IDCLI2-NUM-ICL2         PIC 9(08).
+000000     05 WS-IDCLI2-VRF-ICL2         PIC X(01).
+000000     05 FILLER                     PIC X(03)  VALUE SPACES.
+000000*
+000000 01  WS-MTOES1.
+000000     05 FILLER                     PIC X(03)  VALUE SPACES.
+000000     05 FILLER                     PIC X(11)  VALUE SPACES.
+000000     05 WS-MTOES1-GLS-MOES         PIC X(56).
+000000*
+000000 01  WS-MTOES2.
+000000     05 FILLER                     PIC X(03)  VALUE SPACES.
+000000     05 WS-MTOES2-GLS-MOES         PIC X(56).
+000000     05 FILLER                     PIC X(11)  VALUE SPACES.
+000000*
+000000 01  WS-MTOES3.
+000000     05 FILLER                     PIC X(03)  VALUE SPACES.
+000000     05 WS-MTOES3-GLS-MOES         PIC X(51).
+000000     05 FILLER                     PIC X(16)  VALUE SPACES.
+000000*
+000000 01  WS-LINAA.
+000000     05 FILLER                     PIC X(03)  VALUE SPACES.
+000000     05 FILLER                     PIC X(13)  VALUE SPACES.
+000000     05 WS-LINAA-FEC-FREA.
+000000        10 WS-LINAA-NUM-DREA       PIC 9(02).
+000000        10 FILLER                  PIC X(01)  VALUE SPACES.
+000000        10 WS-LINAA-GLS-MREA       PIC X(03).
+000000        10 FILLER                  PIC X(01)  VALUE SPACES.
+000000        10 WS-LINAA-NUM-SREA       PIC 9(02).
+000000        10 WS-LINAA-NUM-AREA       PIC 9(02).
+000000     05 FILLER                     PIC X(06)  VALUE SPACES.
+000000     05 WS-LINAA-NUM-DURV          PIC Z(04)9.
+000000     05 FILLER                     PIC X(16)  VALUE SPACES.
+000000     05 WS-LINAA-FEC-FTER.
+000000        10 WS-LINAA-NUM-DTER       PIC 9(02).
+000000        10 FILLER                  PIC X(01)  VALUE SPACES.
+000000        10 WS-LINAA-GLS-MTER       PIC X(03).
+000000        10 FILLER                  PIC X(01)  VALUE SPACES.
+000000        10 WS-LINAA-NUM-STER       PIC 9(02).
+000000        10 WS-LINAA-NUM-ATER       PIC 9(02).
+000000     05 FILLER                     PIC X(05)  VALUE SPACES.
+000000*
+000000 01  WS-LINBB.
+000000     05 FILLER                     PIC X(03)  VALUE SPACES.
+000000     05 FILLER                     PIC X(07)  VALUE SPACES.
+000000     05 WS-LINBB-VAL-CAPT          PIC X(17).
+000000     05 WS-LINBB-VAL-CAPT-2DEC     REDEFINES
+000000        WS-LINBB-VAL-CAPT             PIC **.***.***.**9,99.
+000000     05 WS-LINBB-VAL-CAPT-4DEC     REDEFINES
+000000        WS-LINBB-VAL-CAPT             PIC ****.***.**9,9999.
+000000     05 FILLER                     PIC X(09)  VALUE SPACES.
+000000     05 WS-LINBB-SGV-TPER          PIC ZZ9,9999CR.
+000000     05 FILLER                     PIC X(09)  VALUE SPACES.
+000000     05 WS-LINBB-VAL-INTP          PIC X(15).
+000000     05 WS-LINBB-VAL-INTP-2DEC     REDEFINES
+000000        WS-LINBB-VAL-INTP             PIC ****.***.**9,99.
+000000     05 WS-LINBB-VAL-INTP-4DEC     REDEFINES
+000000        WS-LINBB-VAL-INTP             PIC **.***.**9,9999.
+000000*
+000000     EJECT
+000000* LINEAS PARTICULARES PERTENECIENTES A TIPO DE DOCUMENTO 'B'
+000000 01  WS-LIN1B.
+000000     05 FILLER                     PIC X(03)  VALUE SPACES.
+000000     05 FILLER                     PIC X(13)  VALUE SPACES.
+000000     05 WS-LIN1B-FEC-FREA.
+000000        10 WS-LIN1B-NUM-DREA       PIC 9(02).
+000000        10 FILLER                  PIC X(01)  VALUE SPACES.
+000000        10 WS-LIN1B-GLS-MREA       PIC X(03).
+000000        10 FILLER                  PIC X(01)  VALUE SPACES.
+000000        10 WS-LIN1B-NUM-SREA       PIC 9(02).
+000000        10 WS-LIN1B-NUM-AREA       PIC 9(02).
+000000     05 FILLER                     PIC X(43)  VALUE SPACES.
+000000*
+000000 01  WS-LIN2B.
+000000     05 FILLER                     PIC X(03)  VALUE SPACES.
+000000     05 FILLER                     PIC X(05)  VALUE SPACES.
+000000     05 WS-LIN2B-NUM-DURV          PIC Z(04)9.
+000000     05 FILLER                     PIC X(39)  VALUE SPACES.
+000000     05 WS-LIN2B-SGV-TPER          PIC ZZ9,9999CR.
+000000     05 FILLER                     PIC X(08)  VALUE SPACES.
+000000*
+000000     EJECT
+000000* LINEAS PARTICULARES PERTENECIENTES A TIPO DE DOCUMENTO 'C'
+000000 01  WS-LIN1C.
+000000     05 FILLER                     PIC X(03)  VALUE SPACES.
+000000     05 FILLER                     PIC X(09)  VALUE SPACES.
+000000     05 WS-LIN1C-VAL-VPES          PIC X(17).
+000000     05 WS-LIN1C-VAL-VPES-2DEC     REDEFINES
+000000        WS-LIN1C-VAL-VPES             PIC **.***.***.**9,99.
+000000     05 WS-LIN1C-VAL-VPES-4DEC     REDEFINES
+000000        WS-LIN1C-VAL-VPES             PIC ****.***.**9,9999.
+000000     05 FILLER                     PIC X(41)  VALUE SPACES.
+000000*
+000000     EJECT
+000000******************************************************************
+000000*      USER INFORMATION BLOCK                                    *
+000000******************************************************************
+000000*
+000000 01  UIB.
+000000     05 FILLER                 PIC X(32) VALUE 'DAPPHIMP'.
+000000*
+000000******************************************************************
+000000*      REQUEST AREA                                              *
+000000******************************************************************
+000000*
+000000 01  REQ-AREA-OPD.
+000000     02 REQ-COMAN-OPD        PIC X(05).
+000000     02 REQ-TBLNM-OPD        PIC X(03)  VALUE 'OPD'.
+000000     02 REQ-KEYNM-OPD        PIC X(05)  VALUE 'OPD00'.
+000000     02 REQ-RTNCD-OPD        PIC X(02)  VALUE SPACES.
+000000     02 REQ-INRCD-OPD        PIC X(01).
+000000     02 REQ-DBIDE-OPD        PIC S9(4)  COMP VALUE +370.
+000000     02 REQ-TBLID-OPD        PIC X(07).
+000000     02 FILLER               PIC X(25).
+000000     02 REQ-CTMAX-OPD        PIC S9(4)  COMP.
+000000     02 REQ-IOCNT-OPD        PIC S9(4)  COMP.
+000000     02 FILLER               PIC X(22).
+000000     02 REQ-KYVAL-OPD.
+000000        03 REQ-CLAVE-OPD     PIC X(12).
+000000*
+000000 01  REQ-AREA-IMP.
+000000     02 REQ-COMAN-IMP        PIC X(05).
+000000     02 REQ-TBLNM-IMP        PIC X(03)  VALUE 'IMP'.
+000000     02 REQ-KEYNM-IMP        PIC X(05)  VALUE 'IMP00'.
+000000     02 REQ-RTNCD-IMP        PIC X(02)  VALUE SPACES.
+000000     02 REQ-INRCD-IMP        PIC X(01).
+000000     02 REQ-DBIDE-IMP        PIC S9(4)  COMP VALUE +372.
+000000     02 REQ-TBLID-IMP        PIC X(07).
+000000     02 FILLER               PIC X(25).
+000000     02 REQ-CTMAX-INP        PIC S9(4)  COMP.
+000000     02 REQ-IOCNT-INP        PIC S9(4)  COMP.
+000000     02 FILLER               PIC X(22).
+000000     02 REQ-KYVAL-IMP.
+000000        03 REQ-CLAVE-IMP     PIC X(12).
+000000*
+000000     EJECT
+000000******************************************************************
+000000*                   WORK AREA                                    *
+000000******************************************************************
+000000*
+000000 01  REG-OPD.
+000000*    COPYDD DAP-R-OPD.DAP-E-OPD00(PROD),02,D
+      *                             EQUIVALENTE AL REGISTRO OPD
+           02  DAP-E-OPD00.
+      *                             OPERACION DEPOSITO A PLAZO
+               04  OPD.
+      *                             FILLER COMPATIBILIDAD VSAM/MVS
+                   06  OPD-GLS-FLAG PICTURE X(1).
+      *                             IDENTIFICACION OPERACION DAP
+                   06  OPD-KEY-IOPD.
+      *                             COD. INT. COMP. OPERACION DAP
+                       08  OPD-CIC-IOPD.
+      *                             CENTRO ASIGNACION IDENTIFICACION
+                       10  OPD-CAI-IOPD
+                                    PICTURE X(4).
+      *                             IDENT. INTERNA COMPUTACIONAL
+                       10  OPD-IIC-IOPD
+                                    PICTURE X(8).
+      *                             TIME STAMP TRANSACCION
+                   06  OPD-STP-ITRN.
+      *                             FECHA TRANSACCION
+                       08  OPD-FEC-FTRN
+                                    PICTURE 9(8).
+      *                             HORA TRANSACCION
+                       08  OPD-HRA-HRTR
+                                    PICTURE 9(6).
+      *                             INDICADOR TIPO ACCION
+                   06  OPD-COD-TACC PICTURE X(1).
+      *                             INDICADOR STATUS
+                   06  OPD-COD-STAT PICTURE X(1).
+      *                             CODIGO ORIGEN TRANSACCION
+                   06  OPD-COD-OTRN PICTURE X(4).
+      *                             AUTOR TRANSACCION
+                   06  OPD-COD-ATRN PICTURE X(12).
+      *                             VALOR DE CAMBIO OPERACION DAP
+                   06  OPD-COD-VCAM.
+      *                             MISCELANEO TIPO VALOR
+                       08  OPD-MSC-TVAL
+                                    PICTURE X(1).
+      *                             CODIGO VALOR
+                       08  OPD-COD-CVAL
+                                    PICTURE X(3).
+      *                             CODIGO TIPO CAMBIO
+                       08  OPD-COD-TCAM
+                                    PICTURE X(2).
+      *                             CODIGO CLASE OPERACION DAP
+                   06  OPD-COD-COPD.
+      *                             CODIGO TIPO OPERACION
+                       08  OPD-COD-TOPD
+                                    PICTURE X(3).
+      *                             CODIGO AUXILIAR OPERACION
+                       08  OPD-COD-AOPD
+                                    PICTURE X(3).
+      *                             CODIGO OFICINA OPERACION DAP
+                   06  OPD-COD-OFIC PICTURE X(3).
+      *                             RESPONSABLE MANTENCION OPERACION DAP
+                   06  OPD-COD-EJEC PICTURE X(12).
+      *                             COD. INT. COMP. SERIAL CDP
+                   06  OPD-CIC-ISER.
+      *                             CENTRO ASIGNACION IDENTIFICACION
+                       08  OPD-CAI-ISER
+                                    PICTURE X(4).
+      *                             IDENT. INTERNA COMPUTACIONAL
+                       08  OPD-IIC-ISER
+                                    PICTURE X(8).
+      *                             FECHA CAPTACION REAL
+                   06  OPD-FEC-FREA.
+                       08  OPD-NUM-SREA
+                                    PICTURE 9(2).
+                       08  OPD-NUM-AREA
+                                    PICTURE 9(2).
+                       08  OPD-NUM-MREA
+                                    PICTURE 9(2).
+                       08  OPD-NUM-DREA
+                                    PICTURE 9(2).
+      *                             FECHA EMISION CONTABLE
+                   06  OPD-FEC-FCTB.
+                       08  OPD-NUM-SCTB
+                                    PICTURE 9(2).
+                       08  OPD-NUM-ACTB
+                                    PICTURE 9(2).
+                       08  OPD-NUM-MCTB
+                                    PICTURE 9(2).
+                       08  OPD-NUM-DCTB
+                                    PICTURE 9(2).
+      *                             FECHA INGRESO COMPUTACIONAL
+                   06  OPD-FEC-FCMP.
+                       08  OPD-NUM-SCMP
+                                    PICTURE 9(2).
+                       08  OPD-NUM-ACMP
+                                    PICTURE 9(2).
+                       08  OPD-NUM-MCMP
+                                    PICTURE 9(2).
+                       08  OPD-NUM-DCMP
+                                    PICTURE 9(2).
+      *                             MONTO CAPTACION
+                   06  OPD-VAL-CAPT PICTURE S9(11)V9(4)
+                                        COMPUTATIONAL-3.
+      *                             SALDO VALOR CAPTACION
+                   06  OPD-VAL-SCAP PICTURE S9(11)V9(4)
+                                        COMPUTATIONAL-3.
+      *                             MONTO A PAGAR POR CAJA
+                   06  OPD-VAL-CAJA PICTURE S9(11)V9(4)
+                                        COMPUTATIONAL-3.
+      *                             ANALISIS FERIADOS (S/N)
+                   06  OPD-COD-AFER PICTURE X(1).
+      *                             CONDICION GARANTIA
+                   06  OPD-COD-GARA PICTURE X(1).
+      *                             CODIGO UBICACION FISICA CDP
+                   06  OPD-COD-UBFD.
+                       08  OPD-COD-IUBF
+                                    PICTURE X(3).
+                       08  OPD-COD-CUBF
+                                    PICTURE X(3).
+                       08  OPD-COD-SUBF
+                                    PICTURE X(3).
+      *                             NUMERO PROXIMO VENCIMIENTO
+                   06  OPD-NUM-IVEN PICTURE 9(3).
+      *                             FECHA PROXIMO VENCIMIENTO
+                   06  OPD-FEC-FPVC.
+                       08  OPD-NUM-SPVC
+                                    PICTURE 9(2).
+                       08  OPD-NUM-APVC
+                                    PICTURE 9(2).
+                       08  OPD-NUM-MPVC
+                                    PICTURE 9(2).
+                       08  OPD-NUM-DPVC
+                                    PICTURE 9(2).
+      *                             CODIGO TIPO TASA INTERES
+                   06  OPD-COD-TINT.
+      *                             CODIGO TIPO TASA
+                       08  OPD-COD-TIPT.
+      *                             BASE CALCULO TASA INTERES
+                       10  OPD-COD-BCTI
+                                    PICTURE X(1).
+      *                             PERIODO BASE TASA INTERES
+                       10  OPD-COD-PBTI
+                                    PICTURE X(1).
+      *                             MODALIDAD CALCULO TASA INTERES
+                       10  OPD-COD-MCTI.
+      *                             BAJO PERIODO BASE TASA
+                       12  OPD-COD-BPBT
+                                    PICTURE X(1).
+      *                             SOBRE PERIODO BASE TASA
+                       12  OPD-COD-SPBT
+                                    PICTURE X(1).
+      *                             CODIGO VALOR TASA INTERES
+                       08  OPD-COD-CVTI
+                                    PICTURE X(3).
+      *                             TIPO FECHA PERIODO REPACTO
+                       08  OPD-COD-TFPR
+                                    PICTURE X(1).
+      *                             NUMERO PERIODO REPACTO
+                       08  OPD-NUM-PREP
+                                    PICTURE 9(3).
+      *                             UNIDAD TIEMPO OPD-NUM-PREP
+                       08  OPD-MSC-PREP
+                                    PICTURE X(1).
+      *                             VALOR SPREAD
+                   06  OPD-SGV-SPRD PICTURE S9(5)V9(4)
+                                        COMPUTATIONAL.
+      *                             VALOR TASA
+                   06  OPD-SGV-TINT PICTURE S9(5)V9(4)
+                                        COMPUTATIONAL.
+      *                             RETENCION DOCUMENTO
+                   06  OPD-NUM-RETD PICTURE 9(3).
+      *                             UNIDAD TIEMPO OPD-NUM-RETD
+                   06  OPD-IND-RETD PICTURE X(1).
+      *                             IND DEVOLUCION DINERO DOC S/FONDOS
+                   06  OPD-COD-DEVL PICTURE X(1).
+      *                             INDICADOR CUSTODIA
+                   06  OPD-COD-CUST PICTURE X(1).
+      *                             CONDICION GARANTIA ( EN POD )
+                   06  OPD-COD-GPOD PICTURE X(1).
+      *                             SEPARACION ENTRE VENCIMIENTOS
+                   06  OPD-NUM-SEVE PICTURE 9(4)
+                                        COMPUTATIONAL.
+      *                             UNIDAD DE TIEMPO OPD-NUM-SEVE
+                   06  OPD-IND-SEVE PICTURE X(1).
+      *                             DURACION VENCIMIENTOS
+                   06  OPD-NUM-DURV PICTURE 9(4)
+                                        COMPUTATIONAL.
+      *                             UNIDAD DE TIEMPO OPD-NUM-DURV
+                   06  OPD-IND-DURV PICTURE X(1).
+      *                             NUMERO VENCIMIENTOS NO LIQUIDADOS
+                   06  OPD-NUM-VNLQ PICTURE 9(3).
+      *                             NUMERO VENCIMIENTOS LIQUIDADOS
+                   06  OPD-NUM-VSLQ PICTURE 9(3).
+      *                             MODALIDAD DE RETIRO
+                   06  OPD-COD-MORE PICTURE X(2).
+      *                             MONTO O PORCENTAJE DEL RETIRO
+                   06  OPD-SGV-MPRE PICTURE S9(11)V9(4)
+                                        COMPUTATIONAL-3.
+      *                             INDICADOR ORDEN NO PAGO
+                   06  OPD-COD-IONP PICTURE X(1).
+      *                             SITUACION CONTABLE
+                   06  OPD-COD-SCTB PICTURE X(3).
+      *                             INDICADOR RENOVABILIDAD
+                   06  OPD-COD-RENO PICTURE X(1).
+      *                             INDICADOR ENDOSABILIDAD
+                   06  OPD-COD-ENDO PICTURE X(1).
+      *                             VALOR REAJUSTES DEVENGADOS
+                   06  OPD-VAL-READ PICTURE S9(11)V9(4)
+                                        COMPUTATIONAL-3.
+      *                             VALOR INTERESES DEVENGADOS
+                   06  OPD-VAL-INTD PICTURE S9(11)V9(4)
+                                        COMPUTATIONAL-3.
+      *                             USUARIO QUE AUTORIZA TASA ESPECIAL
+                   06  OPD-COD-EATE PICTURE X(12).
+      *                             TASA PERIODO
+                   06  OPD-VAL-SINT PICTURE S9(11)V9(4)
+                                        COMPUTATIONAL-3.
+      *                             FECHA DEVENGO ( ULTIMO PAGO TOTAL IN
+                   06  OPD-FEC-FDEV.
+                       08  OPD-NUM-SDEV
+                                    PICTURE 9(2).
+                       08  OPD-NUM-ADEV
+                                    PICTURE 9(2).
+                       08  OPD-NUM-MDEV
+                                    PICTURE 9(2).
+                       08  OPD-NUM-DDEV
+                                    PICTURE 9(2).
+      *                             FECHA TERMINO DE LA OPERACION
+                   06  OPD-FEC-FTER.
+                       08  OPD-NUM-STER
+                                    PICTURE 9(2).
+                       08  OPD-NUM-ATER
+                                    PICTURE 9(2).
+                       08  OPD-NUM-MTER
+                                    PICTURE 9(2).
+                       08  OPD-NUM-DTER
+                                    PICTURE 9(2).
+      *                             TIPO CERTIF DAP
+                   06  OPD-COD-TCDP PICTURE X(3).
+      *                             CODIGO RESCATE
+                   06  OPD-COD-RESC PICTURE X(1).
+      *                             CODIGO PLAZO PAGO RESCATE
+                   06  OPD-COD-PLPA PICTURE X(1).
+      *                             PLAZO RESCATE
+                   06  OPD-NUM-PLRE PICTURE 9(3).
+      *                             UNIDAD TIEMPO PLAZO RESCATE
+                   06  OPD-IND-PLRE PICTURE X(1).
+      *                             PERIODO NEGOCIACION TASA ESPECIAL
+                   06  OPD-NUM-PNTE PICTURE 9(3).
+      *                             UNIDAD TIEMPO OPD-NUM-PNTE
+                   06  OPD-IND-PNTE PICTURE X(1).
+      *                             PLAZO CONTABLE
+                   06  OPD-COD-PLZO PICTURE X(2).
+      *                             RESERVADO SAFE
+                   06  OPD-GLS-SAFE PICTURE X(18).
+      *                             FECHA DE CAPTACION ORIGINAL
+                   06  OPD-FEC-FPCO.
+                       08  OPD-NUM-SPCO
+                                    PICTURE 9(2).
+                       08  OPD-NUM-APCO
+                                    PICTURE 9(2).
+                       08  OPD-NUM-MPCO
+                                    PICTURE 9(2).
+                       08  OPD-NUM-DPCO
+                                    PICTURE 9(2).
+      *                             PERIODO PRIMER VENCIMIENTO
+                   06  OPD-NUM-PVEN PICTURE 9(5)
+                                        COMPUTATIONAL-3.
+      *                             UNIDAD TIEMPO OPD-NUM-PVEN
+                   06  OPD-IND-PVEN PICTURE X(1).
+      *                             NUMERO DE OPERACION QUE GENERO RENOV
+                   06  OPD-CIC-GREN.
+                       08  OPD-CAI-GREN
+                                    PICTURE X(4).
+                       08  OPD-IIC-GREN
+                                    PICTURE X(8).
+      *                             INDICADOR ABONO AUTOMATICO A CUENTA
+                   06  OPD-COD-AACC PICTURE X(1).
+      *                             NUMERO DE OPERACION ORIGINAL
+                   06  OPD-CIC-ORIG.
+                       08  OPD-CAI-ORIG
+                                    PICTURE X(4).
+                       08  OPD-IIC-ORIG
+                                    PICTURE X(8).
+      *                             MULTIPLES CLIENTES ?
+                   06  OPD-IND-MCLI PICTURE X(1).
+      *                             INGRESO NO LINEA ? ( S = ODB, N = OD
+                   06  OPD-IND-IDIF PICTURE X(1).
+      *                             MONTO CAPTACION EN PESOS
+                   06  OPD-VAL-IPES PICTURE S9(11)V9(4)
+                                        COMPUTATIONAL-3.
+      *                             INDICADOR CUSTODIA ORIGINAL
+                   06  OPD-COD-CUSO PICTURE X(1).
+      *                             GLOSA DISPONIBLE
+                   06  OPD-GLS-DISP PICTURE X(9).
+000000*
+000000     EJECT
+000000 01  REG-IMP.
+000000*    COPYDD JDA-R-IMP.JDA-E-IMP00(PROD),02,D
+      *                             EQUIVALENTE AL REGISTRO IMP
+           02  JDA-E-IMP00.
+      *                             OPERACION DEPOSITO A PLAZO
+               04  IMP.
+      *                             FILLER COMPATIBILIDAD VSAM/MVS
+                   06  IMP-GLS-FLAG PICTURE X(1).
+      *                             SERIAL OPERACION DAP
+                   06  IMP-CIC-ISER.
+      *                             CENTRO ASIGNACION IDENTIFICACION
+                       08  IMP-CAI-ISER
+                                    PICTURE X(4).
+      *                             IDENT. INTERNA COMPUTACIONAL
+                       08  IMP-IIC-ISER
+                                    PICTURE X(8).
+      *                             TIME STAMP TRANSACCION
+                   06  IMP-STP-ITRN.
+      *                             FECHA TRANSACCION
+                       08  IMP-FEC-FTRN
+                                    PICTURE 9(8).
+      *                             HORA TRANSACCION
+                       08  IMP-HRA-HRTR
+                                    PICTURE 9(6).
+      *                             INDICADOR TIPO ACCION
+                   06  IMP-COD-TACC PICTURE X(1).
+      *                             INDICADOR STATUS
+                   06  IMP-COD-STAT PICTURE X(1).
+      *                             CODIGO ORIGEN TRANSACCION
+                   06  IMP-COD-OTRN PICTURE X(4).
+      *                             AUTOR TRANSACCION
+                   06  IMP-COD-ATRN PICTURE X(12).
+      *                             TIPO CERTIF DAP
+                   06  IMP-COD-TCDP PICTURE X(3).
+      *                             COD. DE OPERACION DAP
+                   06  IMP-CIC-IOPD.
+      *                             CENTRO ASIGNACION IDENTIFICACION
+                       08  IMP-CAI-IOPD
+                                    PICTURE X(4).
+      *                             IDENT. INTERNA COMPUTACIONAL
+                       08  IMP-IIC-IOPD
+                                    PICTURE X(8).
+      *                             CODIGO CLASE OPERACION DAP
+                   06  IMP-COD-COPD.
+      *                             CODIGO TIPO OPERACION
+                       08  IMP-COD-TOPD
+                                    PICTURE X(3).
+      *                             CODIGO AUXILIAR OPERACION
+                       08  IMP-COD-AOPD
+                                    PICTURE X(3).
+      *                             CODIGO OFICINA OPERACION DAP
+                   06  IMP-COD-OFIC PICTURE X(3).
+      *                             GLOSA OFICINA OPERACION DAP
+                   06  IMP-GLS-OFIC PICTURE X(20).
+      *                             FECHA CAPTACION REAL
+                   06  IMP-FEC-FREA.
+                       08  IMP-NUM-SREA
+                                    PICTURE 9(2).
+                       08  IMP-NUM-AREA
+                                    PICTURE 9(2).
+                       08  IMP-NUM-MREA
+                                    PICTURE 9(2).
+                       08  IMP-NUM-DREA
+                                    PICTURE 9(2).
+      *                             MONTO CAPTACION
+                   06  IMP-VAL-CAPT PICTURE 9(11)V9(4).
+      *                             MONTO CAPTACION EN PESOS
+                   06  IMP-VAL-VPES PICTURE 9(11)V9(4).
+      *                             VALOR SPREAD
+                   06  IMP-SGV-SPRD PICTURE S9(3)V9(4).
+      *                             VALOR TASA
+                   06  IMP-SGV-TINT PICTURE S9(3)V9(4).
+      *                             INTERESES PERIODO
+                   06  IMP-VAL-INTP PICTURE 9(11)V9(4).
+      *                             VALOR FINAL A PAGAR
+                   06  IMP-VAL-VFIN PICTURE 9(11)V9(4).
+      *                             NUMERO DE CLIENTES
+                   06  IMP-NUM-NCLI PICTURE 9(1).
+      *                             CLIENTE + INDICADOR O CALIFICADOR +
+                   06  IMP-IDC-ICL1.
+      *                             RUT CLIENTE 1
+                       08  IMP-NUM-ICL1
+                                    PICTURE X(8).
+      *                             INDICADOR TIPO RUT CLIENTE 1
+                       08  IMP-IND-ICL1
+                                    PICTURE X(1).
+      *                             EXTENSION DEL RUT CLIENTE 1
+                       08  IMP-GLS-ICL1
+                                    PICTURE X(3).
+      *                             DIGITO VERIFICADOR DEL RUT CLIENTE 1
+                   06  IMP-VRF-ICL1 PICTURE X(1).
+      *                             NOMBRE CLIENTE 1
+                   06  IMP-GLS-NOM1 PICTURE X(75).
+      *                             CLIENTE + INDICADOR O CALIFICADOR +
+                   06  IMP-IDC-ICL2.
+      *                             RUT CLIENTE 2
+                       08  IMP-NUM-ICL2
+                                    PICTURE X(8).
+      *                             INDICADOR TIPO RUT CLIENTE 2
+                       08  IMP-IND-ICL2
+                                    PICTURE X(1).
+      *                             EXTENSION DEL RUT CLIENTE 2
+                       08  IMP-GLS-ICL2
+                                    PICTURE X(3).
+      *                             DIGITO VERIFICADOR DEL RUT CLIENTE 2
+                   06  IMP-VRF-ICL2 PICTURE X(1).
+      *                             NOMBRE CLIENTE 2
+                   06  IMP-GLS-NOM2 PICTURE X(75).
+      *                             CONDICION GARANTIA
+                   06  IMP-COD-GARA PICTURE X(1).
+      *                             FECHA PROXIMO VENCIMIENTO
+                   06  IMP-FEC-FPVC.
+                       08  IMP-NUM-SPVC
+                                    PICTURE 9(2).
+                       08  IMP-NUM-APVC
+                                    PICTURE 9(2).
+                       08  IMP-NUM-MPVC
+                                    PICTURE 9(2).
+                       08  IMP-NUM-DPVC
+                                    PICTURE 9(2).
+      *                             RETENCION DOCUMENTO
+                   06  IMP-NUM-RETD PICTURE 9(3).
+      *                             UNIDAD TIEMPO IMP-NUM-RETD
+                   06  IMP-IND-RETD PICTURE X(1).
+      *                             INDICADOR CUSTODIA
+                   06  IMP-COD-CUST PICTURE X(1).
+      *                             INDICADOR RENOVABILIDAD
+                   06  IMP-COD-RENO PICTURE X(1).
+      *                             INDICADOR ENDOSABILIDAD
+                   06  IMP-COD-ENDO PICTURE X(1).
+      *                             DURACION VENCIMIENTOS
+                   06  IMP-NUM-DURV PICTURE 9(4).
+      *                             UNIDAD DE TIEMPO IMP-NUM-DURV
+                   06  IMP-IND-DURV PICTURE X(1).
+      *                             FECHA TERMINO DE LA OPERACION
+                   06  IMP-FEC-FTER.
+                       08  IMP-NUM-STER
+                                    PICTURE 9(2).
+                       08  IMP-NUM-ATER
+                                    PICTURE 9(2).
+                       08  IMP-NUM-MTER
+                                    PICTURE 9(2).
+                       08  IMP-NUM-DTER
+                                    PICTURE 9(2).
+      *                             PLAZO CONTABLE
+                   06  IMP-COD-PLZO PICTURE X(2).
+      *                             RESERVADO SAFE
+                   06  IMP-GLS-SAFE PICTURE X(18).
+      *                             VALOR TASA DEL PERIODO
+                   06  IMP-SGV-TPER PICTURE S9(11)V9(4).
+      *                             INDICADOR CUSTODIA ORIGINAL
+                   06  IMP-COD-CUSO PICTURE X(1).
+      *                             GLOSA DISPONIBLE
+                   06  IMP-GLS-DISP PICTURE X(15).
+000000*
+000000     EJECT
+000000******************************************************************
+000000*                 ELEMENT LIST                                   *
+000000******************************************************************
+000000*
+000000 01  ELM-LIS-OPD.
+000000     05 ELEM-OPD             PIC X(05)  VALUE 'OPD00'.
+000000     05 ELSE-OPD             PIC X(01).
+000000     05 FILLER               PIC X(05)  VALUE SPACES.
+000000*
+000000 01  ELM-LIS-IMP.
+000000     05 ELEM-IMP             PIC X(05)  VALUE 'IMP00'.
+000000     05 ELSE-IMP             PIC X(01).
+000000     05 FILLER               PIC X(05)  VALUE SPACES.
+000000*
+000000     EJECT
+000000*
+000000 LINKAGE SECTION.
+000000 01  DFHCOMMAREA.
+000000     05 FILLER PIC X(300).
+000000     EJECT
+000000*
+000000*
+000000*
+000000 PROCEDURE DIVISION.
+000000*------------------
+000000     PERFORM A-INICIO
+000000     PERFORM B-PROCESO
+000000     PERFORM Z-FIN.
+000000*
+000000 A-INICIO.
+000000*----------
+000000     EXEC CICS IGNORE CONDITION
+000000               NOTFND NOTOPEN DSIDERR DISABLED DUPKEY ILLOGIC
+000000               INVREQ IOERR NOTAUTH ISCINVREQ LENGERR SYSIDERR
+000000               DUPREC NOSPACE
+000000     END-EXEC.
+000000*
+000000     EXEC CICS HANDLE ABEND
+000000               LABEL(B1-FIN-ABEND)
+000000     END-EXEC.
+000000*
+000000     MOVE DFHCOMMAREA            TO MSGINP47-REG
+000000     MOVE EIBCALEN               TO MSGINP47-LEN
+000000*
+000000* INICIALIZA VARIABLES Y TRANSFORMA CAMPOS
+000000     MOVE MSGINP47-CAMPO-1       TO WX-CUENT-X
+000000     MOVE WX-CUENT-N             TO WW-CUENT-N.
+000000*
+000000     MOVE MSGINP47-CAMPO-2       TO WX-SERIA-X
+000000     MOVE WX-SERIA-N             TO WW-SERIA-N.
+000000*
+000000     MOVE 21                     TO DSPBIN-VAL-DSP
+000000     MOVE DSPBIN-VAL-BIN         TO WS-HEX15.
+000000     MOVE 255                    TO DSPBIN-VAL-DSP
+000000     MOVE DSPBIN-VAL-BIN         TO WS-HEXFF.
+000000     MOVE 0                      TO WS-VAL-IMPR,
+000000*
+000000* LEER TABLA OPD
+000000     MOVE 'REDKY'                TO REQ-COMAN-OPD
+000000     MOVE 'OPD'                  TO REQ-TBLNM-OPD
+000000     MOVE 'OPD01'                TO REQ-KEYNM-OPD
+000000     MOVE SPACES                 TO REQ-RTNCD-OPD
+000000     MOVE 370                    TO REQ-DBIDE-OPD
+000000     MOVE WW-SERIA-CLAVE         TO REQ-CLAVE-OPD
+000000     CALL 'DBNTRY' USING UIB REQ-AREA-OPD REG-OPD ELM-LIS-OPD
+000000     IF REQ-RTNCD-OPD = SPACES
+000000* RECH, MSG(000) 'SERIAL YA ASIGNADO. REPITA TRANSAC.' Y TERMINAR
+000000        MOVE '4'                 TO W-MSGTXT-CODIGO
+000000        MOVE '2'                 TO W-MSGTXT-ESTADO
+000000        MOVE '000'               TO W-MSGTXT-NRO-MENSAJ
+000000        MOVE '000'               TO W-MSGTXT-NRO-RUTCMD
+000000        MOVE SPACES              TO W-MSGTXT-COD-OFIC
+000000        MOVE '1'                 TO W-MSGTXT-DST-MENSAJ
+000000        MOVE 'SERIAL YA ASIGNADO. REPITA TRANSAC.'
+000000                                 TO W-MSGTXT-GLS-MENSAJ
+000000        MOVE HIGH-VALUE          TO W-MSGTXT-FIN-MENSAJ
+000000        MOVE W-MSGTXT-MENSAJE    TO MSGOUT47-REG
+000000        MOVE W-MSGTXT-LARGO      TO MSGOUT47-LEN
+000000        PERFORM Z-FIN
+000000     ELSE
+000000        IF REQ-RTNCD-OPD = '14'
+000000           NEXT SENTENCE
+000000        ELSE
+000000           MOVE '4'              TO W-MSGTXT-CODIGO
+000000           MOVE '2'              TO W-MSGTXT-ESTADO
+000000           MOVE '000'            TO W-MSGTXT-NRO-MENSAJ
+000000           MOVE '000'            TO W-MSGTXT-NRO-RUTCMD
+000000           MOVE SPACES           TO W-MSGTXT-COD-OFIC
+000000           MOVE '1'              TO W-MSGTXT-DST-MENSAJ
+000000           MOVE 'ERROR EN BASE DE DATOS'
+000000                                 TO W-MSGTXT-GLS-MENSAJ
+000000           MOVE WS-HEXFF         TO W-MSGTXT-FIN-MENSAJ
+000000           MOVE W-MSGTXT-MENSAJE TO MSGOUT47-REG
+000000           MOVE W-MSGTXT-LARGO   TO MSGOUT47-LEN
+000000           PERFORM Z-FIN.
+000000*
+000000* DECODIFICAR INDICADORES (BITS)
+000000     MOVE ALL '0'                TO TABLA
+000000     IF MSGINP47-INDICADORES = LOW-VALUE
+000000        NEXT SENTENCE
+000000     ELSE
+000000        MOVE MSGINP47-INDICADORES
+000000                                 TO BYTE-D
+000000        MOVE 9                   TO FUNC-E
+000000        MOVE 0                   TO BIT-MD
+000000*       CALL 'RUTUTBYT' USING
+000000        CALL 'RCTUTBYT' USING DFHEIBLK DFHCOMMAREA
+000000           BYTE-D FUNC-E BIT-MD TABLA.
+000000     MOVE BIT-1-8 (4)            TO WS-LLAVE-SUPER.
+000000*
+000000 B-PROCESO.
+000000*
+000000* LEE OPERACION EN IMP
+000000     PERFORM B3-LEER-IMP
+000000     IF REQ-RTNCD-IMP = SPACES
+000000        NEXT SENTENCE
+000000     ELSE
+000000        IF REQ-RTNCD-IMP = '14'
+000000* RECH, MSG(134) 'DOCTO. NO EXISTE' Y TERMINAR
+000000           MOVE '4'              TO W-MSGCOD-CODIGO
+000000           MOVE '2'              TO W-MSGCOD-ESTADO
+000000           MOVE '134'            TO W-MSGCOD-NRO-MENSAJ
+000000           MOVE '000'            TO W-MSGCOD-NRO-RUTCMD
+000000           MOVE SPACES           TO W-MSGCOD-COD-OFIC
+000000           MOVE '1'              TO W-MSGCOD-DST-MENSAJ
+000000           MOVE HIGH-VALUE       TO W-MSGCOD-FIN-MENSAJ
+000000           MOVE W-MSGCOD-MENSAJE TO MSGOUT47-REG
+000000           MOVE W-MSGCOD-LARGO   TO MSGOUT47-LEN
+000000           PERFORM Z-FIN
+000000        ELSE
+000000           MOVE '4'              TO W-MSGTXT-CODIGO
+000000           MOVE '2'              TO W-MSGTXT-ESTADO
+000000           MOVE '000'            TO W-MSGTXT-NRO-MENSAJ
+000000           MOVE '000'            TO W-MSGTXT-NRO-RUTCMD
+000000           MOVE SPACES           TO W-MSGTXT-COD-OFIC
+000000           MOVE '1'              TO W-MSGTXT-DST-MENSAJ
+000000           MOVE 'ERROR EN BASE DE DATOS'
+000000                                 TO W-MSGTXT-GLS-MENSAJ
+000000           MOVE WS-HEXFF         TO W-MSGTXT-FIN-MENSAJ
+000000           MOVE W-MSGTXT-MENSAJE TO MSGOUT47-REG
+000000           MOVE W-MSGTXT-LARGO   TO MSGOUT47-LEN
+000000           PERFORM Z-FIN.
+000000* LEE OPERACION EN OPD
+000000     PERFORM B3-LEER-OPD
+000000     IF REQ-RTNCD-OPD = SPACES
+000000        NEXT SENTENCE
+000000     ELSE
+000000        IF REQ-RTNCD-OPD = '14'
+000000* RECH, MSG(134) 'DOCTO. NO EXISTE' Y TERMINAR
+000000           MOVE '4'              TO W-MSGCOD-CODIGO
+000000           MOVE '2'              TO W-MSGCOD-ESTADO
+000000           MOVE '134'            TO W-MSGCOD-NRO-MENSAJ
+000000           MOVE '000'            TO W-MSGCOD-NRO-RUTCMD
+000000           MOVE SPACES           TO W-MSGCOD-COD-OFIC
+000000           MOVE '1'              TO W-MSGCOD-DST-MENSAJ
+000000           MOVE HIGH-VALUE       TO W-MSGCOD-FIN-MENSAJ
+000000           MOVE W-MSGCOD-MENSAJE TO MSGOUT47-REG
+000000           MOVE W-MSGCOD-LARGO   TO MSGOUT47-LEN
+000000           PERFORM Z-FIN
+000000        ELSE
+000000           MOVE '4'              TO W-MSGTXT-CODIGO
+000000           MOVE '2'              TO W-MSGTXT-ESTADO
+000000           MOVE '000'            TO W-MSGTXT-NRO-MENSAJ
+000000           MOVE '000'            TO W-MSGTXT-NRO-RUTCMD
+000000           MOVE SPACES           TO W-MSGTXT-COD-OFIC
+000000           MOVE '1'              TO W-MSGTXT-DST-MENSAJ
+000000           MOVE 'ERROR EN BASE DE DATOS'
+000000                                 TO W-MSGTXT-GLS-MENSAJ
+000000           MOVE WS-HEXFF         TO W-MSGTXT-FIN-MENSAJ
+000000           MOVE W-MSGTXT-MENSAJE TO MSGOUT47-REG
+000000           MOVE W-MSGTXT-LARGO   TO MSGOUT47-LEN
+000000           PERFORM Z-FIN.
+000000*
+000000     PERFORM BP-COMUN.
+000000*
+000000 B1-FIN-ABEND.
+000000* RECH, MSG(000) 'ERROR EN PROGRAMA' Y TERMINAR
+000000     MOVE '4'              TO W-MSGTXT-CODIGO
+000000     MOVE '2'              TO W-MSGTXT-ESTADO
+000000     MOVE '000'            TO W-MSGTXT-NRO-MENSAJ
+000000     MOVE '000'            TO W-MSGTXT-NRO-RUTCMD
+000000     MOVE SPACES           TO W-MSGTXT-COD-OFIC
+000000     MOVE '1'              TO W-MSGTXT-DST-MENSAJ
+000000     MOVE 'ERROR EN PROGRAMA'
+000000                           TO W-MSGTXT-GLS-MENSAJ
+000000     MOVE HIGH-VALUE       TO W-MSGTXT-FIN-MENSAJ
+000000     MOVE W-MSGTXT-MENSAJE TO MSGOUT47-REG
+000000     MOVE W-MSGTXT-LARGO   TO MSGOUT47-LEN
+000000     PERFORM Z-FIN.
+000000*
+000000 B3-LEER-OPD.
+000000* LEER TABLA OPD CON UPDATE
+000000     MOVE 'RDUKY'                TO REQ-COMAN-OPD
+000000     MOVE 'OPD'                  TO REQ-TBLNM-OPD
+000000     MOVE 'OPD00'                TO REQ-KEYNM-OPD
+000000     MOVE SPACES                 TO REQ-RTNCD-OPD
+000000     MOVE 370                    TO REQ-DBIDE-OPD
+000000     MOVE WW-CUENT-CLAVE         TO REQ-CLAVE-OPD
+000000     CALL 'DBNTRY' USING UIB REQ-AREA-OPD REG-OPD ELM-LIS-OPD
+000000     IF REQ-RTNCD-OPD = SPACES
+000000        NEXT SENTENCE
+000000     ELSE
+000000        IF REQ-RTNCD-OPD = '14'
+000000           NEXT SENTENCE
+000000        ELSE
+000000           MOVE '4'              TO W-MSGTXT-CODIGO
+000000           MOVE '2'              TO W-MSGTXT-ESTADO
+000000           MOVE '000'            TO W-MSGTXT-NRO-MENSAJ
+000000           MOVE '000'            TO W-MSGTXT-NRO-RUTCMD
+000000           MOVE SPACES           TO W-MSGTXT-COD-OFIC
+000000           MOVE '1'              TO W-MSGTXT-DST-MENSAJ
+000000           MOVE 'ERROR EN BASE DE DATOS'
+000000                                 TO W-MSGTXT-GLS-MENSAJ
+000000           MOVE WS-HEXFF         TO W-MSGTXT-FIN-MENSAJ
+000000           MOVE W-MSGTXT-MENSAJE TO MSGOUT47-REG
+000000           MOVE W-MSGTXT-LARGO   TO MSGOUT47-LEN
+000000           PERFORM Z-FIN.
+000000*
+000000 B3-LEER-IMP.
+000000* LEER TABLA IMP CON UPDATE
+000000     MOVE 'RDUKY'                TO REQ-COMAN-IMP
+000000     MOVE 'IMP'                  TO REQ-TBLNM-IMP
+000000     MOVE 'IMP00'                TO REQ-KEYNM-IMP
+000000     MOVE SPACES                 TO REQ-RTNCD-IMP
+000000     MOVE 372                    TO REQ-DBIDE-IMP
+000000     MOVE WW-CUENT-CLAVE         TO REQ-CLAVE-IMP
+000000     CALL 'DBNTRY' USING UIB REQ-AREA-IMP REG-IMP ELM-LIS-IMP
+000000     IF REQ-RTNCD-IMP = SPACES
+000000        NEXT SENTENCE
+000000     ELSE
+000000        IF REQ-RTNCD-IMP = '14'
+000000           NEXT SENTENCE
+000000        ELSE
+000000           MOVE '4'              TO W-MSGTXT-CODIGO
+000000           MOVE '2'              TO W-MSGTXT-ESTADO
+000000           MOVE '000'            TO W-MSGTXT-NRO-MENSAJ
+000000           MOVE '000'            TO W-MSGTXT-NRO-RUTCMD
+000000           MOVE SPACES           TO W-MSGTXT-COD-OFIC
+000000           MOVE '1'              TO W-MSGTXT-DST-MENSAJ
+000000           MOVE 'ERROR EN BASE DE DATOS'
+000000                                 TO W-MSGTXT-GLS-MENSAJ
+000000           MOVE WS-HEXFF         TO W-MSGTXT-FIN-MENSAJ
+000000           MOVE W-MSGTXT-MENSAJE TO MSGOUT47-REG
+000000           MOVE W-MSGTXT-LARGO   TO MSGOUT47-LEN
+000000           PERFORM Z-FIN.
+000000*
+000000 B4-UPDA-OPD.
+000000* ACTUALIZA REGISTRO OPD
+000000     MOVE 'UPDAT'                TO REQ-COMAN-OPD
+000000     MOVE WW-CUENT-CLAVE         TO REQ-CLAVE-OPD
+000000     CALL 'DBNTRY' USING UIB REQ-AREA-OPD REG-OPD ELM-LIS-OPD
+000000     IF REQ-RTNCD-OPD = SPACES
+000000        NEXT SENTENCE
+000000     ELSE
+000000        IF REQ-RTNCD-OPD = '14'
+000000           NEXT SENTENCE.
+000000*
+000000 B4-UPDA-IMP.
+000000* ACTUALIZA REGISTRO IMP
+000000     MOVE 'UPDAT'                TO REQ-COMAN-IMP
+000000     MOVE WW-CUENT-CLAVE         TO REQ-CLAVE-IMP
+000000     CALL 'DBNTRY' USING UIB REQ-AREA-IMP REG-IMP ELM-LIS-IMP
+000000     IF REQ-RTNCD-IMP = SPACES
+000000        NEXT SENTENCE
+000000     ELSE
+000000        IF REQ-RTNCD-IMP = '14'
+000000           NEXT SENTENCE.
+000000*
+000000 B5-RELE-OPD.
+000000* LIBERA REGISTRTO OPD
+000000     MOVE 'RELES'                TO REQ-COMAN-OPD
+000000     MOVE WW-CUENT-CLAVE         TO REQ-CLAVE-OPD
+000000     CALL 'DBNTRY' USING UIB REQ-AREA-OPD REG-OPD ELM-LIS-OPD.
+000000*
+000000 B5-RELE-IMP.
+000000* LIBERA REGISTRTO IMP
+000000     MOVE 'RELES'                TO REQ-COMAN-IMP
+000000     MOVE WW-CUENT-CLAVE         TO REQ-CLAVE-IMP
+000000     CALL 'DBNTRY' USING UIB REQ-AREA-IMP REG-IMP ELM-LIS-IMP.
+000000*
+000000 BP-COMUN.
+000000     IF IMP-COD-STAT = 'S'
+000000* RECH, MSG(000) 'FALTA CANCELAR TOTAL' Y TERMINAR
+000000        MOVE '4'                 TO W-MSGTXT-CODIGO
+000000        MOVE '2'                 TO W-MSGTXT-ESTADO
+000000        MOVE '000'               TO W-MSGTXT-NRO-MENSAJ
+000000        MOVE '000'               TO W-MSGTXT-NRO-RUTCMD
+000000        MOVE SPACES              TO W-MSGTXT-COD-OFIC
+000000        MOVE '1'                 TO W-MSGTXT-DST-MENSAJ
+000000        MOVE 'FALTA CANCELAR TOTAL'
+000000                                 TO W-MSGTXT-GLS-MENSAJ
+000000        MOVE HIGH-VALUE          TO W-MSGTXT-FIN-MENSAJ
+000000        MOVE W-MSGTXT-MENSAJE    TO MSGOUT47-REG
+000000        MOVE W-MSGTXT-LARGO      TO MSGOUT47-LEN
+000000        PERFORM Z-FIN.
+000000     IF IMP-COD-STAT = 'X'
+000000* RECH, MSG(130) 'ERROR EN DOCTO.' Y TERMINAR
+000000        MOVE '4'                 TO W-MSGCOD-CODIGO
+000000        MOVE '2'                 TO W-MSGCOD-ESTADO
+000000        MOVE '130'               TO W-MSGCOD-NRO-MENSAJ
+000000        MOVE '000'               TO W-MSGCOD-NRO-RUTCMD
+000000        MOVE SPACES              TO W-MSGCOD-COD-OFIC
+000000        MOVE '1'                 TO W-MSGCOD-DST-MENSAJ
+000000        MOVE HIGH-VALUE          TO W-MSGCOD-FIN-MENSAJ
+000000        MOVE W-MSGCOD-MENSAJE    TO MSGOUT47-REG
+000000        MOVE W-MSGCOD-LARGO      TO MSGOUT47-LEN
+000000        PERFORM Z-FIN.
+111111     IF IMP-COD-CUST = 'E'
+111111* RECH, MSG(000) 'DOCTO. EN CUSTODIA ELECTRONICA' Y TERMINAR
+111111        MOVE '4'                 TO W-MSGTXT-CODIGO
+111111        MOVE '2'                 TO W-MSGTXT-ESTADO
+111111        MOVE '000'               TO W-MSGTXT-NRO-MENSAJ
+111111        MOVE '000'               TO W-MSGTXT-NRO-RUTCMD
+111111        MOVE SPACES              TO W-MSGTXT-COD-OFIC
+111111        MOVE '1'                 TO W-MSGTXT-DST-MENSAJ
+111111        MOVE 'DOCTO. EN CUSTODIA ELECTRONICA'
+111111                                 TO W-MSGTXT-GLS-MENSAJ
+111111        MOVE HIGH-VALUE          TO W-MSGTXT-FIN-MENSAJ
+111111        MOVE W-MSGTXT-MENSAJE    TO MSGOUT47-REG
+111111        MOVE W-MSGTXT-LARGO      TO MSGOUT47-LEN
+111111        PERFORM Z-FIN.
+000000     IF IMP-COD-STAT = 'W'
+000000* RECH, MSG(126) 'TRANS.YA REALIZADA' Y TERMINAR
+000000        MOVE '4'                 TO W-MSGCOD-CODIGO
+000000        MOVE '2'                 TO W-MSGCOD-ESTADO
+000000        MOVE '126'               TO W-MSGCOD-NRO-MENSAJ
+000000        MOVE '000'               TO W-MSGCOD-NRO-RUTCMD
+000000        MOVE SPACES              TO W-MSGCOD-COD-OFIC
+000000        MOVE '1'                 TO W-MSGCOD-DST-MENSAJ
+000000        MOVE HIGH-VALUE          TO W-MSGCOD-FIN-MENSAJ
+000000        MOVE W-MSGCOD-MENSAJE    TO MSGOUT47-REG
+000000        MOVE W-MSGCOD-LARGO      TO MSGOUT47-LEN
+000000        PERFORM Z-FIN.
+000000     IF IMP-COD-STAT = 'A'
+000000        PERFORM BP1-COMUN
+000000     ELSE
+000000        IF IMP-COD-STAT = 'G' AND
+000000           WS-LLAVE-SUPER = 1
+000000              PERFORM BP1-COMUN
+000000        ELSE
+000000* RECH, MSG(126) 'TRANS.YA REALIZADA', PIDE LLAVE SUPERVISOR
+000000           MOVE '4'              TO W-MSGCOD-CODIGO
+000000           MOVE '2'              TO W-MSGCOD-ESTADO
+000000           MOVE '126'            TO W-MSGCOD-NRO-MENSAJ
+000000           MOVE '005'            TO W-MSGCOD-NRO-RUTCMD
+000000           MOVE SPACES           TO W-MSGCOD-COD-OFIC
+000000           MOVE '1'              TO W-MSGCOD-DST-MENSAJ
+000000           MOVE HIGH-VALUE       TO W-MSGCOD-FIN-MENSAJ
+000000           MOVE W-MSGCOD-MENSAJE TO MSGOUT47-REG
+000000           MOVE W-MSGCOD-LARGO   TO MSGOUT47-LEN
+000000           PERFORM Z-FIN.
+000000*
+000000 BP1-COMUN.
+000000     IF WW-SERIA-CLAVE-SUCURS = IMP-COD-OFIC
+000000        PERFORM BP2-COMUN
+000000     ELSE
+000000* RECH, MSG(088) 'SUC. EQUIVOCADA' Y TERMINAR
+000000        MOVE '4'                 TO W-MSGCOD-CODIGO
+000000        MOVE '2'                 TO W-MSGCOD-ESTADO
+000000        MOVE '088'               TO W-MSGCOD-NRO-MENSAJ
+000000        MOVE '000'               TO W-MSGCOD-NRO-RUTCMD
+000000        MOVE SPACES              TO W-MSGCOD-COD-OFIC
+000000        MOVE '1'                 TO W-MSGCOD-DST-MENSAJ
+000000        MOVE HIGH-VALUE          TO W-MSGCOD-FIN-MENSAJ
+000000        MOVE W-MSGCOD-MENSAJE    TO MSGOUT47-REG
+000000        MOVE W-MSGCOD-LARGO      TO MSGOUT47-LEN
+000000        PERFORM Z-FIN.
+000000*
+000000 BP2-COMUN.
+000000* ASIGNAR VALORES
+000000     MOVE WW-SERIA-CLAVE-MONEDA  TO WS-MDC-MONEDA
+000000     MOVE WW-SERIA-CLAVE-TIPDOC  TO WS-MDC-TIPDOC
+000000     MOVE IMP-COD-TCDP           TO WS-MDC-CERTIF
+000000     MOVE OPD-COD-CVAL           TO WS-MDC-MDAOPD
+000000* BUSCA EN TABLA Y VALIDA TIPO CERTIFICADO
+000000     SET IX-DOCTOS               TO 1
+000000     SEARCH TB-DOCTOS
+000000        AT END
+000000* RECH, MSG(000) 'CERTIF. NO CORRESP AL PRODUCTO' Y TERMINAR
+000000           MOVE '4'              TO W-MSGTXT-CODIGO
+000000           MOVE '2'              TO W-MSGTXT-ESTADO
+000000           MOVE '000'            TO W-MSGTXT-NRO-MENSAJ
+000000           MOVE '000'            TO W-MSGTXT-NRO-RUTCMD
+000000           MOVE SPACES           TO W-MSGTXT-COD-OFIC
+000000           MOVE '1'              TO W-MSGTXT-DST-MENSAJ
+000000           MOVE 'CERTIFICADO NO CORRESPONDE AL PRODUCTO'
+000000                                 TO W-MSGTXT-GLS-MENSAJ
+000000           MOVE HIGH-VALUE       TO W-MSGTXT-FIN-MENSAJ
+000000           MOVE W-MSGTXT-MENSAJE TO MSGOUT47-REG
+000000           MOVE W-MSGTXT-LARGO   TO MSGOUT47-LEN
+000000           PERFORM Z-FIN
+000000        WHEN
+000000           TB-DOCTOS-MONEDA (IX-DOCTOS) = WS-MDC-MONEDA AND
+000000           TB-DOCTOS-TIPDOC (IX-DOCTOS) = WS-MDC-TIPDOC AND
+000000           TB-DOCTOS-CERTIF (IX-DOCTOS) = WS-MDC-CERTIF AND
+000000           TB-DOCTOS-MDAOPD (IX-DOCTOS) = WS-MDC-MDAOPD
+000000              PERFORM Q-FORMA
+000000              PERFORM R-MUEVE
+000000              PERFORM S-IMPRIME.
+000000*
+000000 Q-FORMA.
+000000* FORMATEA CAMPOS DE DOCUMENTO SEGUN TIPO.
+000000* SERIAL DEL DOCUMENTO
+000000     MOVE WW-SERIA-CLAVE         TO WS-IDDOC-CLAVE
+000000*
+000000* VALOR SEGUN TIPO
+000000     MOVE IMP-VAL-VFIN           TO WS-VAL-IMPR
+000000     IF TB-DOCTOS-FRMIMP (IX-DOCTOS) = 'B'
+000000        MOVE IMP-VAL-CAPT        TO WS-VAL-IMPR.
+000000* VALOR SEGUN MONEDA
+000000* SI WS-MDC-MONEDA = '0' O '2'  (PESOS O DOLAR) --> 2 DECIMALES
+000000     IF WS-MDC-MONEDA = '0' OR '2'
+000000        MOVE WS-VAL-IMPR         TO WS-IDDOC-VAL-VFIN-2DEC.
+000000* SI WS-MDC-MONEDA = '1'        (UEFES)         --> 4 DECIMALES
+000000     IF WS-MDC-MONEDA = '1'
+000000        MOVE WS-VAL-IMPR         TO WS-IDDOC-VAL-VFIN-4DEC.
+000000*
+000000* GLOSA NOMBRE DE OFICINA
+000000     MOVE IMP-GLS-OFIC           TO WS-IDOFI-GLS-OFIC
+000000*
+000000* OTROS DATOS SEGUN TIPO ESPECIFICO DE DOCUMENTO
+000000*
+000000* DOCUMENTOS TIPO 'A'
+000000     IF TB-DOCTOS-FRMIMP (IX-DOCTOS) = 'A'
+000000        MOVE IMP-NUM-DREA        TO WS-LINAA-NUM-DREA
+000000        MOVE TB-MESES-MES (IMP-NUM-MREA)
+000000                                 TO WS-LINAA-GLS-MREA
+000000        MOVE IMP-NUM-SREA        TO WS-LINAA-NUM-SREA
+000000        MOVE IMP-NUM-AREA        TO WS-LINAA-NUM-AREA
+000000        MOVE IMP-NUM-DURV        TO WS-LINAA-NUM-DURV
+000000        MOVE IMP-NUM-DTER        TO WS-LINAA-NUM-DTER
+000000        MOVE TB-MESES-MES (IMP-NUM-MTER)
+000000                                 TO WS-LINAA-GLS-MTER
+000000        MOVE IMP-NUM-STER        TO WS-LINAA-NUM-STER
+000000        MOVE IMP-NUM-ATER        TO WS-LINAA-NUM-ATER
+000000        MOVE IMP-VAL-CAPT        TO WS-LINBB-VAL-CAPT-2DEC
+000000        MOVE IMP-SGV-TPER        TO WS-LINBB-SGV-TPER
+000000        MOVE IMP-VAL-INTP        TO WS-LINBB-VAL-INTP-2DEC.
+000000*
+000000* DOCUMENTOS TIPO 'B'
+000000     IF TB-DOCTOS-FRMIMP (IX-DOCTOS) = 'B'
+000000        MOVE IMP-NUM-DREA        TO WS-LIN1B-NUM-DREA
+000000        MOVE TB-MESES-MES (IMP-NUM-MREA)
+000000                                 TO WS-LIN1B-GLS-MREA
+000000        MOVE IMP-NUM-SREA        TO WS-LIN1B-NUM-SREA
+000000        MOVE IMP-NUM-AREA        TO WS-LIN1B-NUM-AREA
+000000        MOVE IMP-NUM-DURV        TO WS-LIN2B-NUM-DURV
+000000* SE CALCULA Y FORMATEA TASA SEGUN MONEDA
+000000        IF TB-DOCTOS-MONEDA (IX-DOCTOS) = 0
+000000* MONEDA = PESOS --> SE IMPRIME TASA MULTIPLICADA POR 12
+000000           COMPUTE WS-SGV-TANU =
+000000              IMP-SGV-TINT * 12
+000000           MOVE WS-SGV-TANU      TO WS-LIN2B-SGV-TPER
+000000        ELSE
+000000* OTRAS MONEDAS  --> SE IMPRIME TASA TAL COMO ESTA
+000000           MOVE IMP-SGV-TINT     TO WS-SGV-TANU
+000000           MOVE WS-SGV-TANU      TO WS-LIN2B-SGV-TPER.
+000000*
+000000* DOCUMENTOS TIPO 'C'
+000000     IF TB-DOCTOS-FRMIMP (IX-DOCTOS) = 'C'
+000000        MOVE IMP-NUM-DREA        TO WS-LINAA-NUM-DREA
+000000        MOVE TB-MESES-MES (IMP-NUM-MREA)
+000000                                 TO WS-LINAA-GLS-MREA
+000000        MOVE IMP-NUM-SREA        TO WS-LINAA-NUM-SREA
+000000        MOVE IMP-NUM-AREA        TO WS-LINAA-NUM-AREA
+000000        MOVE IMP-NUM-DURV        TO WS-LINAA-NUM-DURV
+000000        MOVE IMP-NUM-DTER        TO WS-LINAA-NUM-DTER
+000000        MOVE TB-MESES-MES (IMP-NUM-MTER)
+000000                                 TO WS-LINAA-GLS-MTER
+000000        MOVE IMP-NUM-STER        TO WS-LINAA-NUM-STER
+000000        MOVE IMP-NUM-ATER        TO WS-LINAA-NUM-ATER
+000000        MOVE IMP-VAL-CAPT        TO WS-LINBB-VAL-CAPT-4DEC
+000000        MOVE IMP-SGV-TPER        TO WS-LINBB-SGV-TPER
+000000        MOVE IMP-VAL-INTP        TO WS-LINBB-VAL-INTP-4DEC
+000000        MOVE IMP-VAL-VPES        TO WS-LIN1C-VAL-VPES-2DEC.
+000000*
+000000* IDENTIFICACION CLIENTE-1
+000000     MOVE IMP-GLS-NOM1           TO WS-IDCLI1-GLS-NOM1
+000000     MOVE IMP-NUM-ICL1           TO WS-IDCLI1-NUM-ICL1
+000000     MOVE IMP-VRF-ICL1           TO WS-IDCLI1-VRF-ICL1
+000000*
+000000* IDENTIFICACION CLIENTE-2
+000000* SI IMP-NUM-NCLI = 2 (MAS DE 1 CLIENTE)
+000000     IF IMP-NUM-NCLI = 2
+000000        MOVE IMP-GLS-NOM2        TO WS-IDCLI2-GLS-NOM2
+000000        MOVE IMP-NUM-ICL2        TO WS-IDCLI2-NUM-ICL2
+000000        MOVE IMP-VRF-ICL2        TO WS-IDCLI2-VRF-ICL2
+000000     ELSE
+000000        MOVE ALL '0'             TO WS-IDCLI2-GLS-NOM2
+000000        MOVE 0                   TO WS-IDCLI2-NUM-ICL2
+000000        MOVE ALL '0'             TO WS-IDCLI2-VRF-ICL2.
+000000*
+000000* MONTO ESCRITO SEGUN MONEDA
+000000* SI WS-MDC-MONEDA = '0' O '2'  (PESOS O DOLAR) --> 2 DECIMALES
+000000     IF WS-MDC-MONEDA = '0' OR '2'
+000000        MOVE WS-VAL-IMPR         TO NUMERO2
+000000*       CALL 'RUTUOESM' USING
+000000        CALL 'RCTUOESM' USING DFHEIBLK DFHCOMMAREA
+000000           NUMERO2 PALABRA.
+000000* SI WS-MDC-MONEDA = '1'        (UEFES)         --> 4 DECIMALES
+000000     IF WS-MDC-MONEDA = '1'
+000000        MOVE WS-VAL-IMPR         TO NUMERO4
+000000*       CALL 'RUTUOES2' USING
+000000        CALL 'RCTUOES2' USING DFHEIBLK DFHCOMMAREA
+000000           NUMERO4 PALABRA.
+000000     MOVE WS-PALABRA1            TO WS-MTOES1-GLS-MOES
+000000     MOVE WS-PALABRA2            TO WS-MTOES2-GLS-MOES
+000000     MOVE WS-PALABRA3            TO WS-MTOES3-GLS-MOES.
+000000*
+000000 R-MUEVE.
+000000* INICIALIZA AREA DE IMPRESION Y MUEVE DATOS SEGUN TIPO DE DOCTO
+000000     MOVE SPACES                 TO WS-LINIMP
+000000     MOVE WS-HEX15               TO WS-LINIMP-01-IND
+000000                                    WS-LINIMP-02-IND
+000000                                    WS-LINIMP-03-IND
+000000                                    WS-LINIMP-04-IND
+000000                                    WS-LINIMP-05-IND
+000000                                    WS-LINIMP-06-IND
+000000                                    WS-LINIMP-07-IND
+000000                                    WS-LINIMP-08-IND
+000000                                    WS-LINIMP-09-IND
+000000                                    WS-LINIMP-10-IND
+000000                                    WS-LINIMP-11-IND
+000000                                    WS-LINIMP-12-IND
+000000                                    WS-LINIMP-13-IND
+000000                                    WS-LINIMP-14-IND
+000000                                    WS-LINIMP-15-IND
+000000                                    WS-LINIMP-16-IND
+000000     MOVE WS-HEXFF               TO WS-LINIMP-17-IND
+000000     IF TB-DOCTOS-FRMIMP (IX-DOCTOS) = 'A'
+000000        MOVE WS-IDDOC            TO WS-LINIMP-01-DAT
+000000        MOVE WS-IDOFI            TO WS-LINIMP-04-DAT
+000000        MOVE WS-LINAA            TO WS-LINIMP-06-DAT
+000000        MOVE WS-LINBB            TO WS-LINIMP-08-DAT
+000000        MOVE WS-IDCLI1           TO WS-LINIMP-10-DAT
+000000        MOVE WS-IDCLI2           TO WS-LINIMP-12-DAT
+000000        MOVE WS-MTOES1           TO WS-LINIMP-14-DAT
+000000        MOVE WS-MTOES2           TO WS-LINIMP-16-DAT.
+000000     IF TB-DOCTOS-FRMIMP (IX-DOCTOS) = 'B'
+000000        MOVE WS-IDDOC            TO WS-LINIMP-01-DAT
+000000        MOVE WS-IDOFI            TO WS-LINIMP-04-DAT
+000000        MOVE WS-LIN1B            TO WS-LINIMP-06-DAT
+000000        MOVE WS-LIN2B            TO WS-LINIMP-08-DAT
+000000        MOVE WS-IDCLI1           TO WS-LINIMP-10-DAT
+000000        MOVE WS-IDCLI2           TO WS-LINIMP-12-DAT
+000000        MOVE WS-MTOES1           TO WS-LINIMP-14-DAT
+000000        MOVE WS-MTOES2           TO WS-LINIMP-16-DAT.
+000000     IF TB-DOCTOS-FRMIMP (IX-DOCTOS) = 'C'
+000000        MOVE WS-IDDOC            TO WS-LINIMP-01-DAT
+000000        MOVE WS-IDOFI            TO WS-LINIMP-04-DAT
+000000        MOVE WS-LINAA            TO WS-LINIMP-06-DAT
+000000        MOVE WS-LINBB            TO WS-LINIMP-08-DAT
+000000        MOVE WS-LIN1C            TO WS-LINIMP-10-DAT
+000000        MOVE WS-IDCLI1           TO WS-LINIMP-11-DAT
+000000        MOVE WS-IDCLI2           TO WS-LINIMP-13-DAT
+000000        MOVE WS-MTOES1           TO WS-LINIMP-15-DAT
+000000        MOVE WS-MTOES2           TO WS-LINIMP-17-DAT.
+000000*
+000000 S-IMPRIME.
+000000     IF IMP-COD-STAT = 'G'
+000000* ACTUALIZAR REGISTRO IMP
+000000        MOVE 'W'                 TO IMP-COD-STAT
+000000        MOVE WW-SERIA-CLAVE      TO IMP-CIC-ISER
+000000        PERFORM B4-UPDA-IMP
+000000* ACTUALIZAR REGISTRO OPD
+000000        MOVE 'G'                 TO OPD-COD-STAT
+000000        MOVE WW-SERIA-CLAVE      TO OPD-CIC-ISER
+000000        PERFORM B4-UPDA-OPD
+000000     ELSE
+000000* ACTUALIZAR REGISTRO IMP
+000000        MOVE 'G'                 TO IMP-COD-STAT
+000000        MOVE WW-SERIA-CLAVE      TO IMP-CIC-ISER
+000000        PERFORM B4-UPDA-IMP
+000000* ACTUALIZAR REGISTRO OPD
+000000        MOVE 'G'                 TO OPD-COD-STAT
+000000        MOVE WW-SERIA-CLAVE      TO OPD-CIC-ISER
+000000        PERFORM B4-UPDA-OPD.
+000000*
+000000* ACEP, MSG(000) '' Y TERMINAR
+000000     MOVE '4'                    TO W-MSGIMP-CODIGO
+000000     MOVE '1'                    TO W-MSGIMP-ESTADO
+000000     MOVE '000'                  TO W-MSGIMP-NRO-MENSAJ
+000000     MOVE '000'                  TO W-MSGIMP-NRO-RUTCMD
+000000     MOVE SPACES                 TO W-MSGIMP-COD-OFIC
+000000     MOVE '4'                    TO W-MSGIMP-DST-MENSAJ
+000000     MOVE WS-LINIMP              TO W-MSGIMP-DAT-MENSAJ
+000000     MOVE HIGH-VALUE             TO W-MSGIMP-FIN-MENSAJ
+000000     MOVE W-MSGIMP-MENSAJE       TO MSGOUT47-REG
+000000     MOVE W-MSGIMP-LARGO         TO MSGOUT47-LEN
+000000     PERFORM Z-FIN.
+000000*
+000000 Z-FIN.
+000000* ENVIA (ULTIMO) MENSAJE
+000000     EXEC CICS SEND
+000000               FROM(MSGOUT47-REG)
+000000               LENGTH(MSGOUT47-LEN)
+000000               LAST
+000000     END-EXEC.
+000000     PERFORM Z-TERM.
+000000*
+000000 Z-TERM.
+000000* LIBERA REGISTROS
+000000     PERFORM B5-RELE-IMP
+000000     PERFORM B5-RELE-OPD
+000000* RETORNA CONTROL
+000000     EXEC CICS RETURN
+000000     END-EXEC.
+000000     GOBACK.
+000000*
+000000* ------ FIN DE PROGRAMA ------

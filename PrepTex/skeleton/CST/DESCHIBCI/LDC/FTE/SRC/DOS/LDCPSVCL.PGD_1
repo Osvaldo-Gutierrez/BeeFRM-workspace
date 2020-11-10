@@ -1,0 +1,1033 @@
+       IDENTIFICATION DIVISION.
+      *=======================
+       PROGRAM-ID.     LDCPSVCL.
+       AUTHOR.          CONSIST.
+
+      * VALIDA CONSISTENCIA LINEAS DE CREDITO
+      * RECIBE
+      *         05  VCL-KEY-ICLF.
+      * DEVUELVE
+      *         05  VCL-COD-SIST
+      *         05  VCL-COD-MENS
+
+      * SI HAY UN ERROR DEVUELVE MSG-COD-MENS CON EL CODIGO DEL MENSAJE
+      * EL ERROR SE MANEJA EN PROGRAMA LLAMADOR
+      * INI-AMP 27-SEP-1993
+      *   VCL-COD-MENS  DESCRIPCION
+      *   ============  ============================
+      *   CLF    NEX    NO EXISTE CLF
+      *   CMXLDC>CLF    CUPO MAXIMO DE LDC EXCEDE AL DE LA CLF
+      *   FVNLDC>CLF    FECHA DE VENCIMIENTO DE LDC EXCEDE AL DE LA CLF
+      *   RDCGRU>01     EXISTE MAS DE 1 REGISTRO RDC PARA EL GRUPO
+      *   LDCGRU>01     EXISTE MAS DE 1 REGISTRO LDC PARA EL GRUPO
+      *   ARCGRU<>00    NO DEBEN EXISTIR REGISTROS ARC PARA GRUPO
+      *   ARGGRU<>00    NO DEBEN EXISTIR REGISTROS ARG PARA GRUPO
+      *   CLINOUNICO    CLIENTE CON MAS DE 1 CLF VIGENTE
+      * FIN-AMP
+
+       ENVIRONMENT DIVISION.
+      *====================
+       CONFIGURATION SECTION.
+      *----------------------
+       SPECIAL-NAMES.
+               DECIMAL-POINT IS COMMA.
+
+       DATA DIVISION.
+      *=============
+
+       WORKING-STORAGE SECTION.
+      *-----------------------
+       COPY GNSBRMSG.
+       COPY GNSWCFIO.
+       COPY GNSWVFIO.
+       COPY GNSWGSYS.
+
+       COPY GNSWVIDD.
+       01  SCR-VARI.
+           03 SCR-SIST             VALUE 'DEU' PIC X(03).
+           03 SCR-QIDD                         PIC X(08).
+           03 SCR-LIDD                    COMP PIC S9(04).
+
+       COPY LDCBRLDC.
+       COPY LDCBRRDC REPLACING RDC BY RDL.
+       COPY LDCBRARC.
+       COPY LDCBRARG.
+       COPY LDCBRCLF.
+
+      * INI-AMP 28-SEP-1993
+       COPY COLBROPC.
+       COPY COLBRRDC.
+
+       COPY GARBRGDD.
+       COPY GARBRGDG.
+       COPY GARBRTAG.
+      *HPM ini 13-JUN-1994
+       COPY GARBRGVT.
+      *HPM fin 13-JUN-1994
+
+       COPY SGCBRREC.
+
+       COPY DEUBRFIA.
+      *GNN ini 20-JUN-1994
+       COPY DEUBRAMF.
+      *GNN fin 20-JUN-1994
+      * FIN-AMP
+
+       COPY GNSBRTAB.
+       COPY TABBRCAM.
+      *FLB CST  10-OCT-1994 VALIDA TIPO DE LINEA
+       COPY TABBRTIO.
+
+       COPY GNSWGRQA.
+       COPY GNSWGUIB.
+       COPY GNSWGELS.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-MSG-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-RDL-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-LDC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-ARC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-ARG-REQA==.
+      * INI-AMP 28-SEP-1993
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-RDC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-CLF-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-GDD-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-REC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-OPC-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-GDG-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-TAG-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-TAB-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-FIA-REQA==.
+      *GNN ini 20-JUN-1994
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-AMF-REQA==.
+      *GNN fin 20-JUN-1994
+      *HPM ini 13-JUN-1994
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-CAM-REQA==.
+       COPY GNSWGRQA REPLACING ==ADR-REQA== BY ==ADR-GVT-REQA==.
+      *HPM fin 13-JUN-1994
+      * FIN-AMP
+       COPY LDCWGVCL.
+      *HPM ini 13-JUN-1994
+       COPY GNSWGHOY.
+      *HPM fin 13-JUN-1994
+
+      *FLB CST  10-OCT-1994 VALIDA TIPO DE LINEA
+       COPY LDCWGTLC.
+
+       01  WSS-VARI.
+      *HPM ini 13-JUN-1994
+      * Variables para conversion de monedas
+           03  WSS-COD-MNAC                         PIC X(06).
+           03  WSS-COD-CMON-CNV                     PIC X(06).
+      * Monto Limite LDC expresado en Moneda nacional
+      *>>>>
+           03  WSS-IJKL.
+               05  WSS-I                            PIC 9(02).
+               05  WSS-J                            PIC 9(02).
+               05  WSS-K                            PIC 9(02).
+      *FLB CST  12-JUL-1994
+               05  WSS-L                            PIC 9(02).
+      *>>>>
+           03 WSS-CIC-TIP-GAR                       PIC X(01).
+      *HPM fin 13-JUN-1994
+           03 FRM-MENS                              PIC X(40).
+           03 WSS-RDC         VALUE ZEROS           PIC 9(02).
+           03 WSS-LDC         VALUE ZEROS           PIC 9(02).
+           03 WSS-ARC         VALUE ZEROS           PIC 9(03).
+           03 WSS-ARG         VALUE ZEROS           PIC 9(03).
+           03 WSS-LDC-VIG                           PIC X(01).
+           03 WSS-ARG-LDC     VALUE ZEROS           PIC 9(02).
+      * INI-AMP 28-SEP-1993
+           03 WSS-A              VALUE ZEROES       PIC 9(02).
+           03 WSS-B              VALUE ZEROES       PIC 9(02).
+           03 WSS-IND-ARC-DE-CLI VALUE ZEROES       PIC 9(02).
+           03 WSS-IND-ARG-DE-CLI VALUE ZEROES       PIC 9(02).
+           03 WSS-IND-GRUPO      VALUE ZEROES       PIC 9(02).
+           03 WSS-EXISTE-GRUPO   VALUE ZEROES       PIC 9(02).
+           03 WSS-CIC-ICLI    OCCURS 12.
+              05 WSS-CAI-ICLI                       PIC X(04).
+              05 WSS-IIC-ICLI                       PIC X(08).
+      * INI-AMP 18-OCT-1993
+           03 WSS-RDC-ICLI                          PIC X(12).
+           03 WSS-RDC-ICLF                          PIC X(12).
+      * FIN-AMP 18-OCT-1993
+           03 WSS-CLA-OPE.
+              05 WSS-TIP-OPE                        PIC X(03).
+              05 WSS-STP-OPE                        PIC X(03).
+           03 WSS-GLS-DATA.
+              05 FILLER                             PIC X(04).
+              05 WSS-IND-RSG                        PIC X(01).
+              05 FILLER                             PIC X(33).
+           03 WSS-FEC-FVEN.
+              05 WSS-NUM-SVEN                       PIC 9(02).
+              05 WSS-NUM-AVEN                       PIC 9(02).
+              05 WSS-NUM-MVEN                       PIC 9(02).
+              05 WSS-NUM-DVEN                       PIC 9(02).
+      * FIN-AMP
+      *FLB CST  12-JUL-1994 SI H
+           03 WSS-MAX-ARC VALUE ZEROES              PIC 9(02).
+
+      *GNS CST Operacion credito ARC 20-JUN-1994
+      *FLB CST  12-JUL-1994 SI ARC PUEDEN SER MAS DE 10 POR LINEA
+      *   OJO, AUMENTAR LOS OCCURS
+
+           03 WSS-ARC-OP-CREDI.
+      *Codigo interno computacional
+              05 WSS-ARC-CIC-IOPC OCCURS 10 TIMES   PIC X(12).
+      *Codigo valor de cambio
+              05 WSS-ARC-COD-VCOC OCCURS 10 TIMES   PIC X(06).
+      *Codigo clase operacion
+              05 WSS-ARC-COD-COOC OCCURS 10 TIMES   PIC X(06).
+
+      *FLB CST  6-DEC-1994
+           03 WSS-CIC-TOGA                          PIC X(03).
+      *FLB CST   23-FEB-1995 PARAMETROS LINEA AVANCE
+           03  WSS-TLC-DATA.
+               05 WSS-NUM-PLAV                    PIC 9(03).
+               05 WSS-COD-PLAV                    PIC X(01).
+      *RVM-BCI-INI 19-MAR-1998
+      *         05 FILLER                          PIC X(01).
+               05 WSS-IND-TLC-OBL                 PIC X(01).
+      *RVM-BCI-FIN 19-MAR-1998
+               05 WSS-IND-VTOL                    PIC X(01).
+               05 FILLER                          PIC X(14).
+               05 WSS-COD-MLAV                    PIC X(06).
+               05 WSS-VAL-MMLA                    PIC 9(09).
+      *FLB CST  13-MAR-1995
+           03 WSS-CIC-TOCF                          PIC X(03).
+      *<<<< PGM_CHI
+           03  WSS-VAL-CMAX   VALUE ZEROES        PIC 9(15).
+           03  WSS-PES-MMLA   VALUE ZEROES        PIC 9(15).
+           03  WSS-CLF-CMAX   VALUE ZEROES        PIC 9(15).
+           03  WSS-VSN-MLMC   VALUE SPACES        PIC X(01).
+               88 PERMITE-MON-LDC-DIF-A-MON-CLF VALUE 'S'.
+           03  WSS-FEC-FMAX.
+               05  WSS-NUM-SMAX                   PIC 9(02).
+               05  WSS-NUM-AMAX                   PIC 9(02).
+               05  WSS-NUM-MMAX                   PIC 9(02).
+               05  WSS-NUM-DMAX                   PIC 9(02).
+      *FLB CST  13-MAR-1995
+      *>>>>
+       LINKAGE SECTION.
+      *---------------
+       01  DFHCOMMAREA.
+           02 FILLER                               PIC X(240).
+       COPY GNSLGFIO.
+
+       PROCEDURE DIVISION.
+      *===================
+       MAIN SECTION.
+      *------------
+       INI-MAIN.
+           PERFORM INI.
+
+      * INI-AMP 27-SEP-1993
+           PERFORM BUS-CLF.
+           IF VCL-COD-MENS > SPACES
+               GO TO FIN-MAIN.
+      * FIN-AMP
+
+      *FLB CST  13-MAR-1995 CLF GRUPO SOLO TENGA 1 LDC
+           MOVE 'TAB' TO FIO-SIST.
+           MOVE 'TIO ' TO TAB-COD-TTAB IN TAB.
+           MOVE CLF-COD-TOCF IN CLF TO TAB-COD-CTAB IN TAB.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM GNS-FIO-TAB.
+           MOVE TAB-CIC-CTAB IN TAB TO WSS-CIC-TOCF.
+      *FLB CST  13-MAR-1995 FIN
+
+           PERFORM VAL-RDC.
+           IF VCL-COD-MENS > SPACES
+               GO TO FIN-MAIN.
+      *<<<< PGM_CHI
+      *FLB CST  13-MAR-1995
+           MOVE VCL-KEY-ICLF IN VCL-VARI TO CLF-KEY-ICLF IN CLF.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM LDC-FIO-CLF.
+           IF NOT FIO-STAT-OKS
+               MOVE 'CLF    NEX' TO VCL-COD-MENS
+               GO TO FIN-MAIN.
+      *FLB CST  13-MAR-1995 FIN
+           PERFORM VAL-LDC.
+           IF VCL-COD-MENS > SPACES
+               GO TO FIN-MAIN.
+           IF WSS-LDC-VIG NOT = 'S'
+               MOVE 'CLFNOLDCVIG' TO VCL-COD-MENS.
+
+
+       FIN-MAIN.
+      * Termina
+           PERFORM FIN.
+
+      * INI-AMP 27-SEP-1993
+       BUS-CLF SECTION.
+       INI-BUS-CLF.
+           MOVE VCL-KEY-ICLF IN VCL-VARI TO CLF-KEY-ICLF IN CLF.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM LDC-FIO-CLF.
+           IF NOT FIO-STAT-OKS
+               MOVE 'CLF    NEX' TO VCL-COD-MENS
+           ELSE
+               MOVE CLF-FEC-FVEN IN CLF TO WSS-FEC-FVEN
+      *FLB CST  17-MAR-1995
+      *        MOVE CLF-VAL-CMAX IN CLF TO WSS-VAL-CMAX.
+               MOVE CLF-VAL-CMAX IN CLF TO WSS-CLF-CMAX.
+       FIN-BUS-CLF.
+           EXIT.
+      * FIN-AMP
+
+       VAL-RDC SECTION.
+       INI-VAL-RDC.
+           MOVE SPACES                   TO RDC-CIC-ICLI IN RDL.
+           MOVE VCL-KEY-ICLF IN VCL-VARI TO RDC-KEY-ICLF IN RDL.
+
+           MOVE 'RDC-KEY-ICLF' TO FIO-AKEY.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM LDC-FIO-RDC.
+           IF NOT ( FIO-STAT-OKS AND
+              VCL-KEY-ICLF IN VCL-VARI = RDC-KEY-ICLF IN RDL )
+               MOVE 'RDC    NEX' TO VCL-COD-MENS
+               GO TO FIN-VAL-RDC
+      * INI-AMP 18-OCT-1993
+           ELSE
+               MOVE RDC-CIC-ICLI IN RDL TO WSS-RDC-ICLI
+               MOVE RDC-CIC-ICLF IN RDL TO WSS-RDC-ICLF.
+      * FIN-AMP 18-OCT-1993
+
+           MOVE ZEROES TO WSS-RDC.
+       LUP-VAL-RDC.
+           ADD 1 TO WSS-RDC.
+           IF WSS-RDC > VCL-TCLI
+               MOVE 'ARRCLIEXC' TO VCL-COD-MENS
+               GO TO FIN-VAL-RDC.
+      * INI-AMP 28-SEP-1993
+           MOVE RDC-CIC-ICLI IN RDL TO WSS-CIC-ICLI(WSS-RDC).
+           PERFORM BUS-GRUPO.
+           IF WSS-IND-GRUPO > ZEROES
+               MOVE 99 TO WSS-EXISTE-GRUPO
+               IF WSS-RDC > 1
+                   MOVE 'RDCGRU>01' TO VCL-COD-MENS
+                   GO TO FIN-VAL-RDC.
+           PERFORM VAL-CON-RDC-CLF.
+           IF VCL-COD-MENS > SPACES
+               GO TO FIN-VAL-RDC.
+      * FIN-AMP
+
+      * INI-AMP 18-OCT-1993
+           MOVE WSS-RDC-ICLI TO RDC-CIC-ICLI IN RDL.
+           MOVE WSS-RDC-ICLF TO RDC-CIC-ICLF IN RDL.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM LDC-FIO-RDC.
+           IF NOT FIO-STAT-OKS
+               MOVE 'CLFNOEXIS' TO VCL-COD-MENS
+               GO TO FIN-VAL-RDC.
+      * FIN-AMP 18-OCT-1993
+           MOVE 'RDC-KEY-ICLF' TO FIO-AKEY.
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM LDC-FIO-RDC.
+           IF FIO-STAT-OKS AND
+              VCL-KEY-ICLF IN VCL-VARI = RDC-KEY-ICLF IN RDL
+      * INI-AMP 28-SEP-1993
+               IF WSS-EXISTE-GRUPO > ZEROES
+                   MOVE 'RDCGRU>01' TO VCL-COD-MENS
+                   GO TO FIN-VAL-RDC
+               ELSE
+      * FIN-AMP
+      * INI-AMP 18-OCT-1993
+                   MOVE RDC-CIC-ICLI IN RDL TO WSS-RDC-ICLI
+                   MOVE RDC-CIC-ICLF IN RDL TO WSS-RDC-ICLF
+      * FIN-AMP 18-OCT-1993
+                   GO TO LUP-VAL-RDC.
+
+       FIN-VAL-RDC.
+           EXIT.
+
+      * INI-AMP 28-SEP-1993
+       BUS-GRUPO SECTION.
+       INI-BUS-GRUPO.
+           MOVE ZEROES              TO WSS-IND-GRUPO.
+           MOVE RDC-CIC-ICLI IN RDL TO REC-CIC-ICLI IN REC.
+           MOVE 'GC'                TO REC-COD-TREC IN REC.
+           MOVE SPACES              TO REC-CIC-IREL IN REC.
+           MOVE ZEROES              TO REC-NUM-TREC IN REC.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM SGC-FIO-REC.
+           IF NOT ( FIO-STAT-OKS AND
+              RDC-CIC-ICLI IN RDL = REC-CIC-ICLI IN REC AND
+              REC-COD-TREC IN REC = 'GC' AND
+              REC-IND-VIGE IN REC = 'S' )
+               MOVE ZEROES TO WSS-IND-GRUPO
+           ELSE
+               MOVE 99     TO WSS-IND-GRUPO.
+       FIN-BUS-GRUPO.
+           EXIT.
+
+       VAL-CON-RDC-CLF SECTION.
+       INI-VAL-CON-RDC-CLF.
+           MOVE WSS-CIC-ICLI(WSS-RDC) TO RDC-CIC-ICLI IN RDL.
+           MOVE SPACES                TO RDC-CAI-ICLF IN RDL.
+           MOVE ZEROES                TO RDC-IIC-ICLF IN RDL.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM LDC-FIO-RDC.
+           IF NOT ( FIO-STAT-OKS AND
+                    RDC-CIC-ICLI IN RDL = WSS-CIC-ICLI(WSS-RDC) )
+               GO TO FIN-VAL-CON-RDC-CLF.
+
+       LUP-VAL-CON-RDC-CLF.
+           IF RDC-CIC-ICLF IN RDL = VCL-KEY-ICLF IN VCL-VARI
+               GO TO NXT-VAL-CON-RDC-CLF.
+
+           MOVE RDC-CIC-ICLF IN RDL TO CLF-CIC-ICLF IN CLF.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM LDC-FIO-CLF.
+           IF NOT FIO-STAT-OKS
+               MOVE 'CLFNOEXIS' TO VCL-COD-MENS
+               GO TO FIN-VAL-CON-RDC-CLF.
+
+           IF CLF-MSC-STAT IN CLF NOT = 'C' AND
+              CLF-MSC-STAT IN CLF NOT = 'R'
+               MOVE 'CLINOUNICO' TO VCL-COD-MENS
+               GO TO FIN-VAL-CON-RDC-CLF.
+
+       NXT-VAL-CON-RDC-CLF.
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM LDC-FIO-RDC.
+           IF ( FIO-STAT-OKS AND
+                RDC-CIC-ICLI IN RDL = WSS-CIC-ICLI(WSS-RDC) )
+              GO TO LUP-VAL-CON-RDC-CLF.
+
+       FIN-VAL-CON-RDC-CLF.
+           EXIT.
+      * FIN-AMP
+
+       VAL-LDC SECTION.
+       INI-VAL-LDC.
+           MOVE 'N' TO WSS-LDC-VIG.
+           MOVE VCL-KEY-ICLF IN VCL-VARI TO LDC-CIC-ICLF IN LDC.
+           MOVE ZEROS                    TO LDC-NUM-ILDC IN LDC.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM LDC-FIO-LDC.
+           IF NOT ( FIO-STAT-OKS AND
+              VCL-KEY-ICLF IN VCL-VARI = LDC-CIC-ICLF IN LDC )
+               MOVE 'LDC    NEX' TO VCL-COD-MENS
+               GO TO FIN-VAL-LDC.
+           MOVE ZEROES TO WSS-LDC.
+           MOVE ZEROES TO WSS-ARC.
+           MOVE ZEROES TO WSS-ARG.
+       LUP-VAL-LDC.
+      *FLB CST  12-JUL-1994 DEBE CONTAR LAS NO VIGENTES, SALVO QUE
+      * SE HAGA UN CAMBIO DE MEDIANA COMPLEJIDAD EN LDCPSCCU
+      *AMP-INI  3-NOV-1993
+      *    IF LDC-IND-VIGE IN LDC NOT = 'S'
+      *        GO TO NXT-VAL-LDC.
+      *AMP-FIN  3-NOV-1993
+      *FLB CST  12-JUL-1994 FIN
+           ADD 1 TO WSS-LDC.
+           IF WSS-LDC > VCL-TLCR
+               MOVE 'ARRLDCEXC' TO VCL-COD-MENS
+               GO TO FIN-VAL-LDC.
+
+      *FLB CST  13-MAR-1995 CLF GRUPO SOLO TENGA 1 LDC
+           IF WSS-CIC-TOCF = 'CGE' AND WSS-LDC > 1
+               MOVE 'LDCGRU>01' TO VCL-COD-MENS
+               GO TO FIN-VAL-LDC.
+      *FLB CST  13-MAR-1995 FIN
+
+      * INI-AMP 27-SEP-1993
+           IF WSS-EXISTE-GRUPO > ZEROES AND WSS-LDC > 1
+               MOVE 'LDCGRU>01' TO VCL-COD-MENS
+               GO TO FIN-VAL-LDC.
+      *FLB CST  13-MAR-1995 MODIFICADO
+      *    IF WSS-VAL-CMAX < LDC-VAL-CMAX IN LDC
+           IF WSS-CLF-CMAX < LDC-VAL-CMAX IN LDC AND
+              NOT PERMITE-MON-LDC-DIF-A-MON-CLF
+               MOVE 'CMXLDC>CLF' TO VCL-COD-MENS
+               GO TO FIN-VAL-LDC.
+
+
+      * FIN-AMP
+           IF LDC-IND-VIGE IN LDC = 'S'
+               MOVE 'S' TO WSS-LDC-VIG.
+
+      *FLB CST  10-OCT-1994 VALIDA TIPO DE LINEA
+           MOVE LDC-COD-TIPO IN LDC TO TLC-CODG.
+
+      *FLB CST  28-NOV-1994
+           MOVE 'DEU' TO FIO-SIST.
+           MOVE 'TLC'               TO TAB-COD-TTAB IN TAB.
+           MOVE LDC-COD-TIPO IN LDC TO TAB-COD-CTAB IN TAB.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM GNS-FIO-TAB.
+           IF NOT ( FIO-STAT-OKS AND TAB-IND-VIGE IN TAB = 'S' )
+               MOVE SPACES              TO TLC-CIC-LDIS IN TLC-VARI
+           ELSE
+               MOVE TAB-CIC-CTAB IN TAB TO TLC-CIC-LDIS IN TLC-VARI.
+
+      *FLB CST  27-FEB-1995 VEN LDC > VEN CLF
+      * GUARDA PARAMETROS
+           MOVE TAB-GLS-DATA IN TAB TO WSS-TLC-DATA.
+
+      *RVM-BCI-INI 19-MAR-1998
+           IF WSS-IND-TLC-OBL IN WSS-VARI = 'S' AND
+              CLF-IIC-ICAC IN CLF NOT > ZEROES
+               MOVE 'CLFICACOBLIG' TO VCL-COD-MENS
+               GO TO FIN-VAL-LDC.
+      *RVM-BCI-FIN 19-MAR-1998
+
+      * TRASLADADO AQUI
+      *    IF WSS-FEC-FVEN < LDC-FEC-FVEN IN LDC
+           IF WSS-FEC-FVEN < LDC-FEC-FVEN IN LDC AND
+              WSS-IND-VTOL NOT = 'S'
+               MOVE 'VENLDC>CLF' TO VCL-COD-MENS
+               GO TO FIN-VAL-LDC.
+      *FLB CST  27-FEB-1995 FIN
+
+      *FLB CST  13-MAR-1995 VALIDA MONTO LDC VS CLF
+           PERFORM VAL-MON-LDC-CLF.
+           IF MSG-COD-MENS > SPACES
+               MOVE MSG-COD-MENS TO VCL-COD-MENS
+               GO TO FIN-VAL-LDC.
+      *FLB CST  13-MAR-1995 FIN
+      *FLB CST  12-JUL-1994
+           MOVE ZEROES TO WSS-L.
+           PERFORM VAL-ARC.
+           IF VCL-COD-MENS > SPACES
+               GO TO FIN-VAL-LDC.
+
+      *FLB CST  28-NOV-1994
+           IF TLC-VSN-TIPO IN TLC-VARI = 'S' AND
+              TLC-CIC-LDIS IN TLC-VARI = 'LIBRE' AND
+              WSS-L > ZEROES
+               MOVE 'LDCEXIARC'  TO VCL-COD-MENS
+               GO TO FIN-VAL-LDC.
+      *JSS-INI 11-DEC-1998
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           MOVE 'LDC'       TO FIO-SIST.
+           MOVE 'VSN'        TO TAB-COD-TTAB IN TAB.
+           MOVE 'LDCSIN ARC' TO TAB-COD-CTAB IN TAB.
+           PERFORM GNS-FIO-TAB.
+           IF NOT ( FIO-STAT-OKS AND TAB-IND-VIGE IN TAB NOT = 'N' )
+      *JSS-FIN 11-DEC-1998
+               IF TLC-VSN-TIPO IN TLC-VARI = 'S' AND
+                  TLC-CIC-LDIS IN TLC-VARI NOT = 'LIBRE' AND
+                  WSS-L NOT > ZEROES
+                   MOVE 'LDCNOARC'  TO VCL-COD-MENS
+                   GO TO FIN-VAL-LDC.
+      *FLB CST  28-NOV-1994 FIN
+
+           PERFORM VAL-ARG.
+           IF VCL-COD-MENS > SPACES
+               GO TO FIN-VAL-LDC.
+
+           IF WSS-ARG-LDC = ZEROES AND
+              LDC-IND-MGAR IN LDC NOT = 'S'
+               MOVE 'MGARNOT=S' TO VCL-COD-MENS
+               GO TO FIN-VAL-LDC.
+
+           IF WSS-ARG-LDC = 1 AND
+              LDC-IND-MGAR IN LDC NOT = 'U'
+               MOVE 'MGARNOT=U' TO VCL-COD-MENS
+               GO TO FIN-VAL-LDC.
+
+           IF WSS-ARG-LDC > 1 AND
+              NOT ( LDC-IND-MGAR IN LDC = 'O' OR 'Y' )
+               MOVE 'MGARNOT=OY' TO VCL-COD-MENS
+               GO TO FIN-VAL-LDC.
+
+      *AMP-INI  3-NOV-1993
+       NXT-VAL-LDC.
+      *AMP-FIN  3-NOV-1993
+           MOVE FIO-GET-NXT    TO FIO-CMND.
+           PERFORM LDC-FIO-LDC.
+           IF FIO-STAT-OKS AND
+              VCL-KEY-ICLF IN VCL-VARI = LDC-CIC-ICLF IN LDC
+               GO TO LUP-VAL-LDC.
+       FIN-VAL-LDC.
+           EXIT.
+
+       VAL-ARC SECTION.
+       INI-VAL-ARC.
+           MOVE LDC-KEY-ILDC IN LDC TO ARC-KEY-ILDC IN ARC.
+           MOVE ZEROS               TO ARC-NUM-IARC IN ARC.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM LDC-FIO-ARC.
+           IF NOT ( FIO-STAT-OKS AND
+              ARC-KEY-ILDC IN ARC = LDC-KEY-ILDC IN LDC )
+               GO TO FIN-VAL-ARC.
+
+       LUP-VAL-ARC.
+           ADD 1 TO WSS-ARC.
+      * INI-AMP 27-SEP-1993
+           IF WSS-EXISTE-GRUPO > ZEROES
+               MOVE 'ARCGRU<>00' TO VCL-COD-MENS
+               GO TO FIN-VAL-ARC.
+      * FIN-AMP
+           IF WSS-ARC > VCL-TARC
+               MOVE 'ARRARCEXC' TO VCL-COD-MENS
+               GO TO FIN-VAL-ARC.
+      * INI-AMP  3-NOV-1993
+           IF ARC-IIC-IOPC IN ARC > ZEROES AND
+      * SOLO VALIDA COLOCACIONES (OPC)
+              ARC-COD-TOOC IN ARC NOT > SPACES
+      * FIN-AMP  3-NOV-1993
+               PERFORM VAL-ARC-DE-CLI
+      * INI-AMP  14-OCT-1993
+               IF WSS-IND-ARC-DE-CLI NOT > ZEROES
+                   MOVE 'ARCNODECLI' TO VCL-COD-MENS
+                   GO TO FIN-VAL-ARC.
+      * FIN-AMP  14-OCT-1993
+      * FIN-AMP
+
+      *FLB CST  12-JUL-1994
+           ADD 1 TO WSS-L.
+           MOVE WSS-L TO WSS-MAX-ARC.
+
+      *GNS CST LLenar tabla ARC Operacion credito
+           MOVE ARC-CIC-IOPC IN ARC TO WSS-ARC-CIC-IOPC(WSS-L).
+           MOVE ARC-COD-VCOC IN ARC TO WSS-ARC-COD-VCOC(WSS-L).
+           MOVE ARC-COD-COOC IN ARC TO WSS-ARC-COD-COOC(WSS-L).
+
+      *FLB CST  10-OCT-1994 Codificacion Tipo de Linea
+           MOVE ARC-COD-TOOC IN ARC TO TLC-TOOC.
+           MOVE ARC-COD-AOOC IN ARC TO TLC-AOOC.
+
+           IF ARC-IIC-IOPC IN ARC > ZEROES AND
+              TLC-TOOC NOT > SPACES
+               MOVE ARC-CIC-IOPC IN ARC TO OPC-KEY-IOPC IN OPC
+               MOVE FIO-GET-KEY         TO FIO-CMND
+               PERFORM COL-FIO-OPC
+               IF NOT FIO-STAT-OKS
+                   MOVE 'OPC    NEX' TO VCL-COD-MENS
+                   GO TO FIN-VAL-ARC
+               ELSE
+                   MOVE OPC-COD-TOOC IN OPC TO TLC-TOOC
+                   MOVE OPC-COD-AOOC IN OPC TO TLC-AOOC.
+
+           PERFORM LDC-VAL-TLC.
+           IF MSG-COD-MENS > SPACES
+               MOVE MSG-COD-MENS TO VCL-COD-MENS
+               GO TO FIN-VAL-ARC.
+      *FLB CST  10-OCT-1994 FIN Codificacion Tipo de Linea
+
+           MOVE FIO-GET-NXT    TO FIO-CMND.
+           PERFORM LDC-FIO-ARC.
+           IF FIO-STAT-OKS AND
+              ARC-KEY-ILDC IN ARC = LDC-KEY-ILDC IN LDC
+               GO TO LUP-VAL-ARC.
+
+       FIN-VAL-ARC.
+           EXIT.
+
+      * INI-AMP 28-SEP-1993
+       VAL-ARC-DE-CLI SECTION.
+       INI-VAL-ARC-DE-CLI.
+           MOVE ZEROES TO WSS-A.
+           MOVE ZEROES TO WSS-IND-ARC-DE-CLI.
+       LUP-VAL-ARC-DE-CLI.
+           ADD 1 TO WSS-A.
+      *FLB CST 10-DEC-1993
+      *    IF WSS-A > VCL-TCLI
+           IF WSS-A > VCL-TCLI OR
+              WSS-IIC-ICLI(WSS-A) NOT > ZEROES
+      *FLB CST 10-DEC-1993
+              GO TO FIN-VAL-ARC-DE-CLI.
+           MOVE WSS-CIC-ICLI(WSS-A) TO RDC-CIC-ICLI IN RDC.
+           MOVE ARC-CIC-IOPC IN ARC TO RDC-CIC-IOPC IN RDC.
+           MOVE ZEROES              TO RDC-NUM-IDLC IN RDC.
+           MOVE FIO-GET-KEY         TO FIO-CMND.
+           PERFORM COL-FIO-RDC.
+           IF FIO-STAT-OKS
+               MOVE 99 TO WSS-IND-ARC-DE-CLI
+               GO TO FIN-VAL-ARC-DE-CLI.
+           GO TO LUP-VAL-ARC-DE-CLI.
+       FIN-VAL-ARC-DE-CLI.
+      *AMP-INI 14-OCT-1993
+      *    IF WSS-IND-ARC-DE-CLI NOT > ZEROES
+      *        MOVE 'ARCNODECLI' TO VCL-COD-MENS.
+      *AMP-FIN 14-OCT-1993
+           EXIT.
+      * FIN-AMP
+
+       VAL-ARG SECTION.
+       INI-VAL-ARG.
+           MOVE ZEROS TO WSS-ARG-LDC.
+           MOVE LDC-KEY-ILDC IN LDC TO ARG-KEY-ILDC IN ARG.
+           MOVE ZEROS               TO ARG-NUM-IARG IN ARG.
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM LDC-FIO-ARG.
+           IF NOT ( FIO-STAT-OKS AND
+              ARG-KEY-ILDC IN ARG = LDC-KEY-ILDC IN LDC )
+               GO TO FIN-VAL-ARG.
+
+       LUP-VAL-ARG.
+           ADD 1 TO WSS-ARG.
+      * INI-AMP 27-SEP-1993
+           IF WSS-EXISTE-GRUPO > ZEROES
+               MOVE 'ARGGRU<>00' TO VCL-COD-MENS
+               GO TO FIN-VAL-ARG.
+      * FIN-AMP
+           IF WSS-ARG > VCL-TARG
+               MOVE 'ARRARGEXC' TO VCL-COD-MENS
+               GO TO FIN-VAL-ARG.
+
+      * INI-AMP  3-NOV-1993
+      * SOLO VALIDA GARANTIAS (GDD)
+      *FLB CST  13-DEC-1993
+           IF ARG-IIC-IGAR IN ARG > ZEROES
+               PERFORM VAL-ARG-DE-CLI
+      * INI-AMP 14-OCT-1993
+      * SMC-INI  13-DEC-1993
+      *         IF WSS-IND-ARG-DE-CLI NOT > ZEROES
+      *             MOVE 'ARGNODECLI' TO VCL-COD-MENS
+      *             GO TO FIN-VAL-ARG.
+               IF VCL-COD-MENS > SPACES
+                  GO TO FIN-VAL-ARG.
+      * SMC-FIN  13-DEC-1993
+      * FIN-AMP 14-OCT-1993
+      * FIN-AMP
+           ADD 1 TO WSS-ARG-LDC.
+           MOVE FIO-GET-NXT    TO FIO-CMND.
+           PERFORM LDC-FIO-ARG.
+           IF FIO-STAT-OKS AND
+              ARG-KEY-ILDC IN ARG = LDC-KEY-ILDC IN LDC
+               GO TO LUP-VAL-ARG.
+
+       FIN-VAL-ARG.
+           EXIT.
+
+      * INI-AMP 28-SEP-1993
+       VAL-ARG-DE-CLI SECTION.
+       INI-VAL-ARG-DE-CLI.
+           MOVE ZEROES TO WSS-B.
+           MOVE SPACES TO VCL-COD-MENS.
+
+      *FLB CST  6-DEC-1994
+           MOVE 'TAB' TO FIO-SIST.
+           MOVE 'TIO ' TO TAB-COD-TTAB IN TAB.
+           MOVE ARG-COD-TOGA IN ARG TO TAB-COD-CTAB IN TAB.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM GNS-FIO-TAB.
+           MOVE TAB-CIC-CTAB IN TAB TO WSS-CIC-TOGA.
+
+           IF WSS-CIC-TOGA = 'AVL' OR
+              WSS-CIC-TOGA = 'FIA'
+              PERFORM VAL-FIA-DE-CLI
+              IF VCL-COD-MENS NOT > SPACES AND
+      *FLB CST  6-DEC-1994
+                 WSS-CIC-TOGA = 'FIA' AND
+                 WSS-ARC > ZEROES
+                 PERFORM PUT-AMF
+              ELSE
+              IF VCL-COD-MENS NOT > SPACES AND
+                 WSS-CIC-TOGA = 'AVL' AND
+                 WSS-ARC > ZEROES
+                 PERFORM DEL-AMF
+              ELSE
+                 NEXT SENTENCE
+      *FLB CST  6-DEC-1994
+           ELSE
+              PERFORM VAL-GAR-DE-CLI.
+
+       FIN-VAL-ARG-DE-CLI.
+           EXIT.
+      *AMP-FIN  14-OCT-1993
+
+      *SMC-INI  13-DEC-1993
+       VAL-GAR-DE-CLI SECTION.
+       INI-VAL-GAR-DE-CLI.
+           MOVE 'ARGNODECLI' TO VCL-COD-MENS.
+           ADD 1 TO WSS-B.
+           IF WSS-B > VCL-TCLI OR WSS-IIC-ICLI(WSS-B) NOT > ZEROES
+               GO TO FIN-VAL-GAR-DE-CLI.
+
+           MOVE WSS-CIC-ICLI(WSS-B) TO GDD-CIC-ICLI IN GDD.
+           MOVE ARG-CIC-IGAR IN ARG TO GAR-ID       IN GDD.
+           MOVE FIO-GET-KEY         TO FIO-CMND.
+           PERFORM GAR-FIO-GDD.
+           IF FIO-STAT-OKS
+               MOVE GAR-CLV-GDD-2 IN GDD TO GAR-CLV-GDG-1 IN GDG
+               MOVE FIO-GET-KEY TO FIO-CMND
+               PERFORM GAR-FIO-GDG
+               IF FIO-STAT-OKS AND GAR-FEC-ALZ IN GDG NOT > ZEROES
+                   MOVE SPACES TO VCL-COD-MENS
+                   GO TO FIN-VAL-GAR-DE-CLI.
+           GO TO INI-VAL-GAR-DE-CLI.
+       FIN-VAL-GAR-DE-CLI.
+           EXIT.
+
+      *JSS-INI 4-MAR-1994
+       VAL-FIA-DE-CLI SECTION.
+       INI-VAL-FIA-DE-CLI.
+           MOVE ARG-CIC-IGAR IN ARG TO FIA-CIC-IESC IN FIA
+           MOVE ZEROES              TO FIA-NUM-IFIA IN FIA
+           MOVE FIO-GET-NLS TO FIO-CMND.
+           PERFORM DEU-FIO-FIA.
+           IF NOT FIO-STAT-OKS OR
+              FIA-CIC-IESC IN FIA NOT = ARG-CIC-IGAR IN ARG
+               MOVE 'FIA    NEX' TO VCL-COD-MENS
+               GO TO FIN-VAL-FIA-DE-CLI.
+           IF FIA-FEC-FALZ IN FIA > ZEROES
+               MOVE 'FIA    ALZ' TO VCL-COD-MENS
+               GO TO NXT-VAL-FIA-DE-CLI.
+      *Analiza si la fianza pertenece a uno de los deudores
+       FIA-VAL-FIA-DE-CLI.
+           MOVE SPACES TO VCL-COD-MENS.
+           MOVE 0 TO WSS-B.
+      *Realiza un LUP con los deudores verificando si alguno
+      *de ellos es el deudor de la fianza analizada
+       LUP-VAL-FIA-DE-CLI.
+           ADD 1 TO WSS-B.
+           IF WSS-B > VCL-TCLI OR WSS-IIC-ICLI(WSS-B) NOT > ZEROES
+               MOVE 'FIANODECLI' TO VCL-COD-MENS
+               GO TO FIN-VAL-FIA-DE-CLI.
+           IF WSS-CIC-ICLI(WSS-B) NOT = FIA-CIC-ICLI IN FIA
+               GO TO LUP-VAL-FIA-DE-CLI.
+      *Lee la siguiente fianza
+       NXT-VAL-FIA-DE-CLI.
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM DEU-FIO-FIA.
+           IF FIO-STAT-OKS AND
+              FIA-CIC-IESC IN FIA = ARG-CIC-IGAR IN ARG
+               IF FIA-FEC-FALZ IN FIA > ZEROES
+                  GO TO NXT-VAL-FIA-DE-CLI
+               ELSE
+                   GO TO FIA-VAL-FIA-DE-CLI.
+       FIN-VAL-FIA-DE-CLI.
+           EXIT.
+      *JSS-FIN 4-MAR-1994
+      *SMC-FIN  13-DEC-1993
+
+
+
+       INI SECTION.
+       INI-INI.
+       COPY GNSBGEIB.
+       COPY GNSBGEDB.
+      *Handler para manejar VSAM
+           PERFORM GNS-HDL-VSM.
+           MOVE DFHCOMMAREA(1:EIBCALEN) TO VCL-CMMA IN VCL-VARI.
+           MOVE VCL-PROG TO FIO-PROG.
+      *Buscar Independencia de Datos
+           MOVE VCL-QIDD TO SCR-QIDD.
+           MOVE VCL-LIDD TO SCR-LIDD.
+           PERFORM GNS-BUS-IDD.
+
+           MOVE SPACES  TO MSG-COD-SIST
+                           MSG-COD-MENS.
+      * Limpia Variables de Retorno
+           MOVE SPACES  TO VCL-COD-SIST
+                           VCL-COD-MENS.
+
+
+      *FLB CST  12-JUL-1994 LIMPIA ARREGLO DE RDC'S
+           PERFORM LIM-ARR.
+
+      *FLB CST  10-OCT-1994 Codificacion Tipo de Linea
+           MOVE 'DEU' TO FIO-SIST.
+           MOVE 'VSN'       TO TAB-COD-TTAB IN TAB.
+           MOVE 'CODTIPLDC' TO TAB-COD-CTAB IN TAB.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM GNS-FIO-TAB.
+           IF FIO-STAT-OKS AND TAB-IND-VIGE IN TAB = 'S'
+               MOVE 'S' TO TLC-VSN-TIPO IN TLC-VARI
+           ELSE
+               MOVE 'N' TO TLC-VSN-TIPO IN TLC-VARI.
+      *FLB CST  23-FEB-1995
+      * EXAMINA SI LDC PERMITE MONEDA DISTINTA A LA DE CLF
+           MOVE 'DEU'                TO FIO-SIST.
+           MOVE 'VSN '               TO TAB-COD-TTAB IN TAB.
+           MOVE 'MONLDC<>CLF'        TO TAB-COD-CTAB IN TAB.
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM GNS-FIO-TAB.
+           IF FIO-STAT-OKS AND
+              TAB-IND-VIGE IN TAB = 'S'
+               MOVE 'S' TO WSS-VSN-MLMC
+           ELSE
+               MOVE 'N' TO WSS-VSN-MLMC.
+       FIN-INI.
+           EXIT.
+
+       LIM-ARR SECTION.
+       INI-LIM-ARR.
+           MOVE ZEROES TO WSS-I.
+       LUP-LIM-ARR.
+           ADD 1 TO WSS-I.
+           IF WSS-I > 12
+               GO TO FIN-LIM-ARR.
+           MOVE SPACES TO WSS-CAI-ICLI(WSS-I).
+           MOVE ZEROES TO WSS-IIC-ICLI(WSS-I).
+       FIN-LIM-ARR.
+           EXIT.
+
+       FIN SECTION.
+       INI-FIN.
+           MOVE 'DEU' TO VCL-COD-SIST IN VCL-VARI.
+           IF VCL-COD-MENS IN VCL-VARI = SPACES AND
+              MSG-COD-MENS > SPACES
+               MOVE MSG-COD-MENS TO VCL-COD-MENS IN VCL-VARI.
+
+           MOVE VCL-CMMA IN VCL-VARI TO DFHCOMMAREA.
+           MOVE +0 TO EIBRESP.
+       COPY GNSBGGBK.
+       FIN-FIN.
+           EXIT.
+
+       COPY GNSBGSYS.
+       COPY GNSBBIDD.
+       COPY GNSBHVSM.
+       COPY GNSBGVSM.
+       COPY GNSBGDTC.
+       COPY GNSBGMSG.
+      *HPM ini 13-JUN-1994
+       COPY GNSBGHOY.
+      *HPM fin 13-JUN-1994
+       COPY GNSBIABT.
+
+       COPY LDCBFRDC REPLACING RDC BY RDL.
+       COPY LDCBFLDC.
+       COPY LDCBFARC.
+       COPY LDCBFARG.
+       COPY LDCBFCLF.
+
+      * INI-AMP 28-SEP-1993
+       COPY COLBFOPC.
+       COPY COLBFRDC.
+
+      * INI-AMP 28-SEP-1993
+       COPY GARBFGDD.
+       COPY GARBFGDG.
+       COPY GARBFTAG.
+      *HPM ini 13-JUN-1994
+       COPY GARBFGVT.
+      *HPM fin 13-JUN-1994
+      * FIN-AMP
+
+       COPY SGCBFREC.
+
+       COPY DEUBFFIA.
+      *GNN ini 20-JUN-1994
+       COPY DEUBFAMF.
+      *GNN fin 20-JUN-1994
+      * FIN-AMP
+
+      *HPM ini 13-JUN-1994
+       COPY TABBFCAM.
+      *HPM fin 13-JUN-1994
+
+       COPY GNSBVTAB.
+       COPY GNSBFTAB.
+       COPY GNSBFMSG.
+
+       PUT-AMF SECTION.
+       INI-PUT-AMF.
+      *leer fianza
+           MOVE ARG-CIC-IGAR IN ARG TO FIA-CIC-IESC IN FIA.
+           MOVE 0                   TO FIA-NUM-IFIA IN FIA.
+           MOVE FIO-GET-NLS         TO FIO-CMND.
+       LU1-PUT-AMF.
+           PERFORM DEU-FIO-FIA.
+           IF NOT (FIO-STAT-OKS AND
+                   FIA-CIC-IESC IN FIA = ARG-CIC-IGAR IN ARG)
+               GO TO BRW-PUT-AMF.
+
+      * Fianza Vigente, no se modifica
+           IF FIA-MSC-STAT IN FIA = 'S'
+               MOVE FIO-GET-NXT TO FIO-CMND
+               GO TO LU1-PUT-AMF.
+
+      * Fianza no Vigente, primero eliminar los AMF
+           PERFORM ELI-AMF.
+           IF MSG-COD-MENS > SPACES
+               MOVE MSG-COD-MENS TO VCL-COD-MENS
+               GO TO FIN-PUT-AMF.
+      * Fianza no Vigente, segundo grabar los AMF a partir de ARC
+           MOVE 1 TO WSS-L.
+       LU2-PUT-AMF.
+      *FLB CST  12-JUL-1994
+           IF WSS-L > WSS-MAX-ARC
+               MOVE FIO-GET-NXT TO FIO-CMND
+               GO TO LU1-PUT-AMF.
+           MOVE SPACES                  TO AMF.
+           MOVE FIA-KEY-IFIA            TO AMF-KEY-IFIA IN AMF.
+           MOVE WSS-L                   TO AMF-NUM-IAMF IN AMF.
+           MOVE WSS-ARC-CIC-IOPC(WSS-L) TO AMF-CIC-IOCA IN AMF.
+           MOVE WSS-ARC-COD-VCOC(WSS-L) TO AMF-COD-VCOA IN AMF.
+           MOVE WSS-ARC-COD-COOC(WSS-L) TO AMF-COD-COOA IN AMF.
+           MOVE 0                       TO AMF-VAL-LIMA IN AMF.
+           PERFORM GET-FHOY.
+           MOVE HOY-STP-ITRN        TO AMF-STP-ITRN IN AMF.
+      *FLB CST  6-DEC-1994
+           MOVE VCL-OTRN            TO AMF-COD-OTRN IN AMF.
+           MOVE VCL-USER            TO AMF-COD-ATRN IN AMF.
+           MOVE FIO-PUT             TO FIO-CMND.
+           PERFORM DEU-FIO-AMF.
+           IF FIO-STAT-OKS
+               ADD 1 TO WSS-L
+               GO TO LU2-PUT-AMF.
+           MOVE FIO-MENS TO VCL-COD-MENS.
+       BRW-PUT-AMF.
+           IF FIO-STAT-OKS
+               MOVE FIO-END-BRW TO FIO-CMND
+               PERFORM DEU-FIO-FIA.
+       FIN-PUT-AMF.
+           EXIT.
+
+       ELI-AMF SECTION.
+       INI-ELI-AMF.
+           MOVE SPACES              TO MSG-COD-MENS.
+           MOVE FIA-KEY-IFIA IN FIA TO AMF-KEY-IFIA IN AMF.
+           MOVE 0                   TO AMF-NUM-IAMF IN AMF.
+       LUP-ELI-AMF.
+           MOVE FIO-GET-NLS         TO FIO-CMND.
+           PERFORM DEU-FIO-AMF.
+           IF NOT (FIO-STAT-OKS AND
+                   AMF-KEY-IFIA IN AMF = FIA-KEY-IFIA IN FIA)
+               GO TO BRW-ELI-AMF.
+           MOVE FIO-GET-KEY-UPD     TO FIO-CMND.
+           PERFORM DEU-FIO-AMF.
+           IF NOT FIO-STAT-OKS
+               MOVE 'AMF GKUPD NO'   TO MSG-COD-MENS
+               GO TO FIN-ELI-AMF.
+           MOVE FIO-DEL             TO FIO-CMND.
+           PERFORM DEU-FIO-AMF.
+           IF NOT FIO-STAT-OKS
+               MOVE 'AMF DELE NO'    TO MSG-COD-MENS
+               GO TO FIN-ELI-AMF.
+           GO TO LUP-ELI-AMF.
+       BRW-ELI-AMF.
+           IF FIO-STAT-OKS
+               MOVE FIO-END-BRW TO FIO-CMND
+               PERFORM DEU-FIO-AMF.
+       FIN-ELI-AMF.
+           EXIT.
+
+      *FLB CST  6-DEC-1994 BORRA LOS AMF PARA 'AVL'
+       DEL-AMF SECTION.
+       INI-DEL-AMF.
+      *leer fianza
+           MOVE ARG-CIC-IGAR IN ARG TO FIA-CIC-IESC IN FIA.
+           MOVE 0                   TO FIA-NUM-IFIA IN FIA.
+           MOVE FIO-GET-NLS         TO FIO-CMND.
+       LUP-DEL-AMF.
+           PERFORM DEU-FIO-FIA.
+           IF NOT (FIO-STAT-OKS AND
+                   FIA-CIC-IESC IN FIA = ARG-CIC-IGAR IN ARG)
+               GO TO BRW-DEL-AMF.
+
+           PERFORM ELI-AMF.
+           IF MSG-COD-MENS > SPACES
+               MOVE MSG-COD-MENS TO VCL-COD-MENS
+               GO TO FIN-DEL-AMF.
+
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           GO TO LUP-DEL-AMF.
+
+       BRW-DEL-AMF.
+           IF FIO-STAT-OKS
+               MOVE FIO-END-BRW TO FIO-CMND
+               PERFORM DEU-FIO-FIA.
+       FIN-DEL-AMF.
+           EXIT.
+
+      *FLB CST  10-OCT-1994 VALIDA TIPO DE LINEA
+       COPY LDCBVTLC.
+      *FLB CST  13-MAR-1995 VALIDA MONEDA LDC VS. CLF
+       COPY LDCBVMLC.

@@ -1,0 +1,284 @@
+      * CONTROL DE AUTONOMIA EN ACTIVACION CLF
+       LDC-PRO-LAC SECTION.
+       INI-LDC-PRO-LAC.
+      *SMC-INI 26-10-1993 LEE TABLA VSN PARA DETERMINAR SI SE
+      *                   USA LA FUNCIONALIDAD DE APROBACION POR
+      *                   CATEGORIA.
+      * BUSCA REGISTRO CTG.
+           MOVE 'DEU'                TO FIO-SIST
+           MOVE 'VSN '               TO TAB-COD-TTAB IN TAB
+           MOVE 'LDCCTG      '       TO TAB-COD-CTAB IN TAB
+           MOVE FIO-GET-KEY TO FIO-CMND
+           PERFORM GNS-FIO-TAB
+           IF FIO-STAT-OKS
+              MOVE TAB-IND-VIGE IN TAB  TO WSS-VSN-VCTG IN WSS-VARI
+           ELSE
+              MOVE  'N'                 TO WSS-VSN-VCTG IN WSS-VARI.
+
+           IF NOT USA-CTG
+              GO TO FIN-LDC-PRO-LAC.
+
+      *SMC-FIN 26-10-1993
+
+      * Valido codigo de usuario activador
+           MOVE 'EJC '   TO USR-COD-TTAB IN USR.
+           MOVE SCR-USER TO USR-COD-USER IN USR.
+           PERFORM VAL-TDU.
+           IF MSG-COD-MENS > SPACES
+               MOVE MSG-GLS-DESC TO FRM-MENS
+               MOVE FRM-SUAR-MAL TO FRM-SUAR
+               GO TO FIN-LDC-PRO-LAC.
+
+      * Con Categorža Funcional y Tipo de Banca del usuario acceso LAC
+           MOVE USR-COD-CUSR IN USR TO LAC-COD-CUSR IN LAC.
+           MOVE USR-COD-AGES IN USR TO LAC-COD-AGES IN LAC.
+           PERFORM LDC-FIO-LAC.
+           IF NOT FIO-STAT-OKS
+               MOVE 'DEU'        TO MSG-COD-SIST
+               MOVE 'LAC    NEX' TO MSG-COD-MENS
+               PERFORM GET-MSG
+               MOVE MSG-GLS-DESC TO FRM-MENS
+               MOVE FRM-SUAR-MAL TO FRM-SUAR
+               GO TO FIN-LDC-PRO-LAC.
+
+      * Acumulo Cupos de Riesgos de 1a. y de 2a.
+           PERFORM ACUMULA-RSG1-Y-RSG2.
+           IF MSG-COD-MENS > SPACES
+               GO TO FIN-LDC-PRO-LAC.
+
+      * OBTIENE CIC DEL US$
+           MOVE 'TAB'          TO FIO-SIST.
+           MOVE 'VLR'          TO TAB-CIC-TTAB IN TAB.
+           MOVE '1013'         TO TAB-CIC-CTAB IN TAB.
+           MOVE 'TAB-CIC-TABL' TO FIO-AKEY.
+           MOVE FIO-GET-KEY    TO FIO-CMND.
+           PERFORM GNS-FIO-TAB.
+           IF NOT FIO-STAT-OKS
+               MOVE 'TAB'          TO MSG-COD-SIST
+               MOVE 'CICUS$NEX'    TO MSG-COD-MENS
+               PERFORM GET-MSG
+               MOVE MSG-GLS-DESC TO FRM-MENS
+               MOVE FRM-SUAR-MAL TO FRM-SUAR
+               GO TO FIN-LDC-PRO-LAC.
+           MOVE TAB-COD-CTAB IN TAB TO WSS-COD-USD IN WSS-VARI.
+
+      * Si la moneda del CEM esta en USD, no voy a la tabla CAM
+           IF CLF-COD-VCCF IN CLF-FLD = TAB-COD-CTAB IN TAB
+               MOVE CLF-VAL-CMAX IN CLF-FLD TO WSS-VAL-CMAX-USD
+               MOVE WSS-VAL-RSG1            TO WSS-VAL-RSG1-USD
+               MOVE WSS-VAL-RSG2            TO WSS-VAL-RSG2-USD
+               GO TO COMPARA-RSGS-VS-LAC.
+
+      * OBTIENE CIC DEL $
+           MOVE 'TAB'          TO FIO-SIST.
+           MOVE 'VLR'          TO TAB-CIC-TTAB IN TAB.
+           MOVE '0999'         TO TAB-CIC-CTAB IN TAB.
+           MOVE 'TAB-CIC-TABL' TO FIO-AKEY.
+           MOVE FIO-GET-KEY    TO FIO-CMND.
+           PERFORM GNS-FIO-TAB.
+           IF NOT FIO-STAT-OKS
+               MOVE 'TAB'           TO MSG-COD-SIST
+               MOVE 'CIC0999NEX'    TO MSG-COD-MENS
+               PERFORM GET-MSG
+               MOVE MSG-GLS-DESC TO FRM-MENS
+               MOVE FRM-SUAR-MAL TO FRM-SUAR
+               GO TO FIN-LDC-PRO-LAC.
+
+      * SI LA MONEDA DEL CLF NO ESTA EN USD, TRANSFORMA DE MONEDA
+      *  A MONEDA NACIONAL SIEMPRE QUE LA MONEDA NO SE LA NACIONAL
+
+      * Si la moneda del CEM esta en $ , no voy a la tabla CAM
+           IF CLF-COD-VCCF IN CLF-FLD = TAB-COD-CTAB IN TAB
+              MOVE CLF-COD-VCCF IN CLF-FLD TO TAB-COD-CTAB IN TAB
+               MOVE 1 TO WSS-SGV-VCAM
+               GO TO OBT-VAL-USD.
+
+      * Obtengo el tipo de cambio vigente
+           MOVE HOY-SHOY                 TO CAM-NUM-SCAM IN CAM(1).
+           MOVE HOY-AHOY                 TO CAM-NUM-ACAM IN CAM(1).
+           MOVE HOY-MHOY                 TO CAM-NUM-MCAM IN CAM(1).
+           MOVE HOY-DHOY                 TO CAM-NUM-DCAM IN CAM(1).
+           MOVE CAM-FEC-FCAM IN CAM(1)   TO CAM-FEC-FCAM IN CAM(2).
+           MOVE CLF-COD-VCCF IN CLF-FLD  TO CAM-COD-VCAM IN CAM(1).
+           MOVE TAB-COD-CTAB IN TAB      TO CAM-COD-VCAM IN CAM(2).
+
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM TAB-FIO-CAM.
+           IF NOT ( FIO-STAT-OKS AND CAM-IND-VIGE IN CAM = 'S' )
+               MOVE 'TAB'        TO MSG-COD-SIST
+               MOVE 'CAM    NEX' TO MSG-COD-MENS
+               PERFORM GET-MSG
+               MOVE MSG-COD-MENS TO FRM-MENS
+               MOVE FRM-SUAR-MAL TO FRM-SUAR
+               GO TO FIN-LDC-PRO-LAC.
+           MOVE CAM-SGV-VCAM IN CAM TO WSS-SGV-VCAM.
+
+       OBT-VAL-USD.
+
+      *AMP-INI  27-OCT-1993
+           MOVE HOY-SHOY                 TO CAM-NUM-SCAM IN CAM(1).
+           MOVE HOY-AHOY                 TO CAM-NUM-ACAM IN CAM(1).
+           MOVE HOY-MHOY                 TO CAM-NUM-MCAM IN CAM(1).
+           MOVE HOY-DHOY                 TO CAM-NUM-DCAM IN CAM(1).
+           MOVE CAM-FEC-FCAM IN CAM(1)   TO CAM-FEC-FCAM IN CAM(2).
+      *AMP-FIN  27-OCT-1993
+           MOVE WSS-COD-USD              TO CAM-COD-VCAM IN CAM(1).
+           MOVE TAB-COD-CTAB IN TAB      TO CAM-COD-VCAM IN CAM(2).
+
+           MOVE FIO-GET-KEY TO FIO-CMND.
+           PERFORM TAB-FIO-CAM.
+           IF NOT ( FIO-STAT-OKS AND CAM-IND-VIGE IN CAM = 'S' )
+               MOVE 'TAB'        TO MSG-COD-SIST
+               MOVE 'CAM    NEX' TO MSG-COD-MENS
+               PERFORM GET-MSG
+               MOVE MSG-COD-MENS TO FRM-MENS
+               MOVE FRM-SUAR-MAL TO FRM-SUAR
+               GO TO FIN-LDC-PRO-LAC.
+
+      * Convierto CEM, Suma de LDC de 1a., y de 2a. a USD
+
+           COMPUTE WSS-VAL-CMAX-USD ROUNDED = CLF-VAL-CMAX IN CLF-FLD *
+                                              WSS-SGV-VCAM /
+                                              CAM-SGV-VCAM IN CAM.
+
+           COMPUTE WSS-VAL-RSG1-USD ROUNDED = WSS-VAL-RSG1 *
+                                              WSS-SGV-VCAM /
+                                              CAM-SGV-VCAM IN CAM.
+
+           COMPUTE WSS-VAL-RSG2-USD ROUNDED = WSS-VAL-RSG2 *
+                                              WSS-SGV-VCAM /
+                                              CAM-SGV-VCAM IN CAM.
+
+       COMPARA-RSGS-VS-LAC.
+
+      * LTM-INI 30-04-1994
+           MOVE HOY-SHOY                 TO FEC-SEC1.
+           MOVE HOY-AHOY                 TO FEC-AEC1.
+           MOVE HOY-MHOY                 TO FEC-MEC1.
+           MOVE HOY-DHOY                 TO FEC-DEC1.
+
+           MOVE CLF-NUM-SVEN IN CLF-FLD  TO FEC-SEC2.
+           MOVE CLF-NUM-AVEN IN CLF-FLD  TO FEC-AEC2.
+           MOVE CLF-NUM-MVEN IN CLF-FLD  TO FEC-MEC2.
+           MOVE CLF-NUM-DVEN IN CLF-FLD  TO FEC-DEC2.
+
+           MOVE FEC-FORM-FEC             TO FEC-FORM.
+           MOVE FEC-DIF-MES              TO FEC-CMND.
+           PERFORM CAL-FEC.
+           IF NOT FEC-STAT-OKS
+               MOVE FEC-MENS TO FRM-MENS
+               MOVE FRM-SUAR-MAL  TO FRM-SUAR
+               GO TO FIN-LDC-PRO-LAC.
+           MOVE 0   TO WSS-TRMO.
+       LUP-BUSCA-TRAMO.
+      *----------------
+           ADD 1    TO WSS-TRMO.
+           IF FEC-NMES NOT > LAC-NUM-MSES IN LAC (WSS-TRMO) OR
+              WSS-TRMO > 12
+               GO TO FIN-BUSCA-TRAMO.
+           GO TO LUP-BUSCA-TRAMO.
+       FIN-BUSCA-TRAMO.
+      *----------------
+      * FIN-LTM 30-04-1994
+      * Comparo Montos de 1a. + 2a. de LAC vs. CEM
+           IF LAC-NUM-CAT1 IN LAC (WSS-TRMO) +
+              LAC-NUM-CAT2 IN LAC (WSS-TRMO) < WSS-VAL-CMAX-USD
+               MOVE 'DEU'        TO MSG-COD-SIST
+               MOVE 'LAC1+2<CLF' TO MSG-COD-MENS
+               PERFORM GET-MSG
+               MOVE MSG-GLS-DESC TO FRM-MENS
+               MOVE FRM-SUAR-MAL TO FRM-SUAR
+               GO TO FIN-LDC-PRO-LAC.
+
+      *HPM ini 8-FEB-1994
+      *
+      * Comparo el menor valor entre Suma de LDC de 1a. y CEM
+      * vs. Monto de 1a. de LAC
+           IF WSS-VAL-RSG1-USD > WSS-VAL-CMAX-USD
+               MOVE WSS-VAL-CMAX-USD TO WSS-VAL-CMP-USD
+           ELSE
+               MOVE WSS-VAL-RSG1-USD TO WSS-VAL-CMP-USD.
+
+           IF WSS-VAL-CMP-USD > LAC-NUM-CAT1 IN LAC (WSS-TRMO)
+               MOVE 'DEU'        TO MSG-COD-SIST
+               MOVE 'RSG1>LAC1'  TO MSG-COD-MENS
+               PERFORM GET-MSG
+               MOVE MSG-GLS-DESC TO FRM-MENS
+               MOVE FRM-SUAR-MAL TO FRM-SUAR
+               GO TO FIN-LDC-PRO-LAC.
+      *
+      * Comparo el menor valor entre Suma de LDC de 2a. y CEM
+      * vs. Monto de 2a. de LAC
+           IF WSS-VAL-RSG2-USD > WSS-VAL-CMAX-USD
+               MOVE WSS-VAL-CMAX-USD TO WSS-VAL-CMP-USD
+           ELSE
+               MOVE WSS-VAL-RSG2-USD TO WSS-VAL-CMP-USD.
+
+           IF WSS-VAL-CMP-USD > LAC-NUM-CAT2 IN LAC (WSS-TRMO)
+               MOVE 'DEU'        TO MSG-COD-SIST
+               MOVE 'RSG2>LAC2'  TO MSG-COD-MENS
+               PERFORM GET-MSG
+               MOVE MSG-GLS-DESC TO FRM-MENS
+               MOVE FRM-SUAR-MAL TO FRM-SUAR
+               GO TO FIN-LDC-PRO-LAC.
+      *HPM fin 8-FEB-1994
+
+      *HPM ini 8-FEB-1994
+      * Comparo Suma de LDC de 1a. + 2a. vs. Monto de 2a. de LAC
+      *     IF WSS-VAL-RSG1-USD + WSS-VAL-RSG2-USD > LAC-NUM-CAT2
+      *                                              IN LAC (WSS-TRMO)
+      *         MOVE 'DEU'        TO MSG-COD-SIST
+      *         MOVE 'RSGS>LAC2'  TO MSG-COD-MENS
+      *         PERFORM GET-MSG
+      *         MOVE MSG-GLS-DESC TO FRM-MENS
+      *         MOVE FRM-SUAR-MAL TO FRM-SUAR
+      *         GO TO FIN-LDC-PRO-LAC.
+      *HPM fin 8-FEB-1994
+       FIN-LDC-PRO-LAC.
+           EXIT.
+
+        ACUMULA-RSG1-Y-RSG2 SECTION.
+        INI-ACUMULA-RSG1-Y-RSG2.
+            MOVE ZEROES TO WSS-VAL-RSG1.
+            MOVE ZEROES TO WSS-VAL-RSG2.
+      *AMP-INI  27-OCT-1993
+      *     MOVE CLF-KEY-ICLF IN CLF TO LDC-CIC-ICLF IN LDC.
+            MOVE CLF-CAI-ICLF IN CLF-FLD TO LDC-CAI-ICLF IN LDC.
+            MOVE CLF-IIC-ICLF IN CLF-FLD TO LDC-IIC-ICLF IN LDC.
+      *AMP-FIN  27-OCT-1993
+            MOVE FIO-GET-NLS TO FIO-CMND.
+            PERFORM  LDC-FIO-LDC.
+            IF NOT ( FIO-STAT-OKS AND
+      *AMP-INI  27-OCT-1993
+      *              LDC-CIC-ICLF IN LDC = CLF-CIC-ICLF IN CLF )
+                LDC-CAI-ICLF IN LDC = CLF-CAI-ICLF IN CLF-FLD AND
+                LDC-IIC-ICLF IN LDC = CLF-IIC-ICLF IN CLF-FLD )
+      *AMP-FIN  27-OCT-1993
+                GO TO FIN-ACUMULA-RSG1-Y-RSG2.
+        LUP-ACUMULA-RSG1-Y-RSG2.
+            IF LDC-IND-VIGE IN LDC = 'S'
+      * LTM-INI 04-05-1994
+      *          IF LDC-IND-CRSG IN LDC = '1'
+      *              ADD LDC-VAL-CMAX IN LDC TO WSS-VAL-RSG1
+      *          ELSE
+      *              ADD LDC-VAL-CMAX IN LDC TO WSS-VAL-RSG2.
+                 COMPUTE WSS-VAL-RSG1 = WSS-VAL-RSG1 + ( LDC-VAL-CMAX *
+                                        LDC-VAL-RSG1 / 100 )
+                 COMPUTE WSS-VAL-RSG2 = WSS-VAL-RSG2 + ( LDC-VAL-CMAX *
+                                        LDC-VAL-RSG2 / 100 ).
+      * LTM-FIN 04-05-1994
+
+        NXT-ACUMULA-RSG1-Y-RSG2.
+            MOVE FIO-GET-NXT TO FIO-CMND.
+            PERFORM LDC-FIO-LDC.
+            IF NOT ( FIO-STAT-OKS AND
+      *AMP-INI  27-OCT-1993
+      *              LDC-CIC-ICLF IN LDC = CLF-CIC-ICLF IN CLF )
+                LDC-CAI-ICLF IN LDC = CLF-CAI-ICLF IN CLF-FLD AND
+                LDC-IIC-ICLF IN LDC = CLF-IIC-ICLF IN CLF-FLD )
+      *AMP-FIN  27-OCT-1993
+                GO TO FIN-ACUMULA-RSG1-Y-RSG2.
+            GO TO LUP-ACUMULA-RSG1-Y-RSG2.
+        FIN-ACUMULA-RSG1-Y-RSG2.
+            EXIT.
+

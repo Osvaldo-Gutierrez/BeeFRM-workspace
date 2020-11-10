@@ -1,0 +1,151 @@
+       IDENTIFICATION DIVISION.
+      *=======================
+       PROGRAM-ID.    GNSPCPRV.
+       AUTHOR.        CONSIST.
+
+      * Manejo de Privilegios para Comandos
+
+       ENVIRONMENT DIVISION.
+      *====================
+
+       DATA DIVISION.
+      *=============
+
+       WORKING-STORAGE SECTION.
+      *-----------------------
+       COPY GNSBRPRV REPLACING ==PRV== BY ==PRV EXTERNAL==.
+       COPY GNSWCFIO.
+       COPY GNSWVFIO.
+       COPY GNSWGPRV.
+       COPY GNSWGSTR.
+       COPY GNSWGSCR.
+       01  WSS-VARI.
+           03 WSS-VEC-MTCH.
+              05 WSS-MTCH           OCCURS 10 PIC X(01).
+           03 WSS-SOKS                        PIC X(01) VALUE 'S'.
+           03 WSS-SMAL                        PIC X(01) VALUE 'N'.
+           03 WSS-SIND.
+              05 I                            PIC 9(02).
+              05 ICMN                         PIC 9(02).
+              05 IMTC                         PIC 9(02).
+
+       PROCEDURE DIVISION.
+      *==================
+
+       MAIN SECTION.
+      *------------
+       INI-MAIN.
+           MOVE SPACES   TO WSS-VEC-MTCH.
+           MOVE 1        TO I.
+           MOVE 0        TO ICMN.
+           MOVE 0        TO IMTC.
+       CON-MAIN.
+           IF SCR-COD-CCMN(I) NOT = SPACES
+                      ADD 1 TO ICMN.
+           ADD 1 TO I.
+           IF I < 11
+                      GO TO CON-MAIN.
+           MOVE FIO-IFNF-PGM TO FIO-IFNF.
+           MOVE FIO-FNF TO FIO-CMND.
+           PERFORM GNS-FIO-PRV.
+           MOVE FIO-INP TO FIO-CMND.
+           PERFORM GNS-FIO-PRV.
+           IF NOT FIO-STAT-OKS
+                      GO TO FIN-MAIN.
+       LUP-MAIN.
+           MOVE FIO-GET-NXT TO FIO-CMND.
+           PERFORM GNS-FIO-PRV.
+           IF NOT FIO-STAT-OKS
+                      GO TO FIN-MAIN.
+           MOVE SPACES TO PRV-NEMO PRV-CMND PRV-STAT.
+           UNSTRING PRV DELIMITED BY '/' INTO
+                    PRV-USER PRV-OWNE PRV-NEMO PRV-CMND PRV-STAT.
+           IF PRV-CMND = SPACES
+                      GO TO LUP-MAIN.
+           IF NOT PRV-STAT-OKS
+                      MOVE WSS-SMAL TO PRV-STAT.
+           MOVE PRV-PROC TO STR-CAND.
+           MOVE PRV-NEMO TO STR-PATT.
+           PERFORM PRV-MTCH.
+           IF NOT STR-MTCH-YES
+                      GO TO LUP-MAIN.
+           MOVE PRV-CMND TO STR-PATT.
+           PERFORM MTC-CMND VARYING I FROM 1 BY 1 UNTIL I > 10.
+           IF ICMN NOT = IMTC
+                      GO TO LUP-MAIN.
+       FIN-MAIN.
+           PERFORM SET-CMND VARYING I FROM 1 BY 1 UNTIL I > 10.
+           MOVE FIO-CLO TO FIO-CMND.
+           PERFORM GNS-FIO-PRV.
+           EXIT PROGRAM.
+           
+       PRV-MTCH SECTION.
+      *----------------
+       INI-PRV-MTCH.
+           IF SPACES = STR-PATT OR STR-CAND OR NOT STR-PCHR(STR-ILIM)
+                      GO TO MTC-PRV-MTCH.
+           PERFORM BUS-CHAR VARYING STR-IAST FROM STR-ILIM BY -1
+                      UNTIL STR-IAST < 1 OR STR-PCHR(STR-IAST) = '*'.
+           IF STR-IAST < 1
+                      GO TO MTC-PRV-MTCH.
+           PERFORM BUS-CHAR VARYING STR-IMAX FROM STR-ILIM BY -1 UNTIL
+                      STR-CCHR(STR-IMAX) NOT = SPACES
+           PERFORM BUS-CHAR VARYING STR-INBL FROM STR-ILIM BY -1 UNTIL
+                      STR-PCHR(STR-INBL) NOT = SPACES.
+           IF STR-INBL NOT < STR-IMAX
+                      GO TO MTC-PRV-MTCH.
+           PERFORM MOV-CHAR VARYING STR-ISTR FROM 1 BY 1
+                      UNTIL STR-ISTR > STR-INBL - STR-IAST.
+           PERFORM PUT-ASTE VARYING STR-ISTR FROM 1 BY 1
+                      UNTIL STR-ISTR > STR-IMAX - STR-INBL.
+       MTC-PRV-MTCH.
+           CALL 'STR$MATCH_WILD'           USING
+                      BY DESCRIPTOR           STR-CAND
+                      BY DESCRIPTOR           STR-PATT
+                      GIVING                      STR-MTCH.
+       FIN-PRV-MTCH.
+           EXIT.
+
+       BUS-CHAR SECTION.
+      *----------------
+       INI-BUS-CHAR.
+       FIN-BUS-CHAR.
+           EXIT.
+
+       MOV-CHAR SECTION.
+      *----------------
+       INI-MOV-CHAR.
+           MOVE STR-PCHR( STR-INBL - STR-ISTR + 1 ) TO
+                      STR-PCHR( STR-IMAX - STR-ISTR + 1 ).
+       FIN-MOV-CHAR.
+           EXIT.
+
+       PUT-ASTE SECTION.
+      *----------------
+       INI-PUT-ASTE.
+           MOVE '*' TO STR-PCHR( STR-IAST + STR-ISTR ).
+       FIN-PUT-ASTE.
+           EXIT.
+
+       MTC-CMND SECTION.
+      *-----------------
+       INI-MTC-CMND.
+           IF SPACES = SCR-COD-CCMN(I) OR NOT WSS-MTCH(I)
+                      GO TO FIN-MTC-CMND.
+           MOVE SCR-COD-CCMN(I) TO STR-CAND.
+           PERFORM PRV-MTCH.
+           IF STR-MTCH-YES
+                      MOVE PRV-STAT TO WSS-MTCH(I)
+                      ADD 1 TO IMTC.
+       FIN-MTC-CMND.
+           EXIT.
+
+       SET-CMND SECTION.
+      *-----------------
+       INI-SET-CMND.
+           IF WSS-MTCH(I) NOT = WSS-SOKS
+                      MOVE SPACES TO SCR-COD-CCMN(I).
+       FIN-SET-CMND.
+           EXIT.
+
+       COPY GNSBFPRV.
