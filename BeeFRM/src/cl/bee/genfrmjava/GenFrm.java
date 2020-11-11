@@ -930,7 +930,7 @@ public class GenFrm {
 
                     FieldDef fd = (FieldDef) fields.get(i);
 
-                    if (fd.modifier == FieldDef.IKY) {
+                    if (fd.modifier == FieldDef.IKY && FieldDef.absenceAttribute(fd.attributes, FieldDef.DISPLAY_ONLY_ATTR)) {
                         gen_set_field_attr(entityName, fd, "FRM-CPIM-AEY", false, -1);
                     }
                 }
@@ -951,7 +951,7 @@ public class GenFrm {
 
                     FieldDef fd = (FieldDef) fields.get(i);
 
-                    if (fd.modifier == FieldDef.MKY) {
+                    if (fd.modifier == FieldDef.MKY && FieldDef.absenceAttribute(fd.attributes, FieldDef.DISPLAY_ONLY_ATTR)) {
                         gen_set_field_attr(entityName, fd, "FRM-CPIM-AEY", false, -1);
                     }
                 }
@@ -972,7 +972,7 @@ public class GenFrm {
 
                     FieldDef fd = (FieldDef) fields.get(i);
 
-                    if (fd.modifier == FieldDef.AKY) {
+                    if (fd.modifier == FieldDef.AKY && FieldDef.absenceAttribute(fd.attributes, FieldDef.DISPLAY_ONLY_ATTR)) {
                         gen_set_field_attr(entityName, fd, "FRM-CPIM-AEY", false, -1);
                     }
                 }
@@ -1070,7 +1070,7 @@ public class GenFrm {
 
                 FieldDef fd = (FieldDef) fields.get(i);
 
-                if (fd.modifier == FieldDef.IKY) {
+                if (fd.modifier == FieldDef.IKY && FieldDef.absenceAttribute(fd.attributes, FieldDef.DISPLAY_ONLY_ATTR) ) {
                     gen_set_field_attr(entityName, fd, "FRM-CPIM-UBY", true, -1); ///// verificar con B?
                 }
             }
@@ -1091,7 +1091,7 @@ public class GenFrm {
 
                 FieldDef fd = (FieldDef) fields.get(i);
 
-                if (fd.modifier == FieldDef.MKY) {
+                if (fd.modifier == FieldDef.MKY && FieldDef.absenceAttribute(fd.attributes, FieldDef.DISPLAY_ONLY_ATTR)) {
                     gen_set_field_attr(entityName, fd, "FRM-CPIM-UBY", false, -1);
                 }
             }
@@ -1112,7 +1112,7 @@ public class GenFrm {
 
                 FieldDef fd = (FieldDef) fields.get(i);
 
-                if (fd.modifier == FieldDef.AKY) {
+                if (fd.modifier == FieldDef.AKY && FieldDef.absenceAttribute(fd.attributes, FieldDef.DISPLAY_ONLY_ATTR)) {
                     gen_set_field_attr(entityName, fd, "FRM-CPIM-UBY", true, -1);
                 }
             }
@@ -1510,7 +1510,7 @@ public class GenFrm {
 
             //
 
-            if (!fd.fmsname.substring(0, 3).equals(FieldDef.FRM) && FieldDef.absenceAttribute(fd.attributes, FieldDef.DISPLAY_ONLY_ATTR) && fd.special != FieldDef.GLS_IDC && fd.type != FieldDef.DATE) { //  &&
+            if (FieldDef.absenceAttribute(fd.attributes, FieldDef.DISPLAY_ONLY_ATTR) && fd.special != FieldDef.GLS_IDC && fd.type != FieldDef.DATE) { //  &&
                 validation_response_required(entityName, fd, size);
             }
 
@@ -1525,10 +1525,23 @@ public class GenFrm {
                 gen.println("           PERFORM VAL-GLS.");
                 gen.println("           MOVE IDC-GLS-RUTV TO " + glosaField + " IN " + entityName + "-FLD.");
             }
-            else if (fd.type == FieldDef.STRING && (fd.special == FieldDef.IDC || fd.special == FieldDef.VRF)) {
-                validation_response_required(entityName, fd, size);
+            else if (fd.type == FieldDef.STRING && fd.special == FieldDef.VRF) {
+           //     validation_response_required(entityName, fd, size);
+           //OGB , se agrega validacion de VAL-RUT 	
+                gen.println("      *VAL-RUT Valida Rut para campo IDC");
+                gen.println("           MOVE IDC-ZERO-S TO IDC-ZERO.");
+                gen.println("           MOVE " + fd.name.substring(0, 3) + "-NUM-" + fd.name.substring(8) + " IN " + entityName + "-FLD TO IDC-NUM-RUTV.");
+                gen.println("           MOVE " + fd.name + " IN " + entityName + "-FLD TO IDC-VRF-RUTV.");
+                gen.println("           PERFORM VAL-RUT.");
             }
-
+            else if (fd.type == FieldDef.STRING && fd.special == FieldDef.IDC) {
+            	
+                gen.println("      *VAL-IDC Valida identificador");
+                gen.println("           MOVE "+ fd.name +" IN " + entityName + "-FLD TO IDC-IND-RUTV.");
+                gen.println("           PERFORM VAL-IDC.");
+                gen.println("           MOVE IDC-IND-RUTV TO "+ fd.name +" IN " + entityName + "-FLD.");
+            	
+            }
             // probando ...
 
             //String ident = "INI_" + fd.name.replace('-', '_');
@@ -1938,7 +1951,7 @@ public class GenFrm {
 
                 FieldDef fd = (FieldDef) fields.get(i);
 
-                if (fd.modifier == FieldDef.MKY) {
+                if (fd.modifier == FieldDef.MKY && action == BQ_ACTION) {
                     perform_and_validation(entityName, fd, "VAL-MKY", true, -1);
                 }
             }
@@ -2144,6 +2157,22 @@ public class GenFrm {
 
                         break;
                     }
+                    
+                    if (fd.replaced != null && fd.special == FieldDef.VRF) {
+                        for (FieldDef fr : fd.replaced) {
+                        	
+                            switch (fr.type) {
+
+                            case FieldDef.INTEGER :
+                            case FieldDef.LONG :
+                            case FieldDef.DOUBLE :
+
+                                gen_num_validation(entityName, fr, "VAL-NUM-MKY", -1);
+
+                                break;
+                            }
+                        }
+                    }
                 }
             }
             else {
@@ -2176,13 +2205,31 @@ public class GenFrm {
 
                         break;
                     }
+                    
+                    if (fd.replaced != null && fd.special == FieldDef.VRF) {
+                        for (FieldDef fr : fd.replaced) {
+                        	
+                            switch (fr.type) {
+
+                            case FieldDef.INTEGER :
+                            case FieldDef.LONG :
+                            case FieldDef.DOUBLE :
+
+                                gen_num_validation(entityName, fr, "VAL-NUM-MKY", -1);
+
+                                break;
+                            }
+                        }
+                    }
+                    
                 }
+                
             }
             else {
                 //////////////
             }
         }
-
+        
         finSection("VAL-NUM-MKY-" + entityName);
 
         //
@@ -2207,6 +2254,22 @@ public class GenFrm {
                         gen_num_validation(entityName, fd, "VAL-NUM-AKY", -1);
 
                         break;
+                    }
+                    
+                    if (fd.replaced != null && fd.special == FieldDef.VRF) {
+                        for (FieldDef fr : fd.replaced) {
+                        	
+                            switch (fr.type) {
+
+                            case FieldDef.INTEGER :
+                            case FieldDef.LONG :
+                            case FieldDef.DOUBLE :
+
+                                gen_num_validation(entityName, fr, "VAL-NUM-MKY", -1);
+
+                                break;
+                            }
+                        }
                     }
                 }
             }
@@ -2392,6 +2455,22 @@ public class GenFrm {
 
                         break;
                     }
+                    
+                    if (fd.replaced != null && fd.special == FieldDef.VRF) {
+                        for (FieldDef fr : fd.replaced) {
+                        	
+                            switch (fr.type) {
+
+                            case FieldDef.INTEGER :
+                            case FieldDef.LONG :
+                            case FieldDef.DOUBLE :
+
+                            	prepare_num_edition(entityName, fr, "EDT-MKY", -1);
+
+                                break;
+                            }
+                        }
+                    }
                 }
             }
             else {
@@ -2424,6 +2503,24 @@ public class GenFrm {
 
                         break;
                     }
+                    
+                    if (fd.replaced != null && fd.special == FieldDef.VRF) {
+                        for (FieldDef fr : fd.replaced) {
+                        	
+                            switch (fr.type) {
+
+                            case FieldDef.INTEGER :
+                            case FieldDef.LONG :
+                            case FieldDef.DOUBLE :
+
+                            	prepare_num_edition(entityName, fr, "EDT-MKY", -1);
+
+                                break;
+                            }
+                        }
+                    }
+                    
+                    
                 }
             }
             else {
@@ -2455,6 +2552,22 @@ public class GenFrm {
                         prepare_num_edition(entityName, fd, "EDT-AKY", -1);
 
                         break;
+                    }
+                    
+                    if (fd.replaced != null && fd.special == FieldDef.VRF) {
+                        for (FieldDef fr : fd.replaced) {
+                        	
+                            switch (fr.type) {
+
+                            case FieldDef.INTEGER :
+                            case FieldDef.LONG :
+                            case FieldDef.DOUBLE :
+
+                            	prepare_num_edition(entityName, fr, "EDT-MKY", -1);
+
+                                break;
+                            }
+                        }
                     }
                 }
             }
@@ -2698,8 +2811,11 @@ public class GenFrm {
 
                 FieldDef fd = (FieldDef) fields.get(i);
 
-                if (Utils.searchIntInArray(fd.modifier, KEY_TYPES) < 0) {
+                if ((Utils.searchIntInArray(fd.modifier, KEY_TYPES) < 0)) {
                     perform_and_validation(entityName, fd, "VAL-FLD", false, -1); ///// verificar
+                }
+                if (fd.special == FieldDef.VRF || fd.special == FieldDef.IDC) {
+                    perform_and_validation(entityName, fd, "VAL-FLD", false, -1); 
                 }
             }
             else if (fields.get(i) instanceof ArrayList) {
