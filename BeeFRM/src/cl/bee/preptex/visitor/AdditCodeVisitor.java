@@ -152,7 +152,7 @@ public class AdditCodeVisitor extends BaseVisitor implements GJNoArguVisitor<Obj
      */
     public Object visit(selection_statement n) {
 
-      //logger.debug("entrando a 'visit(selection_statement n, if_level: " + if_level + ")' " + n.f1.accept(tokenVisitor).toString().trim() + ")");
+        //logger.debug("entrando a 'visit(selection_statement n, if_level: " + if_level + ")' " + n.f1.accept(tokenVisitor).toString().trim() + ")");
 
         if (if_level == 1) {
 
@@ -180,7 +180,7 @@ public class AdditCodeVisitor extends BaseVisitor implements GJNoArguVisitor<Obj
 
             if (cond_mode) {
 
-              //logger.debug("cond: [" + cond + "]");
+              logger.debug("cond: [" + cond + "]");
 
                 tree.put(cond, text);
             }
@@ -188,7 +188,7 @@ public class AdditCodeVisitor extends BaseVisitor implements GJNoArguVisitor<Obj
 
                 for (int i = 0; i < list.size(); i++) {
 
-                  //logger.debug("agregando para '" + list.get(i) + "' ...");
+                  logger.debug("agregando para '" + list.get(i) + "' ...");
 
                     tree.put(list.get(i), text);
                 }

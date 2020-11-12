@@ -343,14 +343,21 @@ public class GenFrm {
 
             String ident = "EOF_" + action_names[action];
 
-            if (addit_hash.containsKey    (ident)) {
+            int z = 0;
+            while(addit_hash.containsKey    (ident)) {
                 gen.println(addit_hash.get(ident));
+                z++;
+                ident = ident + "$" + z;
             }
 
-            ident = "EOF";
 
-            if (addit_hash.containsKey    (ident)) {
+            ident = "EOF";
+            
+            z = 0;
+            while(addit_hash.containsKey    (ident)) {
                 gen.println(addit_hash.get(ident));
+                z++;
+                ident = ident + "$" + z;
             }
 
             //
@@ -1504,9 +1511,13 @@ public class GenFrm {
 
             String ident = "INI_" + fd.name.replace('-', '_');
 
-            if (addit_hash.containsKey    (ident)) {
+            int z = 0;
+            while(addit_hash.containsKey    (ident)) {
                 gen.println(addit_hash.get(ident));
+                z++;
+                ident = ident + "$" + z;
             }
+            
 
             //
 
@@ -1571,10 +1582,14 @@ public class GenFrm {
 
             ident = fd.name.replace('-', '_');
 
-            if (addit_hash.containsKey    (ident)) {
+            z = 0;
+            while(addit_hash.containsKey    (ident)) {
                 gen.println(addit_hash.get(ident));
+                z++;
+                ident = ident + "$" + z;
             }
-
+            
+            
             //
 
             if (FieldDef.absenceAttribute(fd.attributes, FieldDef.DISPLAY_ONLY_ATTR) && fd.special != FieldDef.GLS_IDC) {
@@ -2811,11 +2826,8 @@ public class GenFrm {
 
                 FieldDef fd = (FieldDef) fields.get(i);
 
-                if ((Utils.searchIntInArray(fd.modifier, KEY_TYPES) < 0)) {
+                if ((Utils.searchIntInArray(fd.modifier, KEY_TYPES) < 0) || fd.modifier == FieldDef.MKY) {
                     perform_and_validation(entityName, fd, "VAL-FLD", false, -1); ///// verificar
-                }
-                if (fd.special == FieldDef.VRF || fd.special == FieldDef.IDC) {
-                    perform_and_validation(entityName, fd, "VAL-FLD", false, -1); 
                 }
             }
             else if (fields.get(i) instanceof ArrayList) {
@@ -2841,7 +2853,7 @@ public class GenFrm {
 
                 FieldDef fd = (FieldDef) fields.get(i);
 
-                if (Utils.searchIntInArray(fd.modifier, KEY_TYPES) < 0) {
+                if ((Utils.searchIntInArray(fd.modifier, KEY_TYPES) < 0) || fd.modifier == FieldDef.MKY) {
                     genVAL_field(entityName, fd, -1, gls);
                 }
             }
@@ -2899,9 +2911,13 @@ public class GenFrm {
 
       //logger.debug("seccion '" + sectionName + "', ident '" + ident + "' (" + (addit_hash.containsKey(ident) ? "OK" : "NO") + ")");
 
-        if (addit_hash.containsKey    (ident)) {
+        int z = 0;
+        while(addit_hash.containsKey    (ident)) {
             gen.println(addit_hash.get(ident));
+            z++;
+            ident = ident + "$" + z;
         }
+        
     }
 
     /******************************************************************************
@@ -2939,12 +2955,13 @@ public class GenFrm {
 
         String ident = additName != null ? additName : "FIN_" + sectionName.replace('-', '_');
 
-        if (addit_hash.containsKey    (ident)) {
+        int z = 0;
+        while(addit_hash.containsKey    (ident)) {
             gen.println(addit_hash.get(ident));
+            z++;
+            ident = ident + "$" + z;
         }
-        else {
-
-        }
+        
 
         gen.println("       FIN-" + sectionName + ".");
         gen.println("           EXIT.");

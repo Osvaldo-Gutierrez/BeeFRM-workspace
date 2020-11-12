@@ -65,6 +65,13 @@ public class PrepTexStream extends FileInputStream {
             BufferedReader        fp_in    = new BufferedReader(new InputStreamReader(new FileInputStream(name)));
             ByteArrayOutputStream baos     = new ByteArrayOutputStream();
             PrintStream           fp_out   = new PrintStream(baos);
+            
+            
+            //ogb
+            String label = null;
+            List<String> usedLabel = new ArrayList<String>();
+            Map<String, Integer> codeLabel = new HashMap<>();
+            //ogb
 
             while ((line = fp_in.readLine()) != null) {
 
@@ -72,6 +79,8 @@ public class PrepTexStream extends FileInputStream {
 
                 if (line.startsWith(control)) {
 
+                	label = line.substring(ctrl_len);
+                	
                     if (text != null) {
 
                         fp_out.println("TEXT[:" + rtrim(text));
@@ -84,7 +93,20 @@ public class PrepTexStream extends FileInputStream {
                         fp_out.println("END");
                     }
                     else {
-                        fp_out.println(replace(line.substring(ctrl_len), symbolsTable));
+                    	
+                        if(codeLabel.containsKey(label)) {
+                            int nitm = codeLabel.get(label);
+                            nitm++;
+                            codeLabel.put(label, nitm);
+                            label = label + "$" +nitm;
+                            fp_out.println(replace(label, symbolsTable));
+
+                        }
+                        else {
+                        	codeLabel.put(label, 0);
+                            fp_out.println(replace(line.substring(ctrl_len), symbolsTable));
+                        }
+
                     }
                 }
                 else {
