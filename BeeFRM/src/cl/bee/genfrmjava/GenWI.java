@@ -74,7 +74,7 @@ public class GenWI {
     public static void main(String args[]) {
 
     	BasicConfigurator.configure();
-        logger.info("Inicio GenAdditXML.java ");    	
+        logger.info("Inicio GenWI.java ");    	
         try {
 
             String configClass = null;
@@ -315,7 +315,8 @@ public class GenWI {
                                 case FieldDef.INTEGER :
                                 case FieldDef.LONG :
                                 case FieldDef.DOUBLE :
-                                    gen.println("           05 " + array.get(j).field.name + "-EDT  PIC  " + getEditPicture(array.get(j).field.picture, FieldDef.hasAttribute(array.get(j).field.attributes, FieldDef.DISPLAY_ONLY_ATTR), array.get(j).field.special) + ".");
+                                    gen.println("           05 " + array.get(j).field.name + "-EDT  PIC  " + 
+                                    			getEditPicture(array.get(j).field.picture, FieldDef.hasAttribute(array.get(j).field.attributes, FieldDef.DISPLAY_ONLY_ATTR), array.get(j).field.special) + ".");
                                     break;
                                 }
                             }
