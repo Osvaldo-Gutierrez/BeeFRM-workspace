@@ -73,6 +73,8 @@ public class GenWI {
      */
     public static void main(String args[]) {
 
+    	BasicConfigurator.configure();
+        logger.info("Inicio GenAdditXML.java ");    	
         try {
 
             String configClass = null;
@@ -202,7 +204,12 @@ public class GenWI {
                     tx = (TextDef) obj;
 
                     gen.println("      * ( F / C - " + form2.format(tx.row) + " / " + form2.format(tx.column) + " )");
-                    gen.println("      * \"" + tx.caption + "\"");
+                    if (tx.caption.length() > 47) {
+                        gen.println("      * \"" + tx.caption.substring(0, 47) + "\"");
+                        gen.println("      * \"" + tx.caption.substring(47) + "\"");
+                    }
+                    else
+                    	gen.println("      * \"" + tx.caption + "\"");
                     gen.println("      *");
                 }
             }
@@ -276,7 +283,7 @@ public class GenWI {
                                 case FieldDef.INTEGER :
                                 case FieldDef.LONG :
                                 case FieldDef.DOUBLE :
-                                    gen.println("           05 " + fr.name + "-EDT  PIC  " + getEditPicture(fr.picture, FieldDef.hasAttribute(fr.attributes, FieldDef.DISPLAY_ONLY_ATTR)) + ".");
+                                    gen.println("           05 " + fr.name + "-EDT  PIC  " + getEditPicture(fr.picture, FieldDef.hasAttribute(fr.attributes, FieldDef.DISPLAY_ONLY_ATTR), fr.special) + ".");
                                     break;
                                 }
                             }
@@ -288,13 +295,30 @@ public class GenWI {
                             case FieldDef.INTEGER :
                             case FieldDef.LONG :
                             case FieldDef.DOUBLE :
-                                gen.println("           05 " + fd.name + "-EDT  PIC  " +     getEditPicture(fd.picture, FieldDef.hasAttribute(fd.attributes, FieldDef.DISPLAY_ONLY_ATTR)) + ".");
+                                gen.println("           05 " + fd.name + "-EDT  PIC  " +     getEditPicture(fd.picture, FieldDef.hasAttribute(fd.attributes, FieldDef.DISPLAY_ONLY_ATTR), fd.special) + ".");
                                 break;
                             }
                         }
 
                     } else if (fields.get(i) instanceof ArrayList) {
                         ////////////////////////////////////
+                    	
+                        	ArrayList<ElementDef> array = null;
+                        	array = (ArrayList<ElementDef>) fields.get(i);
+
+                            ArrayList<ElementDef> valid = new ArrayList<ElementDef>();
+
+                            for (int j = 0; j < array.size(); j++) {
+
+                                switch(array.get(j).field.type) {
+
+                                case FieldDef.INTEGER :
+                                case FieldDef.LONG :
+                                case FieldDef.DOUBLE :
+                                    gen.println("           05 " + array.get(j).field.name + "-EDT  PIC  " + getEditPicture(array.get(j).field.picture, FieldDef.hasAttribute(array.get(j).field.attributes, FieldDef.DISPLAY_ONLY_ATTR), array.get(j).field.special) + ".");
+                                    break;
+                                }
+                            }
                     }
                 }
             }
@@ -353,6 +377,24 @@ public class GenWI {
 
             } else if (fields.get(i) instanceof ArrayList) {
                 ////////////////////////////////////
+            	
+            	ArrayList<ElementDef> array = null;
+            	array = (ArrayList<ElementDef>) fields.get(i);
+
+                ArrayList<ElementDef> valid = new ArrayList<ElementDef>();
+
+                for (int j = 0; j < array.size(); j++) {
+
+                    switch(array.get(j).field.type) {
+
+                    case FieldDef.INTEGER :
+                    case FieldDef.LONG :
+                    case FieldDef.DOUBLE :
+                    	 return true;
+                    }
+                }
+            	
+            	
             }
         }
 
@@ -455,12 +497,17 @@ public class GenWI {
      * @param special TODO_javadoc
      *
      */
-    private static String getEditPicture(String picture, boolean isDisplayOnly) {
+    private static String getEditPicture(String picture, boolean isDisplayOnly, int type) {
 
         String s = picture.replaceAll("9", "Z").replaceAll("N", "-");
 
         if (isDisplayOnly) {
-
+        	
+          	if (type == FieldDef.VRF) {
+          		s = picture.replaceAll("9", "Z");
+          		return s;
+          	}
+        	
             int pos = s.indexOf(',');
 
             switch (s.charAt(s.length() - 1)) {
