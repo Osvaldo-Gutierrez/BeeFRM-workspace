@@ -17,7 +17,7 @@ package cl.bee.genfrmjava.adddef.schema;
 public interface SectionDocument extends org.apache.xmlbeans.XmlObject
 {
     public static final org.apache.xmlbeans.SchemaType type = (org.apache.xmlbeans.SchemaType)
-        org.apache.xmlbeans.XmlBeans.typeSystemForClassLoader(SectionDocument.class.getClassLoader(), "schemaorg_apache_xmlbeans.system.s86FB8B51BF8A1799A84DF6E21106E5B4").resolveHandle("section0da5doctype");
+        org.apache.xmlbeans.XmlBeans.typeSystemForClassLoader(SectionDocument.class.getClassLoader(), "schemaorg_apache_xmlbeans.system.s225DE17AEEF28B18B251CA4F5F9AA65C").resolveHandle("section0da5doctype");
     
     /**
      * Gets the "section" element
@@ -42,7 +42,7 @@ public interface SectionDocument extends org.apache.xmlbeans.XmlObject
     public interface Section extends org.apache.xmlbeans.XmlObject
     {
         public static final org.apache.xmlbeans.SchemaType type = (org.apache.xmlbeans.SchemaType)
-            org.apache.xmlbeans.XmlBeans.typeSystemForClassLoader(Section.class.getClassLoader(), "schemaorg_apache_xmlbeans.system.s86FB8B51BF8A1799A84DF6E21106E5B4").resolveHandle("sectione274elemtype");
+            org.apache.xmlbeans.XmlBeans.typeSystemForClassLoader(Section.class.getClassLoader(), "schemaorg_apache_xmlbeans.system.s225DE17AEEF28B18B251CA4F5F9AA65C").resolveHandle("sectione274elemtype");
         
         /**
          * Gets the "code" element
@@ -83,6 +83,36 @@ public interface SectionDocument extends org.apache.xmlbeans.XmlObject
          * Sets (as xml) the "name" attribute
          */
         void xsetName(org.apache.xmlbeans.XmlString name);
+        
+        /**
+         * Gets the "concatenate" attribute
+         */
+        long getConcatenate();
+        
+        /**
+         * Gets (as xml) the "concatenate" attribute
+         */
+        org.apache.xmlbeans.XmlUnsignedInt xgetConcatenate();
+        
+        /**
+         * True if has "concatenate" attribute
+         */
+        boolean isSetConcatenate();
+        
+        /**
+         * Sets the "concatenate" attribute
+         */
+        void setConcatenate(long concatenate);
+        
+        /**
+         * Sets (as xml) the "concatenate" attribute
+         */
+        void xsetConcatenate(org.apache.xmlbeans.XmlUnsignedInt concatenate);
+        
+        /**
+         * Unsets the "concatenate" attribute
+         */
+        void unsetConcatenate();
         
         /**
          * A factory class with static methods for creating instances

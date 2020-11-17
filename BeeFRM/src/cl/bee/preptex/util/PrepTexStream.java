@@ -30,9 +30,12 @@ public class PrepTexStream extends FileInputStream {
 
     /** TODO_javadoc. */
     private ByteArrayInputStream bais = null;
+    
+    private int numConca = 0;
 
     /** TODO_javadoc. */
     private static Pattern endpattern = Pattern.compile("^[ ]*END", Pattern.CASE_INSENSITIVE);
+    
 
     /******************************************************************************
      * PrepTexStream
@@ -49,7 +52,7 @@ public class PrepTexStream extends FileInputStream {
      * @since 1.0
      *
      */
-    public PrepTexStream(String name, String ctrl, HashMap<String, Object> symbolsTable) throws FileNotFoundException {
+    public PrepTexStream(String name, String ctrl, HashMap<String, Object> symbolsTable, HashMap<String, Integer> concatenatedOrder ) throws FileNotFoundException {
 
         super(name);
 
@@ -71,6 +74,11 @@ public class PrepTexStream extends FileInputStream {
             String label = null;
             List<String> usedLabel = new ArrayList<String>();
             Map<String, Integer> codeLabel = new HashMap<>();
+            
+            
+            Boolean concatenated = false;
+            String  prevKey = null;
+            numConca = 0;
             //ogb
 
             while ((line = fp_in.readLine()) != null) {
@@ -91,21 +99,37 @@ public class PrepTexStream extends FileInputStream {
 
                     if (endpattern.matcher(line.substring(ctrl_len)).find()) {
                         fp_out.println("END");
+                        concatenated = false;
                     }
                     else {
-                    	
-                        if(codeLabel.containsKey(label)) {
-                            int nitm = codeLabel.get(label);
-                            nitm++;
-                            codeLabel.put(label, nitm);
-                            label = label + "$" +nitm;
-                            fp_out.println(replace(label, symbolsTable));
+                    	if (concatenated) {
+                            fp_out.println("END");
+                            
+                            numConca = 1;
+                            concatenatedOrder.put(prevKey.substring(label.indexOf("IF ") + 3), numConca);
+                            
+	                        ReadConcatenatedCode(ctrl, symbolsTable, fp_in, fp_out, line, prevKey, label, codeLabel, concatenatedOrder);
+                            label = prevKey;
+                            
+                    	}
+                    	else {
+	                        if(codeLabel.containsKey(label)) {
+	                            int nitm = codeLabel.get(label);
+	                            nitm++;
+	                            codeLabel.put(label, nitm);
+	                            label = label + "$" +nitm;
+	                            fp_out.println(replace(label, symbolsTable));
+	
+	                        }
+	                        else {
+	                        	codeLabel.put(label, 0);
+	                            fp_out.println(replace(line.substring(ctrl_len), symbolsTable));
+	                        }
 
-                        }
-                        else {
-                        	codeLabel.put(label, 0);
-                            fp_out.println(replace(line.substring(ctrl_len), symbolsTable));
-                        }
+	                        
+                    	}
+                    	concatenated = true;
+                        prevKey = label;
 
                     }
                 }
@@ -124,7 +148,6 @@ public class PrepTexStream extends FileInputStream {
 
             /*
             FileOutputStream fpTmp = new FileOutputStream(name + ".ext");
-
             fpTmp.write(baos.toByteArray());
             fpTmp.close();
             */
@@ -345,5 +368,99 @@ public class PrepTexStream extends FileInputStream {
         e.printStackTrace(new PrintWriter(caw));
 
         return caw.toString();
+    }
+    
+    public void ReadConcatenatedCode(String ctrl,HashMap<String, Object> symbolsTable, BufferedReader fp_in, PrintStream fp_out,
+    		String line, String prevKey, String label, Map<String, Integer> codeLabel, HashMap<String, Integer> concatenatedOrder) 
+    		throws FileNotFoundException{
+        
+        try {
+	        String                control  = ctrl;
+	        int                   ctrl_len = control.length();
+	        String                ls       = System.getProperty("line.separator");
+	        String                text     = null;
+	        String                newPrv   = null;
+	        Boolean concatenated = false;
+
+
+	        label = prevKey + " AND " + label.substring(label.indexOf("IF ") + 3);
+
+	        newPrv = label;
+	        
+	        if(codeLabel.containsKey(label)) {
+	            int nitm = codeLabel.get(label);
+	            nitm++;
+	            codeLabel.put(label, nitm);
+	            label = label + "$" +nitm;
+	            fp_out.println(replace(label, symbolsTable));
+	
+	        }
+	        else {
+	        	codeLabel.put(label, 0);
+	        	fp_out.println(replace(label, symbolsTable));
+	        }
+	        
+	        concatenated = true;
+	        numConca++;
+	        concatenatedOrder.put(label.substring(label.indexOf("IF ") + 3), numConca);
+	        
+	
+	        while ((line = fp_in.readLine()) != null) {
+	
+	            if (line.startsWith(control)) {
+	
+	            	label = line.substring(ctrl_len);
+	            	
+	                if (text != null) {
+	
+	                    fp_out.println("TEXT[:" + rtrim(text));
+	                    fp_out.println(":]");
+	
+	                    text = null;
+	                                            
+	                }
+	
+	                if (endpattern.matcher(line.substring(ctrl_len)).find()) {
+	                    fp_out.println("END");
+	                    concatenated = false;
+	                    label = prevKey;
+	                    
+                        if(codeLabel.containsKey(label)) {
+                            int nitm = codeLabel.get(label);
+                            nitm++;
+                            codeLabel.put(label, nitm);
+                            label = label + "$" +nitm;
+                            fp_out.println(replace(label, symbolsTable));
+
+                        }
+                        else {
+                        	codeLabel.put(label, 0);
+                            fp_out.println(replace(line.substring(ctrl_len), symbolsTable));
+                        }
+            	        numConca++;
+            	        concatenatedOrder.put(label.substring(label.indexOf("IF ") + 3), numConca);
+	                    return;
+
+	                }
+	                else {
+	                    
+	                    if (concatenated){
+	                        fp_out.println("END");
+	                        ReadConcatenatedCode(ctrl, symbolsTable, fp_in, fp_out, line, newPrv, label, codeLabel, concatenatedOrder);
+	                    }
+	                    concatenated = true;
+
+	                }
+	            }
+	            else {
+	                text = text != null ? text += (ls + line) : line;
+	            }
+	        }
+        
+	    }
+	    catch (Exception e) {
+	        throw new FileNotFoundException(printStackTrace(e));
+	    }
+        
     }
 }

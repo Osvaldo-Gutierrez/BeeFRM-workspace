@@ -61,6 +61,10 @@ public class GenFrm {
     private static final String action_names[] = { "", "BA", "BQ", "BU" };
 
     //
+    
+    /** TODO_javadoc. */
+    private static final String[] cond_extras = {"PGM_BQ", "PGM_BU"};
+    
 
     /** TODO_javadoc. */
     private static PrintStream gen = null;

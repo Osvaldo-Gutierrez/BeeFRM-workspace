@@ -1392,7 +1392,7 @@ public class BaseVisitor implements GJNoArguVisitor<Object> {
 
             logger.info(prefix + "utilizando '" + pathname + "' en [" + n.accept(tokenVisitor).toString().trim() + "].");
 
-            PrepTex parser = new PrepTex(new PrepTexStream(pathname, control, symbolsTable));
+            PrepTex parser = new PrepTex(new PrepTexStream(pathname, control, symbolsTable, new HashMap<String, Integer>()));
             Node    root   = parser.specification();
 
             IncludeVisitor vis = new IncludeVisitor(pathname, sym_include, control, country, client, system, logging, !n.f1.present()/* f1 -> [ identifier_list() <OF> ]*/);

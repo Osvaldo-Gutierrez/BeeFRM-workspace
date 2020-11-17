@@ -92,6 +92,8 @@ public class SectionDocumentImpl extends org.apache.xmlbeans.impl.values.XmlComp
             new javax.xml.namespace.QName("http://cl/bee/genfrmjava/adddef/schema", "code");
         private static final javax.xml.namespace.QName NAME$2 = 
             new javax.xml.namespace.QName("", "name");
+        private static final javax.xml.namespace.QName CONCATENATE$4 = 
+            new javax.xml.namespace.QName("", "concatenate");
         
         
         /**
@@ -227,6 +229,98 @@ public class SectionDocumentImpl extends org.apache.xmlbeans.impl.values.XmlComp
                     target = (org.apache.xmlbeans.XmlString)get_store().add_attribute_user(NAME$2);
                 }
                 target.set(name);
+            }
+        }
+        
+        /**
+         * Gets the "concatenate" attribute
+         */
+        public long getConcatenate()
+        {
+            synchronized (monitor())
+            {
+                check_orphaned();
+                org.apache.xmlbeans.SimpleValue target = null;
+                target = (org.apache.xmlbeans.SimpleValue)get_store().find_attribute_user(CONCATENATE$4);
+                if (target == null)
+                {
+                    return 0L;
+                }
+                return target.getLongValue();
+            }
+        }
+        
+        /**
+         * Gets (as xml) the "concatenate" attribute
+         */
+        public org.apache.xmlbeans.XmlUnsignedInt xgetConcatenate()
+        {
+            synchronized (monitor())
+            {
+                check_orphaned();
+                org.apache.xmlbeans.XmlUnsignedInt target = null;
+                target = (org.apache.xmlbeans.XmlUnsignedInt)get_store().find_attribute_user(CONCATENATE$4);
+                return target;
+            }
+        }
+        
+        /**
+         * True if has "concatenate" attribute
+         */
+        public boolean isSetConcatenate()
+        {
+            synchronized (monitor())
+            {
+                check_orphaned();
+                return get_store().find_attribute_user(CONCATENATE$4) != null;
+            }
+        }
+        
+        /**
+         * Sets the "concatenate" attribute
+         */
+        public void setConcatenate(long concatenate)
+        {
+            synchronized (monitor())
+            {
+                check_orphaned();
+                org.apache.xmlbeans.SimpleValue target = null;
+                target = (org.apache.xmlbeans.SimpleValue)get_store().find_attribute_user(CONCATENATE$4);
+                if (target == null)
+                {
+                    target = (org.apache.xmlbeans.SimpleValue)get_store().add_attribute_user(CONCATENATE$4);
+                }
+                target.setLongValue(concatenate);
+            }
+        }
+        
+        /**
+         * Sets (as xml) the "concatenate" attribute
+         */
+        public void xsetConcatenate(org.apache.xmlbeans.XmlUnsignedInt concatenate)
+        {
+            synchronized (monitor())
+            {
+                check_orphaned();
+                org.apache.xmlbeans.XmlUnsignedInt target = null;
+                target = (org.apache.xmlbeans.XmlUnsignedInt)get_store().find_attribute_user(CONCATENATE$4);
+                if (target == null)
+                {
+                    target = (org.apache.xmlbeans.XmlUnsignedInt)get_store().add_attribute_user(CONCATENATE$4);
+                }
+                target.set(concatenate);
+            }
+        }
+        
+        /**
+         * Unsets the "concatenate" attribute
+         */
+        public void unsetConcatenate()
+        {
+            synchronized (monitor())
+            {
+                check_orphaned();
+                get_store().remove_attribute(CONCATENATE$4);
             }
         }
     }

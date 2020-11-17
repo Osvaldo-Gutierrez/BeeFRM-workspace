@@ -114,7 +114,9 @@ public class GenAdditXML {
                 return;
             }
 
-            PrepTex parser  = new PrepTex(new PrepTexStream(filename, "*%", new HashMap<String, Object>()));
+            HashMap<String, Integer> concatenatedOrder         = new HashMap<String, Integer>();
+            
+            PrepTex parser  = new PrepTex(new PrepTexStream(filename, "*%", new HashMap<String, Object>(), concatenatedOrder));
             Node    root    = parser.specification();
 
             //
@@ -144,7 +146,7 @@ public class GenAdditXML {
                     symbolsTable.put("pgm_" + action_names[i].toLowerCase(), new Boolean(action == i));
                 }
 
-                root.accept(new AdditCodeVisitor(systemName + "BM" + entityName + ".TXT", symbolsTable, country, client, systemName, false/*logging*/, tree, false/*cond_mode*/));
+                root.accept(new AdditCodeVisitor(systemName + "BM" + entityName + ".TXT", symbolsTable, country, client, systemName, false/*logging*/, tree, true/*cond_mode*/));
 
                 //
 
@@ -158,7 +160,10 @@ public class GenAdditXML {
                         gen.println("    == " + preptex_id);
                         gen.println("    == ========================================================================================== -->");
                         gen.println();
-                        gen.println("  <section name=\"" + preptex_id + "\">");
+                        if (concatenatedOrder.containsKey(preptex_id))
+                            gen.println("  <section name=\"" + preptex_id + "\" concatenate=\"" + concatenatedOrder.get(preptex_id) + "\">");
+                        else
+                        	gen.println("  <section name=\"" + preptex_id + "\">");
                         gen.println();
                         gen.println("    <code><![CDATA[" + tree.get(preptex_id) + "]]></code>");
                         gen.println();
