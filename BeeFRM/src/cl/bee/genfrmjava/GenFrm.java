@@ -70,7 +70,7 @@ public class GenFrm {
     private static PrintStream gen = null;
 
     /** TODO_javadoc. */
-    private static HashMap<String, String> addit_hash = null;
+    private static HashMap<String, SectionDef> addit_hash = null;
 
     /** TODO_javadoc. */
     private static HashMap<String, DomainRangeDef> ranges_hash = null;
@@ -157,7 +157,7 @@ public class GenFrm {
 
             //
 
-            addit_hash = new HashMap<String, String>();
+            addit_hash = new HashMap<String, SectionDef>();
 
             getAdditFromXML(       "data/addit/addit_" + systemName.toLowerCase() + "_" + entityName.toLowerCase() + "_" + action_names[action].toLowerCase() + ".xml");
 
@@ -346,23 +346,31 @@ public class GenFrm {
             //
 
             String ident = "EOF_" + action_names[action];
-
+            /*
             int z = 0;
             while(addit_hash.containsKey    (ident)) {
-                gen.println(addit_hash.get(ident));
+            	            	
+                gen.println(((SectionDef)addit_hash.get(ident)).getCode());
                 z++;
                 ident = ident + "$" + z;
             }
+            */
+            printGen(ident, "PGM_" + action_names[action]);
+            
 
 
             ident = "EOF";
             
+            /*
             z = 0;
             while(addit_hash.containsKey    (ident)) {
                 gen.println(addit_hash.get(ident));
                 z++;
                 ident = ident + "$" + z;
             }
+            */
+            
+            printGen(ident, "PGM_" + action_names[action]);
 
             //
 
@@ -1515,12 +1523,8 @@ public class GenFrm {
 
             String ident = "INI_" + fd.name.replace('-', '_');
 
-            int z = 0;
-            while(addit_hash.containsKey    (ident)) {
-                gen.println(addit_hash.get(ident));
-                z++;
-                ident = ident + "$" + z;
-            }
+            
+            printGen(ident, "PGM_" + action_names[action]);
             
 
             //
@@ -1586,13 +1590,7 @@ public class GenFrm {
 
             ident = fd.name.replace('-', '_');
 
-            z = 0;
-            while(addit_hash.containsKey    (ident)) {
-                gen.println(addit_hash.get(ident));
-                z++;
-                ident = ident + "$" + z;
-            }
-            
+            printGen(ident, "PGM_" + action_names[action]);
             
             //
 
@@ -2455,6 +2453,11 @@ public class GenFrm {
 
         iniSection("EDT-IKY-" + entityName);
 
+        String ident = "EDT_IKY_" + entityName;
+
+        printGen(ident, "PGM_" + action_names[action]);
+        
+        
         for (int i = 0; i < fields.size(); i++) {
 
             if (fields.get(i) instanceof FieldDef) {
@@ -2914,13 +2917,8 @@ public class GenFrm {
         String ident = additName != null ? additName : "INI_" + sectionName.replace('-', '_');
 
       //logger.debug("seccion '" + sectionName + "', ident '" + ident + "' (" + (addit_hash.containsKey(ident) ? "OK" : "NO") + ")");
-
-        int z = 0;
-        while(addit_hash.containsKey    (ident)) {
-            gen.println(addit_hash.get(ident));
-            z++;
-            ident = ident + "$" + z;
-        }
+        
+        printGen(ident, "PGM_" + action_names[action]);
         
     }
 
@@ -2959,13 +2957,7 @@ public class GenFrm {
 
         String ident = additName != null ? additName : "FIN_" + sectionName.replace('-', '_');
 
-        int z = 0;
-        while(addit_hash.containsKey    (ident)) {
-            gen.println(addit_hash.get(ident));
-            z++;
-            ident = ident + "$" + z;
-        }
-        
+        printGen(ident, "PGM_" + action_names[action]);
 
         gen.println("       FIN-" + sectionName + ".");
         gen.println("           EXIT.");
@@ -2991,6 +2983,8 @@ public class GenFrm {
 
         ArrayList  errors = new ArrayList();
         XmlOptions opts   = new XmlOptions();
+        
+        SectionDef additSection; 
 
         opts.setErrorListener(errors);
 
@@ -3001,7 +2995,44 @@ public class GenFrm {
             AdditionalDocument.Additional addit = root.getAdditional();
 
             for (SectionDocument.Section section : addit.getSectionArray()) {
-                addit_hash.put(section.getName(), section.getCode());
+            	
+            	additSection = new SectionDef(section.getName(), section.getCode());
+            	if (section.isSetConcatenate())
+            		additSection.setConcatenate((int)section.getConcatenate());
+            	
+            	if(addit_hash.containsKey(additSection.getName()))
+            	{
+            		String name = additSection.getName();
+            		
+            		if(name.contains("$"))  {
+
+        				int pos =  Integer. parseInt(name.substring(name.indexOf("$") + 1));
+            			while(addit_hash.containsKey(name))
+            			{
+            				name = name.substring(0, name.indexOf("$"));
+            				pos++;
+            				name = name + "$" + pos;
+            			}
+                    	addit_hash.put(name, additSection);
+            		}
+            		else {
+            			int cnt1 = 0;
+            			while(addit_hash.containsKey(name))
+            			{
+            				cnt1++;
+            				name = (name.contains("$")) ? name.substring(0, name.indexOf("$")) : name;
+            				name = name + "$" + cnt1;
+            			}
+            			if (cnt1 > 0)
+                        	addit_hash.put(name, additSection);
+            			else
+            				addit_hash.put(name + "$" + 1, additSection);
+            		}
+
+            	}
+            	else
+            		addit_hash.put(additSection.getName(), additSection);
+            //    addit_hash.put(section.getName(), section.getCode());
             }
 
         } else {
@@ -3233,6 +3264,65 @@ public class GenFrm {
         }
 
         return gls;
+    }
+    
+    private static void printGen(String ident, String labelSpecial) {
+    	
+	    int z = 0;
+	    int numCon = 0;
+	    String bkpIdent = null;
+	    
+	    while(addit_hash.containsKey(ident)) {
+	    	
+	    	SectionDef sectionCode = (SectionDef)addit_hash.get(ident);
+	    	
+	    	if(sectionCode.getConcatenate() > 0)
+	    	{
+	    		numCon = 1;
+	    		bkpIdent = ident;
+	    		
+	    	    while(addit_hash.containsKey(ident)) {
+
+	    	    	
+	    	    	sectionCode = (SectionDef)addit_hash.get(ident);
+	    	    	if (sectionCode.getConcatenate() == numCon) {
+		    	    	numCon++;
+		    	    	
+			    		if (sectionCode.numSpecial() > 0) {
+			    			if (sectionCode.hasSpecial(labelSpecial))
+					    		gen.println(((SectionDef)addit_hash.get(ident)).getCode());
+			    		}
+			    		else
+				    		gen.println(((SectionDef)addit_hash.get(ident)).getCode());
+			    		
+			    		ident = bkpIdent;
+			    		z = 0;
+	    	    	}
+	    	    	else {
+		    	        z++;
+		    	        
+		    	        ident = ((ident.contains("$")) ? ident.substring(0, ident.indexOf("$")) : ident) + "$" + z;	
+	    	    	}
+
+	    	    }
+	
+	    	}
+	    	else {
+		    	if (labelSpecial == null)
+		    		gen.println(sectionCode.getCode());
+		    	else
+		    		if (sectionCode.numSpecial() > 0) {
+		    			if (sectionCode.hasSpecial(labelSpecial))
+				    		gen.println(((SectionDef)addit_hash.get(ident)).getCode());
+		    		}
+		    		else
+			    		gen.println(((SectionDef)addit_hash.get(ident)).getCode());
+		    	
+		        z++;
+		        ident = ident + "$" + z;
+	    	}
+	    }
+	    
     }
 
 }

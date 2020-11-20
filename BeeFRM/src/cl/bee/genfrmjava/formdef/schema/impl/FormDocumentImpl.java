@@ -100,14 +100,15 @@ public class FormDocumentImpl extends org.apache.xmlbeans.impl.values.XmlComplex
             new javax.xml.namespace.QName("http://cl/bee/genfrmjava/formdef/schema", "text");
         private static final javax.xml.namespace.QName ENTITY$10 = 
             new javax.xml.namespace.QName("", "entity");
-        private static final javax.xml.namespace.QName NAME$11 = 
-                new javax.xml.namespace.QName("", "name");
-        private static final javax.xml.namespace.QName POSX$12 = 
-                new javax.xml.namespace.QName("", "posx");
-        private static final javax.xml.namespace.QName POSY$13 = 
-                new javax.xml.namespace.QName("", "posy");
-        private static final javax.xml.namespace.QName WIDTH$14 = 
-                new javax.xml.namespace.QName("", "width");
+        private static final javax.xml.namespace.QName NAME$12 = 
+            new javax.xml.namespace.QName("", "name");
+        private static final javax.xml.namespace.QName POSX$14 = 
+            new javax.xml.namespace.QName("", "posx");
+        private static final javax.xml.namespace.QName POSY$16 = 
+            new javax.xml.namespace.QName("", "posy");
+        private static final javax.xml.namespace.QName WIDTH$18 = 
+            new javax.xml.namespace.QName("", "width");
+        
         
         /**
          * Gets array of all "field" elements
@@ -766,7 +767,7 @@ public class FormDocumentImpl extends org.apache.xmlbeans.impl.values.XmlComplex
             {
                 check_orphaned();
                 org.apache.xmlbeans.SimpleValue target = null;
-                target = (org.apache.xmlbeans.SimpleValue)get_store().find_attribute_user(NAME$11);
+                target = (org.apache.xmlbeans.SimpleValue)get_store().find_attribute_user(NAME$12);
                 if (target == null)
                 {
                     return null;
@@ -784,7 +785,7 @@ public class FormDocumentImpl extends org.apache.xmlbeans.impl.values.XmlComplex
             {
                 check_orphaned();
                 org.apache.xmlbeans.XmlString target = null;
-                target = (org.apache.xmlbeans.XmlString)get_store().find_attribute_user(NAME$11);
+                target = (org.apache.xmlbeans.XmlString)get_store().find_attribute_user(NAME$12);
                 return target;
             }
         }
@@ -792,172 +793,172 @@ public class FormDocumentImpl extends org.apache.xmlbeans.impl.values.XmlComplex
         /**
          * Sets the "name" attribute
          */
-        public void setName(java.lang.String entity)
+        public void setName(java.lang.String name)
         {
             synchronized (monitor())
             {
                 check_orphaned();
                 org.apache.xmlbeans.SimpleValue target = null;
-                target = (org.apache.xmlbeans.SimpleValue)get_store().find_attribute_user(NAME$11);
+                target = (org.apache.xmlbeans.SimpleValue)get_store().find_attribute_user(NAME$12);
                 if (target == null)
                 {
-                    target = (org.apache.xmlbeans.SimpleValue)get_store().add_attribute_user(NAME$11);
+                    target = (org.apache.xmlbeans.SimpleValue)get_store().add_attribute_user(NAME$12);
                 }
-                target.setStringValue(entity);
+                target.setStringValue(name);
             }
         }
         
         /**
          * Sets (as xml) the "name" attribute
          */
-        public void xsetName(org.apache.xmlbeans.XmlString entity)
+        public void xsetName(org.apache.xmlbeans.XmlString name)
         {
             synchronized (monitor())
             {
                 check_orphaned();
                 org.apache.xmlbeans.XmlString target = null;
-                target = (org.apache.xmlbeans.XmlString)get_store().find_attribute_user(NAME$11);
+                target = (org.apache.xmlbeans.XmlString)get_store().find_attribute_user(NAME$12);
                 if (target == null)
                 {
-                    target = (org.apache.xmlbeans.XmlString)get_store().add_attribute_user(NAME$11);
+                    target = (org.apache.xmlbeans.XmlString)get_store().add_attribute_user(NAME$12);
                 }
-                target.set(entity);
+                target.set(name);
             }
         }
         
         /**
-         * Gets the "posX" attribute
+         * Gets the "posx" attribute
          */
-        public long getPosX()
+        public long getPosx()
         {
             synchronized (monitor())
             {
                 check_orphaned();
                 org.apache.xmlbeans.SimpleValue target = null;
-                target = (org.apache.xmlbeans.SimpleValue)get_store().find_attribute_user(POSX$12);
+                target = (org.apache.xmlbeans.SimpleValue)get_store().find_attribute_user(POSX$14);
                 if (target == null)
                 {
-                	return 0L;
+                    return 0L;
                 }
                 return target.getLongValue();
             }
         }
         
         /**
-         * Gets (as xml) the "posX" attribute
+         * Gets (as xml) the "posx" attribute
          */
-        public org.apache.xmlbeans.XmlUnsignedInt xgetPosX()
+        public org.apache.xmlbeans.XmlUnsignedInt xgetPosx()
         {
             synchronized (monitor())
             {
                 check_orphaned();
                 org.apache.xmlbeans.XmlUnsignedInt target = null;
-                target = (org.apache.xmlbeans.XmlUnsignedInt)get_store().find_attribute_user(POSX$12);
+                target = (org.apache.xmlbeans.XmlUnsignedInt)get_store().find_attribute_user(POSX$14);
                 return target;
             }
         }
         
         /**
-         * Sets the "posX" attribute
+         * Sets the "posx" attribute
          */
-        public void setPosX(long entity)
+        public void setPosx(long posx)
         {
             synchronized (monitor())
             {
                 check_orphaned();
                 org.apache.xmlbeans.SimpleValue target = null;
-                target = (org.apache.xmlbeans.SimpleValue)get_store().find_attribute_user(POSX$12);
+                target = (org.apache.xmlbeans.SimpleValue)get_store().find_attribute_user(POSX$14);
                 if (target == null)
                 {
-                    target = (org.apache.xmlbeans.SimpleValue)get_store().add_attribute_user(POSX$12);
+                    target = (org.apache.xmlbeans.SimpleValue)get_store().add_attribute_user(POSX$14);
                 }
-                target.setLongValue(entity);
+                target.setLongValue(posx);
             }
         }
         
         /**
-         * Sets (as xml) the "posX" attribute
+         * Sets (as xml) the "posx" attribute
          */
-        public void xsetPosX(org.apache.xmlbeans.XmlUnsignedInt entity)
+        public void xsetPosx(org.apache.xmlbeans.XmlUnsignedInt posx)
         {
             synchronized (monitor())
             {
                 check_orphaned();
                 org.apache.xmlbeans.XmlUnsignedInt target = null;
-                target = (org.apache.xmlbeans.XmlUnsignedInt)get_store().find_attribute_user(POSX$12);
+                target = (org.apache.xmlbeans.XmlUnsignedInt)get_store().find_attribute_user(POSX$14);
                 if (target == null)
                 {
-                    target = (org.apache.xmlbeans.XmlUnsignedInt)get_store().add_attribute_user(POSX$12);
+                    target = (org.apache.xmlbeans.XmlUnsignedInt)get_store().add_attribute_user(POSX$14);
                 }
-                target.set(entity);
+                target.set(posx);
             }
         }
         
         /**
-         * Gets the "posY" attribute
+         * Gets the "posy" attribute
          */
-        public long getPosY()
+        public long getPosy()
         {
             synchronized (monitor())
             {
                 check_orphaned();
                 org.apache.xmlbeans.SimpleValue target = null;
-                target = (org.apache.xmlbeans.SimpleValue)get_store().find_attribute_user(POSY$13);
+                target = (org.apache.xmlbeans.SimpleValue)get_store().find_attribute_user(POSY$16);
                 if (target == null)
                 {
-                	return 0L;
+                    return 0L;
                 }
                 return target.getLongValue();
             }
         }
         
         /**
-         * Gets (as xml) the "posY" attribute
+         * Gets (as xml) the "posy" attribute
          */
-        public org.apache.xmlbeans.XmlUnsignedInt xgetPosY()
+        public org.apache.xmlbeans.XmlUnsignedInt xgetPosy()
         {
             synchronized (monitor())
             {
                 check_orphaned();
                 org.apache.xmlbeans.XmlUnsignedInt target = null;
-                target = (org.apache.xmlbeans.XmlUnsignedInt)get_store().find_attribute_user(POSY$13);
+                target = (org.apache.xmlbeans.XmlUnsignedInt)get_store().find_attribute_user(POSY$16);
                 return target;
             }
         }
         
         /**
-         * Sets the "posY" attribute
+         * Sets the "posy" attribute
          */
-        public void setPosY(long entity)
+        public void setPosy(long posy)
         {
             synchronized (monitor())
             {
                 check_orphaned();
                 org.apache.xmlbeans.SimpleValue target = null;
-                target = (org.apache.xmlbeans.SimpleValue)get_store().find_attribute_user(POSY$13);
+                target = (org.apache.xmlbeans.SimpleValue)get_store().find_attribute_user(POSY$16);
                 if (target == null)
                 {
-                    target = (org.apache.xmlbeans.SimpleValue)get_store().add_attribute_user(POSY$13);
+                    target = (org.apache.xmlbeans.SimpleValue)get_store().add_attribute_user(POSY$16);
                 }
-                target.setLongValue(entity);
+                target.setLongValue(posy);
             }
         }
         
         /**
-         * Sets (as xml) the "posY" attribute
+         * Sets (as xml) the "posy" attribute
          */
-        public void xsetPosY(org.apache.xmlbeans.XmlUnsignedInt entity)
+        public void xsetPosy(org.apache.xmlbeans.XmlUnsignedInt posy)
         {
             synchronized (monitor())
             {
                 check_orphaned();
                 org.apache.xmlbeans.XmlUnsignedInt target = null;
-                target = (org.apache.xmlbeans.XmlUnsignedInt)get_store().find_attribute_user(POSY$13);
+                target = (org.apache.xmlbeans.XmlUnsignedInt)get_store().find_attribute_user(POSY$16);
                 if (target == null)
                 {
-                    target = (org.apache.xmlbeans.XmlUnsignedInt)get_store().add_attribute_user(POSY$13);
+                    target = (org.apache.xmlbeans.XmlUnsignedInt)get_store().add_attribute_user(POSY$16);
                 }
-                target.set(entity);
+                target.set(posy);
             }
         }
         
@@ -970,10 +971,10 @@ public class FormDocumentImpl extends org.apache.xmlbeans.impl.values.XmlComplex
             {
                 check_orphaned();
                 org.apache.xmlbeans.SimpleValue target = null;
-                target = (org.apache.xmlbeans.SimpleValue)get_store().find_attribute_user(WIDTH$14);
+                target = (org.apache.xmlbeans.SimpleValue)get_store().find_attribute_user(WIDTH$18);
                 if (target == null)
                 {
-                	return 0L;
+                    return 0L;
                 }
                 return target.getLongValue();
             }
@@ -988,7 +989,7 @@ public class FormDocumentImpl extends org.apache.xmlbeans.impl.values.XmlComplex
             {
                 check_orphaned();
                 org.apache.xmlbeans.XmlUnsignedInt target = null;
-                target = (org.apache.xmlbeans.XmlUnsignedInt)get_store().find_attribute_user(WIDTH$14);
+                target = (org.apache.xmlbeans.XmlUnsignedInt)get_store().find_attribute_user(WIDTH$18);
                 return target;
             }
         }
@@ -996,36 +997,36 @@ public class FormDocumentImpl extends org.apache.xmlbeans.impl.values.XmlComplex
         /**
          * Sets the "width" attribute
          */
-        public void setWidth(long entity)
+        public void setWidth(long width)
         {
             synchronized (monitor())
             {
                 check_orphaned();
                 org.apache.xmlbeans.SimpleValue target = null;
-                target = (org.apache.xmlbeans.SimpleValue)get_store().find_attribute_user(WIDTH$14);
+                target = (org.apache.xmlbeans.SimpleValue)get_store().find_attribute_user(WIDTH$18);
                 if (target == null)
                 {
-                    target = (org.apache.xmlbeans.SimpleValue)get_store().add_attribute_user(WIDTH$14);
+                    target = (org.apache.xmlbeans.SimpleValue)get_store().add_attribute_user(WIDTH$18);
                 }
-                target.setLongValue(entity);
+                target.setLongValue(width);
             }
         }
         
         /**
          * Sets (as xml) the "width" attribute
          */
-        public void xsetWidth(org.apache.xmlbeans.XmlUnsignedInt entity)
+        public void xsetWidth(org.apache.xmlbeans.XmlUnsignedInt width)
         {
             synchronized (monitor())
             {
                 check_orphaned();
                 org.apache.xmlbeans.XmlUnsignedInt target = null;
-                target = (org.apache.xmlbeans.XmlUnsignedInt)get_store().find_attribute_user(WIDTH$14);
+                target = (org.apache.xmlbeans.XmlUnsignedInt)get_store().find_attribute_user(WIDTH$18);
                 if (target == null)
                 {
-                    target = (org.apache.xmlbeans.XmlUnsignedInt)get_store().add_attribute_user(WIDTH$14);
+                    target = (org.apache.xmlbeans.XmlUnsignedInt)get_store().add_attribute_user(WIDTH$18);
                 }
-                target.set(entity);
+                target.set(width);
             }
         }
     }

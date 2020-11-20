@@ -17,7 +17,7 @@ package cl.bee.genfrmjava.formdef.schema;
 public interface IndexDocument extends org.apache.xmlbeans.XmlObject
 {
     public static final org.apache.xmlbeans.SchemaType type = (org.apache.xmlbeans.SchemaType)
-        org.apache.xmlbeans.XmlBeans.typeSystemForClassLoader(IndexDocument.class.getClassLoader(), "schemaorg_apache_xmlbeans.system.s86FB8B51BF8A1799A84DF6E21106E5B4").resolveHandle("index7523doctype");
+        org.apache.xmlbeans.XmlBeans.typeSystemForClassLoader(IndexDocument.class.getClassLoader(), "schemaorg_apache_xmlbeans.system.s225DE17AEEF28B18B251CA4F5F9AA65C").resolveHandle("index7523doctype");
     
     /**
      * Gets the "index" element
@@ -42,7 +42,7 @@ public interface IndexDocument extends org.apache.xmlbeans.XmlObject
     public interface Index extends org.apache.xmlbeans.XmlObject
     {
         public static final org.apache.xmlbeans.SchemaType type = (org.apache.xmlbeans.SchemaType)
-            org.apache.xmlbeans.XmlBeans.typeSystemForClassLoader(Index.class.getClassLoader(), "schemaorg_apache_xmlbeans.system.s86FB8B51BF8A1799A84DF6E21106E5B4").resolveHandle("index8061elemtype");
+            org.apache.xmlbeans.XmlBeans.typeSystemForClassLoader(Index.class.getClassLoader(), "schemaorg_apache_xmlbeans.system.s225DE17AEEF28B18B251CA4F5F9AA65C").resolveHandle("index8061elemtype");
         
         /**
          * Gets array of all "pos" elements

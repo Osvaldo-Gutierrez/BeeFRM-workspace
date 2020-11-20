@@ -72,8 +72,8 @@ public class ChileBci implements Config {
             FormDocument.Form form = root.getForm();
             
             forms.setName(form.getName());
-            forms.setAreaX(form.getPosX());
-            forms.setAreaY(form.getPosY());
+            forms.setAreaX(form.getPosx());
+            forms.setAreaY(form.getPosy());
             forms.setWidth(form.getWidth());
             //
 

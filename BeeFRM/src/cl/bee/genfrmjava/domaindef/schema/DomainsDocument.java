@@ -17,7 +17,7 @@ package cl.bee.genfrmjava.domaindef.schema;
 public interface DomainsDocument extends org.apache.xmlbeans.XmlObject
 {
     public static final org.apache.xmlbeans.SchemaType type = (org.apache.xmlbeans.SchemaType)
-        org.apache.xmlbeans.XmlBeans.typeSystemForClassLoader(DomainsDocument.class.getClassLoader(), "schemaorg_apache_xmlbeans.system.s86FB8B51BF8A1799A84DF6E21106E5B4").resolveHandle("domains8980doctype");
+        org.apache.xmlbeans.XmlBeans.typeSystemForClassLoader(DomainsDocument.class.getClassLoader(), "schemaorg_apache_xmlbeans.system.s225DE17AEEF28B18B251CA4F5F9AA65C").resolveHandle("domains8980doctype");
     
     /**
      * Gets the "domains" element
@@ -42,7 +42,7 @@ public interface DomainsDocument extends org.apache.xmlbeans.XmlObject
     public interface Domains extends org.apache.xmlbeans.XmlObject
     {
         public static final org.apache.xmlbeans.SchemaType type = (org.apache.xmlbeans.SchemaType)
-            org.apache.xmlbeans.XmlBeans.typeSystemForClassLoader(Domains.class.getClassLoader(), "schemaorg_apache_xmlbeans.system.s86FB8B51BF8A1799A84DF6E21106E5B4").resolveHandle("domains629belemtype");
+            org.apache.xmlbeans.XmlBeans.typeSystemForClassLoader(Domains.class.getClassLoader(), "schemaorg_apache_xmlbeans.system.s225DE17AEEF28B18B251CA4F5F9AA65C").resolveHandle("domains629belemtype");
         
         /**
          * Gets array of all "domain" elements

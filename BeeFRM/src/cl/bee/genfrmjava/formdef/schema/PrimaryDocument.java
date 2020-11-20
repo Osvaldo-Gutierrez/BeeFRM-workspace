@@ -17,7 +17,7 @@ package cl.bee.genfrmjava.formdef.schema;
 public interface PrimaryDocument extends org.apache.xmlbeans.XmlObject
 {
     public static final org.apache.xmlbeans.SchemaType type = (org.apache.xmlbeans.SchemaType)
-        org.apache.xmlbeans.XmlBeans.typeSystemForClassLoader(PrimaryDocument.class.getClassLoader(), "schemaorg_apache_xmlbeans.system.s86FB8B51BF8A1799A84DF6E21106E5B4").resolveHandle("primaryfc93doctype");
+        org.apache.xmlbeans.XmlBeans.typeSystemForClassLoader(PrimaryDocument.class.getClassLoader(), "schemaorg_apache_xmlbeans.system.s225DE17AEEF28B18B251CA4F5F9AA65C").resolveHandle("primaryfc93doctype");
     
     /**
      * Gets the "primary" element
@@ -42,7 +42,7 @@ public interface PrimaryDocument extends org.apache.xmlbeans.XmlObject
     public interface Primary extends org.apache.xmlbeans.XmlObject
     {
         public static final org.apache.xmlbeans.SchemaType type = (org.apache.xmlbeans.SchemaType)
-            org.apache.xmlbeans.XmlBeans.typeSystemForClassLoader(Primary.class.getClassLoader(), "schemaorg_apache_xmlbeans.system.s86FB8B51BF8A1799A84DF6E21106E5B4").resolveHandle("primaryef81elemtype");
+            org.apache.xmlbeans.XmlBeans.typeSystemForClassLoader(Primary.class.getClassLoader(), "schemaorg_apache_xmlbeans.system.s225DE17AEEF28B18B251CA4F5F9AA65C").resolveHandle("primaryef81elemtype");
         
         /**
          * Gets array of all "field" elements

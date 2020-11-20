@@ -17,7 +17,7 @@ package cl.bee.genfrmjava.rangedef.schema;
 public interface RangesDocument extends org.apache.xmlbeans.XmlObject
 {
     public static final org.apache.xmlbeans.SchemaType type = (org.apache.xmlbeans.SchemaType)
-        org.apache.xmlbeans.XmlBeans.typeSystemForClassLoader(RangesDocument.class.getClassLoader(), "schemaorg_apache_xmlbeans.system.s86FB8B51BF8A1799A84DF6E21106E5B4").resolveHandle("ranges641edoctype");
+        org.apache.xmlbeans.XmlBeans.typeSystemForClassLoader(RangesDocument.class.getClassLoader(), "schemaorg_apache_xmlbeans.system.s225DE17AEEF28B18B251CA4F5F9AA65C").resolveHandle("ranges641edoctype");
     
     /**
      * Gets the "ranges" element
@@ -42,7 +42,7 @@ public interface RangesDocument extends org.apache.xmlbeans.XmlObject
     public interface Ranges extends org.apache.xmlbeans.XmlObject
     {
         public static final org.apache.xmlbeans.SchemaType type = (org.apache.xmlbeans.SchemaType)
-            org.apache.xmlbeans.XmlBeans.typeSystemForClassLoader(Ranges.class.getClassLoader(), "schemaorg_apache_xmlbeans.system.s86FB8B51BF8A1799A84DF6E21106E5B4").resolveHandle("ranges8910elemtype");
+            org.apache.xmlbeans.XmlBeans.typeSystemForClassLoader(Ranges.class.getClassLoader(), "schemaorg_apache_xmlbeans.system.s225DE17AEEF28B18B251CA4F5F9AA65C").resolveHandle("ranges8910elemtype");
         
         /**
          * Gets array of all "field" elements

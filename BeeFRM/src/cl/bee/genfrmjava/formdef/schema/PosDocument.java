@@ -17,7 +17,7 @@ package cl.bee.genfrmjava.formdef.schema;
 public interface PosDocument extends org.apache.xmlbeans.XmlObject
 {
     public static final org.apache.xmlbeans.SchemaType type = (org.apache.xmlbeans.SchemaType)
-        org.apache.xmlbeans.XmlBeans.typeSystemForClassLoader(PosDocument.class.getClassLoader(), "schemaorg_apache_xmlbeans.system.s86FB8B51BF8A1799A84DF6E21106E5B4").resolveHandle("posb265doctype");
+        org.apache.xmlbeans.XmlBeans.typeSystemForClassLoader(PosDocument.class.getClassLoader(), "schemaorg_apache_xmlbeans.system.s225DE17AEEF28B18B251CA4F5F9AA65C").resolveHandle("posb265doctype");
     
     /**
      * Gets the "pos" element
@@ -42,7 +42,7 @@ public interface PosDocument extends org.apache.xmlbeans.XmlObject
     public interface Pos extends org.apache.xmlbeans.XmlObject
     {
         public static final org.apache.xmlbeans.SchemaType type = (org.apache.xmlbeans.SchemaType)
-            org.apache.xmlbeans.XmlBeans.typeSystemForClassLoader(Pos.class.getClassLoader(), "schemaorg_apache_xmlbeans.system.s86FB8B51BF8A1799A84DF6E21106E5B4").resolveHandle("posa525elemtype");
+            org.apache.xmlbeans.XmlBeans.typeSystemForClassLoader(Pos.class.getClassLoader(), "schemaorg_apache_xmlbeans.system.s225DE17AEEF28B18B251CA4F5F9AA65C").resolveHandle("posa525elemtype");
         
         /**
          * Gets the "row" attribute

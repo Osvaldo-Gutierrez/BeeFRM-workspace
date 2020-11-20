@@ -17,7 +17,7 @@ package cl.bee.genfrmjava.formdef.schema;
 public interface FormDocument extends org.apache.xmlbeans.XmlObject
 {
     public static final org.apache.xmlbeans.SchemaType type = (org.apache.xmlbeans.SchemaType)
-        org.apache.xmlbeans.XmlBeans.typeSystemForClassLoader(FormDocument.class.getClassLoader(), "schemaorg_apache_xmlbeans.system.s86FB8B51BF8A1799A84DF6E21106E5B4").resolveHandle("form0de7doctype");
+        org.apache.xmlbeans.XmlBeans.typeSystemForClassLoader(FormDocument.class.getClassLoader(), "schemaorg_apache_xmlbeans.system.s225DE17AEEF28B18B251CA4F5F9AA65C").resolveHandle("form0de7doctype");
     
     /**
      * Gets the "form" element
@@ -42,7 +42,7 @@ public interface FormDocument extends org.apache.xmlbeans.XmlObject
     public interface Form extends org.apache.xmlbeans.XmlObject
     {
         public static final org.apache.xmlbeans.SchemaType type = (org.apache.xmlbeans.SchemaType)
-            org.apache.xmlbeans.XmlBeans.typeSystemForClassLoader(Form.class.getClassLoader(), "schemaorg_apache_xmlbeans.system.s86FB8B51BF8A1799A84DF6E21106E5B4").resolveHandle("form9887elemtype");
+            org.apache.xmlbeans.XmlBeans.typeSystemForClassLoader(Form.class.getClassLoader(), "schemaorg_apache_xmlbeans.system.s225DE17AEEF28B18B251CA4F5F9AA65C").resolveHandle("form9887elemtype");
         
         /**
          * Gets array of all "field" elements
@@ -287,42 +287,42 @@ public interface FormDocument extends org.apache.xmlbeans.XmlObject
         /**
          * Gets the "posx" attribute
          */
-        long getPosX();
+        long getPosx();
         
         /**
          * Gets (as xml) the "posx" attribute
          */
-        org.apache.xmlbeans.XmlUnsignedInt xgetPosX();
+        org.apache.xmlbeans.XmlUnsignedInt xgetPosx();
         
         /**
          * Sets the "posx" attribute
          */
-        void setPosX(long posx);
+        void setPosx(long posx);
         
         /**
          * Sets (as xml) the "posx" attribute
          */
-        void xsetPosX(org.apache.xmlbeans.XmlUnsignedInt posx);
+        void xsetPosx(org.apache.xmlbeans.XmlUnsignedInt posx);
         
         /**
          * Gets the "posy" attribute
          */
-        long getPosY();
+        long getPosy();
         
         /**
          * Gets (as xml) the "posy" attribute
          */
-        org.apache.xmlbeans.XmlUnsignedInt xgetPosY();
+        org.apache.xmlbeans.XmlUnsignedInt xgetPosy();
         
         /**
          * Sets the "posy" attribute
          */
-        void setPosY(long posy);
+        void setPosy(long posy);
         
         /**
          * Sets (as xml) the "posy" attribute
          */
-        void xsetPosY(org.apache.xmlbeans.XmlUnsignedInt posy);
+        void xsetPosy(org.apache.xmlbeans.XmlUnsignedInt posy);
         
         /**
          * Gets the "width" attribute

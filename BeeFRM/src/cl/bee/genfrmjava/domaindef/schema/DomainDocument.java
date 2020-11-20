@@ -17,7 +17,7 @@ package cl.bee.genfrmjava.domaindef.schema;
 public interface DomainDocument extends org.apache.xmlbeans.XmlObject
 {
     public static final org.apache.xmlbeans.SchemaType type = (org.apache.xmlbeans.SchemaType)
-        org.apache.xmlbeans.XmlBeans.typeSystemForClassLoader(DomainDocument.class.getClassLoader(), "schemaorg_apache_xmlbeans.system.s86FB8B51BF8A1799A84DF6E21106E5B4").resolveHandle("domain65a7doctype");
+        org.apache.xmlbeans.XmlBeans.typeSystemForClassLoader(DomainDocument.class.getClassLoader(), "schemaorg_apache_xmlbeans.system.s225DE17AEEF28B18B251CA4F5F9AA65C").resolveHandle("domain65a7doctype");
     
     /**
      * Gets the "domain" element
@@ -42,7 +42,7 @@ public interface DomainDocument extends org.apache.xmlbeans.XmlObject
     public interface Domain extends org.apache.xmlbeans.XmlObject
     {
         public static final org.apache.xmlbeans.SchemaType type = (org.apache.xmlbeans.SchemaType)
-            org.apache.xmlbeans.XmlBeans.typeSystemForClassLoader(Domain.class.getClassLoader(), "schemaorg_apache_xmlbeans.system.s86FB8B51BF8A1799A84DF6E21106E5B4").resolveHandle("domain5e47elemtype");
+            org.apache.xmlbeans.XmlBeans.typeSystemForClassLoader(Domain.class.getClassLoader(), "schemaorg_apache_xmlbeans.system.s225DE17AEEF28B18B251CA4F5F9AA65C").resolveHandle("domain5e47elemtype");
         
         /**
          * Gets the "name" attribute

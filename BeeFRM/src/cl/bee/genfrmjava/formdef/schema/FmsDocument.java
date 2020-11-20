@@ -17,7 +17,7 @@ package cl.bee.genfrmjava.formdef.schema;
 public interface FmsDocument extends org.apache.xmlbeans.XmlObject
 {
     public static final org.apache.xmlbeans.SchemaType type = (org.apache.xmlbeans.SchemaType)
-        org.apache.xmlbeans.XmlBeans.typeSystemForClassLoader(FmsDocument.class.getClassLoader(), "schemaorg_apache_xmlbeans.system.s86FB8B51BF8A1799A84DF6E21106E5B4").resolveHandle("fmsf49ddoctype");
+        org.apache.xmlbeans.XmlBeans.typeSystemForClassLoader(FmsDocument.class.getClassLoader(), "schemaorg_apache_xmlbeans.system.s225DE17AEEF28B18B251CA4F5F9AA65C").resolveHandle("fmsf49ddoctype");
     
     /**
      * Gets the "fms" element
@@ -42,7 +42,7 @@ public interface FmsDocument extends org.apache.xmlbeans.XmlObject
     public interface Fms extends org.apache.xmlbeans.XmlObject
     {
         public static final org.apache.xmlbeans.SchemaType type = (org.apache.xmlbeans.SchemaType)
-            org.apache.xmlbeans.XmlBeans.typeSystemForClassLoader(Fms.class.getClassLoader(), "schemaorg_apache_xmlbeans.system.s86FB8B51BF8A1799A84DF6E21106E5B4").resolveHandle("fms9f95elemtype");
+            org.apache.xmlbeans.XmlBeans.typeSystemForClassLoader(Fms.class.getClassLoader(), "schemaorg_apache_xmlbeans.system.s225DE17AEEF28B18B251CA4F5F9AA65C").resolveHandle("fms9f95elemtype");
         
         /**
          * Gets the "name" attribute

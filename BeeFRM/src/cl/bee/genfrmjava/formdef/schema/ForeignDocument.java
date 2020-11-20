@@ -17,7 +17,7 @@ package cl.bee.genfrmjava.formdef.schema;
 public interface ForeignDocument extends org.apache.xmlbeans.XmlObject
 {
     public static final org.apache.xmlbeans.SchemaType type = (org.apache.xmlbeans.SchemaType)
-        org.apache.xmlbeans.XmlBeans.typeSystemForClassLoader(ForeignDocument.class.getClassLoader(), "schemaorg_apache_xmlbeans.system.s86FB8B51BF8A1799A84DF6E21106E5B4").resolveHandle("foreignb565doctype");
+        org.apache.xmlbeans.XmlBeans.typeSystemForClassLoader(ForeignDocument.class.getClassLoader(), "schemaorg_apache_xmlbeans.system.s225DE17AEEF28B18B251CA4F5F9AA65C").resolveHandle("foreignb565doctype");
     
     /**
      * Gets the "foreign" element
@@ -42,7 +42,7 @@ public interface ForeignDocument extends org.apache.xmlbeans.XmlObject
     public interface Foreign extends org.apache.xmlbeans.XmlObject
     {
         public static final org.apache.xmlbeans.SchemaType type = (org.apache.xmlbeans.SchemaType)
-            org.apache.xmlbeans.XmlBeans.typeSystemForClassLoader(Foreign.class.getClassLoader(), "schemaorg_apache_xmlbeans.system.s86FB8B51BF8A1799A84DF6E21106E5B4").resolveHandle("foreign02a5elemtype");
+            org.apache.xmlbeans.XmlBeans.typeSystemForClassLoader(Foreign.class.getClassLoader(), "schemaorg_apache_xmlbeans.system.s225DE17AEEF28B18B251CA4F5F9AA65C").resolveHandle("foreign02a5elemtype");
         
         /**
          * Gets array of all "field" elements

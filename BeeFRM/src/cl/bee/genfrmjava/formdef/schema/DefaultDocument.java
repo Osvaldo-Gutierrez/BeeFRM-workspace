@@ -17,7 +17,7 @@ package cl.bee.genfrmjava.formdef.schema;
 public interface DefaultDocument extends org.apache.xmlbeans.XmlObject
 {
     public static final org.apache.xmlbeans.SchemaType type = (org.apache.xmlbeans.SchemaType)
-        org.apache.xmlbeans.XmlBeans.typeSystemForClassLoader(DefaultDocument.class.getClassLoader(), "schemaorg_apache_xmlbeans.system.s86FB8B51BF8A1799A84DF6E21106E5B4").resolveHandle("default59d2doctype");
+        org.apache.xmlbeans.XmlBeans.typeSystemForClassLoader(DefaultDocument.class.getClassLoader(), "schemaorg_apache_xmlbeans.system.s225DE17AEEF28B18B251CA4F5F9AA65C").resolveHandle("default59d2doctype");
     
     /**
      * Gets the "default" element
@@ -42,7 +42,7 @@ public interface DefaultDocument extends org.apache.xmlbeans.XmlObject
     public interface Default extends org.apache.xmlbeans.XmlObject
     {
         public static final org.apache.xmlbeans.SchemaType type = (org.apache.xmlbeans.SchemaType)
-            org.apache.xmlbeans.XmlBeans.typeSystemForClassLoader(Default.class.getClassLoader(), "schemaorg_apache_xmlbeans.system.s86FB8B51BF8A1799A84DF6E21106E5B4").resolveHandle("default673felemtype");
+            org.apache.xmlbeans.XmlBeans.typeSystemForClassLoader(Default.class.getClassLoader(), "schemaorg_apache_xmlbeans.system.s225DE17AEEF28B18B251CA4F5F9AA65C").resolveHandle("default673felemtype");
         
         /**
          * Gets the "value" attribute
