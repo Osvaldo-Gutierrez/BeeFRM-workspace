@@ -65,6 +65,10 @@ public class GenFrm {
     /** TODO_javadoc. */
     private static final String[] cond_extras = {"PGM_BQ", "PGM_BU"};
     
+    
+    //Variables de VAX/Compilacion
+    private static final Boolean PGM_PTC = true;
+    private static final Boolean PGM_PER = false;
 
     /** TODO_javadoc. */
     private static PrintStream gen = null;
@@ -482,7 +486,8 @@ public class GenFrm {
 
                 FieldDef fd = (FieldDef) vars.get(i);
 
-                if (!fd.fmsname.substring(3, 8).equals("_IND_")) { ///////// validar
+                if (fd.fmsname.substring(3, 8).equals("_IND_") || fd.fmsname.substring(3, 8).equals("_MSC_")
+                		|| fd.fmsname.substring(3, 8).equals("_COD_")) { ///////// validar
                     domain_range_validation_search(entityName, fd, -1, gls, "PUT");
                 }
             }
@@ -3000,38 +3005,21 @@ public class GenFrm {
             	if (section.isSetConcatenate())
             		additSection.setConcatenate((int)section.getConcatenate());
             	
-            	if(addit_hash.containsKey(additSection.getName()))
-            	{
-            		String name = additSection.getName();
-            		
-            		if(name.contains("$"))  {
-
-        				int pos =  Integer. parseInt(name.substring(name.indexOf("$") + 1));
-            			while(addit_hash.containsKey(name))
-            			{
-            				name = name.substring(0, name.indexOf("$"));
-            				pos++;
-            				name = name + "$" + pos;
-            			}
-                    	addit_hash.put(name, additSection);
+        		String name = additSection.getName();
+        		ArrayList<String> subNames;
+        		
+        		if (name.contains(" OR ")) {
+        			
+        			subNames = new  ArrayList<String>(Arrays.asList(name.split(" OR ")));
+        			
+            		for (String itmName : subNames)
+            		{
+            			putSection(itmName, additSection);
             		}
-            		else {
-            			int cnt1 = 0;
-            			while(addit_hash.containsKey(name))
-            			{
-            				cnt1++;
-            				name = (name.contains("$")) ? name.substring(0, name.indexOf("$")) : name;
-            				name = name + "$" + cnt1;
-            			}
-            			if (cnt1 > 0)
-                        	addit_hash.put(name, additSection);
-            			else
-            				addit_hash.put(name + "$" + 1, additSection);
-            		}
-
-            	}
-            	else
-            		addit_hash.put(additSection.getName(), additSection);
+        			
+        		}
+        		else
+        			putSection(name, additSection);
             //    addit_hash.put(section.getName(), section.getCode());
             }
 
@@ -3043,6 +3031,43 @@ public class GenFrm {
 
             throw new XmlException(filename + " es invalido.");
         }
+    }
+    
+    
+    private static void putSection(String name, SectionDef additSection ) {
+    	
+    	
+    	if(addit_hash.containsKey(name))
+    	{
+			if(name.contains("$"))  {
+	
+				int pos =  Integer. parseInt(name.substring(name.indexOf("$") + 1));
+				while(addit_hash.containsKey(name))
+				{
+					name = name.substring(0, name.indexOf("$"));
+					pos++;
+					name = name + "$" + pos;
+				}
+	        	addit_hash.put(name, additSection);
+			}
+			else {
+				int cnt1 = 0;
+				while(addit_hash.containsKey(name))
+				{
+					cnt1++;
+					name = (name.contains("$")) ? name.substring(0, name.indexOf("$")) : name;
+					name = name + "$" + cnt1;
+				}
+				if (cnt1 > 0)
+	            	addit_hash.put(name, additSection);
+				else
+					addit_hash.put(name + "$" + 1, additSection);
+			}
+		
+    	}
+    	else
+    		addit_hash.put(name, additSection);
+    	
     }
 
     /******************************************************************************
@@ -3291,6 +3316,19 @@ public class GenFrm {
 			    		if (sectionCode.numSpecial() > 0) {
 			    			if (sectionCode.hasSpecial(labelSpecial))
 					    		gen.println(((SectionDef)addit_hash.get(ident)).getCode());
+			    			
+			    			if (sectionCode.hasSpecial("PGM_PTC") && PGM_PTC)  //
+					    		gen.println(((SectionDef)addit_hash.get(ident)).getCode());
+			    			
+			    			if (sectionCode.hasSpecial("NOT_PGM_PTC") && !PGM_PTC)  //
+					    		gen.println(((SectionDef)addit_hash.get(ident)).getCode());
+			    			
+			    			if (sectionCode.hasSpecial("PGM_PER") && PGM_PER)  //
+					    		gen.println(((SectionDef)addit_hash.get(ident)).getCode());
+			    			
+			    			if (sectionCode.hasSpecial("NOT_PGM_PER") && !PGM_PER)  //
+					    		gen.println(((SectionDef)addit_hash.get(ident)).getCode());
+			    			
 			    		}
 			    		else
 				    		gen.println(((SectionDef)addit_hash.get(ident)).getCode());
@@ -3313,6 +3351,18 @@ public class GenFrm {
 		    	else
 		    		if (sectionCode.numSpecial() > 0) {
 		    			if (sectionCode.hasSpecial(labelSpecial))
+				    		gen.println(((SectionDef)addit_hash.get(ident)).getCode());
+		    			
+		    			if (sectionCode.hasSpecial("PGM_PTC") && PGM_PTC)  //
+				    		gen.println(((SectionDef)addit_hash.get(ident)).getCode());
+		    			
+		    			if (sectionCode.hasSpecial("NOT_PGM_PTC") && !PGM_PTC)  //
+				    		gen.println(((SectionDef)addit_hash.get(ident)).getCode());
+		    			
+		    			if (sectionCode.hasSpecial("PGM_PER") && PGM_PER)  //
+				    		gen.println(((SectionDef)addit_hash.get(ident)).getCode());
+		    			
+		    			if (sectionCode.hasSpecial("NOT_PGM_PER") && !PGM_PER)  //
 				    		gen.println(((SectionDef)addit_hash.get(ident)).getCode());
 		    		}
 		    		else

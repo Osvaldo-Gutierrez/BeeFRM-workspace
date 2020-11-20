@@ -36,6 +36,9 @@ public class PrepTexStream extends FileInputStream {
     /** TODO_javadoc. */
     private static Pattern endpattern = Pattern.compile("^[ ]*END", Pattern.CASE_INSENSITIVE);
     
+    /** TODO_javadoc. */
+    private static Pattern elsepattern = Pattern.compile("^[ ]*ELSE", Pattern.CASE_INSENSITIVE);
+    
     private static final String type_special_names[]        = { "PGM_BQ", "PGM_BU" }; //ordenado
     
 
@@ -409,11 +412,13 @@ public class PrepTexStream extends FileInputStream {
 	        String                ls       = System.getProperty("line.separator");
 	        String                text     = null;
 	        String                newPrv   = null;
+	        String                currLabel = null;
 	        Boolean concatenated = false;
 
 	        prevKey = (prevKey.contains("$")) ? prevKey.substring(0, prevKey.indexOf("$")) : prevKey;
 
-	        label = prevKey + " AND " + label.substring(label.indexOf("IF ") + 3);
+	        currLabel = label.substring(label.indexOf("IF ") + 3).trim();
+	        label = prevKey + " AND " + label.substring(label.indexOf("IF ") + 3).trim();
 
 	        newPrv = label;
 	        
@@ -450,25 +455,36 @@ public class PrepTexStream extends FileInputStream {
 	                                            
 	                }
 	
-	                if (endpattern.matcher(line.substring(ctrl_len)).find()) {
+	                if (endpattern.matcher(line.substring(ctrl_len)).find() || elsepattern.matcher(line.substring(ctrl_len)).find()) {
 	                    fp_out.println("END");
 	                    concatenated = false;
 	                    
 	                    label = (prevKey.contains("$")) ? prevKey.substring(0, prevKey.indexOf("$")) : prevKey;
 	                    
-                        if(codeLabel.containsKey(label)) {
-                            int nitm = codeLabel.get(label);
-                            nitm++;
-                            codeLabel.put(label, nitm);
-                            label = label + "$" +nitm;
-                            fp_out.println(replace(label, symbolsTable));
+	                    
+	                    if(endpattern.matcher(line.substring(ctrl_len)).find()) {
+	                        if(codeLabel.containsKey(label)) {
+	                            int nitm = codeLabel.get(label);
+	                            nitm++;
+	                            codeLabel.put(label, nitm);
+	                            label = label + "$" +nitm;
+	                            fp_out.println(replace(label, symbolsTable));
 
-                        }
-                        else {
-                        	codeLabel.put(label, 0);
-                            fp_out.println(replace(label, symbolsTable));
-                        }
-                        
+	                        }
+	                        else {
+	                        	codeLabel.put(label, 0);
+	                            fp_out.println(replace(label, symbolsTable));
+	                        }	
+	                    }
+	                    else if (elsepattern.matcher(line.substring(ctrl_len)).find()) {
+	                    	String auxLabel = label;
+	                    	
+	                    	auxLabel = "IF NOT_" + currLabel;
+	                        label = ReadConcatenatedCode(ctrl, symbolsTable, fp_in, fp_out, line, label, auxLabel, codeLabel, concatenatedOrder);
+	                    	
+	                    	
+	                    }
+
 
                         
             	        //numConca++;

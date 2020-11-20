@@ -27,7 +27,7 @@ public class SectionDef {
     private ArrayList<String> nameSpecials = null;
     
     /** TODO_javadoc. */
-    private static final String type_special_names[]        = { "PGM_BQ", "PGM_BU" }; //ordenado
+    private static final String type_special_names[]        = { "NOT_PGM_PER","NOT_PGM_PTC", "PGM_BQ", "PGM_BU", "PGM_PER", "PGM_PTC" }; //ordenado
     
     public String getName() {
 		return name;
