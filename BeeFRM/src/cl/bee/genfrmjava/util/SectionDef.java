@@ -27,7 +27,8 @@ public class SectionDef {
     private ArrayList<String> nameSpecials = null;
     
     /** TODO_javadoc. */
-    private static final String type_special_names[]        = { "NOT_PGM_PER","NOT_PGM_PTC", "PGM_BQ", "PGM_BU", "PGM_PER", "PGM_PTC" }; //ordenado
+    //variables que no son consideradas para asignar el nombre a la clase
+    private static final String type_special_names[]  = { "NOT PGM_BQ", "NOT PGM_BU", "NOT_PGM_PER","NOT_PGM_PTC", "PGM_BQ", "PGM_BU", "PGM_PER", "PGM_PTC" }; //ordenado
     
     public String getName() {
 		return name;
@@ -71,6 +72,8 @@ public class SectionDef {
 		int position = 0;
 		for( String txt : nameUni ) {
 			
+			txt = txt.trim();
+			
 			int pos = 0;
 			
 			//remueve caracter $ y se le asigna al nombre
@@ -95,7 +98,7 @@ public class SectionDef {
 	
 	public boolean hasSpecial(String label) {
 		
-		if (nameSpecials.contains(label))
+		if (nameSpecials.contains(label.trim()))
 			return true;
 		else
 			return false;

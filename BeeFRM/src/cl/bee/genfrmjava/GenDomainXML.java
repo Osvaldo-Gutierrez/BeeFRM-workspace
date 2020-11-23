@@ -45,7 +45,8 @@ public class GenDomainXML {
      *
      */
     public static void main(String args[]) {
-
+    	BasicConfigurator.configure();
+        logger.info("Inicio GenFrm.java ");
         try {
 
             for (int idx = 0; idx < args.length - 1; idx++) {

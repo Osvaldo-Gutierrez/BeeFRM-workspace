@@ -1647,6 +1647,22 @@ public class GenFrm {
 
               //logger.debug("domain (" + range.getDomain() + ") --> validation : '" + domain.getValidation() + "'");
 
+                if (range.getSearch().equals("") && domain.getSearch().equals(""))
+                {
+                	String nameD = domain.getName();
+                	
+                	if (nameD.substring(0, 3).equals("IND") && domain.getRegistry().equals("MSC")) {
+                		domain.setSearch("BUSMSC");
+                		domain.setValidation("VALIND");
+                	}
+                	else 
+                		if (nameD.substring(0, 3).equals("COD") && domain.getRegistry().equals("TAB")) {
+                		domain.setSearch("BUSTAB");
+                		domain.setValidation("VALCOD");
+                	}
+                	
+                }
+                
                 ////////////////////////////////////////////////
                 //si esta formando secciones PUT y el campo posee glosa tipo FRM-GLS-
                 if (sectionType.equals("PUT") && gls.containsKey(fd.name.substring(8,12))) {
@@ -2590,7 +2606,7 @@ public class GenFrm {
                             case FieldDef.LONG :
                             case FieldDef.DOUBLE :
 
-                            	prepare_num_edition(entityName, fr, "EDT-MKY", -1);
+                            	prepare_num_edition(entityName, fr, "EDT-AKY", -1);
 
                                 break;
                             }
@@ -3316,6 +3332,17 @@ public class GenFrm {
 			    		if (sectionCode.numSpecial() > 0) {
 			    			if (sectionCode.hasSpecial(labelSpecial))
 					    		gen.println(((SectionDef)addit_hash.get(ident)).getCode());
+
+			    			String negLabel = null;
+			    			//negacion de PGM_
+			    			if (action == BQ_ACTION)
+			    				negLabel = "NOT PGM_BU";
+			    			else if (action == BU_ACTION)
+			    				negLabel = "NOT PGM_BQ";
+			    			
+			    			if (sectionCode.hasSpecial(negLabel))
+			    				gen.println(((SectionDef)addit_hash.get(ident)).getCode());
+			    			
 			    			
 			    			if (sectionCode.hasSpecial("PGM_PTC") && PGM_PTC)  //
 					    		gen.println(((SectionDef)addit_hash.get(ident)).getCode());
