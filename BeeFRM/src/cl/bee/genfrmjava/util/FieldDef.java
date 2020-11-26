@@ -73,7 +73,7 @@ public class FieldDef {
 
     /** TODO_javadoc. */
     public static final int FEC     = 1;
-
+    
     /** TODO_javadoc. */
     public static final int GLS_IDC = 2;
 
@@ -87,7 +87,10 @@ public class FieldDef {
     public static final int OFI     = 5;
 
     /** TODO_javadoc. */
-    public static final int VRF     = 6;
+    public static final int SGV     = 6;
+    
+    /** TODO_javadoc. */
+    public static final int VRF     = 7;
 
     //
 
@@ -177,7 +180,7 @@ public class FieldDef {
     //
 
     /** TODO_javadoc. */
-    private static final String special_names[] = { "", "FEC", "GLS_IDC", "IDC", "IDG", "OFI" , "VRF" /* ordenados */};
+    private static final String special_names[] = { "", "FEC", "GLS_IDC", "IDC", "IDG", "OFI" , "SGV", "VRF" /* ordenados */};
 
     /** TODO_javadoc. */
     public static final String[] date_initials = { "D", "M", "S", "A" };
@@ -480,7 +483,10 @@ public class FieldDef {
 
         default:
 
-            size = picture.length();
+        	//OGB - cuando string comienza con guiones estos no se toman en cuenta en el tamaño
+            //size = picture.length();
+            size = (picture.startsWith("-")) ? picture.substring(picture.indexOf("X")).length() : picture.length();
+            
         }
 
         //
@@ -987,6 +993,9 @@ public class FieldDef {
         }
         else if (secGru.equals("VRF")) {
             return VRF;
+        }
+        else if (secGru.equals("SGV")) {
+            return SGV;
         }
         else {
             return UNDEF;

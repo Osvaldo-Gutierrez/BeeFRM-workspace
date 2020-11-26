@@ -39,7 +39,7 @@ public class PrepTexStream extends FileInputStream {
     /** TODO_javadoc. */
     private static Pattern elsepattern = Pattern.compile("^[ ]*ELSE", Pattern.CASE_INSENSITIVE);
     
-    private static final String type_special_names[]        = { "PGM_BQ", "PGM_BU" }; //ordenado
+    private static final String type_special_names[] = { "NOT PGM_BQ", "NOT PGM_BU", "NOT PGM_PER","NOT PGM_PTC", "PGM_BQ", "PGM_BU", "PGM_PER", "PGM_PTC" }; //ordenado
     
 
     /******************************************************************************
@@ -479,7 +479,7 @@ public class PrepTexStream extends FileInputStream {
 	                    else if (elsepattern.matcher(line.substring(ctrl_len)).find()) {
 	                    	String auxLabel = label;
 	                    	
-	                    	auxLabel = "IF NOT_" + currLabel;
+	                    	auxLabel = "IF NOT " + currLabel;
 	                        label = ReadConcatenatedCode(ctrl, symbolsTable, fp_in, fp_out, line, label, auxLabel, codeLabel, concatenatedOrder);
 	                    	
 	                    	

@@ -530,6 +530,14 @@ public class GenWI {
                 }
             }
         }
+        else {
+        	
+          	if (type == FieldDef.SGV) {
+          		s = s.replaceAll("Z", "-");
+          	}
+        	
+        	
+        }
 
         return s;
     }

@@ -28,7 +28,10 @@ public class SectionDef {
     
     /** TODO_javadoc. */
     //variables que no son consideradas para asignar el nombre a la clase
-    private static final String type_special_names[]  = { "NOT PGM_BQ", "NOT PGM_BU", "NOT_PGM_PER","NOT_PGM_PTC", "PGM_BQ", "PGM_BU", "PGM_PER", "PGM_PTC" }; //ordenado
+    //private static final String type_special_names[]  = { "NOT PGM_BQ", "NOT PGM_BU", "NOT_PGM_PER","NOT_PGM_PTC", "PGM_BQ", "PGM_BU", "PGM_PER", "PGM_PTC" }; //ordenado
+   //private static final String type_special_names[]  = { "NOT PGM_BQ", "NOT PGM_BU", "NOT PGM_PER","NOT PGM_PTC", "PGM_BQ", "PGM_BU", "PGM_PER", "PGM_PTC" }; //ordenado
+    private static final String type_special_names[]  = { "NOT PGM_ARG", "NOT PGM_BQ", "NOT PGM_BU", "NOT PGM_DOS", "NOT PGM_DTC", "NOT PGM_MVS", "NOT PGM_PER", 
+    		                                              "NOT PGM_PTC", "PGM_ARG", "PGM_BQ", "PGM_BU", "PGM_DOS", "PGM_DTC", "PGM_MVS", "PGM_PER", "PGM_PTC" }; //ordenado
     
     public String getName() {
 		return name;
@@ -78,7 +81,7 @@ public class SectionDef {
 			
 			//remueve caracter $ y se le asigna al nombre
 			if (txt.contains("$")) {
-				pos =  Integer. parseInt(txt.substring(txt.indexOf("$")));
+				pos =  Integer. parseInt(txt.substring(txt.indexOf("$") + 1));
 				txt = txt.substring(0, txt.indexOf("$"));
 			}
 			

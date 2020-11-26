@@ -149,30 +149,34 @@ public class GetFieldsVisitor extends DepthFirstVisitor implements Visitor {
         	NodeChoice ch = (NodeChoice)e.nextElement();
             NodeSequence ns = (NodeSequence) ch.choice;
             
-        	if(ns.nodes.get(2) instanceof NodeToken)
+        	if (ns.nodes.get(2) instanceof NodeToken)
         	{
         		NodeToken nk = (NodeToken)ns.nodes.get(2);
-        		if(((NodeToken)ns.nodes.get(0)).tokenImage.equals("NAME") )
+        		if (((NodeToken)ns.nodes.get(0)).tokenImage.equals("NAME") )
         		{
         			nameForm = unquote(((NodeToken)ns.nodes.get(2)).tokenImage);
         		}
-        		else if(((NodeToken)ns.nodes.get(0)).tokenImage.equals("AREA_TO_CLEAR") )
+        		else if (((NodeToken)ns.nodes.get(0)).tokenImage.equals("AREA_TO_CLEAR") )
         		{
         			posX =  Integer.parseInt(((NodeToken)ns.nodes.get(2)).tokenImage);
         			posY =  Integer.parseInt(((NodeToken)ns.nodes.get(4)).tokenImage);
         		}
         			
         	}
-            if(ns.nodes.get(2) instanceof NodeChoice) 
+            if (ns.nodes.get(2) instanceof NodeChoice) 
             {
             	NodeChoice  cs2 = (NodeChoice) ns.nodes.get(2);
             	NodeToken   ns2 = (NodeToken) cs2.choice;
 
             	NodeToken   nn2 = (NodeToken) ns.elementAt(0);
                 
-        		if(nn2.tokenImage.equals("WIDTH"))
+        		if (nn2.tokenImage.equals("WIDTH"))
         		{
-        			width =  Integer.parseInt(ns2.tokenImage);
+        			if  (nn2.tokenImage.length() > 0 && nn2.tokenImage.matches("\\d+"))
+        					width =  Integer.parseInt(ns2.tokenImage);
+        			else
+        				    width = 80;
+        			
         		}
             }	
         } 

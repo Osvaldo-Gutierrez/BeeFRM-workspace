@@ -69,6 +69,7 @@ public class GenFrm {
     //Variables de VAX/Compilacion
     private static final Boolean PGM_PTC = true;
     private static final Boolean PGM_PER = false;
+    private static final Boolean PGM_ARG = false;
 
     /** TODO_javadoc. */
     private static PrintStream gen = null;
@@ -486,8 +487,8 @@ public class GenFrm {
 
                 FieldDef fd = (FieldDef) vars.get(i);
 
-                if (fd.fmsname.substring(3, 8).equals("_IND_") || fd.fmsname.substring(3, 8).equals("_MSC_")
-                		|| fd.fmsname.substring(3, 8).equals("_COD_")) { ///////// validar
+                if (fd.name.substring(3, 8).equals("-IND-") || fd.name.substring(3, 8).equals("-MSC-")
+                		|| fd.name.substring(3, 8).equals("-COD-")) { 
                     domain_range_validation_search(entityName, fd, -1, gls, "PUT");
                 }
             }
@@ -2508,7 +2509,7 @@ public class GenFrm {
                             case FieldDef.LONG :
                             case FieldDef.DOUBLE :
 
-                            	prepare_num_edition(entityName, fr, "EDT-MKY", -1);
+                            	prepare_num_edition(entityName, fr, "EDT-IKY", -1);
 
                                 break;
                             }
@@ -3343,19 +3344,25 @@ public class GenFrm {
 			    			if (sectionCode.hasSpecial(negLabel))
 			    				gen.println(((SectionDef)addit_hash.get(ident)).getCode());
 			    			
-			    			
+			    			//Codigo en duro, probablemente haya que hacer algo dinamico, han ido apareciendo mas y mas de estas variables PGM_
 			    			if (sectionCode.hasSpecial("PGM_PTC") && PGM_PTC)  //
 					    		gen.println(((SectionDef)addit_hash.get(ident)).getCode());
 			    			
-			    			if (sectionCode.hasSpecial("NOT_PGM_PTC") && !PGM_PTC)  //
+			    			if (sectionCode.hasSpecial("NOT PGM_PTC") && !PGM_PTC)  //
 					    		gen.println(((SectionDef)addit_hash.get(ident)).getCode());
 			    			
 			    			if (sectionCode.hasSpecial("PGM_PER") && PGM_PER)  //
 					    		gen.println(((SectionDef)addit_hash.get(ident)).getCode());
 			    			
-			    			if (sectionCode.hasSpecial("NOT_PGM_PER") && !PGM_PER)  //
+			    			if (sectionCode.hasSpecial("NOT PGM_PER") && !PGM_PER)  //
 					    		gen.println(((SectionDef)addit_hash.get(ident)).getCode());
 			    			
+			    			if (sectionCode.hasSpecial("PGM_ARG") && PGM_ARG)  //
+					    		gen.println(((SectionDef)addit_hash.get(ident)).getCode());
+			    			
+			    			if (sectionCode.hasSpecial("NOT PGM_ARG") && !PGM_ARG)  //
+					    		gen.println(((SectionDef)addit_hash.get(ident)).getCode());
+			    			//
 			    		}
 			    		else
 				    		gen.println(((SectionDef)addit_hash.get(ident)).getCode());

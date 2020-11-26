@@ -307,7 +307,7 @@ public class GenMap {
         else {
 
             String name     = fd.name.substring(4, 7) + fd.name.substring(8, 12);
-            int    size     = fd.size;
+            int    size     = fd.size;            	               	   
             int    gen_size = fd.size;
             int    offset   = 0;
 
@@ -342,6 +342,8 @@ public class GenMap {
                 size     = 8;
                 offset   = 2;
             }
+            else        
+            	offset = (fd.picture.startsWith("-")) ? fd.picture.length() - fd.size : 0;
 
             if (FieldDef.absenceAttribute(fd.attributes, FieldDef.DISPLAY_ONLY_ATTR) && (mask & 0x04) == 0x04) {
                 gen.println("         DFHMDF POS=(" + form2.format(fd.row - posX) + "," + form2.format(fd.column - 3                            ) + "),ATTRB=(ASKIP,NORM),LENGTH=1,INITIAL='" + (Utils.searchIntInArray(fd.modifier, KEY_TYPES) >= 0 ? "{" : "<") + "'");
@@ -396,41 +398,107 @@ public class GenMap {
 
         addAttrb(attrbs, "ASKIP");
 
+        /*
+        if (FieldDef.hasAttribute(fd.attributes, FieldDef.NOECHO_ATTR)) {
+        	addAttrb(attrbs, "DRK");
+        	addAttrb(attrbs, "FSET");
+        }
+        if (FieldDef.absenceAttribute(fd.attributes, FieldDef.NOECHO_ATTR)) {
+        	
+        	if (FieldDef.absenceAttribute(fd.attributes, FieldDef.DISPLAY_ONLY_ATTR))
+        		addAttrb(attrbs, "NORM");
+
+        }
+        
+        
+        if (FieldDef.absenceAttribute(fd.attributes, FieldDef.NOECHO_ATTR)) {
+            if (FieldDef.hasAttribute(fd.attributes, FieldDef.DISPLAY_ONLY_ATTR)) {
+            	addAttrb(attrbs, "BRT");
+            	
+            	if (fd.special != FieldDef.GLS)
+            	{
+                	addAttrb(attrbs, "FSET");
+            	}
+            }  
+        }
+        
+        if (fd.special == FieldDef.IDC || fd.special == FieldDef.GLS_IDC  ) {
+
+        	if (fd.modifier == FieldDef.AKY || fd.modifier == FieldDef.IKY || fd.modifier == FieldDef.MKY)
+        	{
+            	addAttrb(attrbs, "FSET");
+        	}
+        }
+        if (fd.special == FieldDef.FEC ||
+               (fd.type == FieldDef.INTEGER && fd.special != FieldDef.VRF) || fd.type == FieldDef.LONG || (fd.type == FieldDef.DOUBLE)) {
+                 addAttrb(attrbs, "FSET");
+             }
+        
+        if (fd.special == FieldDef.VRF) {
+        	if (fd.modifier == FieldDef.AKY || fd.modifier == FieldDef.IKY || fd.modifier == FieldDef.MKY)
+        	{
+            	addAttrb(attrbs, "FSET");
+        	}
+        }
+        */
+        
+        
+        
         if (FieldDef.absenceAttribute(fd.attributes, FieldDef.DISPLAY_ONLY_ATTR) || fd.special == FieldDef.FEC ) {
             addAttrb(attrbs, "NORM");
-        }
-
-        if (fd.special == FieldDef.IDC || fd.special == FieldDef.VRF || fd.special == FieldDef.GLS_IDC ) {
-            addAttrb(attrbs, "NORM");
-            addAttrb(attrbs, "FSET");
-        }
-        else if (FieldDef.hasAttribute(fd.attributes, FieldDef.DISPLAY_ONLY_ATTR)) {
             if (FieldDef.hasAttribute(fd.attributes, FieldDef.NOECHO_ATTR)) {
-                addAttrb(attrbs, "DRK");
+            	addAttrb(attrbs, "BRT");
             }
-            else {
-            	addAttrb(attrbs, "BRT"); 
-            }
-        }
+            else
+	            if (FieldDef.hasAttribute(fd.attributes, FieldDef.DISPLAY_ONLY_ATTR)) {
+	            	addAttrb(attrbs, "BRT");
+	            }
 
-        if ((fd.modifier == FieldDef.AKY || fd.modifier == FieldDef.IKY) && FieldDef.absenceAttribute(fd.attributes, FieldDef.SUPPRESS_ATTR) ){
-            addAttrb(attrbs, "FSET");
+            if (fd.modifier == FieldDef.FLD && fd.special == FieldDef.VRF ){
+            	addAttrb(attrbs, "FSET");
+            }
+            
+            
+            
         }
-        	
-        	
+	        else if (fd.special == FieldDef.IDC || fd.special == FieldDef.VRF || fd.special == FieldDef.GLS_IDC ) {
+	            addAttrb(attrbs, "NORM");
+	            
+	        }        
+		        else if (FieldDef.hasAttribute(fd.attributes, FieldDef.DISPLAY_ONLY_ATTR)) {
+		            if (FieldDef.hasAttribute(fd.attributes, FieldDef.NOECHO_ATTR)) {
+		                addAttrb(attrbs, "DRK");
+		            }
+		            else {
+		            	addAttrb(attrbs, "BRT"); 
+		            }
+		        }
+
         if (FieldDef.hasAttribute(fd.attributes, FieldDef.DISPLAY_ONLY_ATTR) && fd.fmsname.indexOf("_GLS_") == -1 && fd.special == -1) {
             addAttrb(attrbs, "FSET");
         }
-
-        if (fd.modifier == FieldDef.FLD && FieldDef.hasAttribute(fd.attributes, FieldDef.SUPPRESS_ATTR)) {
-            addAttrb(attrbs, "FSET");
-        }
         
-        else
-        if (fd.special == FieldDef.FEC ||
-           (fd.type == FieldDef.INTEGER && fd.special != FieldDef.VRF) || fd.type == FieldDef.LONG || (fd.type == FieldDef.DOUBLE)) {
+        if ((fd.modifier == FieldDef.AKY || fd.modifier == FieldDef.IKY || fd.modifier == FieldDef.MKY)  ){
             addAttrb(attrbs, "FSET");
         }
+        else
+	        if (fd.modifier == FieldDef.FLD && FieldDef.hasAttribute(fd.attributes, FieldDef.SUPPRESS_ATTR)) {
+	            addAttrb(attrbs, "FSET");
+	            
+	            //ultimo, quizas hay que restringir solo a numericos *OJO
+	            if (FieldDef.hasAttribute(fd.attributes, FieldDef.DISPLAY_ONLY_ATTR))
+	            	addAttrb(attrbs, "FSET");
+	            
+	        }
+	        else
+		        if (fd.special == FieldDef.FEC ||
+		           (fd.type == FieldDef.INTEGER ) || fd.type == FieldDef.LONG || (fd.type == FieldDef.DOUBLE)) {
+		            addAttrb(attrbs, "FSET");
+		        }
+		        else
+		        	if (fd.special == FieldDef.VRF || fd.special == FieldDef.IDC || fd.special == FieldDef.GLS_IDC) {
+		        		addAttrb(attrbs, "FSET");
+		        	}
         
         //
 
