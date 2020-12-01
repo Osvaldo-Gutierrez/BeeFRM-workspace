@@ -32,6 +32,9 @@ public class SectionDef {
    //private static final String type_special_names[]  = { "NOT PGM_BQ", "NOT PGM_BU", "NOT PGM_PER","NOT PGM_PTC", "PGM_BQ", "PGM_BU", "PGM_PER", "PGM_PTC" }; //ordenado
     private static final String type_special_names[]  = { "NOT PGM_ARG", "NOT PGM_BQ", "NOT PGM_BU", "NOT PGM_DOS", "NOT PGM_DTC", "NOT PGM_MVS", "NOT PGM_PER", 
     		                                              "NOT PGM_PTC", "PGM_ARG", "PGM_BQ", "PGM_BU", "PGM_DOS", "PGM_DTC", "PGM_MVS", "PGM_PER", "PGM_PTC" }; //ordenado
+    private static final String envString = "PGM_";
+    
+    private static final String notenvString = "NOT ";
     
     public String getName() {
 		return name;
@@ -58,43 +61,58 @@ public class SectionDef {
 	}
 
 
-	public SectionDef(String name, String code) {
+	public SectionDef(String name, String code, HashMap<String, Boolean> environment_hash) {
 		super();
 		this.code = code;
 		
-		List<String> fixedLenghtList = Arrays.asList(name.split(" AND "));
-		ArrayList<String>  nameUni = new ArrayList<String>(fixedLenghtList);
+		
+		List<String> listOr = Arrays.asList(name.split(" OR "));
+		ArrayList<String>  nameUniOr = new ArrayList<String>(listOr);
 		this.nameSpecials = new ArrayList<String>();
 		
-		if (nameUni.size() == 1)
-		{
-			this.name = nameUni.get(0);
-			return;
+		for( String txtOr : nameUniOr ) {
+		
+			List<String> fixedLenghtList = Arrays.asList(txtOr.split(" AND "));
+			ArrayList<String>  nameUni = new ArrayList<String>(fixedLenghtList);
+
+			
+
+			for( String txt : nameUni ) {
+				
+				txt = txt.trim();
+				
+				int pos = 0;
+				
+				//remueve caracter $ y se le asigna al nombre
+				if (txt.contains("$")) {
+					pos =  Integer. parseInt(txt.substring(txt.indexOf("$") + 1));
+					txt = txt.substring(0, txt.indexOf("$"));
+				}
+				
+				if (txt.startsWith(envString) || txt.startsWith(notenvString + envString)) {
+					
+					this.nameSpecials.add(txt);
+					
+					if(!environment_hash.containsKey(txt)) {
+						
+						txt = (txt.startsWith(notenvString))? txt.substring(notenvString.length()) : txt;
+						
+						environment_hash.put(txt, false);
+						environment_hash.put(notenvString + txt, true);
+					}
+
+					
+				}
+				else
+				{	
+					this.name = pos > 0 ? txt + "$" + pos : txt	;
+				}
+				
+			}
+			
 		}
 		
-		int position = 0;
-		for( String txt : nameUni ) {
-			
-			txt = txt.trim();
-			
-			int pos = 0;
-			
-			//remueve caracter $ y se le asigna al nombre
-			if (txt.contains("$")) {
-				pos =  Integer. parseInt(txt.substring(txt.indexOf("$") + 1));
-				txt = txt.substring(0, txt.indexOf("$"));
-			}
-			
-			if ((position = Arrays.binarySearch(type_special_names, txt)) > -1) {
-				
-				this.nameSpecials.add(this.type_special_names[position]);
-			}
-			else
-			{	
-				this.name = pos > 0 ? txt + "$" + pos : txt	;
-			}
-			
-		}
+
 		
 	}
 	
@@ -106,6 +124,12 @@ public class SectionDef {
 		else
 			return false;
 	}
+	
+	public ArrayList<String> getSpecial() {
+		
+		return this.nameSpecials;
+	}
+	
 	
 	public int numSpecial() {
 		

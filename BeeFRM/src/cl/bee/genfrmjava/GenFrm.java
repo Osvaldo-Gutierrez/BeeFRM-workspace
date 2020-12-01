@@ -75,6 +75,9 @@ public class GenFrm {
     private static PrintStream gen = null;
 
     /** TODO_javadoc. */
+    private static HashMap<String, Boolean> environment_hash = null;
+    
+    /** TODO_javadoc. */
     private static HashMap<String, SectionDef> addit_hash = null;
 
     /** TODO_javadoc. */
@@ -139,6 +142,28 @@ public class GenFrm {
                     configClass = args[++idx];
                 }
             }
+            
+            //archivo de parametros de ambiente
+            String linea;
+            String envFile = "data/environment/config.txt";
+            BufferedReader bufferreader = new BufferedReader(new FileReader(envFile));
+            
+            environment_hash = new HashMap<String, Boolean>();
+            
+            while ((linea = bufferreader.readLine()) != null) {     
+                
+            	if (!linea.startsWith("//")) {
+            		
+	            	String[] parts = linea.split("=");
+
+		            	if ((parts[0] == null || parts[1] == null) ) 
+		            		throw new RuntimeException("archivo de parametros config.txt invalido.");
+
+	            	environment_hash.put(parts[0].trim(),Boolean.parseBoolean(parts[1].trim().toLowerCase()));
+	            	environment_hash.put("NOT " + parts[0].trim(), (Boolean.parseBoolean(parts[1].trim().toLowerCase()) ? false : true));
+            	}
+              }
+            
 
             logger.debug("systemName: " + systemName);
             logger.debug("entityName: " + entityName);
@@ -521,7 +546,29 @@ public class GenFrm {
         if (fd.replaced != null) {
 
             for (FieldDef fr : fd.replaced) {
-                get_put_field(subsys, entityName, fr, idx);
+            	
+            	if (fd.special == FieldDef.FEC && fd.name.length() > 6) {
+            		String kindFec = fd.name.substring(4,7);
+            		
+            		if(!kindFec.equals("FEC")) {
+            			
+                		String compFec = fr.name.split("-")[2].substring(0,1);
+                		
+                		if (kindFec.contains(compFec))
+                			get_put_field(subsys, entityName, fr, idx);
+            		}
+                	else
+                	{
+                	
+                		get_put_field(subsys, entityName, fr, idx);
+                	}
+
+            	}
+            	else
+            	{
+            	
+            		get_put_field(subsys, entityName, fr, idx);
+            	}
             }
         }
         else {
@@ -617,8 +664,34 @@ public class GenFrm {
         if (fd.replaced != null) {
 
             for (FieldDef fr : fd.replaced) {
-                get_ret_field(subsys, entityName, fr, idx);
+
+	        	if (fd.special == FieldDef.FEC && fd.name.length() > 6) {
+	        		String kindFec = fd.name.substring(4,7);
+	        		
+	        		if(!kindFec.equals("FEC")) {
+	        			
+	            		String compFec = fr.name.split("-")[2].substring(0,1);
+	            		
+	            		if (kindFec.contains(compFec))
+	            			get_ret_field(subsys, entityName, fr, idx);
+	        		}
+	            	else
+	            	{
+	            	
+	            		get_ret_field(subsys, entityName, fr, idx);
+	            	}
+	
+	        	}
+	        	else
+	        	{
+	        	
+	        		get_ret_field(subsys, entityName, fr, idx);
+	        	}
+            
             }
+            
+            
+            
         }
         else {
             gen.println("           MOVE " + fd.name + " IN " + entityName + "-FLD" + (idx != -1 ? "(" + idx + ")" : "") + " TO " + fd.name + " IN " + subsys + (idx != -1 ? "(" + idx + ")" : "") + ".");
@@ -683,7 +756,9 @@ public class GenFrm {
                 FieldDef fd = (FieldDef) fields.get(i);
 
                 if (fd.fmsname.substring(0, 3).equals(FieldDef.FRM)) {
-                    get_clear_field(entityName, fd, -1);
+                	if (fd.modifier != FieldDef.AKY && fd.modifier != FieldDef.IKY) {
+                		get_clear_field(entityName, fd, -1);
+                	}
                 }
             }
             else if (fields.get(i) instanceof ArrayList) {
@@ -823,19 +898,34 @@ public class GenFrm {
 
         iniSection("FST-KEY-" + entityName);
 
+        chkField:
         for (int i = 0; i < fields.size(); i++) {
 
             if (fields.get(i) instanceof FieldDef) {
 
                 FieldDef fd = (FieldDef) fields.get(i);
 
-              //if (Utils.searchIntInArray(fd.modifier, KEY_TYPES) >= 0) {
-                if (Utils.searchIntInArray(fd.modifier, new int[] { FieldDef.IKY }) >= 0 && FieldDef.absenceAttribute(fd.attributes, FieldDef.DISPLAY_ONLY_ATTR)) {
+                if (fd.replaced != null && fd.type != FieldDef.DATE) {
 
-                     gen_pos_cursor(entityName, fd, -1);
+                    for (FieldDef fr : fd.replaced) {
+                        if (Utils.searchIntInArray(fr.modifier, new int[] { FieldDef.IKY }) >= 0 && FieldDef.absenceAttribute(fr.attributes, FieldDef.DISPLAY_ONLY_ATTR)) {
 
-                     break;
+                             gen_pos_cursor(entityName, fr, -1);
+
+                             break chkField;
+                        }
+                    }
                 }
+                else {
+                    if (Utils.searchIntInArray(fd.modifier, new int[] { FieldDef.IKY }) >= 0 && FieldDef.absenceAttribute(fd.attributes, FieldDef.DISPLAY_ONLY_ATTR)) {
+
+                        gen_pos_cursor(entityName, fd, -1);
+
+                        break chkField;
+                   }
+                }
+                
+
             }
             else {
                 //////////////
@@ -934,6 +1024,39 @@ public class GenFrm {
 
         iniSection("PRO-KEY-" + entityName);
 
+        ArrayList<ElementDef> array = null;
+
+        for (int i = 0; i < fields.size(); i++) {
+
+            if (fields.get(i) instanceof FieldDef) {
+
+                FieldDef fd = (FieldDef) fields.get(i);
+
+                if (fd.fmsname.substring(0, 3).equals(FieldDef.FRM)) {
+                	if (fd.modifier == FieldDef.AKY || fd.modifier == FieldDef.IKY) {
+                		gen_set_field_attr(entityName, fd, "FRM-CPIM-AEY", false, -1);
+                	}
+                }
+            }
+            else if (fields.get(i) instanceof ArrayList) {
+
+                array = (ArrayList<ElementDef>) fields.get(i);
+
+                for (int j = 0; j < array.size(); j++) {
+
+                    if (array.get(j).field.name.substring(0, 3).equals(FieldDef.FRM)) {
+
+                    	if (array.get(j).field.modifier == FieldDef.AKY || array.get(j).field.modifier == FieldDef.IKY) {
+                            for (int k = 0; k < array.get(j).index.size(); k++) {
+                            	gen_set_field_attr(entityName, array.get(j).field, "FRM-CPIM-AEY", false, -1);
+                            }
+                    	}
+                    }
+                }
+            }
+        }
+        
+        
         if (action == BQ_ACTION) {
             gen.println("           PERFORM PRO-IKY-" + entityName + ".");
             gen.println("           PERFORM PRO-AKY-" + entityName + ".");
@@ -956,7 +1079,9 @@ public class GenFrm {
                     FieldDef fd = (FieldDef) fields.get(i);
 
                     if (fd.modifier == FieldDef.IKY && FieldDef.absenceAttribute(fd.attributes, FieldDef.DISPLAY_ONLY_ATTR)) {
-                        gen_set_field_attr(entityName, fd, "FRM-CPIM-AEY", false, -1);
+                    	if (!fd.fmsname.substring(0, 3).equals(FieldDef.FRM)) {
+                        	gen_set_field_attr(entityName, fd, "FRM-CPIM-AEY", false, -1);
+                        }
                     }
                 }
                 else {
@@ -977,7 +1102,9 @@ public class GenFrm {
                     FieldDef fd = (FieldDef) fields.get(i);
 
                     if (fd.modifier == FieldDef.MKY && FieldDef.absenceAttribute(fd.attributes, FieldDef.DISPLAY_ONLY_ATTR)) {
-                        gen_set_field_attr(entityName, fd, "FRM-CPIM-AEY", false, -1);
+                    	if (!fd.fmsname.substring(0, 3).equals(FieldDef.FRM)) {
+                    		gen_set_field_attr(entityName, fd, "FRM-CPIM-AEY", false, -1);
+                    	}
                     }
                 }
                 else {
@@ -998,7 +1125,7 @@ public class GenFrm {
                     FieldDef fd = (FieldDef) fields.get(i);
 
                     if (fd.modifier == FieldDef.AKY && FieldDef.absenceAttribute(fd.attributes, FieldDef.DISPLAY_ONLY_ATTR)) {
-                        gen_set_field_attr(entityName, fd, "FRM-CPIM-AEY", false, -1);
+                    		gen_set_field_attr(entityName, fd, "FRM-CPIM-AEY", false, -1);
                     }
                 }
                 else {
@@ -1019,7 +1146,9 @@ public class GenFrm {
                     FieldDef fd = (FieldDef) fields.get(i);
 
                     if (fd.modifier == FieldDef.MKY) {
-                        gen_set_field_attr(entityName, fd, "FRM-CPIM-AEY", false, -1);
+                    	if (!fd.fmsname.substring(0, 3).equals(FieldDef.FRM)) {
+                    		gen_set_field_attr(entityName, fd, "FRM-CPIM-AEY", false, -1);
+                    	}
                     }
                 }
                 else {
@@ -1079,6 +1208,38 @@ public class GenFrm {
 
         iniSection("UNP-KEY-" + entityName);
 
+        
+        ArrayList<ElementDef> array = null;
+
+        for (int i = 0; i < fields.size(); i++) {
+
+            if (fields.get(i) instanceof FieldDef) {
+
+                FieldDef fd = (FieldDef) fields.get(i);
+
+                if (fd.fmsname.substring(0, 3).equals(FieldDef.FRM)) {
+                	if (fd.modifier == FieldDef.AKY || fd.modifier == FieldDef.IKY) {
+                		gen_set_field_attr(entityName, fd, "FRM-CPIM-UBY", false, -1);
+                	}
+                }
+            }
+            else if (fields.get(i) instanceof ArrayList) {
+
+                array = (ArrayList<ElementDef>) fields.get(i);
+
+                for (int j = 0; j < array.size(); j++) {
+
+                    if (array.get(j).field.name.substring(0, 3).equals(FieldDef.FRM)) {
+                    	if (array.get(j).field.modifier == FieldDef.AKY || array.get(j).field.modifier == FieldDef.IKY) {
+	                        for (int k = 0; k < array.get(j).index.size(); k++) {
+	                        	gen_set_field_attr(entityName, array.get(j).field, "FRM-CPIM-UBY", false, -1);
+	                        }
+                    	}
+                    }
+                }
+            }
+        }
+        
         gen.println("           PERFORM UNP-IKY-" + entityName + ".");
         gen.println("           PERFORM UNP-AKY-" + entityName + ".");
         gen.println("           PERFORM UNP-MKY-" + entityName + ".");
@@ -1096,7 +1257,7 @@ public class GenFrm {
                 FieldDef fd = (FieldDef) fields.get(i);
 
                 if (fd.modifier == FieldDef.IKY && FieldDef.absenceAttribute(fd.attributes, FieldDef.DISPLAY_ONLY_ATTR) ) {
-                    gen_set_field_attr(entityName, fd, "FRM-CPIM-UBY", true, -1); ///// verificar con B?
+                    gen_set_field_attr(entityName, fd, "FRM-CPIM-UBY", false, -1); ///// verificar con B?
                 }
             }
             else {
@@ -1175,7 +1336,8 @@ public class GenFrm {
                 FieldDef fd = (FieldDef) fields.get(i);
 
                 if (fd.fmsname.substring(0, 3).equals(FieldDef.FRM) && FieldDef.absenceAttribute(fd.attributes, FieldDef.DISPLAY_ONLY_ATTR)) {
-                    gen_set_field_attr(entityName, fd, "FRM-CPIM-AEY", false, -1);
+                	if (fd.modifier == FieldDef.FLD)
+                		gen_set_field_attr(entityName, fd, "FRM-CPIM-AEY", false, -1);
                 }
             }
             else {
@@ -1270,7 +1432,8 @@ public class GenFrm {
                 FieldDef fd = (FieldDef) fields.get(i);
 
                 if (fd.fmsname.substring(0, 3).equals(FieldDef.FRM) && FieldDef.absenceAttribute(fd.attributes, FieldDef.DISPLAY_ONLY_ATTR)) {
-                    gen_set_field_attr(entityName, fd, "FRM-CPIM-UBY", false, -1);
+                	if (fd.modifier == FieldDef.FLD)
+                		gen_set_field_attr(entityName, fd, "FRM-CPIM-UBY", false, -1);
                 }
             }
             else {
@@ -1879,16 +2042,16 @@ public class GenFrm {
                         gen.println("               MOVE FRM-SUAR-MAL TO FRM-SUAR.");
                         if(gls.containsKey(fd.name.substring(8,12))) {
     	                    int glsSize = gls.get(fd.name.substring(8,12));
-                            gen.println("           IF MSG-COD-MENS = 'COD    NEX' AND");
+                            gen.println("           IF MSG-COD-MENS NOT = 'COD    NEX' AND");
     	                    gen.println("             " + fd.name + " IN " + entityName + "-FLD > SPACES");
     	                    if (glsSize == 0 || glsSize > 12)
-    	                    	gen.println("           MOVE USR-GLS-DESC IN USR TO FRM-GLS-"+ fd.name.substring(8) + " IN " + entityName + "-FLD.");
+    	                    	gen.println("           MOVE USR-GLS-DESC IN USR TO FRM-GLS-"+ fd.name.substring(8) + " IN " + entityName + "-FLD");
     	                    else if (glsSize > 5)
-    	                    	gen.println("           MOVE USR-GLS-DCOR IN USR TO FRM-GLS-"+ fd.name.substring(8) + " IN " + entityName + "-FLD.");
+    	                    	gen.println("           MOVE USR-GLS-DCOR IN USR TO FRM-GLS-"+ fd.name.substring(8) + " IN " + entityName + "-FLD");
     	                    else
-    	                    	gen.println("           MOVE USR-GLS-ABRV IN USR TO FRM-GLS-"+ fd.name.substring(8) + " IN " + entityName + "-FLD.");
+    	                    	gen.println("           MOVE USR-GLS-ABRV IN USR TO FRM-GLS-"+ fd.name.substring(8) + " IN " + entityName + "-FLD");
                             gen.println("           ELSE");
-    	                    gen.println("               MOVE SPACES TO FRM-GLS-" + fd.name.substring(8) + " IN " + entityName + "-FLD");
+    	                    gen.println("               MOVE SPACES TO FRM-GLS-" + fd.name.substring(8) + " IN " + entityName + "-FLD.");
                         }
                         
                 	}
@@ -2206,7 +2369,7 @@ public class GenFrm {
                             case FieldDef.LONG :
                             case FieldDef.DOUBLE :
 
-                                gen_num_validation(entityName, fr, "VAL-NUM-MKY", -1);
+                                gen_num_validation(entityName, fr, "VAL-NUM-IKY", -1);
 
                                 break;
                             }
@@ -2304,7 +2467,7 @@ public class GenFrm {
                             case FieldDef.LONG :
                             case FieldDef.DOUBLE :
 
-                                gen_num_validation(entityName, fr, "VAL-NUM-MKY", -1);
+                                gen_num_validation(entityName, fr, "VAL-NUM-AKY", -1);
 
                                 break;
                             }
@@ -3018,26 +3181,30 @@ public class GenFrm {
 
             for (SectionDocument.Section section : addit.getSectionArray()) {
             	
-            	additSection = new SectionDef(section.getName(), section.getCode());
+            	additSection = new SectionDef(section.getName(), section.getCode(), environment_hash);
             	if (section.isSetConcatenate())
             		additSection.setConcatenate((int)section.getConcatenate());
             	
         		String name = additSection.getName();
         		ArrayList<String> subNames;
         		
-        		if (name.contains(" OR ")) {
-        			
-        			subNames = new  ArrayList<String>(Arrays.asList(name.split(" OR ")));
-        			
-            		for (String itmName : subNames)
-            		{
-            			putSection(itmName, additSection);
+        		//si es OR se separa en 2 items diferentes
+        		if (name != null) {
+            		if (name.contains(" OR ")) {
+            			
+            			subNames = new  ArrayList<String>(Arrays.asList(name.split(" OR ")));
+            			
+                		for (String itmName : subNames)
+                		{
+                			putSection(itmName, additSection);
+                		}
+            			
             		}
-        			
+            		else
+            			putSection(name, additSection);
+
         		}
-        		else
-        			putSection(name, additSection);
-            //    addit_hash.put(section.getName(), section.getCode());
+
             }
 
         } else {
@@ -3344,24 +3511,14 @@ public class GenFrm {
 			    			if (sectionCode.hasSpecial(negLabel))
 			    				gen.println(((SectionDef)addit_hash.get(ident)).getCode());
 			    			
-			    			//Codigo en duro, probablemente haya que hacer algo dinamico, han ido apareciendo mas y mas de estas variables PGM_
-			    			if (sectionCode.hasSpecial("PGM_PTC") && PGM_PTC)  //
-					    		gen.println(((SectionDef)addit_hash.get(ident)).getCode());
-			    			
-			    			if (sectionCode.hasSpecial("NOT PGM_PTC") && !PGM_PTC)  //
-					    		gen.println(((SectionDef)addit_hash.get(ident)).getCode());
-			    			
-			    			if (sectionCode.hasSpecial("PGM_PER") && PGM_PER)  //
-					    		gen.println(((SectionDef)addit_hash.get(ident)).getCode());
-			    			
-			    			if (sectionCode.hasSpecial("NOT PGM_PER") && !PGM_PER)  //
-					    		gen.println(((SectionDef)addit_hash.get(ident)).getCode());
-			    			
-			    			if (sectionCode.hasSpecial("PGM_ARG") && PGM_ARG)  //
-					    		gen.println(((SectionDef)addit_hash.get(ident)).getCode());
-			    			
-			    			if (sectionCode.hasSpecial("NOT PGM_ARG") && !PGM_ARG)  //
-					    		gen.println(((SectionDef)addit_hash.get(ident)).getCode());
+			    			//se revisan variables de ambiente
+			    			for ( String pgmStrg: sectionCode.getSpecial()) {
+			    				
+			    				if (environment_hash.containsKey(pgmStrg))
+				    				if (environment_hash.get(pgmStrg))
+							    		gen.println(((SectionDef)addit_hash.get(ident)).getCode());
+			    				
+			    			}
 			    			//
 			    		}
 			    		else

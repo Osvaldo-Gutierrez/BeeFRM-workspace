@@ -379,6 +379,12 @@ public class GenMap {
             if (Character.isDigit(picture.charAt(i))) {
                 count++;
             }
+            else {
+            	
+            	Character  charD = picture.charAt(i);
+            	if (charD.equals('X'))
+            		count++;
+            }
         }
 
         return count;

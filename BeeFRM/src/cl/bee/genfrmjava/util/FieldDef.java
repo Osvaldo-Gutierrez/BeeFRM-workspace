@@ -479,8 +479,12 @@ public class FieldDef {
 
             size = picture.length();
 
-            break;
-
+            break;    
+        case DATE :
+        	if (secordGroup(fmsname).equals("FEC"))
+        		size = picture.length();
+        	
+        	break;  
         default:
 
         	//OGB - cuando string comienza con guiones estos no se toman en cuenta en el tamaño
@@ -557,12 +561,12 @@ public class FieldDef {
         if (type == DATE) {
 
             if (!secGru.equals("FEC") &&
-                !secGru.equals("DMA") /*&& !secGru.equals("ADM") &&
-                !secGru.equals("MSA") && !secGru.equals("SAM") &&
-                !secGru.equals("FMA") && !secGru.equals("FAM") &&
-                !secGru.equals("FSA") && !secGru.equals("FAS") &&
-                !secGru.equals("FDM") && !secGru.equals("FMD") &&
-                !secGru.equals("FFA")*/) {
+                !secGru.equals("DMA") &&
+                !secGru.equals("MSA") && 
+                !secGru.equals("FMA") && 
+                !secGru.equals("FSA") && 
+                !secGru.equals("FDM") && 
+                !secGru.equals("FFA")) {
 
                 logger.warn("'" + name + "': secGru de variable 'date' (" + secGru + ") no es conocido.");
             }
@@ -574,12 +578,29 @@ public class FieldDef {
         else {
 
             if (secGru.equals("FEC") ||
-                secGru.equals("DMA") /*|| secGru.equals("ADM") ||
-                secGru.equals("MSA") || secGru.equals("SAM") ||
-                secGru.equals("FMA") || secGru.equals("FAM") ||
-                secGru.equals("FSA") || secGru.equals("FAS") ||
-                secGru.equals("FDM") || secGru.equals("FMD") ||
-                secGru.equals("FFA")*/) {
+                secGru.equals("DMA") ||
+                secGru.equals("MSA") || 
+                secGru.equals("FMA") ||
+                secGru.equals("FSA") ||
+                secGru.equals("FDM") ||
+                secGru.equals("FFA")) {
+            	
+            	if (secGru.equals("FEC"))
+            		size = 8;
+            	else
+                if (secGru.equals("DMA") ||
+                    secGru.equals("MSA") ) {
+                	size = 6;
+                }
+                else
+                	if(secGru.equals("FMA") ||
+                	   secGru.equals("FSA")	||
+                	   secGru.equals("FDM") ||
+                	   secGru.equals("FFA") ) {
+                    	size = 4;
+                    }
+            	
+            	special = FieldDef.FEC;
 
                 logger.warn("'" + name + "': variable tipo '" + getTypeString(type) + "' pasara a tener tipo 'date' (" + picture + ").");
 
@@ -972,14 +993,14 @@ public class FieldDef {
         String secGru    = secordGroup (fmsname);
         String additType = getAdditType(fmsname);
 
-        if (secGru.equals("FEC") ||
-            secGru.equals("DMA") /*|| secGru.equals("ADM") ||
-            secGru.equals("MSA") || secGru.equals("SAM") ||
-            secGru.equals("FMA") || secGru.equals("FAM") ||
-            secGru.equals("FSA") || secGru.equals("FAS") ||
-            secGru.equals("FDM") || secGru.equals("FMD") ||
-            secGru.equals("FFA")*/) {
-
+        	
+       if (secGru.equals("FEC") ||
+           secGru.equals("DMA") ||
+           secGru.equals("MSA") || 
+           secGru.equals("FMA") ||
+           secGru.equals("FSA") ||
+           secGru.equals("FDM") ||
+           secGru.equals("FFA")) {
             return FEC;
         }
         else if (secGru.equals("IDC")) {
