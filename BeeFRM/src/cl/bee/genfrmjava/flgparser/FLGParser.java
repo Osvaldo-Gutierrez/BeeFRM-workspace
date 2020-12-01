@@ -122,6 +122,9 @@ public class FLGParser implements FLGParserConstants {
    Token n41;
    NodeToken n42;
    Token n43;
+   NodeChoice n75;
+   NodeToken n73;
+   Token n74;
    NodeToken n44;
    Token n45;
    NodeSequence n46;
@@ -155,7 +158,7 @@ public class FLGParser implements FLGParserConstants {
                n0 = JTBToolkit.makeNodeToken(n1);
     label_4:
     while (true) {
-      if (jj_2_7(2)) {
+      if (jj_2_9(2)) {
            n4 = new NodeSequence(3);
         n6 = jj_consume_token(NAME_ST_FORM);
                              n5 = JTBToolkit.makeNodeToken(n6);
@@ -167,7 +170,7 @@ public class FLGParser implements FLGParserConstants {
                                 n9 = JTBToolkit.makeNodeToken(n10);
            n4.addNode(n9);
            n3 = new NodeChoice(n4, 0);
-      } else if (jj_2_8(2)) {
+      } else if (jj_2_10(2)) {
            n11 = new NodeSequence(3);
         n13 = jj_consume_token(HELP_FORM);
                            n12 = JTBToolkit.makeNodeToken(n13);
@@ -179,7 +182,7 @@ public class FLGParser implements FLGParserConstants {
                                 n16 = JTBToolkit.makeNodeToken(n17);
            n11.addNode(n16);
            n3 = new NodeChoice(n11, 1);
-      } else if (jj_2_9(2)) {
+      } else if (jj_2_11(2)) {
            n18 = new NodeSequence(5);
         n20 = jj_consume_token(AREA_TO_CLEAR);
                                n19 = JTBToolkit.makeNodeToken(n20);
@@ -197,7 +200,7 @@ public class FLGParser implements FLGParserConstants {
                                  n27 = JTBToolkit.makeNodeToken(n28);
            n18.addNode(n27);
            n3 = new NodeChoice(n18, 2);
-      } else if (jj_2_10(2)) {
+      } else if (jj_2_12(2)) {
            n29 = new NodeSequence(3);
         n31 = jj_consume_token(WIDTH);
                        n30 = JTBToolkit.makeNodeToken(n31);
@@ -219,7 +222,7 @@ public class FLGParser implements FLGParserConstants {
         }
            n29.addNode(n34);
            n3 = new NodeChoice(n29, 3);
-      } else if (jj_2_11(2)) {
+      } else if (jj_2_13(2)) {
            n39 = new NodeSequence(3);
         n41 = jj_consume_token(BACKGROUND);
                             n40 = JTBToolkit.makeNodeToken(n41);
@@ -227,11 +230,21 @@ public class FLGParser implements FLGParserConstants {
         n43 = jj_consume_token(EQUAL_ST_FORM);
                                n42 = JTBToolkit.makeNodeToken(n43);
            n39.addNode(n42);
-        n45 = jj_consume_token(CURRENT);
-                         n44 = JTBToolkit.makeNodeToken(n45);
-           n39.addNode(n44);
+        if (jj_2_7(2)) {
+          n74 = jj_consume_token(BLACK);
+                             n73 = JTBToolkit.makeNodeToken(n74);
+                 n75 = new NodeChoice(n73, 0);
+        } else if (jj_2_8(2)) {
+          n45 = jj_consume_token(CURRENT);
+                               n44 = JTBToolkit.makeNodeToken(n45);
+                 n75 = new NodeChoice(n44, 1);
+        } else {
+          jj_consume_token(-1);
+          throw new ParseException();
+        }
+           n39.addNode(n75);
            n3 = new NodeChoice(n39, 4);
-      } else if (jj_2_12(2)) {
+      } else if (jj_2_14(2)) {
            n46 = new NodeSequence(3);
         n48 = jj_consume_token(HIGHLIGHT);
                            n47 = JTBToolkit.makeNodeToken(n48);
@@ -243,7 +256,7 @@ public class FLGParser implements FLGParserConstants {
                               n51 = JTBToolkit.makeNodeToken(n52);
            n46.addNode(n51);
            n3 = new NodeChoice(n46, 5);
-      } else if (jj_2_13(2)) {
+      } else if (jj_2_15(2)) {
            n53 = new NodeSequence(3);
         n55 = jj_consume_token(PRE_HELP_ACTION_ROUTINE);
                                          n54 = JTBToolkit.makeNodeToken(n55);
@@ -255,7 +268,7 @@ public class FLGParser implements FLGParserConstants {
                                 n58 = JTBToolkit.makeNodeToken(n59);
            n53.addNode(n58);
            n3 = new NodeChoice(n53, 6);
-      } else if (jj_2_14(2)) {
+      } else if (jj_2_16(2)) {
            n60 = new NodeSequence(5);
         n62 = jj_consume_token(POST_HELP_ACTION_ROUTINE);
                                           n61 = JTBToolkit.makeNodeToken(n62);
@@ -278,7 +291,7 @@ public class FLGParser implements FLGParserConstants {
         throw new ParseException();
       }
         n2.addNode(n3);
-      if (jj_2_15(2)) {
+      if (jj_2_17(2)) {
         ;
       } else {
         break label_4;
@@ -335,7 +348,7 @@ public class FLGParser implements FLGParserConstants {
                           n8 = JTBToolkit.makeNodeToken(n9);
     n11 = jj_consume_token(RPAR_ST_TEXT);
                         n10 = JTBToolkit.makeNodeToken(n11);
-    if (jj_2_16(2)) {
+    if (jj_2_18(2)) {
       n14 = jj_consume_token(INTEGER_ST_TEXT);
                               n13 = JTBToolkit.makeNodeToken(n14);
         n12.addNode(n13);
@@ -344,7 +357,7 @@ public class FLGParser implements FLGParserConstants {
     }
     n16 = jj_consume_token(STRING_ST_TEXT);
                           n15 = JTBToolkit.makeNodeToken(n16);
-    if (jj_2_17(2)) {
+    if (jj_2_19(2)) {
         n18 = new NodeSequence(2);
       n20 = jj_consume_token(AMPERSAND);
                         n19 = JTBToolkit.makeNodeToken(n20);
@@ -358,16 +371,16 @@ public class FLGParser implements FLGParserConstants {
     }
     label_5:
     while (true) {
-      if (jj_2_18(2)) {
+      if (jj_2_20(2)) {
         ;
       } else {
         break label_5;
       }
-      if (jj_2_19(2)) {
+      if (jj_2_21(2)) {
         n26 = jj_consume_token(BOLD_TEXT);
                            n25 = JTBToolkit.makeNodeToken(n26);
            n24 = new NodeChoice(n25, 0);
-      } else if (jj_2_20(2)) {
+      } else if (jj_2_22(2)) {
         n28 = jj_consume_token(BLINK);
                        n27 = JTBToolkit.makeNodeToken(n28);
            n24 = new NodeChoice(n27, 1);
@@ -401,10 +414,10 @@ public class FLGParser implements FLGParserConstants {
                 n2 = JTBToolkit.makeNodeToken(n3);
     label_6:
     while (true) {
-      if (jj_2_21(2)) {
+      if (jj_2_23(2)) {
         n6 = field_assign();
            n5 = new NodeChoice(n6, 0);
-      } else if (jj_2_22(2)) {
+      } else if (jj_2_24(2)) {
         n7 = field_attribute();
            n5 = new NodeChoice(n7, 1);
       } else {
@@ -412,7 +425,7 @@ public class FLGParser implements FLGParserConstants {
         throw new ParseException();
       }
         n4.addNode(n5);
-      if (jj_2_23(2)) {
+      if (jj_2_25(2)) {
         ;
       } else {
         break label_6;
@@ -504,7 +517,7 @@ public class FLGParser implements FLGParserConstants {
    Token n75;
    NodeToken n76;
    Token n77;
-    if (jj_2_26(2)) {
+    if (jj_2_28(2)) {
         n1 = new NodeSequence(3);
       n3 = jj_consume_token(CLEAR_CHARACTER);
                              n2 = JTBToolkit.makeNodeToken(n3);
@@ -516,7 +529,7 @@ public class FLGParser implements FLGParserConstants {
                              n6 = JTBToolkit.makeNodeToken(n7);
         n1.addNode(n6);
         n0 = new NodeChoice(n1, 0);
-    } else if (jj_2_27(2)) {
+    } else if (jj_2_29(2)) {
         n8 = new NodeSequence(3);
       n10 = jj_consume_token(DEF);
                   n9 = JTBToolkit.makeNodeToken(n10);
@@ -528,7 +541,7 @@ public class FLGParser implements FLGParserConstants {
                               n13 = JTBToolkit.makeNodeToken(n14);
         n8.addNode(n13);
         n0 = new NodeChoice(n8, 1);
-    } else if (jj_2_28(2)) {
+    } else if (jj_2_30(2)) {
         n15 = new NodeSequence(3);
       n17 = jj_consume_token(HELP);
                    n16 = JTBToolkit.makeNodeToken(n17);
@@ -540,7 +553,7 @@ public class FLGParser implements FLGParserConstants {
                               n20 = JTBToolkit.makeNodeToken(n21);
         n15.addNode(n20);
         n0 = new NodeChoice(n15, 2);
-    } else if (jj_2_29(2)) {
+    } else if (jj_2_31(2)) {
         n22 = new NodeSequence(8);
       n24 = jj_consume_token(NAME_ST_FIELD);
                             n23 = JTBToolkit.makeNodeToken(n24);
@@ -567,7 +580,7 @@ public class FLGParser implements FLGParserConstants {
                             n37 = JTBToolkit.makeNodeToken(n38);
         n22.addNode(n37);
         n0 = new NodeChoice(n22, 3);
-    } else if (jj_2_30(2)) {
+    } else if (jj_2_32(2)) {
         n39 = new NodeSequence(4);
       n41 = jj_consume_token(PICTURE);
                       n40 = JTBToolkit.makeNodeToken(n41);
@@ -575,7 +588,7 @@ public class FLGParser implements FLGParserConstants {
       n43 = jj_consume_token(EQUAL_ST_FIELD);
                              n42 = JTBToolkit.makeNodeToken(n43);
         n39.addNode(n42);
-      if (jj_2_24(2)) {
+      if (jj_2_26(2)) {
         n46 = jj_consume_token(INTEGER_ST_FIELD);
                                   n45 = JTBToolkit.makeNodeToken(n46);
            n44.addNode(n45);
@@ -587,7 +600,7 @@ public class FLGParser implements FLGParserConstants {
                               n47 = JTBToolkit.makeNodeToken(n48);
         n39.addNode(n47);
         n0 = new NodeChoice(n39, 4);
-    } else if (jj_2_31(2)) {
+    } else if (jj_2_33(2)) {
         n49 = new NodeSequence(8);
       n51 = jj_consume_token(INDEX_ST_FIELD);
                              n50 = JTBToolkit.makeNodeToken(n51);
@@ -612,7 +625,7 @@ public class FLGParser implements FLGParserConstants {
         n49.addNode(n62);
       label_7:
       while (true) {
-        if (jj_2_25(2)) {
+        if (jj_2_27(2)) {
           ;
         } else {
           break label_7;
@@ -697,95 +710,95 @@ public class FLGParser implements FLGParserConstants {
    Token n44;
    NodeToken n45;
    Token n46;
-    if (jj_2_32(2)) {
+    if (jj_2_34(2)) {
       n2 = jj_consume_token(BLANK_FILL);
                         n1 = JTBToolkit.makeNodeToken(n2);
         n0 = new NodeChoice(n1, 0);
-    } else if (jj_2_33(2)) {
+    } else if (jj_2_35(2)) {
       n4 = jj_consume_token(DISPLAY_ONLY);
                           n3 = JTBToolkit.makeNodeToken(n4);
         n0 = new NodeChoice(n3, 1);
-    } else if (jj_2_34(2)) {
+    } else if (jj_2_36(2)) {
       n6 = jj_consume_token(ECHO);
                   n5 = JTBToolkit.makeNodeToken(n6);
         n0 = new NodeChoice(n5, 2);
-    } else if (jj_2_35(2)) {
+    } else if (jj_2_37(2)) {
       n8 = jj_consume_token(FIXED_DECIMAL);
                            n7 = JTBToolkit.makeNodeToken(n8);
         n0 = new NodeChoice(n7, 3);
-    } else if (jj_2_36(2)) {
+    } else if (jj_2_38(2)) {
       n10 = jj_consume_token(LEFT_JUSTIFIED);
                              n9 = JTBToolkit.makeNodeToken(n10);
         n0 = new NodeChoice(n9, 4);
-    } else if (jj_2_37(2)) {
+    } else if (jj_2_39(2)) {
       n12 = jj_consume_token(NOAUTOTAB);
                         n11 = JTBToolkit.makeNodeToken(n12);
         n0 = new NodeChoice(n11, 5);
-    } else if (jj_2_38(2)) {
+    } else if (jj_2_40(2)) {
       n14 = jj_consume_token(NOBLINKING);
                          n13 = JTBToolkit.makeNodeToken(n14);
         n0 = new NodeChoice(n13, 6);
-    } else if (jj_2_39(2)) {
+    } else if (jj_2_41(2)) {
       n16 = jj_consume_token(NOBOLD);
                      n15 = JTBToolkit.makeNodeToken(n16);
         n0 = new NodeChoice(n15, 7);
-    } else if (jj_2_40(2)) {
+    } else if (jj_2_42(2)) {
       n18 = jj_consume_token(NODISPLAY_ONLY);
                              n17 = JTBToolkit.makeNodeToken(n18);
         n0 = new NodeChoice(n17, 8);
-    } else if (jj_2_41(2)) {
+    } else if (jj_2_43(2)) {
       n20 = jj_consume_token(NOECHO);
                      n19 = JTBToolkit.makeNodeToken(n20);
         n0 = new NodeChoice(n19, 9);
-    } else if (jj_2_42(2)) {
+    } else if (jj_2_44(2)) {
       n22 = jj_consume_token(NOFIXED_DECIMAL);
                               n21 = JTBToolkit.makeNodeToken(n22);
         n0 = new NodeChoice(n21, 10);
-    } else if (jj_2_43(2)) {
+    } else if (jj_2_45(2)) {
       n24 = jj_consume_token(NOREVERSE);
                         n23 = JTBToolkit.makeNodeToken(n24);
         n0 = new NodeChoice(n23, 11);
-    } else if (jj_2_44(2)) {
+    } else if (jj_2_46(2)) {
       n26 = jj_consume_token(NOSUPERVISOR_ONLY);
                                 n25 = JTBToolkit.makeNodeToken(n26);
         n0 = new NodeChoice(n25, 12);
-    } else if (jj_2_45(2)) {
+    } else if (jj_2_47(2)) {
       n28 = jj_consume_token(NOSUPPRESS);
                          n27 = JTBToolkit.makeNodeToken(n28);
         n0 = new NodeChoice(n27, 13);
-    } else if (jj_2_46(2)) {
+    } else if (jj_2_48(2)) {
       n30 = jj_consume_token(NOUNDERLINE);
                           n29 = JTBToolkit.makeNodeToken(n30);
         n0 = new NodeChoice(n29, 14);
-    } else if (jj_2_47(2)) {
+    } else if (jj_2_49(2)) {
       n32 = jj_consume_token(NOUPPERCASE);
                           n31 = JTBToolkit.makeNodeToken(n32);
         n0 = new NodeChoice(n31, 15);
-    } else if (jj_2_48(2)) {
+    } else if (jj_2_50(2)) {
       n34 = jj_consume_token(RESPONSE_REQUIRED);
                                 n33 = JTBToolkit.makeNodeToken(n34);
         n0 = new NodeChoice(n33, 16);
-    } else if (jj_2_49(2)) {
+    } else if (jj_2_51(2)) {
       n36 = jj_consume_token(REVERSE);
                       n35 = JTBToolkit.makeNodeToken(n36);
         n0 = new NodeChoice(n35, 17);
-    } else if (jj_2_50(2)) {
+    } else if (jj_2_52(2)) {
       n38 = jj_consume_token(RIGHT_JUSTIFIED);
                               n37 = JTBToolkit.makeNodeToken(n38);
         n0 = new NodeChoice(n37, 18);
-    } else if (jj_2_51(2)) {
+    } else if (jj_2_53(2)) {
       n40 = jj_consume_token(SUPPRESS);
                        n39 = JTBToolkit.makeNodeToken(n40);
         n0 = new NodeChoice(n39, 19);
-    } else if (jj_2_52(2)) {
+    } else if (jj_2_54(2)) {
       n42 = jj_consume_token(ZERO_FILL);
                         n41 = JTBToolkit.makeNodeToken(n42);
         n0 = new NodeChoice(n41, 20);
-    } else if (jj_2_53(2)) {
+    } else if (jj_2_55(2)) {
       n44 = jj_consume_token(BOLD_FIELD);
                          n43 = JTBToolkit.makeNodeToken(n44);
         n0 = new NodeChoice(n43, 21);
-    } else if (jj_2_54(2)) {
+    } else if (jj_2_56(2)) {
       n46 = jj_consume_token(UNDERLINE);
                         n45 = JTBToolkit.makeNodeToken(n46);
         n0 = new NodeChoice(n45, 22);
@@ -810,10 +823,10 @@ public class FLGParser implements FLGParserConstants {
                 n0 = JTBToolkit.makeNodeToken(n1);
     label_8:
     while (true) {
-      if (jj_2_55(2)) {
+      if (jj_2_57(2)) {
         n4 = field_assign();
            n3 = new NodeChoice(n4, 0);
-      } else if (jj_2_56(2)) {
+      } else if (jj_2_58(2)) {
         n5 = field_attribute();
            n3 = new NodeChoice(n5, 1);
       } else {
@@ -821,7 +834,7 @@ public class FLGParser implements FLGParserConstants {
         throw new ParseException();
       }
         n2.addNode(n3);
-      if (jj_2_57(2)) {
+      if (jj_2_59(2)) {
         ;
       } else {
         break label_8;
@@ -874,7 +887,7 @@ public class FLGParser implements FLGParserConstants {
                               n14 = JTBToolkit.makeNodeToken(n15);
         n9.addNode(n14);
         n8.addNode(n9);
-      if (jj_2_58(2)) {
+      if (jj_2_60(2)) {
         ;
       } else {
         break label_9;
@@ -919,7 +932,7 @@ public class FLGParser implements FLGParserConstants {
                      n0 = JTBToolkit.makeNodeToken(n1);
     label_10:
     while (true) {
-      if (jj_2_59(2)) {
+      if (jj_2_61(2)) {
            n4 = new NodeSequence(3);
         n6 = jj_consume_token(INDEX_ST_NAMED_DATA);
                                     n5 = JTBToolkit.makeNodeToken(n6);
@@ -931,7 +944,7 @@ public class FLGParser implements FLGParserConstants {
                                        n9 = JTBToolkit.makeNodeToken(n10);
            n4.addNode(n9);
            n3 = new NodeChoice(n4, 0);
-      } else if (jj_2_60(2)) {
+      } else if (jj_2_62(2)) {
            n11 = new NodeSequence(3);
         n13 = jj_consume_token(NAME_ST_NAMED_DATA);
                                     n12 = JTBToolkit.makeNodeToken(n13);
@@ -943,7 +956,7 @@ public class FLGParser implements FLGParserConstants {
                                       n16 = JTBToolkit.makeNodeToken(n17);
            n11.addNode(n16);
            n3 = new NodeChoice(n11, 1);
-      } else if (jj_2_61(2)) {
+      } else if (jj_2_63(2)) {
            n18 = new NodeSequence(3);
         n20 = jj_consume_token(DATA);
                       n19 = JTBToolkit.makeNodeToken(n20);
@@ -960,7 +973,7 @@ public class FLGParser implements FLGParserConstants {
         throw new ParseException();
       }
         n2.addNode(n3);
-      if (jj_2_62(2)) {
+      if (jj_2_64(2)) {
         ;
       } else {
         break label_10;
@@ -1432,31 +1445,18 @@ public class FLGParser implements FLGParserConstants {
     finally { jj_save(61, xla); }
   }
 
-  private boolean jj_3R_13() {
-    if (jj_scan_token(NAMED_DATA)) return true;
-    Token xsp;
-    if (jj_3_62()) return true;
-    while (true) {
-      xsp = jj_scanpos;
-      if (jj_3_62()) { jj_scanpos = xsp; break; }
-    }
-    return false;
+  private boolean jj_2_63(int xla) {
+    jj_la = xla; jj_lastpos = jj_scanpos = token;
+    try { return !jj_3_63(); }
+    catch(LookaheadSuccess ls) { return true; }
+    finally { jj_save(62, xla); }
   }
 
-  private boolean jj_3_30() {
-    if (jj_scan_token(PICTURE)) return true;
-    if (jj_scan_token(EQUAL_ST_FIELD)) return true;
-    return false;
-  }
-
-  private boolean jj_3_5() {
-    if (jj_scan_token(INTEGER_ST_FORM)) return true;
-    return false;
-  }
-
-  private boolean jj_3_16() {
-    if (jj_scan_token(INTEGER_ST_TEXT)) return true;
-    return false;
+  private boolean jj_2_64(int xla) {
+    jj_la = xla; jj_lastpos = jj_scanpos = token;
+    try { return !jj_3_64(); }
+    catch(LookaheadSuccess ls) { return true; }
+    finally { jj_save(63, xla); }
   }
 
   private boolean jj_3R_11() {
@@ -1465,144 +1465,133 @@ public class FLGParser implements FLGParserConstants {
     return false;
   }
 
-  private boolean jj_3_10() {
-    if (jj_scan_token(WIDTH)) return true;
-    if (jj_scan_token(EQUAL_ST_FORM)) return true;
-    return false;
-  }
-
-  private boolean jj_3_54() {
+  private boolean jj_3_56() {
     if (jj_scan_token(UNDERLINE)) return true;
     return false;
   }
 
-  private boolean jj_3_29() {
+  private boolean jj_3_31() {
     if (jj_scan_token(NAME_ST_FIELD)) return true;
     if (jj_scan_token(EQUAL_ST_FIELD)) return true;
     return false;
   }
 
-  private boolean jj_3_53() {
+  private boolean jj_3_55() {
     if (jj_scan_token(BOLD_FIELD)) return true;
     return false;
   }
 
-  private boolean jj_3_52() {
+  private boolean jj_3_54() {
     if (jj_scan_token(ZERO_FILL)) return true;
     return false;
   }
 
-  private boolean jj_3_51() {
-    if (jj_scan_token(SUPPRESS)) return true;
-    return false;
-  }
-
-  private boolean jj_3_9() {
-    if (jj_scan_token(AREA_TO_CLEAR)) return true;
+  private boolean jj_3_12() {
+    if (jj_scan_token(WIDTH)) return true;
     if (jj_scan_token(EQUAL_ST_FORM)) return true;
     return false;
   }
 
-  private boolean jj_3_28() {
+  private boolean jj_3_53() {
+    if (jj_scan_token(SUPPRESS)) return true;
+    return false;
+  }
+
+  private boolean jj_3_30() {
     if (jj_scan_token(HELP)) return true;
     if (jj_scan_token(EQUAL_ST_FIELD)) return true;
     return false;
   }
 
-  private boolean jj_3_50() {
+  private boolean jj_3_52() {
     if (jj_scan_token(RIGHT_JUSTIFIED)) return true;
     return false;
   }
 
-  private boolean jj_3_49() {
+  private boolean jj_3_51() {
     if (jj_scan_token(REVERSE)) return true;
     return false;
   }
 
-  private boolean jj_3_48() {
+  private boolean jj_3_50() {
     if (jj_scan_token(RESPONSE_REQUIRED)) return true;
     return false;
   }
 
-  private boolean jj_3_8() {
-    if (jj_scan_token(HELP_FORM)) return true;
+  private boolean jj_3_11() {
+    if (jj_scan_token(AREA_TO_CLEAR)) return true;
     if (jj_scan_token(EQUAL_ST_FORM)) return true;
     return false;
   }
 
-  private boolean jj_3_27() {
+  private boolean jj_3_29() {
     if (jj_scan_token(DEF)) return true;
     if (jj_scan_token(EQUAL_ST_FIELD)) return true;
     return false;
   }
 
-  private boolean jj_3_47() {
+  private boolean jj_3_49() {
     if (jj_scan_token(NOUPPERCASE)) return true;
     return false;
   }
 
-  private boolean jj_3_46() {
+  private boolean jj_3_48() {
     if (jj_scan_token(NOUNDERLINE)) return true;
     return false;
   }
 
-  private boolean jj_3_45() {
+  private boolean jj_3_47() {
     if (jj_scan_token(NOSUPPRESS)) return true;
     return false;
   }
 
-  private boolean jj_3_22() {
+  private boolean jj_3_24() {
     if (jj_3R_15()) return true;
     return false;
   }
 
-  private boolean jj_3_58() {
+  private boolean jj_3_60() {
     if (jj_scan_token(NAME_ST_ORDER)) return true;
     if (jj_scan_token(EQUAL_ST_ORDER)) return true;
     return false;
   }
 
-  private boolean jj_3_7() {
-    if (jj_scan_token(NAME_ST_FORM)) return true;
+  private boolean jj_3_10() {
+    if (jj_scan_token(HELP_FORM)) return true;
     if (jj_scan_token(EQUAL_ST_FORM)) return true;
     return false;
   }
 
-  private boolean jj_3_26() {
+  private boolean jj_3_28() {
     if (jj_scan_token(CLEAR_CHARACTER)) return true;
     if (jj_scan_token(EQUAL_ST_FIELD)) return true;
     return false;
   }
 
-  private boolean jj_3_44() {
+  private boolean jj_3_46() {
     if (jj_scan_token(NOSUPERVISOR_ONLY)) return true;
     return false;
   }
 
-  private boolean jj_3_21() {
+  private boolean jj_3_23() {
     if (jj_3R_14()) return true;
-    return false;
-  }
-
-  private boolean jj_3_3() {
-    if (jj_3R_13()) return true;
     return false;
   }
 
   private boolean jj_3R_14() {
     Token xsp;
     xsp = jj_scanpos;
-    if (jj_3_26()) {
-    jj_scanpos = xsp;
-    if (jj_3_27()) {
-    jj_scanpos = xsp;
     if (jj_3_28()) {
     jj_scanpos = xsp;
     if (jj_3_29()) {
     jj_scanpos = xsp;
     if (jj_3_30()) {
     jj_scanpos = xsp;
-    if (jj_3_31()) return true;
+    if (jj_3_31()) {
+    jj_scanpos = xsp;
+    if (jj_3_32()) {
+    jj_scanpos = xsp;
+    if (jj_3_33()) return true;
     }
     }
     }
@@ -1611,18 +1600,45 @@ public class FLGParser implements FLGParserConstants {
     return false;
   }
 
-  private boolean jj_3_43() {
+  private boolean jj_3_45() {
     if (jj_scan_token(NOREVERSE)) return true;
     return false;
   }
 
-  private boolean jj_3_15() {
+  private boolean jj_3_25() {
     Token xsp;
     xsp = jj_scanpos;
-    if (jj_3_7()) {
+    if (jj_3_23()) {
     jj_scanpos = xsp;
-    if (jj_3_8()) {
-    jj_scanpos = xsp;
+    if (jj_3_24()) return true;
+    }
+    return false;
+  }
+
+  private boolean jj_3_44() {
+    if (jj_scan_token(NOFIXED_DECIMAL)) return true;
+    return false;
+  }
+
+  private boolean jj_3_9() {
+    if (jj_scan_token(NAME_ST_FORM)) return true;
+    if (jj_scan_token(EQUAL_ST_FORM)) return true;
+    return false;
+  }
+
+  private boolean jj_3_43() {
+    if (jj_scan_token(NOECHO)) return true;
+    return false;
+  }
+
+  private boolean jj_3_42() {
+    if (jj_scan_token(NODISPLAY_ONLY)) return true;
+    return false;
+  }
+
+  private boolean jj_3_17() {
+    Token xsp;
+    xsp = jj_scanpos;
     if (jj_3_9()) {
     jj_scanpos = xsp;
     if (jj_3_10()) {
@@ -1633,29 +1649,39 @@ public class FLGParser implements FLGParserConstants {
     jj_scanpos = xsp;
     if (jj_3_13()) {
     jj_scanpos = xsp;
-    if (jj_3_14()) return true;
-    }
-    }
-    }
-    }
-    }
-    }
-    }
-    return false;
-  }
-
-  private boolean jj_3_23() {
-    Token xsp;
-    xsp = jj_scanpos;
-    if (jj_3_21()) {
+    if (jj_3_14()) {
     jj_scanpos = xsp;
-    if (jj_3_22()) return true;
+    if (jj_3_15()) {
+    jj_scanpos = xsp;
+    if (jj_3_16()) return true;
+    }
+    }
+    }
+    }
+    }
+    }
     }
     return false;
   }
 
-  private boolean jj_3_42() {
-    if (jj_scan_token(NOFIXED_DECIMAL)) return true;
+  private boolean jj_3_3() {
+    if (jj_3R_13()) return true;
+    return false;
+  }
+
+  private boolean jj_3_41() {
+    if (jj_scan_token(NOBOLD)) return true;
+    return false;
+  }
+
+  private boolean jj_3_27() {
+    if (jj_scan_token(COLON_ST_FIELD)) return true;
+    if (jj_scan_token(LPAR_ST_FIELD)) return true;
+    return false;
+  }
+
+  private boolean jj_3_40() {
+    if (jj_scan_token(NOBLINKING)) return true;
     return false;
   }
 
@@ -1669,13 +1695,25 @@ public class FLGParser implements FLGParserConstants {
     return false;
   }
 
-  private boolean jj_3_41() {
-    if (jj_scan_token(NOECHO)) return true;
+  private boolean jj_3_16() {
+    if (jj_scan_token(POST_HELP_ACTION_ROUTINE)) return true;
+    if (jj_scan_token(EQUAL_ST_FORM)) return true;
     return false;
   }
 
-  private boolean jj_3_40() {
-    if (jj_scan_token(NODISPLAY_ONLY)) return true;
+  private boolean jj_3_63() {
+    if (jj_scan_token(DATA)) return true;
+    if (jj_scan_token(EQUAL_ST_NAMED_DATA)) return true;
+    return false;
+  }
+
+  private boolean jj_3_39() {
+    if (jj_scan_token(NOAUTOTAB)) return true;
+    return false;
+  }
+
+  private boolean jj_3_38() {
+    if (jj_scan_token(LEFT_JUSTIFIED)) return true;
     return false;
   }
 
@@ -1684,19 +1722,25 @@ public class FLGParser implements FLGParserConstants {
     return false;
   }
 
-  private boolean jj_3_39() {
-    if (jj_scan_token(NOBOLD)) return true;
+  private boolean jj_3_37() {
+    if (jj_scan_token(FIXED_DECIMAL)) return true;
     return false;
   }
 
-  private boolean jj_3_25() {
-    if (jj_scan_token(COLON_ST_FIELD)) return true;
-    if (jj_scan_token(LPAR_ST_FIELD)) return true;
+  private boolean jj_3_15() {
+    if (jj_scan_token(PRE_HELP_ACTION_ROUTINE)) return true;
+    if (jj_scan_token(EQUAL_ST_FORM)) return true;
     return false;
   }
 
-  private boolean jj_3_38() {
-    if (jj_scan_token(NOBLINKING)) return true;
+  private boolean jj_3_62() {
+    if (jj_scan_token(NAME_ST_NAMED_DATA)) return true;
+    if (jj_scan_token(EQUAL_ST_NAMED_DATA)) return true;
+    return false;
+  }
+
+  private boolean jj_3_36() {
+    if (jj_scan_token(ECHO)) return true;
     return false;
   }
 
@@ -1705,109 +1749,70 @@ public class FLGParser implements FLGParserConstants {
     return false;
   }
 
-  private boolean jj_3_14() {
-    if (jj_scan_token(POST_HELP_ACTION_ROUTINE)) return true;
-    if (jj_scan_token(EQUAL_ST_FORM)) return true;
-    return false;
-  }
-
-  private boolean jj_3_61() {
-    if (jj_scan_token(DATA)) return true;
-    if (jj_scan_token(EQUAL_ST_NAMED_DATA)) return true;
-    return false;
-  }
-
-  private boolean jj_3_37() {
-    if (jj_scan_token(NOAUTOTAB)) return true;
-    return false;
-  }
-
-  private boolean jj_3_36() {
-    if (jj_scan_token(LEFT_JUSTIFIED)) return true;
-    return false;
-  }
-
-  private boolean jj_3_13() {
-    if (jj_scan_token(PRE_HELP_ACTION_ROUTINE)) return true;
-    if (jj_scan_token(EQUAL_ST_FORM)) return true;
-    return false;
-  }
-
-  private boolean jj_3_35() {
-    if (jj_scan_token(FIXED_DECIMAL)) return true;
-    return false;
-  }
-
-  private boolean jj_3_60() {
-    if (jj_scan_token(NAME_ST_NAMED_DATA)) return true;
-    if (jj_scan_token(EQUAL_ST_NAMED_DATA)) return true;
-    return false;
-  }
-
-  private boolean jj_3_34() {
-    if (jj_scan_token(ECHO)) return true;
-    return false;
-  }
-
-  private boolean jj_3_20() {
+  private boolean jj_3_22() {
     if (jj_scan_token(BLINK)) return true;
     return false;
   }
 
-  private boolean jj_3_33() {
+  private boolean jj_3_35() {
     if (jj_scan_token(DISPLAY_ONLY)) return true;
     return false;
   }
 
-  private boolean jj_3_19() {
+  private boolean jj_3_21() {
     if (jj_scan_token(BOLD_TEXT)) return true;
     return false;
   }
 
-  private boolean jj_3_31() {
+  private boolean jj_3_33() {
     if (jj_scan_token(INDEX_ST_FIELD)) return true;
     if (jj_scan_token(EQUAL_ST_FIELD)) return true;
     return false;
   }
 
-  private boolean jj_3_56() {
+  private boolean jj_3_58() {
     if (jj_3R_15()) return true;
     return false;
   }
 
-  private boolean jj_3_12() {
+  private boolean jj_3_14() {
     if (jj_scan_token(HIGHLIGHT)) return true;
     if (jj_scan_token(EQUAL_ST_FORM)) return true;
     return false;
   }
 
-  private boolean jj_3_32() {
+  private boolean jj_3_34() {
     if (jj_scan_token(BLANK_FILL)) return true;
     return false;
   }
 
-  private boolean jj_3_55() {
+  private boolean jj_3_57() {
     if (jj_3R_14()) return true;
     return false;
   }
 
-  private boolean jj_3_18() {
+  private boolean jj_3_8() {
+    if (jj_scan_token(CURRENT)) return true;
+    return false;
+  }
+
+  private boolean jj_3_20() {
     Token xsp;
     xsp = jj_scanpos;
-    if (jj_3_19()) {
+    if (jj_3_21()) {
     jj_scanpos = xsp;
-    if (jj_3_20()) return true;
+    if (jj_3_22()) return true;
     }
     return false;
   }
 
-  private boolean jj_3_59() {
+  private boolean jj_3_61() {
     if (jj_scan_token(INDEX_ST_NAMED_DATA)) return true;
     if (jj_scan_token(EQUAL_ST_NAMED_DATA)) return true;
     return false;
   }
 
-  private boolean jj_3_24() {
+  private boolean jj_3_26() {
     if (jj_scan_token(INTEGER_ST_FIELD)) return true;
     return false;
   }
@@ -1815,10 +1820,6 @@ public class FLGParser implements FLGParserConstants {
   private boolean jj_3R_15() {
     Token xsp;
     xsp = jj_scanpos;
-    if (jj_3_32()) {
-    jj_scanpos = xsp;
-    if (jj_3_33()) {
-    jj_scanpos = xsp;
     if (jj_3_34()) {
     jj_scanpos = xsp;
     if (jj_3_35()) {
@@ -1859,62 +1860,65 @@ public class FLGParser implements FLGParserConstants {
     jj_scanpos = xsp;
     if (jj_3_53()) {
     jj_scanpos = xsp;
-    if (jj_3_54()) return true;
-    }
-    }
-    }
-    }
-    }
-    }
-    }
-    }
-    }
-    }
-    }
-    }
-    }
-    }
-    }
-    }
-    }
-    }
-    }
-    }
-    }
-    }
-    return false;
-  }
-
-  private boolean jj_3_57() {
-    Token xsp;
-    xsp = jj_scanpos;
+    if (jj_3_54()) {
+    jj_scanpos = xsp;
     if (jj_3_55()) {
     jj_scanpos = xsp;
     if (jj_3_56()) return true;
     }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
     return false;
   }
 
-  private boolean jj_3_62() {
+  private boolean jj_3_7() {
+    if (jj_scan_token(BLACK)) return true;
+    return false;
+  }
+
+  private boolean jj_3_59() {
     Token xsp;
     xsp = jj_scanpos;
-    if (jj_3_59()) {
+    if (jj_3_57()) {
     jj_scanpos = xsp;
-    if (jj_3_60()) {
+    if (jj_3_58()) return true;
+    }
+    return false;
+  }
+
+  private boolean jj_3_64() {
+    Token xsp;
+    xsp = jj_scanpos;
+    if (jj_3_61()) {
     jj_scanpos = xsp;
-    if (jj_3_61()) return true;
+    if (jj_3_62()) {
+    jj_scanpos = xsp;
+    if (jj_3_63()) return true;
     }
     }
     return false;
   }
 
-  private boolean jj_3_11() {
-    if (jj_scan_token(BACKGROUND)) return true;
-    if (jj_scan_token(EQUAL_ST_FORM)) return true;
-    return false;
-  }
-
-  private boolean jj_3_17() {
+  private boolean jj_3_19() {
     if (jj_scan_token(AMPERSAND)) return true;
     if (jj_scan_token(STRING_ST_TEXT)) return true;
     return false;
@@ -1923,16 +1927,49 @@ public class FLGParser implements FLGParserConstants {
   private boolean jj_3R_12() {
     if (jj_scan_token(FIELD)) return true;
     Token xsp;
-    if (jj_3_57()) return true;
+    if (jj_3_59()) return true;
     while (true) {
       xsp = jj_scanpos;
-      if (jj_3_57()) { jj_scanpos = xsp; break; }
+      if (jj_3_59()) { jj_scanpos = xsp; break; }
     }
+    return false;
+  }
+
+  private boolean jj_3R_13() {
+    if (jj_scan_token(NAMED_DATA)) return true;
+    Token xsp;
+    if (jj_3_64()) return true;
+    while (true) {
+      xsp = jj_scanpos;
+      if (jj_3_64()) { jj_scanpos = xsp; break; }
+    }
+    return false;
+  }
+
+  private boolean jj_3_32() {
+    if (jj_scan_token(PICTURE)) return true;
+    if (jj_scan_token(EQUAL_ST_FIELD)) return true;
+    return false;
+  }
+
+  private boolean jj_3_18() {
+    if (jj_scan_token(INTEGER_ST_TEXT)) return true;
+    return false;
+  }
+
+  private boolean jj_3_13() {
+    if (jj_scan_token(BACKGROUND)) return true;
+    if (jj_scan_token(EQUAL_ST_FORM)) return true;
     return false;
   }
 
   private boolean jj_3_6() {
     if (jj_scan_token(CURRENT)) return true;
+    return false;
+  }
+
+  private boolean jj_3_5() {
+    if (jj_scan_token(INTEGER_ST_FORM)) return true;
     return false;
   }
 
@@ -1965,7 +2002,7 @@ public class FLGParser implements FLGParserConstants {
    private static void jj_la1_init_2() {
       jj_la1_2 = new int[] {};
    }
-  final private JJCalls[] jj_2_rtns = new JJCalls[62];
+  final private JJCalls[] jj_2_rtns = new JJCalls[64];
   private boolean jj_rescan = false;
   private int jj_gc = 0;
 
@@ -2149,7 +2186,7 @@ public class FLGParser implements FLGParserConstants {
   /** Generate ParseException. */
   public ParseException generateParseException() {
     jj_expentries.clear();
-    boolean[] la1tokens = new boolean[94];
+    boolean[] la1tokens = new boolean[95];
     if (jj_kind >= 0) {
       la1tokens[jj_kind] = true;
       jj_kind = -1;
@@ -2169,7 +2206,7 @@ public class FLGParser implements FLGParserConstants {
         }
       }
     }
-    for (int i = 0; i < 94; i++) {
+    for (int i = 0; i < 95; i++) {
       if (la1tokens[i]) {
         jj_expentry = new int[1];
         jj_expentry[0] = i;
@@ -2196,7 +2233,7 @@ public class FLGParser implements FLGParserConstants {
 
   private void jj_rescan_token() {
     jj_rescan = true;
-    for (int i = 0; i < 62; i++) {
+    for (int i = 0; i < 64; i++) {
     try {
       JJCalls p = jj_2_rtns[i];
       do {
@@ -2265,6 +2302,8 @@ public class FLGParser implements FLGParserConstants {
             case 59: jj_3_60(); break;
             case 60: jj_3_61(); break;
             case 61: jj_3_62(); break;
+            case 62: jj_3_63(); break;
+            case 63: jj_3_64(); break;
           }
         }
         p = p.next;

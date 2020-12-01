@@ -187,11 +187,6 @@ public class GetFieldsVisitor extends DepthFirstVisitor implements Visitor {
         forms.setWidth(width);        
         //OGB FIN
         
-        logger.debug("name: "+nameForm);
-        logger.debug("posX: "+posX);
-        logger.debug("posY: "+posY);
-        logger.debug("width: "+width);
-        
         
         
         // TEXT
