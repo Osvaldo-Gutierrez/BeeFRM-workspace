@@ -177,6 +177,8 @@ public class ChileBci implements Config {
 
                         ElementDef ed = getElementDef(f);
                         
+                        PosDocument.Pos[] pos = f.getIndexArray()[0].getPosArray();
+                        
                         //OGB - se agrega IDC como parte de los campos indexados
                         switch (ed.field.special) {
 
@@ -192,7 +194,7 @@ public class ChileBci implements Config {
 
                                             //name     special                                      modifier        type              size     integers decimals sign   fmsname  picture     xdefault attributes     row     column
                           //re = new FieldDef(varName, null,                                        FieldDef.UNDEF, FieldDef.INTEGER, NUM_LEN, NUM_LEN, 0,       false, varName, "99999999", null,    fd.attributes, fd.row, fd.column);
-                            re = new FieldDef(varName, FieldDef.getSpecialString(ed.field.special),       ed.field.modifier,    FieldDef.INTEGER, NUM_LEN, NUM_LEN, 0,       false, varName, "99999999", null,    ed.field.attributes, ed.field.row, ed.field.column);
+                            re = new FieldDef(varName, FieldDef.getSpecialString(ed.field.special),       ed.field.modifier,    FieldDef.INTEGER, NUM_LEN, NUM_LEN, 0,       false, varName, "99999999", null,    ed.field.attributes, (int) pos[0].getRow(), (int) pos[0].getColumn());
 
                             ed.field.replaced.add(re);
 
@@ -202,7 +204,7 @@ public class ChileBci implements Config {
 
                                             //name     special                                      modifier        type              size integers decimals sign   fmsname  picture     xdefault attributes     row     column
                           //re = new FieldDef(varName, null,                                        FieldDef.UNDEF, FieldDef.STRING,  1,   0,       0,       false, varName, "X",        null,    fd.attributes, fd.row, fd.column + NUM_LEN + 3);
-                            re = new FieldDef(varName, FieldDef.getSpecialString(ed.field.special),       ed.field.modifier,    FieldDef.STRING,  1,   0,       0,       false, varName, "X",        null,    ed.field.attributes, ed.field.row, ed.field.column + NUM_LEN + 3);
+                            re = new FieldDef(varName, FieldDef.getSpecialString(ed.field.special),       ed.field.modifier,    FieldDef.STRING,  1,   0,       0,       false, varName, "X",        null,    ed.field.attributes, (int) pos[0].getRow(), (int) pos[0].getColumn() + NUM_LEN + 3);
 
                             ed.field.replaced.add(re);
 
@@ -218,9 +220,10 @@ public class ChileBci implements Config {
 
                             varName = ed.field.name.substring(0, 3) + "-IND-" + ed.field.name.substring(8);
 
+                            
                                             //name     special                                      modifier        type              size     integers decimals sign   fmsname  picture     xdefault attributes     row     column
                           //re = new FieldDef(varName, null,                                        FieldDef.UNDEF, FieldDef.STRING,  IND_LEN, 0,       0,       false, varName, "X",        null,    fd.attributes, fd.row, fd.column);
-                            re = new FieldDef(varName, FieldDef.getSpecialString(ed.field.special),       ed.field.modifier,    FieldDef.STRING,  IND_LEN, 0,       0,       false, varName, "X",        null,    ed.field.attributes, ed.field.row, ed.field.column);
+                            re = new FieldDef(varName, FieldDef.getSpecialString(ed.field.special),       ed.field.modifier,    FieldDef.STRING,  IND_LEN, 0,       0,       false, varName, "X",        null,    ed.field.attributes, (int) pos[0].getRow(), (int) pos[0].getColumn());
 
                             ed.field.replaced.add(re);
 
@@ -230,7 +233,7 @@ public class ChileBci implements Config {
 
                                             //name     special                                      modifier        type              size integers decimals sign   fmsname  picture     xdefault attributes     row     column
                           //re = new FieldDef(varName, FieldDef.getSpecialString(FieldDef.GLS_IDC), FieldDef.UNDEF, FieldDef.STRING,  3,   0,       0,       false, varName, "XXX",      null,    fd.attributes, fd.row, fd.column + IND_LEN + 3);
-                            re = new FieldDef(varName, FieldDef.getSpecialString(FieldDef.GLS_IDC), ed.field.modifier,    FieldDef.STRING,  3,   0,       0,       false, varName, "XXX",      null,    ed.field.attributes, ed.field.row, ed.field.column + IND_LEN + 3);
+                            re = new FieldDef(varName, FieldDef.getSpecialString(FieldDef.GLS_IDC), ed.field.modifier,    FieldDef.STRING,  3,   0,       0,       false, varName, "XXX",      null,    ed.field.attributes, (int) pos[0].getRow(), (int) pos[0].getColumn() + IND_LEN + 3);
 
                             ed.field.replaced.add(re);
 

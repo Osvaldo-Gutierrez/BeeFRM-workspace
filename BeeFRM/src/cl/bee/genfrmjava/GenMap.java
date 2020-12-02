@@ -158,6 +158,14 @@ public class GenMap {
 
                             f.row       = arr.get(k).index.get(j).row;
                             f.column    = arr.get(k).index.get(j).column;
+                            
+                            if (f.replaced != null && f.type != FieldDef.DATE) {
+
+                                for (FieldDef fr : f.replaced) {
+                                    fr.row = f.row;
+                                }
+                            }
+                            
 
                             f.map_index = k * (size - 1) + j - offset;
 
