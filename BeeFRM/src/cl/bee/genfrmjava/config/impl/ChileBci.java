@@ -176,6 +176,85 @@ public class ChileBci implements Config {
                     for (FieldDocument.Field f : a.getFieldArray()) {
 
                         ElementDef ed = getElementDef(f);
+                        
+                        //OGB - se agrega IDC como parte de los campos indexados
+                        switch (ed.field.special) {
+
+                        case FieldDef.VRF :
+
+                            if (ed.field.replaced == null) {
+                            	ed.field.replaced = new ArrayList<FieldDef>();
+                            }
+                            
+                            //
+
+                            varName = ed.field.name.substring(0, 3) + "-NUM-" + ed.field.name.substring(8);
+
+                                            //name     special                                      modifier        type              size     integers decimals sign   fmsname  picture     xdefault attributes     row     column
+                          //re = new FieldDef(varName, null,                                        FieldDef.UNDEF, FieldDef.INTEGER, NUM_LEN, NUM_LEN, 0,       false, varName, "99999999", null,    fd.attributes, fd.row, fd.column);
+                            re = new FieldDef(varName, FieldDef.getSpecialString(ed.field.special),       ed.field.modifier,    FieldDef.INTEGER, NUM_LEN, NUM_LEN, 0,       false, varName, "99999999", null,    ed.field.attributes, ed.field.row, ed.field.column);
+
+                            ed.field.replaced.add(re);
+
+                            //
+
+                            varName = ed.field.name.substring(0, 3) + "-VRF-" + ed.field.name.substring(8);
+
+                                            //name     special                                      modifier        type              size integers decimals sign   fmsname  picture     xdefault attributes     row     column
+                          //re = new FieldDef(varName, null,                                        FieldDef.UNDEF, FieldDef.STRING,  1,   0,       0,       false, varName, "X",        null,    fd.attributes, fd.row, fd.column + NUM_LEN + 3);
+                            re = new FieldDef(varName, FieldDef.getSpecialString(ed.field.special),       ed.field.modifier,    FieldDef.STRING,  1,   0,       0,       false, varName, "X",        null,    ed.field.attributes, ed.field.row, ed.field.column + NUM_LEN + 3);
+
+                            ed.field.replaced.add(re);
+
+                            break;
+                            
+                        case FieldDef.IDC :
+
+                            if (ed.field.replaced == null) {
+                            	ed.field.replaced = new ArrayList<FieldDef>();
+                            }
+
+                            //
+
+                            varName = ed.field.name.substring(0, 3) + "-IND-" + ed.field.name.substring(8);
+
+                                            //name     special                                      modifier        type              size     integers decimals sign   fmsname  picture     xdefault attributes     row     column
+                          //re = new FieldDef(varName, null,                                        FieldDef.UNDEF, FieldDef.STRING,  IND_LEN, 0,       0,       false, varName, "X",        null,    fd.attributes, fd.row, fd.column);
+                            re = new FieldDef(varName, FieldDef.getSpecialString(ed.field.special),       ed.field.modifier,    FieldDef.STRING,  IND_LEN, 0,       0,       false, varName, "X",        null,    ed.field.attributes, ed.field.row, ed.field.column);
+
+                            ed.field.replaced.add(re);
+
+                            //
+
+                            varName = ed.field.name.substring(0, 3) + "-GLS-" + ed.field.name.substring(8);
+
+                                            //name     special                                      modifier        type              size integers decimals sign   fmsname  picture     xdefault attributes     row     column
+                          //re = new FieldDef(varName, FieldDef.getSpecialString(FieldDef.GLS_IDC), FieldDef.UNDEF, FieldDef.STRING,  3,   0,       0,       false, varName, "XXX",      null,    fd.attributes, fd.row, fd.column + IND_LEN + 3);
+                            re = new FieldDef(varName, FieldDef.getSpecialString(FieldDef.GLS_IDC), ed.field.modifier,    FieldDef.STRING,  3,   0,       0,       false, varName, "XXX",      null,    ed.field.attributes, ed.field.row, ed.field.column + IND_LEN + 3);
+
+                            ed.field.replaced.add(re);
+
+                            break;
+                            
+                        case FieldDef.FEC :
+
+                            if (ed.field.replaced == null) {
+                            	ed.field.replaced = new ArrayList<FieldDef>();
+                            }
+
+                            for (int i = 0; i < FieldDef.date_initials.length; i++) { // 012345678901
+                                                                                      // abc_fec_vxyz
+                                varName = ed.field.name.substring(0, 3) + "-NUM-" + FieldDef.date_initials[i] + ed.field.name.substring(9);
+
+                                                //name     special modifier        type              size integers decimals sign   fmsname  picture     xdefault attributes     row     column
+                              //re = new FieldDef(varName, null,   FieldDef.UNDEF, FieldDef.INTEGER, 2,   2,       0,       false, varName, "99",       null,    fd.attributes, fd.row, fd.column);
+                                re = new FieldDef(varName, null,   ed.field.modifier,    FieldDef.INTEGER, 2,   2,       0,       false, varName, "99",       null,    ed.field.attributes, ed.field.row, ed.field.column);
+
+                                ed.field.replaced.add(re);
+                            }
+
+                            break;
+                        }
 
                       //logger.debug(ed);
 

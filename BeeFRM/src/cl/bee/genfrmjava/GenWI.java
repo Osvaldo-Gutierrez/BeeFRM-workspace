@@ -253,7 +253,17 @@ public class GenWI {
                     gen.println("           05 " + array.get(0).field.name + "-STP-IDX  OCCURS " + array.get(0).index.size() + " TIMES.");
 
                     for (int j = 0; j < array.size(); j++) {
-                        gen.println("              07 " + array.get(j).field.name + "-STP           PIC  X(01).");
+                    	
+                        if (array.get(j).field.replaced != null && array.get(j).field.type != FieldDef.DATE) {
+
+                            for (FieldDef fr : array.get(j).field.replaced) {
+                            	gen.println("              07 " + fr.name + "-STP           PIC  X(01).");
+                            }
+                        }
+                        else {
+                        	gen.println("              07 " + array.get(j).field.name + "-STP           PIC  X(01).");
+                        }
+
                     }
                 }
             }
@@ -310,14 +320,32 @@ public class GenWI {
 
                             for (int j = 0; j < array.size(); j++) {
 
-                                switch(array.get(j).field.type) {
+                            	
+                                if (array.get(j).field.replaced != null && array.get(j).field.type != FieldDef.DATE) {
 
-                                case FieldDef.INTEGER :
-                                case FieldDef.LONG :
-                                case FieldDef.DOUBLE :
-                                    gen.println("           05 " + array.get(j).field.name + "-EDT  PIC  " + 
-                                    			getEditPicture(array.get(j).field.picture, FieldDef.hasAttribute(array.get(j).field.attributes, FieldDef.DISPLAY_ONLY_ATTR), array.get(j).field.special) + ".");
-                                    break;
+                                    for (FieldDef fr : array.get(j).field.replaced) {
+    	                                switch(fr.type) {
+    	                            	
+    	                                case FieldDef.INTEGER :
+    	                                case FieldDef.LONG :
+    	                                case FieldDef.DOUBLE :
+    	                                    gen.println("           05 " + fr.name + "-EDT  PIC  " + 
+    	                                    			getEditPicture(fr.picture, FieldDef.hasAttribute(fr.attributes, FieldDef.DISPLAY_ONLY_ATTR), fr.special) + ".");
+    	                                    break;
+    	                                }
+                                    }
+                                }
+                                else {
+
+	                                switch(array.get(j).field.type) {
+	
+	                                case FieldDef.INTEGER :
+	                                case FieldDef.LONG :
+	                                case FieldDef.DOUBLE :
+	                                    gen.println("           05 " + array.get(j).field.name + "-EDT  PIC  " + 
+	                                    			getEditPicture(array.get(j).field.picture, FieldDef.hasAttribute(array.get(j).field.attributes, FieldDef.DISPLAY_ONLY_ATTR), array.get(j).field.special) + ".");
+	                                    break;
+	                                }
                                 }
                             }
                     }
@@ -500,7 +528,11 @@ public class GenWI {
      */
     private static String getEditPicture(String picture, boolean isDisplayOnly, int type) {
 
-        String s = picture.replaceAll("9", "Z").replaceAll("N", "-");
+    	String s = null;
+    	if (picture.startsWith("N"))
+    		s = picture.replaceAll("9", "-").replaceAll("N", "-");
+    	else
+    		s = picture.replaceAll("9", "Z").replaceAll("N", "-");
 
         if (isDisplayOnly) {
         	
@@ -532,9 +564,9 @@ public class GenWI {
         }
         else {
         	
-          	if (type == FieldDef.SGV) {
-          		s = s.replaceAll("Z", "-");
-          	}
+         // 	if (type == FieldDef.SGV) {
+         // 		s = s.replaceAll("Z", "-");
+         // 	}
         	
         	
         }
