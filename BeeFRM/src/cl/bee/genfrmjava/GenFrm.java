@@ -756,7 +756,7 @@ public class GenFrm {
                 FieldDef fd = (FieldDef) fields.get(i);
 
                 if (fd.fmsname.substring(0, 3).equals(FieldDef.FRM)) {
-                	if (fd.modifier != FieldDef.AKY && fd.modifier != FieldDef.IKY) {
+                	if (fd.modifier != FieldDef.AKY && fd.modifier != FieldDef.IKY && fd.modifier != FieldDef.MKY) {
                 		get_clear_field(entityName, fd, -1);
                 	}
                 }
@@ -1033,7 +1033,7 @@ public class GenFrm {
                 FieldDef fd = (FieldDef) fields.get(i);
 
                 if (fd.fmsname.substring(0, 3).equals(FieldDef.FRM)) {
-                	if (fd.modifier == FieldDef.AKY || fd.modifier == FieldDef.IKY) {
+                	if (fd.modifier == FieldDef.AKY || fd.modifier == FieldDef.IKY || fd.modifier == FieldDef.MKY) {
                 		gen_set_field_attr(entityName, fd, "FRM-CPIM-AEY", false, -1);
                 	}
                 }
@@ -1218,7 +1218,7 @@ public class GenFrm {
                 FieldDef fd = (FieldDef) fields.get(i);
 
                 if (fd.fmsname.substring(0, 3).equals(FieldDef.FRM)) {
-                	if (fd.modifier == FieldDef.AKY || fd.modifier == FieldDef.IKY) {
+                	if (fd.modifier == FieldDef.AKY || fd.modifier == FieldDef.IKY || fd.modifier == FieldDef.MKY) {
                 		gen_set_field_attr(entityName, fd, "FRM-CPIM-UBY", false, -1);
                 	}
                 }
@@ -3514,10 +3514,42 @@ public class GenFrm {
 			    			//se revisan variables de ambiente
 			    			for ( String pgmStrg: sectionCode.getSpecial()) {
 			    				
-			    				if (environment_hash.containsKey(pgmStrg))
-				    				if (environment_hash.get(pgmStrg))
-							    		gen.println(((SectionDef)addit_hash.get(ident)).getCode());
 			    				
+			    				Boolean cumple = true;
+			    				if (environment_hash.containsKey(pgmStrg)) {
+			    					
+			    					if (sectionCode.numSpecial() > 1) {
+			    						//si es mayor a uno se revisan las demas specials para buscar si hay uno con AND,
+			    						//en ese caso ese specials tambien debe estar en environment_hash
+			    						int x = 0;
+			    						for (String ot_special : sectionCode.getSpecial()) {
+			    							if (!ot_special.equals(pgmStrg)) {
+			    								
+			    								String op_special = sectionCode.getOperatorSpecials(x);
+			    								if (op_special.equals("AND")) { 
+								    				if (!environment_hash.get(ot_special)) {
+								    					cumple = false;
+								    				}
+			    								}
+								    					
+			    							}
+			    							
+			    							x++;
+			    							
+			    						}
+			    						
+					    				if (environment_hash.get(pgmStrg) && cumple)
+								    		gen.println(((SectionDef)addit_hash.get(ident)).getCode());
+			    						
+			    					}
+			    					else
+			    					{
+					    				if (environment_hash.get(pgmStrg))
+								    		gen.println(((SectionDef)addit_hash.get(ident)).getCode());
+			    					}
+			    					
+			    				}
+
 			    			}
 			    			//
 			    		}
@@ -3543,18 +3575,27 @@ public class GenFrm {
 		    		if (sectionCode.numSpecial() > 0) {
 		    			if (sectionCode.hasSpecial(labelSpecial))
 				    		gen.println(((SectionDef)addit_hash.get(ident)).getCode());
+
+		    			String negLabel = null;
+		    			//negacion de PGM_
+		    			if (action == BQ_ACTION)
+		    				negLabel = "NOT PGM_BU";
+		    			else if (action == BU_ACTION)
+		    				negLabel = "NOT PGM_BQ";
 		    			
-		    			if (sectionCode.hasSpecial("PGM_PTC") && PGM_PTC)  //
-				    		gen.println(((SectionDef)addit_hash.get(ident)).getCode());
+		    			if (sectionCode.hasSpecial(negLabel))
+		    				gen.println(((SectionDef)addit_hash.get(ident)).getCode());
 		    			
-		    			if (sectionCode.hasSpecial("NOT_PGM_PTC") && !PGM_PTC)  //
-				    		gen.println(((SectionDef)addit_hash.get(ident)).getCode());
+		    			//se revisan variables de ambiente
+		    			for ( String pgmStrg: sectionCode.getSpecial()) {
+		    				
+		    				if (environment_hash.containsKey(pgmStrg))
+			    				if (environment_hash.get(pgmStrg))
+						    		gen.println(((SectionDef)addit_hash.get(ident)).getCode());
+		    				
+		    			}
+		    			//
 		    			
-		    			if (sectionCode.hasSpecial("PGM_PER") && PGM_PER)  //
-				    		gen.println(((SectionDef)addit_hash.get(ident)).getCode());
-		    			
-		    			if (sectionCode.hasSpecial("NOT_PGM_PER") && !PGM_PER)  //
-				    		gen.println(((SectionDef)addit_hash.get(ident)).getCode());
 		    		}
 		    		else
 			    		gen.println(((SectionDef)addit_hash.get(ident)).getCode());

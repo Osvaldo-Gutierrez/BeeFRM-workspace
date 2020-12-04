@@ -488,23 +488,32 @@ public class GenMap {
 		            }
 		        }
 
-        if (FieldDef.hasAttribute(fd.attributes, FieldDef.DISPLAY_ONLY_ATTR) && fd.fmsname.indexOf("_GLS_") == -1 && fd.special == -1) {
-            addAttrb(attrbs, "FSET");
-        }
-        
+
         if ((fd.modifier == FieldDef.AKY || fd.modifier == FieldDef.IKY || fd.modifier == FieldDef.MKY)  ){
             addAttrb(attrbs, "FSET");
+            
+            if (FieldDef.hasAttribute(fd.attributes, FieldDef.DISPLAY_ONLY_ATTR) && fd.fmsname.indexOf("_GLS_") == -1 && fd.special == -1) {
+                addAttrb(attrbs, "FSET");
+            }
         }
-        else
+        else {
+        	
 	        if (fd.modifier == FieldDef.FLD && FieldDef.hasAttribute(fd.attributes, FieldDef.SUPPRESS_ATTR)) {
 	            addAttrb(attrbs, "FSET");
 	            
 	            //ultimo, quizas hay que restringir solo a numericos *OJO
 	            if (FieldDef.hasAttribute(fd.attributes, FieldDef.DISPLAY_ONLY_ATTR))
 	            	addAttrb(attrbs, "FSET");
-	            
+	            else if (FieldDef.hasAttribute(fd.attributes, FieldDef.DISPLAY_ONLY_ATTR) && fd.fmsname.indexOf("_GLS_") == -1 && fd.special == -1) {
+	                    addAttrb(attrbs, "FSET");
+	                }
+	                
 	        }
-	        else
+	        else {
+	            if (FieldDef.hasAttribute(fd.attributes, FieldDef.DISPLAY_ONLY_ATTR) && fd.fmsname.indexOf("_GLS_") == -1 && fd.special == -1) {
+	                addAttrb(attrbs, "FSET");
+	            }
+	            
 		        if (fd.special == FieldDef.FEC ||
 		           (fd.type == FieldDef.INTEGER ) || fd.type == FieldDef.LONG || (fd.type == FieldDef.DOUBLE)) {
 		            addAttrb(attrbs, "FSET");
@@ -513,7 +522,8 @@ public class GenMap {
 		        	if (fd.special == FieldDef.VRF || fd.special == FieldDef.IDC || fd.special == FieldDef.GLS_IDC) {
 		        		addAttrb(attrbs, "FSET");
 		        	}
-        
+	        }
+        }
         //
 
         StringBuffer sb = new StringBuffer();

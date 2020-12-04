@@ -25,13 +25,9 @@ public class SectionDef {
     
     /** TODO_javadoc. */
     private ArrayList<String> nameSpecials = null;
-    
+    private ArrayList<String> operatorSpecials = null;
     /** TODO_javadoc. */
-    //variables que no son consideradas para asignar el nombre a la clase
-    //private static final String type_special_names[]  = { "NOT PGM_BQ", "NOT PGM_BU", "NOT_PGM_PER","NOT_PGM_PTC", "PGM_BQ", "PGM_BU", "PGM_PER", "PGM_PTC" }; //ordenado
-   //private static final String type_special_names[]  = { "NOT PGM_BQ", "NOT PGM_BU", "NOT PGM_PER","NOT PGM_PTC", "PGM_BQ", "PGM_BU", "PGM_PER", "PGM_PTC" }; //ordenado
-    private static final String type_special_names[]  = { "NOT PGM_ARG", "NOT PGM_BQ", "NOT PGM_BU", "NOT PGM_DOS", "NOT PGM_DTC", "NOT PGM_MVS", "NOT PGM_PER", 
-    		                                              "NOT PGM_PTC", "PGM_ARG", "PGM_BQ", "PGM_BU", "PGM_DOS", "PGM_DTC", "PGM_MVS", "PGM_PER", "PGM_PTC" }; //ordenado
+
     private static final String envString = "PGM_";
     
     private static final String notenvString = "NOT ";
@@ -65,23 +61,25 @@ public class SectionDef {
 		super();
 		this.code = code;
 		
-		
+
 		List<String> listOr = Arrays.asList(name.split(" OR "));
 		ArrayList<String>  nameUniOr = new ArrayList<String>(listOr);
 		this.nameSpecials = new ArrayList<String>();
+		this.operatorSpecials = new ArrayList<String>();
+		
+		ArrayList<String>  nameKeys = new ArrayList<String>();
 		
 		for( String txtOr : nameUniOr ) {
 		
 			List<String> fixedLenghtList = Arrays.asList(txtOr.split(" AND "));
 			ArrayList<String>  nameUni = new ArrayList<String>(fixedLenghtList);
 
+			int nSpecials = 0;
+			int pos = 0;
 			
-
 			for( String txt : nameUni ) {
 				
 				txt = txt.trim();
-				
-				int pos = 0;
 				
 				//remueve caracter $ y se le asigna al nombre
 				if (txt.contains("$")) {
@@ -91,7 +89,15 @@ public class SectionDef {
 				
 				if (txt.startsWith(envString) || txt.startsWith(notenvString + envString)) {
 					
+					pos++;
+					
 					this.nameSpecials.add(txt);
+					
+					
+					if (pos > 1)
+						this.operatorSpecials.add("AND");
+					else
+						this.operatorSpecials.add("OR");
 					
 					if(!environment_hash.containsKey(txt)) {
 						
@@ -125,9 +131,22 @@ public class SectionDef {
 			return false;
 	}
 	
+	public int getPosSpecial(String label) {
+		
+		if (nameSpecials.contains(label.trim()))
+			return nameSpecials.indexOf(label);
+		else
+			return -1;
+	}
+	
 	public ArrayList<String> getSpecial() {
 		
 		return this.nameSpecials;
+	}
+	
+	public String getOperatorSpecials(int index) {
+		
+		return this.operatorSpecials.get(index);
 	}
 	
 	

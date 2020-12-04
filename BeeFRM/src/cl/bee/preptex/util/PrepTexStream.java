@@ -15,6 +15,8 @@ import java.util.regex.*;
 
 import org.apache.log4j.*;
 
+import cl.bee.genfrmjava.util.Utils;
+
 
 /**
  *
@@ -93,7 +95,8 @@ public class PrepTexStream extends FileInputStream {
 
                 if (line.startsWith(control)) {
 
-                	label = line.substring(ctrl_len);
+                	label = rtrim(line.substring(ctrl_len));
+
                 	
                     if (text != null) {
 
@@ -120,6 +123,11 @@ public class PrepTexStream extends FileInputStream {
                     else {
                     	if (!label.startsWith("!") && label.contains("IF "))
                     	{
+                    		
+                        	String textBr = (label.contains("IF ")) ? label.substring(label.indexOf("IF ") + 3) : label;
+                        	String prIni = (label.contains("IF ")) ? label.substring(0, label.indexOf("IF ") + 3) : "";
+                        	label = prIni + splitBrackets(textBr);
+                        	
                     		outConca = false;
 	                    	if (concatenated) {
 	                            fp_out.println("END");
@@ -148,13 +156,13 @@ public class PrepTexStream extends FileInputStream {
 		                            int nitm = codeLabel.get(label);
 		                            nitm++;
 		                            codeLabel.put(label, nitm);
-		                            label = label + "$" +nitm;
+		                            label = label.trim() + "$" +nitm;
 		                            fp_out.println(replace(label, symbolsTable));
 		
 		                        }
 		                        else {
 		                        	codeLabel.put(label, 0);
-		                            fp_out.println(replace(line.substring(ctrl_len), symbolsTable));
+		                            fp_out.println(replace(label, symbolsTable));
 		                        }
 	
 		                        
@@ -190,6 +198,121 @@ public class PrepTexStream extends FileInputStream {
             throw new FileNotFoundException(printStackTrace(e));
         }
     }
+    
+    private String splitBrackets(String iniText) {
+
+        if (!iniText.contains("(") || !iniText.contains(")"))
+        	return iniText;
+        
+        Pattern pattern = Pattern.compile("\\((?:[^)(]+|\\((?:[^)(]+|\\([^)(]*\\))*\\))*\\)", Pattern.CASE_INSENSITIVE);
+        
+        Matcher matcher = pattern.matcher(iniText);
+        
+        String proText = null;
+        String prvText = null;
+        String nxtText = null;
+        
+        String operatorOut = null;
+        String operatorIn = null;
+        
+        String finalText = null;
+        String proCond = null;
+        
+        String position = null;
+        
+        int indexAND = -1;
+        int indexOR = -1;
+        int indexPro = -1;
+        		
+        int count = 0;
+        
+        while( matcher.find() ) {
+            count++;
+            
+           
+            proText = iniText.substring(matcher.start() + 1, matcher.end() - 1);
+            
+            //recursividad para parentesis dentro de parentesis
+            if (proText.contains("(") && proText.contains(")"))
+            	proText = splitBrackets(proText);
+            
+            
+            prvText = iniText.substring(0, matcher.start());
+            nxtText = iniText.substring(matcher.end());
+            
+            
+            if (prvText.contains(" AND ") || prvText.contains(" OR ")) {
+            
+            	indexAND = prvText.lastIndexOf(" AND ");
+            	indexOR  = prvText.lastIndexOf(" OR ");      	
+                position = "prv";
+            	
+            }
+            else if (nxtText.contains(" AND ") || nxtText.contains(" OR ")) {
+            	
+            	indexAND = nxtText.indexOf(" AND ");
+            	indexOR  = nxtText.indexOf(" OR ");
+            	position = "nxt";
+            }
+            else {
+            	
+            	//es solo el IF ( ), se remueven los parentesis y se retorna
+            	
+            	iniText = iniText.replaceAll("(", "").replaceAll(")", "");
+            	return iniText;
+            }
+            	
+            
+            operatorOut = (indexAND > indexOR) ? " AND ":" OR ";
+            indexPro = (indexAND > indexOR) ? indexAND:indexOR;
+            
+            operatorIn = (operatorOut.equals(" AND ")) ? " OR ":" AND ";
+            
+            if (position.equals("prv")) {
+            	proCond = prvText.substring(0 ,	indexPro).trim();
+            	proCond = (proCond.lastIndexOf(" ") >= 0) ? proCond.substring(proCond.lastIndexOf(" ")).trim() : proCond;
+            	
+            }
+            else {
+            	proCond = nxtText.substring(indexPro).trim();
+            	proCond = proCond.substring(proCond.indexOf(" ")).trim();
+            }
+            
+            finalText = "";
+        	for (String innerText : proText.split(operatorIn)){
+        		
+        		finalText += proCond;
+        		finalText += operatorOut + innerText;
+        		finalText += operatorIn;
+
+        	}
+        
+        	finalText = finalText.substring( 0, finalText.length() - operatorIn.length());
+            
+            
+            if (position.equals("prv")) {
+	        	if (nxtText.length() > 0) {
+	        		
+	        		finalText = "(" + finalText + ") " + nxtText;
+	        		finalText = splitBrackets(finalText);
+	        		
+	        	}
+            }
+            else {
+	        	if (prvText.length() > 0) {
+	        		
+	        		finalText = prvText + " (" + finalText + ")";
+	        		finalText = splitBrackets(finalText);
+	        		
+	        	}
+            }
+            
+        }
+
+        
+        return finalText;
+    }
+
 
     /******************************************************************************
      * listIds
