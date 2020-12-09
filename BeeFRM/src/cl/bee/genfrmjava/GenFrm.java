@@ -986,6 +986,13 @@ public class GenFrm {
 
                     break;
                 }
+                
+                if (fd.modifier == FieldDef.MKY && FieldDef.absenceAttribute(fd.attributes, FieldDef.DISPLAY_ONLY_ATTR)) {
+
+                    gen_pos_cursor(entityName, fd, -1);
+
+                    break;
+                } 
             }
             else if (fields.get(i) instanceof ArrayList) {
 
@@ -1716,20 +1723,30 @@ public class GenFrm {
             else if (fd.type == FieldDef.STRING && fd.special == FieldDef.VRF) {
            //     validation_response_required(entityName, fd, size);
            //OGB , se agrega validacion de VAL-RUT 	
-                gen.println("      *VAL-RUT Valida Rut para campo IDC");
-                gen.println("           MOVE IDC-ZERO-S TO IDC-ZERO.");
-                gen.println("           MOVE " + fd.name.substring(0, 3) + "-NUM-" + fd.name.substring(8) + " IN " + entityName + "-FLD TO IDC-NUM-RUTV.");
-                gen.println("           MOVE " + fd.name + " IN " + entityName + "-FLD TO IDC-VRF-RUTV.");
-                gen.println("           PERFORM VAL-RUT.");
+ 
+                if (FieldDef.hasAttribute(fd.attributes, FieldDef.DISPLAY_ONLY_ATTR))
+                    validation_response_required(entityName, fd, size);
+                else {
+                    gen.println("      *VAL-RUT Valida Rut para campo IDC");
+                    gen.println("           MOVE IDC-ZERO-S TO IDC-ZERO.");
+                    gen.println("           MOVE " + fd.name.substring(0, 3) + "-NUM-" + fd.name.substring(8) + " IN " + entityName + "-FLD TO IDC-NUM-RUTV.");
+                    gen.println("           MOVE " + fd.name + " IN " + entityName + "-FLD TO IDC-VRF-RUTV.");
+                    gen.println("           PERFORM VAL-RUT.");	
+                }
+                
             }
             else if (fd.type == FieldDef.STRING && fd.special == FieldDef.IDC) {
             	
-                gen.println("      *VAL-IDC Valida identificador");
-                gen.println("           MOVE "+ fd.name +" IN " + entityName + "-FLD TO IDC-IND-RUTV.");
-                gen.println("           PERFORM VAL-IDC.");
-                gen.println("           MOVE IDC-IND-RUTV TO "+ fd.name +" IN " + entityName + "-FLD.");
-            	
+                if (FieldDef.hasAttribute(fd.attributes, FieldDef.DISPLAY_ONLY_ATTR))
+                    validation_response_required(entityName, fd, size);
+                else {
+	                gen.println("      *VAL-IDC Valida identificador");
+	                gen.println("           MOVE "+ fd.name +" IN " + entityName + "-FLD TO IDC-IND-RUTV.");
+	                gen.println("           PERFORM VAL-IDC.");
+	                gen.println("           MOVE IDC-IND-RUTV TO "+ fd.name +" IN " + entityName + "-FLD.");
+                }
             }
+            	
             // probando ...
 
             //String ident = "INI_" + fd.name.replace('-', '_');
@@ -3492,7 +3509,6 @@ public class GenFrm {
 	    		
 	    	    while(addit_hash.containsKey(ident)) {
 
-	    	    	
 	    	    	sectionCode = (SectionDef)addit_hash.get(ident);
 	    	    	if (sectionCode.getConcatenate() == numCon) {
 		    	    	numCon++;
@@ -3514,7 +3530,6 @@ public class GenFrm {
 			    			//se revisan variables de ambiente
 			    			for ( String pgmStrg: sectionCode.getSpecial()) {
 			    				
-			    				
 			    				Boolean cumple = true;
 			    				if (environment_hash.containsKey(pgmStrg)) {
 			    					
@@ -3523,9 +3538,14 @@ public class GenFrm {
 			    						//en ese caso ese specials tambien debe estar en environment_hash
 			    						int x = 0;
 			    						for (String ot_special : sectionCode.getSpecial()) {
+			    							
+		    								String op_special = sectionCode.getOperatorSpecials(x);
+		    								if (op_special.equals("OR")) { 
+		    									cumple = true;
+		    								}
+		    								
 			    							if (!ot_special.equals(pgmStrg)) {
-			    								
-			    								String op_special = sectionCode.getOperatorSpecials(x);
+
 			    								if (op_special.equals("AND")) { 
 								    				if (!environment_hash.get(ot_special)) {
 								    					cumple = false;
@@ -3560,8 +3580,10 @@ public class GenFrm {
 			    		z = 0;
 	    	    	}
 	    	    	else {
+	    	    		
+	    	    		proNoConcatenated( sectionCode, ident, labelSpecial );
+	    	    		
 		    	        z++;
-		    	        
 		    	        ident = ((ident.contains("$")) ? ident.substring(0, ident.indexOf("$")) : ident) + "$" + z;	
 	    	    	}
 
@@ -3569,42 +3591,55 @@ public class GenFrm {
 	
 	    	}
 	    	else {
-		    	if (labelSpecial == null)
-		    		gen.println(sectionCode.getCode());
-		    	else
-		    		if (sectionCode.numSpecial() > 0) {
-		    			if (sectionCode.hasSpecial(labelSpecial))
-				    		gen.println(((SectionDef)addit_hash.get(ident)).getCode());
-
-		    			String negLabel = null;
-		    			//negacion de PGM_
-		    			if (action == BQ_ACTION)
-		    				negLabel = "NOT PGM_BU";
-		    			else if (action == BU_ACTION)
-		    				negLabel = "NOT PGM_BQ";
-		    			
-		    			if (sectionCode.hasSpecial(negLabel))
-		    				gen.println(((SectionDef)addit_hash.get(ident)).getCode());
-		    			
-		    			//se revisan variables de ambiente
-		    			for ( String pgmStrg: sectionCode.getSpecial()) {
-		    				
-		    				if (environment_hash.containsKey(pgmStrg))
-			    				if (environment_hash.get(pgmStrg))
-						    		gen.println(((SectionDef)addit_hash.get(ident)).getCode());
-		    				
-		    			}
-		    			//
-		    			
-		    		}
-		    		else
-			    		gen.println(((SectionDef)addit_hash.get(ident)).getCode());
-		    	
+	    		
+	    		proNoConcatenated( sectionCode, ident, labelSpecial );
+	    		
 		        z++;
 		        ident = ident + "$" + z;
 	    	}
 	    }
 	    
     }
+    
+    private static void proNoConcatenated(SectionDef sectionCode, String ident, String labelSpecial) {
+    	
+    	if(sectionCode.getConcatenate() > 0)
+    		return;
+    	
+    	if (labelSpecial == null)
+    		gen.println(sectionCode.getCode());
+    	else {
+    		if (sectionCode.numSpecial() > 0) {
+    			if (sectionCode.hasSpecial(labelSpecial))
+		    		gen.println(((SectionDef)addit_hash.get(ident)).getCode());
+
+    			String negLabel = null;
+    			//negacion de PGM_
+    			if (action == BQ_ACTION)
+    				negLabel = "NOT PGM_BU";
+    			else if (action == BU_ACTION)
+    				negLabel = "NOT PGM_BQ";
+    			
+    			if (sectionCode.hasSpecial(negLabel))
+    				gen.println(((SectionDef)addit_hash.get(ident)).getCode());
+    			
+    			//se revisan variables de ambiente
+    			for ( String pgmStrg: sectionCode.getSpecial()) {
+    				
+    				if (environment_hash.containsKey(pgmStrg))
+	    				if (environment_hash.get(pgmStrg))
+				    		gen.println(((SectionDef)addit_hash.get(ident)).getCode());
+    				
+    			}
+    			//
+    			
+    		}
+    		else
+	    		gen.println(((SectionDef)addit_hash.get(ident)).getCode());
+    	}
+    
+    }
 
 }
+
+

@@ -76,6 +76,7 @@ public class SectionDef {
 
 			int nSpecials = 0;
 			int pos = 0;
+			int pItem = 0;
 			
 			for( String txt : nameUni ) {
 				
@@ -89,12 +90,12 @@ public class SectionDef {
 				
 				if (txt.startsWith(envString) || txt.startsWith(notenvString + envString)) {
 					
-					pos++;
+					pItem++;
 					
 					this.nameSpecials.add(txt);
 					
 					
-					if (pos > 1)
+					if (pItem > 1)
 						this.operatorSpecials.add("AND");
 					else
 						this.operatorSpecials.add("OR");
