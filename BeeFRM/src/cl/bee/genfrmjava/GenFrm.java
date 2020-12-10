@@ -3488,7 +3488,10 @@ public class GenFrm {
                 glosa = fd.name.substring(0, 7);
 
                 if (!gls.containsKey(fd.name) && glosa.equals("FRM-GLS")) { // !subsys.equals(FieldDef.FRM) &&
-                	gls.put((fd.name.substring(8,12)),fd.size);
+                	
+                	String subname = (fd.name.length() < 12) ? fd.name.substring(8,fd.name.length()):fd.name.substring(8, 12);
+                	
+                	gls.put((subname),fd.size);
                 }
             }
         }
