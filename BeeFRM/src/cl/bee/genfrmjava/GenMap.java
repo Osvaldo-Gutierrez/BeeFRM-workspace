@@ -313,7 +313,7 @@ public class GenMap {
             special_num++;
         }
         else {
-
+        	
             String name     = fd.name.substring(4, 7) + fd.name.substring(8, 12);
             int    size     = fd.size;            	               	   
             int    gen_size = fd.size;

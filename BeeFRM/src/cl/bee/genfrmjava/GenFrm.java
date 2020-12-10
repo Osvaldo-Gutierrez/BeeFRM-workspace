@@ -212,6 +212,10 @@ public class GenFrm {
             gen.println("      * " + Utils.NOMBRE_GENEDADOR + " " + Utils.VERSION_GENEDADOR);
             gen.println("      * " + formdate_gen.format(new Date()).toUpperCase());
             gen.println("      *");
+            
+            printGen("SETTAG", "PGM_" + action_names[action]);
+            
+            
             gen.println("       SET-TAG-" + systemName + action_names[action] + entityName + " SECTION.");
             gen.println("       INI-SET-TAG-" + systemName + action_names[action] + entityName + ".");
             gen.println("           MOVE");
