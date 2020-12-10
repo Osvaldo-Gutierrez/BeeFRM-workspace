@@ -1043,7 +1043,7 @@ public class GenFrm {
 
                 FieldDef fd = (FieldDef) fields.get(i);
 
-                if (fd.fmsname.substring(0, 3).equals(FieldDef.FRM)) {
+                if (fd.fmsname.substring(0, 3).equals(FieldDef.FRM) && FieldDef.absenceAttribute(fd.attributes, FieldDef.DISPLAY_ONLY_ATTR)) {
                 	if (fd.modifier == FieldDef.AKY || fd.modifier == FieldDef.IKY || fd.modifier == FieldDef.MKY) {
                 		gen_set_field_attr(entityName, fd, "FRM-CPIM-AEY", false, -1);
                 	}
@@ -1055,7 +1055,7 @@ public class GenFrm {
 
                 for (int j = 0; j < array.size(); j++) {
 
-                    if (array.get(j).field.name.substring(0, 3).equals(FieldDef.FRM)) {
+                    if (array.get(j).field.name.substring(0, 3).equals(FieldDef.FRM) && FieldDef.absenceAttribute(array.get(j).field.attributes, FieldDef.DISPLAY_ONLY_ATTR)) {
 
                     	if (array.get(j).field.modifier == FieldDef.AKY || array.get(j).field.modifier == FieldDef.IKY) {
                             for (int k = 0; k < array.get(j).index.size(); k++) {
@@ -1228,7 +1228,7 @@ public class GenFrm {
 
                 FieldDef fd = (FieldDef) fields.get(i);
 
-                if (fd.fmsname.substring(0, 3).equals(FieldDef.FRM)) {
+                if (fd.fmsname.substring(0, 3).equals(FieldDef.FRM) && FieldDef.absenceAttribute(fd.attributes, FieldDef.DISPLAY_ONLY_ATTR)) {
                 	if (fd.modifier == FieldDef.AKY || fd.modifier == FieldDef.IKY || fd.modifier == FieldDef.MKY) {
                 		gen_set_field_attr(entityName, fd, "FRM-CPIM-UBY", false, -1);
                 	}
@@ -1240,7 +1240,7 @@ public class GenFrm {
 
                 for (int j = 0; j < array.size(); j++) {
 
-                    if (array.get(j).field.name.substring(0, 3).equals(FieldDef.FRM)) {
+                    if (array.get(j).field.name.substring(0, 3).equals(FieldDef.FRM) && FieldDef.absenceAttribute(array.get(j).field.attributes, FieldDef.DISPLAY_ONLY_ATTR)) {
                     	if (array.get(j).field.modifier == FieldDef.AKY || array.get(j).field.modifier == FieldDef.IKY) {
 	                        for (int k = 0; k < array.get(j).index.size(); k++) {
 	                        	gen_set_field_attr(entityName, array.get(j).field, "FRM-CPIM-UBY", false, -1);
