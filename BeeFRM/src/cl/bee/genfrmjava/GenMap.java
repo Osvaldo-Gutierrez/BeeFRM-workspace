@@ -314,7 +314,8 @@ public class GenMap {
         }
         else {
         	
-            String name     = fd.name.substring(4, 7) + fd.name.substring(8, 12);
+        	String subname = (fd.name.length() < 12) ? fd.name.substring(8,fd.name.length()):fd.name.substring(8, 12);
+            String name     = fd.name.substring(4, 7) + subname;
             int    size     = fd.size;            	               	   
             int    gen_size = fd.size;
             int    offset   = 0;
