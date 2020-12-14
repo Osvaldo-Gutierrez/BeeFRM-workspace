@@ -2115,8 +2115,8 @@ public class GenFrm {
         case FieldDef.LONG :
         case FieldDef.DOUBLE :
         case FieldDef.DATE :
-
-            if (FieldDef.hasAttribute(fd.attributes, FieldDef.RESPONSE_REQUIRED_ATTR)) {
+        	
+            if (FieldDef.hasAttribute(fd.attributes, FieldDef.RESPONSE_REQUIRED_ATTR) && fd.special == FieldDef.VRF) {
 
                 gen.println("           IF " + fd.name + " IN " + entityName + "-FLD" + (size != -1 ? "(FRM-IFLD)" : "") + " = ZEROES");
                 gen.println("                PERFORM ERR-GLS");
@@ -2134,7 +2134,7 @@ public class GenFrm {
         case FieldDef.BOOLEAN :
         case FieldDef.STRING :
 
-            if (FieldDef.hasAttribute(fd.attributes, FieldDef.RESPONSE_REQUIRED_ATTR)) {
+            if (FieldDef.hasAttribute(fd.attributes, FieldDef.RESPONSE_REQUIRED_ATTR) && fd.special != FieldDef.VRF  && fd.special != FieldDef.IDC) {
 
                 gen.println("           IF " + fd.name + " IN " + entityName + "-FLD" + (size != -1 ? "(FRM-IFLD)" : "") + " NOT > SPACES"); // 1902_06 02 07 diff liq.docx (mail 03-09-2019 18:49)
                 gen.println("                PERFORM ERR-GLS");
