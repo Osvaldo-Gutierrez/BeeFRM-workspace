@@ -460,34 +460,42 @@ public class GenMap {
         
         
         if (FieldDef.absenceAttribute(fd.attributes, FieldDef.DISPLAY_ONLY_ATTR) || fd.special == FieldDef.FEC ) {
-            addAttrb(attrbs, "NORM");
-            if (FieldDef.hasAttribute(fd.attributes, FieldDef.NOECHO_ATTR)) {
-            	addAttrb(attrbs, "BRT");
-            }
-            else
-	            if (FieldDef.hasAttribute(fd.attributes, FieldDef.DISPLAY_ONLY_ATTR)) {
+        	
+        	
+    	    if (FieldDef.hasAttribute(fd.attributes, FieldDef.NOECHO_ATTR)) {
+    	    	addAttrb(attrbs, "DRK");
+            	addAttrb(attrbs, "FSET");
+    	    }
+    	    else {
+    	    	addAttrb(attrbs, "NORM");
+
+	            if (FieldDef.hasAttribute(fd.attributes, FieldDef.NOECHO_ATTR)) {
 	            	addAttrb(attrbs, "BRT");
 	            }
-
-            if (fd.modifier == FieldDef.FLD && fd.special == FieldDef.VRF ){
-            	addAttrb(attrbs, "FSET");
-            }
+	            else
+		            if (FieldDef.hasAttribute(fd.attributes, FieldDef.DISPLAY_ONLY_ATTR)) {
+		            	addAttrb(attrbs, "BRT");
+		            }
+	
+	            if (fd.modifier == FieldDef.FLD && fd.special == FieldDef.VRF ){
+	            	addAttrb(attrbs, "FSET");
+	            }
             
-            
+    	    }
             
         }
-	        else if (fd.special == FieldDef.IDC || fd.special == FieldDef.VRF || fd.special == FieldDef.GLS_IDC ) {
+	    else if (fd.special == FieldDef.IDC || fd.special == FieldDef.VRF || fd.special == FieldDef.GLS_IDC ) {
 	            addAttrb(attrbs, "NORM");
 	            
-	        }        
-		        else if (FieldDef.hasAttribute(fd.attributes, FieldDef.DISPLAY_ONLY_ATTR)) {
-		            if (FieldDef.hasAttribute(fd.attributes, FieldDef.NOECHO_ATTR)) {
-		                addAttrb(attrbs, "DRK");
-		            }
-		            else {
-		            	addAttrb(attrbs, "BRT"); 
-		            }
-		        }
+	    }        
+	    else if (FieldDef.hasAttribute(fd.attributes, FieldDef.DISPLAY_ONLY_ATTR)) {
+		     if (FieldDef.hasAttribute(fd.attributes, FieldDef.NOECHO_ATTR)) {
+		          addAttrb(attrbs, "DRK");
+		     }
+		     else {
+		          addAttrb(attrbs, "BRT"); 
+		     }
+		}
 
 
         if ((fd.modifier == FieldDef.AKY || fd.modifier == FieldDef.IKY || fd.modifier == FieldDef.MKY)  ){
