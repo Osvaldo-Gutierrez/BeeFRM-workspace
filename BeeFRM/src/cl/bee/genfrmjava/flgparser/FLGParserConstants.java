@@ -71,119 +71,123 @@ public interface FLGParserConstants {
   /** RegularExpression Id. */
   int BLINK = 37;
   /** RegularExpression Id. */
-  int AMPERSAND = 38;
+  int REVERSE_TEXT = 38;
   /** RegularExpression Id. */
-  int COMMA_ST_TEXT = 39;
+  int UNDERLINE_TEXT = 39;
   /** RegularExpression Id. */
-  int LPAR_ST_TEXT = 40;
+  int AMPERSAND = 40;
   /** RegularExpression Id. */
-  int RPAR_ST_TEXT = 41;
+  int COMMA_ST_TEXT = 41;
   /** RegularExpression Id. */
-  int SEMICOLON_ST_TEXT = 42;
+  int LPAR_ST_TEXT = 42;
   /** RegularExpression Id. */
-  int INTEGER_ST_TEXT = 43;
+  int RPAR_ST_TEXT = 43;
   /** RegularExpression Id. */
-  int STRING_ST_TEXT = 44;
+  int SEMICOLON_ST_TEXT = 44;
   /** RegularExpression Id. */
-  int BLANK_FILL = 45;
+  int INTEGER_ST_TEXT = 45;
   /** RegularExpression Id. */
-  int CLEAR_CHARACTER = 46;
+  int STRING_ST_TEXT = 46;
   /** RegularExpression Id. */
-  int DEF = 47;
+  int BLANK_FILL = 47;
   /** RegularExpression Id. */
-  int DISPLAY_ONLY = 48;
+  int CLEAR_CHARACTER = 48;
   /** RegularExpression Id. */
-  int ECHO = 49;
+  int DEF = 49;
   /** RegularExpression Id. */
-  int FIXED_DECIMAL = 50;
+  int DISPLAY_ONLY = 50;
   /** RegularExpression Id. */
-  int HELP = 51;
+  int ECHO = 51;
   /** RegularExpression Id. */
-  int INDEX_ST_FIELD = 52;
+  int FIXED_DECIMAL = 52;
   /** RegularExpression Id. */
-  int LEFT_JUSTIFIED = 53;
+  int HELP = 53;
   /** RegularExpression Id. */
-  int NAME_ST_FIELD = 54;
+  int INDEX_ST_FIELD = 54;
   /** RegularExpression Id. */
-  int NOAUTOTAB = 55;
+  int LEFT_JUSTIFIED = 55;
   /** RegularExpression Id. */
-  int NOBLINKING = 56;
+  int NAME_ST_FIELD = 56;
   /** RegularExpression Id. */
-  int NOBOLD = 57;
+  int NOAUTOTAB = 57;
   /** RegularExpression Id. */
-  int NODISPLAY_ONLY = 58;
+  int NOBLINKING = 58;
   /** RegularExpression Id. */
-  int NOECHO = 59;
+  int NOBOLD = 59;
   /** RegularExpression Id. */
-  int NOFIXED_DECIMAL = 60;
+  int NODISPLAY_ONLY = 60;
   /** RegularExpression Id. */
-  int NOREVERSE = 61;
+  int NOECHO = 61;
   /** RegularExpression Id. */
-  int NOSUPERVISOR_ONLY = 62;
+  int NOFIXED_DECIMAL = 62;
   /** RegularExpression Id. */
-  int NOSUPPRESS = 63;
+  int NOREVERSE = 63;
   /** RegularExpression Id. */
-  int NOUNDERLINE = 64;
+  int NOSUPERVISOR_ONLY = 64;
   /** RegularExpression Id. */
-  int NOUPPERCASE = 65;
+  int NOSUPPRESS = 65;
   /** RegularExpression Id. */
-  int PICTURE = 66;
+  int NOUNDERLINE = 66;
   /** RegularExpression Id. */
-  int RESPONSE_REQUIRED = 67;
+  int NOUPPERCASE = 67;
   /** RegularExpression Id. */
-  int REVERSE = 68;
+  int PICTURE = 68;
   /** RegularExpression Id. */
-  int RIGHT_JUSTIFIED = 69;
+  int RESPONSE_REQUIRED = 69;
   /** RegularExpression Id. */
-  int SUPPRESS = 70;
+  int REVERSE = 70;
   /** RegularExpression Id. */
-  int ZERO_FILL = 71;
+  int RIGHT_JUSTIFIED = 71;
   /** RegularExpression Id. */
-  int BOLD_FIELD = 72;
+  int SUPPRESS = 72;
   /** RegularExpression Id. */
-  int UNDERLINE = 73;
+  int ZERO_FILL = 73;
   /** RegularExpression Id. */
-  int COLON_ST_FIELD = 74;
+  int BOLD_FIELD = 74;
   /** RegularExpression Id. */
-  int COMMA_ST_FIELD = 75;
+  int UNDERLINE = 75;
   /** RegularExpression Id. */
-  int EQUAL_ST_FIELD = 76;
+  int COLON_ST_FIELD = 76;
   /** RegularExpression Id. */
-  int LPAR_ST_FIELD = 77;
+  int COMMA_ST_FIELD = 77;
   /** RegularExpression Id. */
-  int RPAR_ST_FIELD = 78;
+  int EQUAL_ST_FIELD = 78;
   /** RegularExpression Id. */
-  int SEMICOLON_ST_FIELD = 79;
+  int LPAR_ST_FIELD = 79;
   /** RegularExpression Id. */
-  int INTEGER_ST_FIELD = 80;
+  int RPAR_ST_FIELD = 80;
   /** RegularExpression Id. */
-  int STRING_ST_FIELD = 81;
+  int SEMICOLON_ST_FIELD = 81;
   /** RegularExpression Id. */
-  int BEGIN_WITH = 82;
+  int INTEGER_ST_FIELD = 82;
   /** RegularExpression Id. */
-  int NAME_ST_ORDER = 83;
+  int STRING_ST_FIELD = 83;
   /** RegularExpression Id. */
-  int EQUAL_ST_ORDER = 84;
+  int BEGIN_WITH = 84;
   /** RegularExpression Id. */
-  int SEMICOLON_ST_ORDER = 85;
+  int NAME_ST_ORDER = 85;
   /** RegularExpression Id. */
-  int INTEGER_ST_ORDER = 86;
+  int EQUAL_ST_ORDER = 86;
   /** RegularExpression Id. */
-  int STRING_ST_ORDER = 87;
+  int SEMICOLON_ST_ORDER = 87;
   /** RegularExpression Id. */
-  int INDEX_ST_NAMED_DATA = 88;
+  int INTEGER_ST_ORDER = 88;
   /** RegularExpression Id. */
-  int DATA = 89;
+  int STRING_ST_ORDER = 89;
   /** RegularExpression Id. */
-  int NAME_ST_NAMED_DATA = 90;
+  int INDEX_ST_NAMED_DATA = 90;
   /** RegularExpression Id. */
-  int EQUAL_ST_NAMED_DATA = 91;
+  int DATA = 91;
   /** RegularExpression Id. */
-  int SEMICOLON_ST_NAMED_DATA = 92;
+  int NAME_ST_NAMED_DATA = 92;
   /** RegularExpression Id. */
-  int INTEGER_ST_NAMED_DATA = 93;
+  int EQUAL_ST_NAMED_DATA = 93;
   /** RegularExpression Id. */
-  int STRING_ST_NAMED_DATA = 94;
+  int SEMICOLON_ST_NAMED_DATA = 94;
+  /** RegularExpression Id. */
+  int INTEGER_ST_NAMED_DATA = 95;
+  /** RegularExpression Id. */
+  int STRING_ST_NAMED_DATA = 96;
 
   /** Lexical state. */
   int NAMED_DATA_STATE = 0;
@@ -240,6 +244,8 @@ public interface FLGParserConstants {
     "<STRING_ST_FORM>",
     "\"BOLD\"",
     "\"BLINK\"",
+    "\"REVERSE\"",
+    "\"UNDERLINE\"",
     "\"&\"",
     "\",\"",
     "\"(\"",
