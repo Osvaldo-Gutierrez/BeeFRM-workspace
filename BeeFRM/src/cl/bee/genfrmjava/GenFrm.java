@@ -61,15 +61,6 @@ public class GenFrm {
     private static final String action_names[] = { "", "BA", "BQ", "BU" };
 
     //
-    
-    /** TODO_javadoc. */
-    private static final String[] cond_extras = {"PGM_BQ", "PGM_BU"};
-    
-    
-    //Variables de VAX/Compilacion
-    private static final Boolean PGM_PTC = true;
-    private static final Boolean PGM_PER = false;
-    private static final Boolean PGM_ARG = false;
 
     /** TODO_javadoc. */
     private static PrintStream gen = null;
@@ -163,6 +154,19 @@ public class GenFrm {
 	            	environment_hash.put("NOT " + parts[0].trim(), (Boolean.parseBoolean(parts[1].trim().toLowerCase()) ? false : true));
             	}
               }
+            
+            environment_hash.put("PGM_" + action_names[action], true);
+            if (action == BQ_ACTION) {
+            	environment_hash.put("PGM_BU", false);
+            	environment_hash.put("NOT PGM_BU", true);
+            	environment_hash.put("NOT PGM_BQ", false);
+            }
+            else {
+            	environment_hash.put("PGM_BQ", false);
+            	environment_hash.put("NOT PGM_BQ", true);
+            	environment_hash.put("NOT PGM_BU", false);
+            }
+            	
             
 
             logger.debug("systemName: " + systemName);
@@ -2041,13 +2045,13 @@ public class GenFrm {
                         if(gls.containsKey(fd.name.substring(8,12))) {
     	                    int glsSize = gls.get(fd.name.substring(8,12));
                         	
-                            gen.println("           IF MSG-COD-MENS = 'COD    NEX'");
+                            gen.println("           IF MSG-COD-MENS NOT = 'COD    NEX'");
     	                    if (glsSize == 0 || glsSize > 12)
-    	                    	gen.println("           MOVE USR-GLS-DESC IN USR TO FRM-GLS-"+ fd.name.substring(8) + " IN " + entityName + "-FLD.");
+    	                    	gen.println("           MOVE USR-GLS-DESC IN USR TO FRM-GLS-"+ fd.name.substring(8) + " IN " + entityName + "-FLD");
     	                    else if (glsSize > 5)
-    	                    	gen.println("           MOVE USR-GLS-DCOR IN USR TO FRM-GLS-"+ fd.name.substring(8) + " IN " + entityName + "-FLD.");
+    	                    	gen.println("           MOVE USR-GLS-DCOR IN USR TO FRM-GLS-"+ fd.name.substring(8) + " IN " + entityName + "-FLD");
     	                    else
-    	                    	gen.println("           MOVE USR-GLS-ABRV IN USR TO FRM-GLS-"+ fd.name.substring(8) + " IN " + entityName + "-FLD.");
+    	                    	gen.println("           MOVE USR-GLS-ABRV IN USR TO FRM-GLS-"+ fd.name.substring(8) + " IN " + entityName + "-FLD");
                             gen.println("           ELSE");
     	                    gen.println("               MOVE SPACES TO FRM-GLS-" + fd.name.substring(8) + " IN " + entityName + "-FLD");
 
@@ -3521,18 +3525,18 @@ public class GenFrm {
 		    	    	numCon++;
 		    	    	
 			    		if (sectionCode.numSpecial() > 0) {
-			    			if (sectionCode.hasSpecial(labelSpecial))
-					    		gen.println(((SectionDef)addit_hash.get(ident)).getCode());
+			    		//	if (sectionCode.hasSpecial(labelSpecial))
+					   // 		gen.println(((SectionDef)addit_hash.get(ident)).getCode());
 
 			    			String negLabel = null;
 			    			//negacion de PGM_
-			    			if (action == BQ_ACTION)
-			    				negLabel = "NOT PGM_BU";
-			    			else if (action == BU_ACTION)
-			    				negLabel = "NOT PGM_BQ";
+			    			//if (action == BQ_ACTION)
+			    			//	negLabel = "NOT PGM_BU";
+			    			//else if (action == BU_ACTION)
+			    			//	negLabel = "NOT PGM_BQ";
 			    			
-			    			if (sectionCode.hasSpecial(negLabel))
-			    				gen.println(((SectionDef)addit_hash.get(ident)).getCode());
+			    			//if (sectionCode.hasSpecial(negLabel))
+			    			//	gen.println(((SectionDef)addit_hash.get(ident)).getCode());
 			    			
 			    			//se revisan variables de ambiente
 			    			for ( String pgmStrg: sectionCode.getSpecial()) {
@@ -3565,8 +3569,10 @@ public class GenFrm {
 			    							
 			    						}
 			    						
-					    				if (environment_hash.get(pgmStrg) && cumple)
+					    				if (environment_hash.get(pgmStrg) && cumple) {
 								    		gen.println(((SectionDef)addit_hash.get(ident)).getCode());
+								    		break;
+					    				}
 			    						
 			    					}
 			    					else
@@ -3617,18 +3623,18 @@ public class GenFrm {
     		gen.println(sectionCode.getCode());
     	else {
     		if (sectionCode.numSpecial() > 0) {
-    			if (sectionCode.hasSpecial(labelSpecial))
-		    		gen.println(((SectionDef)addit_hash.get(ident)).getCode());
+    		//	if (sectionCode.hasSpecial(labelSpecial))
+		    //		gen.println(((SectionDef)addit_hash.get(ident)).getCode());
 
     			String negLabel = null;
     			//negacion de PGM_
-    			if (action == BQ_ACTION)
-    				negLabel = "NOT PGM_BU";
-    			else if (action == BU_ACTION)
-    				negLabel = "NOT PGM_BQ";
+    			//if (action == BQ_ACTION)
+    			//	negLabel = "NOT PGM_BU";
+    			//else if (action == BU_ACTION)
+    			//	negLabel = "NOT PGM_BQ";
     			
-    			if (sectionCode.hasSpecial(negLabel))
-    				gen.println(((SectionDef)addit_hash.get(ident)).getCode());
+    			//if (sectionCode.hasSpecial(negLabel))
+    			//	gen.println(((SectionDef)addit_hash.get(ident)).getCode());
     			
     			//se revisan variables de ambiente
     			for ( String pgmStrg: sectionCode.getSpecial()) {

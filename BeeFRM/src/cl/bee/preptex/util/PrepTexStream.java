@@ -134,8 +134,10 @@ public class PrepTexStream extends FileInputStream {
 
 	                            //si es de tipo BQ o BU no se pone como concatenated ya que no se tomara en cuenta despues
 	                			if (Arrays.binarySearch(type_special_names, ((prevKey.contains("$")) ? prevKey.substring(0, prevKey.indexOf("$")) : prevKey).substring(prevKey.indexOf("IF ") + 3)) < 0) {
+
+	                				numConca = searchMaxConcatenated(concatenatedOrder, prevKey.substring(prevKey.indexOf("IF ") + 3) );
 	                				numConca++;
-	                                concatenatedOrder.put(prevKey.substring(label.indexOf("IF ") + 3), numConca);
+	                                concatenatedOrder.put(prevKey.substring(prevKey.indexOf("IF ") + 3), numConca);
 	                			}
 	                            
 	                			prevKey = ReadConcatenatedCode(ctrl, symbolsTable, fp_in, fp_out, line, prevKey, label, codeLabel, concatenatedOrder);
@@ -152,16 +154,16 @@ public class PrepTexStream extends FileInputStream {
 	                    	}
 	                    	else {
 	                            numConca = 0;
-		                        if(codeLabel.containsKey(label)) {
-		                            int nitm = codeLabel.get(label);
+		                        if(codeLabel.containsKey(label.trim())) {
+		                            int nitm = codeLabel.get(label.trim());
 		                            nitm++;
-		                            codeLabel.put(label, nitm);
+		                            codeLabel.put(label.trim(), nitm);
 		                            label = label.trim() + "$" +nitm;
 		                            fp_out.println(replace(label, symbolsTable));
 		
 		                        }
 		                        else {
-		                        	codeLabel.put(label, 0);
+		                        	codeLabel.put(label.trim(), 0);
 		                            fp_out.println(replace(label, symbolsTable));
 		                        }
 	
@@ -545,16 +547,16 @@ public class PrepTexStream extends FileInputStream {
 
 	        newPrv = label;
 	        
-	        if(codeLabel.containsKey(label)) {
-	            int nitm = codeLabel.get(label);
+	        if(codeLabel.containsKey(label.trim())) {
+	            int nitm = codeLabel.get(label.trim());
 	            nitm++;
-	            codeLabel.put(label, nitm);
+	            codeLabel.put(label.trim(), nitm);
 	            label = label + "$" +nitm;
 	            fp_out.println(replace(label, symbolsTable));
 	
 	        }
 	        else {
-	        	codeLabel.put(label, 0);
+	        	codeLabel.put(label.trim(), 0);
 	        	fp_out.println(replace(label, symbolsTable));
 	        }
 	        
@@ -586,16 +588,16 @@ public class PrepTexStream extends FileInputStream {
 	                    
 	                    
 	                    if(endpattern.matcher(line.substring(ctrl_len)).find()) {
-	                        if(codeLabel.containsKey(label)) {
-	                            int nitm = codeLabel.get(label);
+	                        if(codeLabel.containsKey(label.trim())) {
+	                            int nitm = codeLabel.get(label.trim());
 	                            nitm++;
-	                            codeLabel.put(label, nitm);
+	                            codeLabel.put(label.trim(), nitm);
 	                            label = label + "$" +nitm;
 	                            fp_out.println(replace(label, symbolsTable));
 
 	                        }
 	                        else {
-	                        	codeLabel.put(label, 0);
+	                        	codeLabel.put(label.trim(), 0);
 	                            fp_out.println(replace(label, symbolsTable));
 	                        }	
 	                    }
@@ -638,4 +640,33 @@ public class PrepTexStream extends FileInputStream {
         return label;
         
     }
+    
+    
+    public int searchMaxConcatenated(HashMap<String, Integer> concatenatedOrder, String key_b) throws IOException {
+    	
+    	int max_conca = 0;
+    	key_b = (key_b.contains("$"))? key_b.substring(0, key_b.indexOf("$")) : key_b;
+    	
+    	for(Map.Entry<String, Integer> entry : concatenatedOrder.entrySet()) {
+    	    String key = entry.getKey();
+    	    int value = entry.getValue();
+
+    	    
+    	    String[] parts = key.split(" ");
+    	    for (String part : parts) {
+    	        
+    	    	part = (part.contains("$"))? part.substring(0, part.indexOf("$")) : part;
+    	    	if (part.equals(key_b)) {
+    	    		max_conca = (value > max_conca) ? value : max_conca;
+    	    		break;
+    	    	}
+    	    	
+    	    }
+    	    
+    	}
+    	
+    	
+        return max_conca;
+    }
+    
 }

@@ -1666,7 +1666,7 @@ public class BaseVisitor implements GJNoArguVisitor<Object> {
             return new String(baos.toByteArray());
 
         } catch (IOException e) {
-            return "";
+            return ""; 
         }
     }
 
