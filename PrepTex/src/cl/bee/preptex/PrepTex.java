@@ -33,7 +33,7 @@ public class PrepTex implements PrepTexConstants {
    statement n1;
     label_1:
     while (true) {
-      if (jj_2_1(3)) {
+      if (jj_2_1(6)) {
         ;
       } else {
         break label_1;
@@ -53,19 +53,19 @@ public class PrepTex implements PrepTexConstants {
    iteration_statement n3;
    include_statement n4;
    text_statement n5;
-    if (jj_2_2(3)) {
+    if (jj_2_2(6)) {
       n1 = assignment_statement();
         n0 = new NodeChoice(n1, 0);
-    } else if (jj_2_3(3)) {
+    } else if (jj_2_3(6)) {
       n2 = selection_statement();
         n0 = new NodeChoice(n2, 1);
-    } else if (jj_2_4(3)) {
+    } else if (jj_2_4(6)) {
       n3 = iteration_statement();
         n0 = new NodeChoice(n3, 2);
-    } else if (jj_2_5(3)) {
+    } else if (jj_2_5(6)) {
       n4 = include_statement();
         n0 = new NodeChoice(n4, 3);
-    } else if (jj_2_6(3)) {
+    } else if (jj_2_6(6)) {
       n5 = text_statement();
         n0 = new NodeChoice(n5, 4);
     } else {
@@ -94,7 +94,7 @@ public class PrepTex implements PrepTexConstants {
     n1 = jj_consume_token(IF);
              n0 = JTBToolkit.makeNodeToken(n1);
     n2 = expression_statement();
-    if (jj_2_7(3)) {
+    if (jj_2_7(6)) {
       n5 = jj_consume_token(THEN);
                   n4 = JTBToolkit.makeNodeToken(n5);
         n3.addNode(n4);
@@ -102,7 +102,7 @@ public class PrepTex implements PrepTexConstants {
       ;
     }
     n6 = statement_list();
-    if (jj_2_8(3)) {
+    if (jj_2_8(6)) {
         n8 = new NodeSequence(2);
       n10 = jj_consume_token(ELSE);
                    n9 = JTBToolkit.makeNodeToken(n10);
@@ -166,7 +166,7 @@ public class PrepTex implements PrepTexConstants {
    Token n43;
    NodeToken n44;
    Token n45;
-    if (jj_2_10(3)) {
+    if (jj_2_10(6)) {
         n1 = new NodeSequence(4);
       n3 = jj_consume_token(WHILE);
                    n2 = JTBToolkit.makeNodeToken(n3);
@@ -179,7 +179,7 @@ public class PrepTex implements PrepTexConstants {
                  n6 = JTBToolkit.makeNodeToken(n7);
         n1.addNode(n6);
         n0 = new NodeChoice(n1, 0);
-    } else if (jj_2_11(3)) {
+    } else if (jj_2_11(6)) {
         n8 = new NodeSequence(9);
       n10 = jj_consume_token(FOR);
                   n9 = JTBToolkit.makeNodeToken(n10);
@@ -207,7 +207,7 @@ public class PrepTex implements PrepTexConstants {
                   n23 = JTBToolkit.makeNodeToken(n24);
         n8.addNode(n23);
         n0 = new NodeChoice(n8, 1);
-    } else if (jj_2_12(3)) {
+    } else if (jj_2_12(6)) {
         n25 = new NodeSequence(10);
       n27 = jj_consume_token(FOR);
                   n26 = JTBToolkit.makeNodeToken(n27);
@@ -225,7 +225,7 @@ public class PrepTex implements PrepTexConstants {
         n25.addNode(n33);
       n35 = expression_statement();
         n25.addNode(n35);
-      if (jj_2_9(3)) {
+      if (jj_2_9(6)) {
            n37 = new NodeSequence(2);
         n39 = jj_consume_token(STEP);
                       n38 = JTBToolkit.makeNodeToken(n39);
@@ -266,7 +266,7 @@ public class PrepTex implements PrepTexConstants {
    Token n8;
     n1 = jj_consume_token(INCLUDE);
                   n0 = JTBToolkit.makeNodeToken(n1);
-    if (jj_2_13(3)) {
+    if (jj_2_13(6)) {
         n3 = new NodeSequence(2);
       n4 = identifier_list();
         n3.addNode(n4);
@@ -316,7 +316,7 @@ public class PrepTex implements PrepTexConstants {
                      n0 = JTBToolkit.makeNodeToken(n1);
     label_2:
     while (true) {
-      if (jj_2_14(3)) {
+      if (jj_2_14(6)) {
         ;
       } else {
         break label_2;
@@ -348,11 +348,11 @@ public class PrepTex implements PrepTexConstants {
    Token n2;
    NodeToken n3;
    Token n4;
-    if (jj_2_15(3)) {
+    if (jj_2_15(6)) {
       n2 = jj_consume_token(EQUAL);
                    n1 = JTBToolkit.makeNodeToken(n2);
         n0 = new NodeChoice(n1, 0);
-    } else if (jj_2_16(3)) {
+    } else if (jj_2_16(6)) {
       n4 = jj_consume_token(PLUSASSIGN);
                         n3 = JTBToolkit.makeNodeToken(n4);
         n0 = new NodeChoice(n3, 1);
@@ -374,7 +374,7 @@ public class PrepTex implements PrepTexConstants {
     n0 = logical_and_expression();
     label_3:
     while (true) {
-      if (jj_2_17(3)) {
+      if (jj_2_17(6)) {
         ;
       } else {
         break label_3;
@@ -402,7 +402,7 @@ public class PrepTex implements PrepTexConstants {
     n0 = equality_expression();
     label_4:
     while (true) {
-      if (jj_2_18(3)) {
+      if (jj_2_18(6)) {
         ;
       } else {
         break label_4;
@@ -431,13 +431,13 @@ public class PrepTex implements PrepTexConstants {
    Token n7;
    relational_expression n8;
     n0 = relational_expression();
-    if (jj_2_21(3)) {
+    if (jj_2_21(6)) {
         n2 = new NodeSequence(2);
-      if (jj_2_19(3)) {
+      if (jj_2_19(6)) {
         n5 = jj_consume_token(EQUAL);
                          n4 = JTBToolkit.makeNodeToken(n5);
               n3 = new NodeChoice(n4, 0);
-      } else if (jj_2_20(3)) {
+      } else if (jj_2_20(6)) {
         n7 = jj_consume_token(NE);
                       n6 = JTBToolkit.makeNodeToken(n7);
               n3 = new NodeChoice(n6, 1);
@@ -471,21 +471,21 @@ public class PrepTex implements PrepTexConstants {
    Token n11;
    additive_expression n12;
     n0 = additive_expression();
-    if (jj_2_26(3)) {
+    if (jj_2_26(6)) {
         n2 = new NodeSequence(2);
-      if (jj_2_22(3)) {
+      if (jj_2_22(6)) {
         n5 = jj_consume_token(LT);
                       n4 = JTBToolkit.makeNodeToken(n5);
               n3 = new NodeChoice(n4, 0);
-      } else if (jj_2_23(3)) {
+      } else if (jj_2_23(6)) {
         n7 = jj_consume_token(GT);
                       n6 = JTBToolkit.makeNodeToken(n7);
               n3 = new NodeChoice(n6, 1);
-      } else if (jj_2_24(3)) {
+      } else if (jj_2_24(6)) {
         n9 = jj_consume_token(LE);
                       n8 = JTBToolkit.makeNodeToken(n9);
               n3 = new NodeChoice(n8, 2);
-      } else if (jj_2_25(3)) {
+      } else if (jj_2_25(6)) {
         n11 = jj_consume_token(GE);
                        n10 = JTBToolkit.makeNodeToken(n11);
               n3 = new NodeChoice(n10, 3);
@@ -517,17 +517,17 @@ public class PrepTex implements PrepTexConstants {
     n0 = multiplicative_expression();
     label_5:
     while (true) {
-      if (jj_2_27(3)) {
+      if (jj_2_27(6)) {
         ;
       } else {
         break label_5;
       }
         n2 = new NodeSequence(2);
-      if (jj_2_28(3)) {
+      if (jj_2_28(6)) {
         n5 = jj_consume_token(PLUS);
                         n4 = JTBToolkit.makeNodeToken(n5);
               n3 = new NodeChoice(n4, 0);
-      } else if (jj_2_29(3)) {
+      } else if (jj_2_29(6)) {
         n7 = jj_consume_token(MINUS);
                          n6 = JTBToolkit.makeNodeToken(n7);
               n3 = new NodeChoice(n6, 1);
@@ -558,17 +558,17 @@ public class PrepTex implements PrepTexConstants {
     n0 = unary_expression();
     label_6:
     while (true) {
-      if (jj_2_30(3)) {
+      if (jj_2_30(6)) {
         ;
       } else {
         break label_6;
       }
         n2 = new NodeSequence(2);
-      if (jj_2_31(3)) {
+      if (jj_2_31(6)) {
         n5 = jj_consume_token(STAR);
                         n4 = JTBToolkit.makeNodeToken(n5);
               n3 = new NodeChoice(n4, 0);
-      } else if (jj_2_32(3)) {
+      } else if (jj_2_32(6)) {
         n7 = jj_consume_token(SLASH);
                          n6 = JTBToolkit.makeNodeToken(n7);
               n3 = new NodeChoice(n6, 1);
@@ -592,10 +592,10 @@ public class PrepTex implements PrepTexConstants {
    NodeSequence n2;
    unary_operator n3;
    unary_expression n4;
-    if (jj_2_33(3)) {
+    if (jj_2_33(6)) {
       n1 = postfix_expression();
         n0 = new NodeChoice(n1, 0);
-    } else if (jj_2_34(3)) {
+    } else if (jj_2_34(6)) {
         n2 = new NodeSequence(2);
       n3 = unary_operator();
         n2.addNode(n3);
@@ -616,11 +616,11 @@ public class PrepTex implements PrepTexConstants {
    Token n2;
    NodeToken n3;
    Token n4;
-    if (jj_2_35(3)) {
+    if (jj_2_35(6)) {
       n2 = jj_consume_token(MINUS);
                    n1 = JTBToolkit.makeNodeToken(n2);
         n0 = new NodeChoice(n1, 0);
-    } else if (jj_2_36(3)) {
+    } else if (jj_2_36(6)) {
       n4 = jj_consume_token(NOT);
                  n3 = JTBToolkit.makeNodeToken(n4);
         n0 = new NodeChoice(n3, 1);
@@ -642,7 +642,7 @@ public class PrepTex implements PrepTexConstants {
    NodeToken n6;
    Token n7;
     n0 = primary_expression();
-    if (jj_2_37(3)) {
+    if (jj_2_37(6)) {
         n2 = new NodeSequence(3);
       n4 = jj_consume_token(LPAREN);
                     n3 = JTBToolkit.makeNodeToken(n4);
@@ -670,7 +670,7 @@ public class PrepTex implements PrepTexConstants {
     n0 = expression_statement();
     label_7:
     while (true) {
-      if (jj_2_38(3)) {
+      if (jj_2_38(6)) {
         ;
       } else {
         break label_7;
@@ -705,14 +705,14 @@ public class PrepTex implements PrepTexConstants {
    expression_statement n13;
    NodeToken n14;
    Token n15;
-    if (jj_2_39(3)) {
+    if (jj_2_39(6)) {
       n2 = jj_consume_token(IDENTIFIER);
                         n1 = JTBToolkit.makeNodeToken(n2);
         n0 = new NodeChoice(n1, 0);
-    } else if (jj_2_40(3)) {
+    } else if (jj_2_40(6)) {
       n3 = constant();
         n0 = new NodeChoice(n3, 1);
-    } else if (jj_2_41(3)) {
+    } else if (jj_2_41(6)) {
         n4 = new NodeSequence(3);
       n6 = jj_consume_token(LPAREN);
                     n5 = JTBToolkit.makeNodeToken(n6);
@@ -723,7 +723,7 @@ public class PrepTex implements PrepTexConstants {
                     n8 = JTBToolkit.makeNodeToken(n9);
         n4.addNode(n8);
         n0 = new NodeChoice(n4, 2);
-    } else if (jj_2_42(3)) {
+    } else if (jj_2_42(6)) {
         n10 = new NodeSequence(3);
       n12 = jj_consume_token(LBRACE);
                      n11 = JTBToolkit.makeNodeToken(n12);
@@ -752,19 +752,19 @@ public class PrepTex implements PrepTexConstants {
    Token n6;
    NodeToken n7;
    Token n8;
-    if (jj_2_43(3)) {
+    if (jj_2_43(6)) {
       n2 = jj_consume_token(DOUBLE);
                     n1 = JTBToolkit.makeNodeToken(n2);
         n0 = new NodeChoice(n1, 0);
-    } else if (jj_2_44(3)) {
+    } else if (jj_2_44(6)) {
       n4 = jj_consume_token(STRING);
                     n3 = JTBToolkit.makeNodeToken(n4);
         n0 = new NodeChoice(n3, 1);
-    } else if (jj_2_45(3)) {
+    } else if (jj_2_45(6)) {
       n6 = jj_consume_token(TRUE);
                   n5 = JTBToolkit.makeNodeToken(n6);
         n0 = new NodeChoice(n5, 2);
-    } else if (jj_2_46(3)) {
+    } else if (jj_2_46(6)) {
       n8 = jj_consume_token(FALSE);
                    n7 = JTBToolkit.makeNodeToken(n8);
         n0 = new NodeChoice(n7, 3);
@@ -1110,7 +1110,7 @@ public class PrepTex implements PrepTexConstants {
     jj_scanpos = xsp;
     if (jj_3_20()) return true;
     }
-    if (jj_3R_19()) return true;
+    if (jj_3R_20()) return true;
     return false;
   }
 
@@ -1131,8 +1131,8 @@ public class PrepTex implements PrepTexConstants {
     return false;
   }
 
-  private boolean jj_3R_18() {
-    if (jj_3R_19()) return true;
+  private boolean jj_3R_19() {
+    if (jj_3R_20()) return true;
     Token xsp;
     xsp = jj_scanpos;
     if (jj_3_21()) jj_scanpos = xsp;
@@ -1168,7 +1168,7 @@ public class PrepTex implements PrepTexConstants {
     jj_scanpos = xsp;
     if (jj_3_29()) return true;
     }
-    if (jj_3R_21()) return true;
+    if (jj_3R_22()) return true;
     return false;
   }
 
@@ -1181,7 +1181,7 @@ public class PrepTex implements PrepTexConstants {
     return false;
   }
 
-  private boolean jj_3R_24() {
+  private boolean jj_3R_25() {
     Token xsp;
     xsp = jj_scanpos;
     if (jj_3_35()) {
@@ -1196,8 +1196,8 @@ public class PrepTex implements PrepTexConstants {
     return false;
   }
 
-  private boolean jj_3R_20() {
-    if (jj_3R_21()) return true;
+  private boolean jj_3R_21() {
+    if (jj_3R_22()) return true;
     Token xsp;
     while (true) {
       xsp = jj_scanpos;
@@ -1239,7 +1239,7 @@ public class PrepTex implements PrepTexConstants {
     return false;
   }
 
-  private boolean jj_3R_16() {
+  private boolean jj_3R_17() {
     if (jj_scan_token(IDENTIFIER)) return true;
     Token xsp;
     while (true) {
@@ -1251,13 +1251,13 @@ public class PrepTex implements PrepTexConstants {
 
   private boolean jj_3_18() {
     if (jj_scan_token(AND)) return true;
-    if (jj_3R_18()) return true;
+    if (jj_3R_19()) return true;
     return false;
   }
 
   private boolean jj_3_34() {
-    if (jj_3R_24()) return true;
-    if (jj_3R_22()) return true;
+    if (jj_3R_25()) return true;
+    if (jj_3R_23()) return true;
     return false;
   }
 
@@ -1265,11 +1265,14 @@ public class PrepTex implements PrepTexConstants {
     if (jj_scan_token(FOR)) return true;
     if (jj_scan_token(IDENTIFIER)) return true;
     if (jj_scan_token(EQUAL)) return true;
+    if (jj_3R_15()) return true;
+    if (jj_scan_token(TO)) return true;
+    if (jj_3R_15()) return true;
     return false;
   }
 
-  private boolean jj_3R_17() {
-    if (jj_3R_18()) return true;
+  private boolean jj_3R_18() {
+    if (jj_3R_19()) return true;
     Token xsp;
     while (true) {
       xsp = jj_scanpos;
@@ -1285,7 +1288,7 @@ public class PrepTex implements PrepTexConstants {
   }
 
   private boolean jj_3_33() {
-    if (jj_3R_23()) return true;
+    if (jj_3R_24()) return true;
     return false;
   }
 
@@ -1294,7 +1297,7 @@ public class PrepTex implements PrepTexConstants {
     return false;
   }
 
-  private boolean jj_3R_22() {
+  private boolean jj_3R_23() {
     Token xsp;
     xsp = jj_scanpos;
     if (jj_3_33()) {
@@ -1338,7 +1341,7 @@ public class PrepTex implements PrepTexConstants {
   }
 
   private boolean jj_3R_9() {
-    if (jj_3R_22()) return true;
+    if (jj_3R_23()) return true;
     if (jj_3R_27()) return true;
     if (jj_3R_15()) return true;
     return false;
@@ -1354,6 +1357,9 @@ public class PrepTex implements PrepTexConstants {
     if (jj_scan_token(FOR)) return true;
     if (jj_scan_token(EACH)) return true;
     if (jj_scan_token(IDENTIFIER)) return true;
+    if (jj_scan_token(IN)) return true;
+    if (jj_scan_token(LPAREN)) return true;
+    if (jj_3R_16()) return true;
     return false;
   }
 
@@ -1370,17 +1376,17 @@ public class PrepTex implements PrepTexConstants {
     }
     }
     }
-    if (jj_3R_20()) return true;
+    if (jj_3R_21()) return true;
     return false;
   }
 
   private boolean jj_3_17() {
     if (jj_scan_token(OR)) return true;
-    if (jj_3R_17()) return true;
+    if (jj_3R_18()) return true;
     return false;
   }
 
-  private boolean jj_3R_25() {
+  private boolean jj_3R_16() {
     if (jj_3R_15()) return true;
     Token xsp;
     while (true) {
@@ -1400,8 +1406,8 @@ public class PrepTex implements PrepTexConstants {
     return false;
   }
 
-  private boolean jj_3R_19() {
-    if (jj_3R_20()) return true;
+  private boolean jj_3R_20() {
+    if (jj_3R_21()) return true;
     Token xsp;
     xsp = jj_scanpos;
     if (jj_3_26()) jj_scanpos = xsp;
@@ -1414,7 +1420,7 @@ public class PrepTex implements PrepTexConstants {
   }
 
   private boolean jj_3R_28() {
-    if (jj_3R_17()) return true;
+    if (jj_3R_18()) return true;
     Token xsp;
     while (true) {
       xsp = jj_scanpos;
@@ -1458,7 +1464,7 @@ public class PrepTex implements PrepTexConstants {
     jj_scanpos = xsp;
     if (jj_3_32()) return true;
     }
-    if (jj_3R_22()) return true;
+    if (jj_3R_23()) return true;
     return false;
   }
 
@@ -1496,8 +1502,8 @@ public class PrepTex implements PrepTexConstants {
     return false;
   }
 
-  private boolean jj_3R_21() {
-    if (jj_3R_22()) return true;
+  private boolean jj_3R_22() {
+    if (jj_3R_23()) return true;
     Token xsp;
     while (true) {
       xsp = jj_scanpos;
@@ -1522,14 +1528,14 @@ public class PrepTex implements PrepTexConstants {
   }
 
   private boolean jj_3_13() {
-    if (jj_3R_16()) return true;
+    if (jj_3R_17()) return true;
     if (jj_scan_token(OF)) return true;
     return false;
   }
 
   private boolean jj_3_37() {
     if (jj_scan_token(LPAREN)) return true;
-    if (jj_3R_25()) return true;
+    if (jj_3R_16()) return true;
     if (jj_scan_token(RPAREN)) return true;
     return false;
   }
@@ -1568,7 +1574,7 @@ public class PrepTex implements PrepTexConstants {
     return false;
   }
 
-  private boolean jj_3R_23() {
+  private boolean jj_3R_24() {
     if (jj_3R_29()) return true;
     Token xsp;
     xsp = jj_scanpos;

@@ -11,6 +11,7 @@ package cl.bee.preptex.util;
 import java.io.*;
 
 import java.util.*;
+import java.util.regex.*;
 
 import org.apache.log4j.*;
 
@@ -29,6 +30,9 @@ public class PrepTexStream extends FileInputStream {
 
     /** TODO_javadoc. */
     private ByteArrayInputStream bais = null;
+
+    /** TODO_javadoc. */
+    private static Pattern endpattern = Pattern.compile("^[ ]*END", Pattern.CASE_INSENSITIVE);
 
     /******************************************************************************
      * PrepTexStream
@@ -72,17 +76,20 @@ public class PrepTexStream extends FileInputStream {
 
                         fp_out.println("TEXT[:" + rtrim(text));
                         fp_out.println(":]");
-                        logger.debug("TEXT[:" + rtrim(text) + ":]");
+
                         text = null;
                     }
 
+                    if (endpattern.matcher(line.substring(ctrl_len)).find()) {
+                        fp_out.println("END");
+                    }
+                    else {
                     fp_out.println(replace(line.substring(ctrl_len), symbolsTable));
-                    logger.debug("LLAVE|"+replace(line.substring(ctrl_len), symbolsTable));
+                    }
                 }
                 else {
                     text = text != null ? text += (ls + line) : line;
                 }
-
             }
 
             if (text != null) {

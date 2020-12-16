@@ -3539,6 +3539,7 @@ public class GenFrm {
 			    			//	gen.println(((SectionDef)addit_hash.get(ident)).getCode());
 			    			
 			    			//se revisan variables de ambiente
+			    			outerloop:
 			    			for ( String pgmStrg: sectionCode.getSpecial()) {
 			    				
 			    				Boolean cumple = true;
@@ -3565,6 +3566,11 @@ public class GenFrm {
 								    					
 			    							}
 			    							
+			    							if (x == 0 && op_special.equals("OR") && !environment_hash.get(pgmStrg))
+			    							{
+			    								cumple = false;
+			    								break outerloop;
+			    							}
 			    							x++;
 			    							
 			    						}

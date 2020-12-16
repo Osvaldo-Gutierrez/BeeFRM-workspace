@@ -600,6 +600,8 @@ public class PrepTexStream extends FileInputStream {
 	                        	codeLabel.put(label.trim(), 0);
 	                            fp_out.println(replace(label, symbolsTable));
 	                        }	
+
+	                        
 	                    }
 	                    else if (elsepattern.matcher(line.substring(ctrl_len)).find()) {
 	                    	String auxLabel = label;
@@ -622,6 +624,9 @@ public class PrepTexStream extends FileInputStream {
 	                    if (concatenated){
 	                        fp_out.println("END");
 	                        label = ReadConcatenatedCode(ctrl, symbolsTable, fp_in, fp_out, line, newPrv, label, codeLabel, concatenatedOrder);
+	                        
+	            	        numConca++;
+	            	        concatenatedOrder.put(label.substring(label.indexOf("IF ") + 3), numConca);
 	                    }
 	                    concatenated = true;
 

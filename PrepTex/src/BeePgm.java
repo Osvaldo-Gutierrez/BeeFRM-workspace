@@ -7,7 +7,6 @@
 
 
 import java.io.*;
-import java.nio.charset.StandardCharsets;
 import java.text.*;
 
 import java.util.*;
@@ -244,12 +243,6 @@ public class BeePgm {
                     PrintVisitor vis = new PrintVisitor(skeleton_filename, symbolsTable, control, country, client, system, false/*logging*/, gen);
 
                     root.accept(vis);
-                    
-                  //ogb-ini
-                    final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                    final String utf8 = StandardCharsets.UTF_8.name();
-                    String data = baos.toString(utf8);
-                  //ogb-fin
                     
                     gen.close();
  
