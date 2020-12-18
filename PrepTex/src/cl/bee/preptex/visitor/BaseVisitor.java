@@ -259,6 +259,8 @@ public class BaseVisitor implements GJNoArguVisitor<Object> {
      */
     public Object visit(statement_list n) {
 
+      //logger.debug("entrando a 'visit(statement_list n) ...'");
+
         NodeListOptional          nlo   = new NodeListOptional();
         ArrayList<statement_list> stmts = null;
 
@@ -268,20 +270,33 @@ public class BaseVisitor implements GJNoArguVisitor<Object> {
 
             if (stmt.f0.which == 3 /*include_statement*/) {
 
+              //logger.debug("include_statement ...'");
+
                 stmts = getStatementsFromInclude((include_statement) stmt.f0.choice);
 
                 for (int j = 0; j < stmts.size(); j++) {
 
                     statement_list sl = stmts.get(j);
 
-                    sl.accept(this);
+                    for (Enumeration<Node> e = sl.f0.elements(); e.hasMoreElements(); ) {
 
-                    for (int k = 0; k < sl.f0.size(); k++) {
-                        nlo.addNode(sl.f0.elementAt(k));
+                        Node node = e.nextElement(); //TODO_ALA: definicion interna :-)
+
+                        nlo.addNode(node);
+
+                        logger.debug("ejecutando " + node.accept(tokenVisitor).toString().trim());
+
+                        node.accept(this);
                     }
                 }
+
+              //logger.debug("================= ...'");
             }
             else {
+
+                nlo.addNode(stmt);
+
+              //logger.debug("ejecutando " + stmt.accept(tokenVisitor).toString().trim());
 
                 stmt.accept(this);
             }
@@ -289,7 +304,7 @@ public class BaseVisitor implements GJNoArguVisitor<Object> {
 
         n.f0 = nlo;
 
-        return n.f0.accept(this);
+        return null;
     }
 
     /******************************************************************************
@@ -1332,7 +1347,7 @@ public class BaseVisitor implements GJNoArguVisitor<Object> {
 
       //logger.debug(prefix + "entrando a 'getStatementsFromInclude(" + n.accept(tokenVisitor).toString().trim() + ")' ...");
 
-        HashMap<String, Object> sym_include = new HashMap<String, Object>();
+        HashMap<String, Object> sym_include = cloner.deepClone(symbolsTable); //new HashMap<String, Object>();
 
         if (n.f1.present()) { // [ identifier_list() <OF> ]
 

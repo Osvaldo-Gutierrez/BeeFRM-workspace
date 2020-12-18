@@ -64,8 +64,12 @@ public class AdditCodeVisitor extends BaseVisitor implements GJNoArguVisitor<Obj
 
         super(filename, symbolsTable, null, country, client, system, logging);
 
+      //logger.debug("entrando a '<init>() ...'");
+
         this.tree      = tree;
         this.cond_mode = cond_mode;
+
+        if_level = 1;
     }
 
     /******************************************************************************
@@ -85,7 +89,7 @@ public class AdditCodeVisitor extends BaseVisitor implements GJNoArguVisitor<Obj
      */
     public Object visit(specification n) {
 
-        if_level = 1;
+      //logger.debug("entrando a 'visit(specification n, if_level:"  + if_level + ") ...'");
 
         return n.f0.accept(this);
     }
@@ -109,6 +113,8 @@ public class AdditCodeVisitor extends BaseVisitor implements GJNoArguVisitor<Obj
      *
      */
     public Object visit(statement n) {
+
+      //logger.debug("entrando a 'visit(statement n) ...'");
 
         switch(n.f0.which) {
 
@@ -146,7 +152,7 @@ public class AdditCodeVisitor extends BaseVisitor implements GJNoArguVisitor<Obj
      */
     public Object visit(selection_statement n) {
 
-      //logger.debug("entrando a visit(selection_statement n), if_level: " + if_level + " (" + n.f1.accept(tokenVisitor).toString().trim() + ")");
+      //logger.debug("entrando a 'visit(selection_statement n, if_level: " + if_level + ")' " + n.f1.accept(tokenVisitor).toString().trim() + ")");
 
         if (if_level == 1) {
 
@@ -173,6 +179,9 @@ public class AdditCodeVisitor extends BaseVisitor implements GJNoArguVisitor<Obj
             if_level--;
 
             if (cond_mode) {
+
+              //logger.debug("cond: [" + cond + "]");
+
                 tree.put(cond, text);
             }
             else {
@@ -191,6 +200,10 @@ public class AdditCodeVisitor extends BaseVisitor implements GJNoArguVisitor<Obj
 
         return null;
     }
+
+    //
+    //
+    //
 
     /******************************************************************************
      * getTextFormStatementList
