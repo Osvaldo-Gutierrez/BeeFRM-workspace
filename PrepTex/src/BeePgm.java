@@ -207,6 +207,39 @@ public class BeePgm {
                         }
                     }
                 }
+                
+                //---------------------------------------------------------------------
+                //OGB, se procesa codigo adicional para obtener variables para symbolsTable
+                
+                gen = new PrintStream("temp");
+                
+                try {
+                	
+                	control = "*%";
+                	
+                	String path_file = findFile(country, client, system, rpf_name + ".TXT");
+                	
+                    PrepTex parser = new PrepTex(new PrepTexStream(path_file, control, symbolsTable));
+                    Node root = parser.specification();
+                    
+                    PrintVisitor vis = new PrintVisitor(path_file, symbolsTable, control, country, client, system, false/*logging*/, gen);
+                    
+                    root.accept(vis);
+                    
+                    gen.close();
+                    
+                	
+                } catch (cl.bee.preptex.ParseException e) {
+
+                    logger.fatal("ParseException: " + printStackTrace(e));
+
+                } catch (Exception e) {
+
+                    logger.fatal("Exception: " + printStackTrace(e));
+                }
+                
+                //
+                //---------------------------------------------------------------------
 
                 // =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
                 // .SRCSOP --> .TEM
@@ -233,9 +266,6 @@ public class BeePgm {
 
                     PrepTex parser = new PrepTex(new PrepTexStream(skeleton_filename, control, symbolsTable));
                     
-                    logger.debug("====================================");
-                    logger.debug("Salio PrepTexStream");
-                    logger.debug("====================================");
                   //parser.disable_tracing();
 
                     Node root = parser.specification();
@@ -392,4 +422,54 @@ public class BeePgm {
 
         return caw.toString();
     }
+    
+    
+    
+    private static String findFile(String country, String client, String system, String filename) {
+
+        //logger.debug(prefix + "entrando a 'findFile(" + country + "," + client + "," + system + "," + filename + ")' ...");
+
+          String pathname = null;
+
+          pathname = Util.findFile("skeleton/CST/DES" + country + client + "/" + system + "/FTE/TXT", filename);
+
+          if (pathname != null) {
+              return pathname;
+          }
+
+          pathname = Util.findFile("skeleton/CST/DES" + country +          "/" + system + "/FTE/TXT", filename);
+
+          if (pathname != null) {
+              return pathname;
+          }
+
+          pathname = Util.findFile("skeleton/CST/DES" +                    "/" + system + "/FTE/TXT", filename);
+
+          if (pathname != null) {
+              return pathname;
+          }
+
+          //
+
+          pathname = Util.findFile("skeleton/CST/DES" + country + client + "/" + system + "/FTE/GNS/DOS/BMS", filename);
+
+          if (pathname != null) {
+              return pathname;
+          }
+
+          pathname = Util.findFile("skeleton/CST/DES/GNS/FTE/SRC", filename);
+
+          if (pathname != null) {
+              return pathname;
+          }
+
+          //
+
+        //pathname = Util.findFile("skeleton", filename); // RETHDR_1
+
+          return pathname;
+      }
+
+    
+    
 }

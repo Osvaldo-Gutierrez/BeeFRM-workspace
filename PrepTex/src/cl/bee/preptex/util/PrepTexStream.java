@@ -33,6 +33,9 @@ public class PrepTexStream extends FileInputStream {
 
     /** TODO_javadoc. */
     private static Pattern endpattern = Pattern.compile("^[ ]*END", Pattern.CASE_INSENSITIVE);
+    
+    private static Pattern defpattern = Pattern.compile("^[\\*]*%[ ]*\\w+[ ]*={1}[ ]*[\\\"]?[A-Z0-9]+[\\\"]?", Pattern.CASE_INSENSITIVE);
+    
 
     /******************************************************************************
      * PrepTexStream
@@ -48,7 +51,7 @@ public class PrepTexStream extends FileInputStream {
      *
      * @since 1.0
      *
-     */
+     */ 
     public PrepTexStream(String name, String ctrl, HashMap<String, Object> symbolsTable) throws FileNotFoundException {
 
         super(name);
@@ -69,27 +72,37 @@ public class PrepTexStream extends FileInputStream {
             while ((line = fp_in.readLine()) != null) {
 
               //logger.debug("[" + line + "]");
+            	
+             //OGB, definicion de variables se deja sin cambios para despues ser procesadas por preptex
+            	if (defpattern.matcher(line).find()){
+                    fp_out.println(line.substring(2));
+            	}
+            	else {
+            		
+                    if (line.startsWith(control)) {
 
-                if (line.startsWith(control)) {
+                        if (text != null) {
 
-                    if (text != null) {
+                            fp_out.println("TEXT[:" + rtrim(text));
+                            fp_out.println(":]");
 
-                        fp_out.println("TEXT[:" + rtrim(text));
-                        fp_out.println(":]");
+                            text = null;
+                        }
 
-                        text = null;
-                    }
-
-                    if (endpattern.matcher(line.substring(ctrl_len)).find()) {
-                        fp_out.println("END");
+                        if (endpattern.matcher(line.substring(ctrl_len)).find()) {
+                            fp_out.println("END");
+                        }
+                        else {
+                        fp_out.println(replace(line.substring(ctrl_len), symbolsTable));
+                        }
                     }
                     else {
-                    fp_out.println(replace(line.substring(ctrl_len), symbolsTable));
+                        text = text != null ? text += (ls + line) : line;
                     }
-                }
-                else {
-                    text = text != null ? text += (ls + line) : line;
-                }
+            		
+            	}
+
+
             }
 
             if (text != null) {
