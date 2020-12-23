@@ -34,6 +34,7 @@ public class PrepTexStream extends FileInputStream {
     /** TODO_javadoc. */
     private static Pattern endpattern = Pattern.compile("^[ ]*END", Pattern.CASE_INSENSITIVE);
     
+    //OGB, obtiene definicion de variable
     private static Pattern defpattern = Pattern.compile("^[\\*]*%[ ]*\\w+[ ]*={1}[ ]*[\\\"]?[A-Z0-9]+[\\\"]?", Pattern.CASE_INSENSITIVE);
     
 

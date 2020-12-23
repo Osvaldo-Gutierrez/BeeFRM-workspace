@@ -621,7 +621,7 @@ public class BaseVisitor implements GJNoArguVisitor<Object> {
 
             putSymbol(ident, op2);
 
-          //logger.debug(prefix + "asignado " + ident + " = " + op2);
+            logger.debug(prefix + "asignado " + ident + " = " + op2);
 
             break;
 

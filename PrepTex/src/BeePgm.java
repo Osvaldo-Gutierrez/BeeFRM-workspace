@@ -228,6 +228,19 @@ public class BeePgm {
                     
                     gen.close();
                     
+                    
+                    //fix OP2/OP3
+                    if(symbolsTable.containsKey("PGM_OP2")) {
+                    	if(action == PQ_ACTION) {
+                    		symbolsTable.put("PGM_OP2", false);
+                    	}
+                    }
+                    if(symbolsTable.containsKey("PGM_OP3")) {
+                    	if(action == PQ_ACTION) {
+                    		symbolsTable.put("PGM_OP3", false);
+                    	}
+                    }
+                    
                 	
                 } catch (cl.bee.preptex.ParseException e) {
 
