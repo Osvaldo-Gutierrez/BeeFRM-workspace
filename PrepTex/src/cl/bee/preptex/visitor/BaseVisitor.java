@@ -1426,9 +1426,11 @@ public class BaseVisitor implements GJNoArguVisitor<Object> {
 
       //logger.debug(prefix + "entrando a 'getStatementsFromInclude(" + n.accept(tokenVisitor).toString().trim() + ")' ...");
 
-    	//OGB, se quita symbolsTable clonado ya que variables incontradas dentro los include si influyen en el codigo base.
-        HashMap<String, Object> sym_include = cloner.deepClone(symbolsTable); //new HashMap<String, Object>();
+    	//OGB, se quita symbolsTable clonado ya que variables encontradas dentro los include si influyen en el codigo base.
+        //HashMap<String, Object> sym_include = cloner.deepClone(symbolsTable); //new HashMap<String, Object>();
 
+    	//Se sustituye ingresando el identificador a buscar y luego de procesado, se remueve de la lista
+    	
         Boolean indDel = false;
         
         if (n.f1.present()) { // [ identifier_list() <OF> ]
@@ -1615,17 +1617,6 @@ public class BaseVisitor implements GJNoArguVisitor<Object> {
 
     }
     
-    
-    public static boolean isNumeric(final String str) {
-
-        // null or empty
-        if (str == null || str.length() == 0) {
-            return false;
-        }
-
-        return str.chars().allMatch(Character::isDigit);
-
-    }
 
     /******************************************************************************
      * getSymbol
