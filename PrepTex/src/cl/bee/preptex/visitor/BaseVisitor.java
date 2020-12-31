@@ -263,6 +263,9 @@ public class BaseVisitor implements GJNoArguVisitor<Object> {
 
         NodeListOptional          nlo   = new NodeListOptional();
         ArrayList<statement_list> stmts = null;
+        
+        
+        ArrayList<statement_list> stmts2 = null;
 
         for (int i = 0; i < n.f0.size(); i++) { // ( statement() )*
 
@@ -271,8 +274,9 @@ public class BaseVisitor implements GJNoArguVisitor<Object> {
             if (stmt.f0.which == 3 /*include_statement*/) {
 
               //logger.debug("include_statement ...'");
+            	
 
-                stmts = getStatementsFromInclude((include_statement) stmt.f0.choice);
+                stmts = getStatementsFromInclude((include_statement) stmt.f0.choice, null);
 
                 for (int j = 0; j < stmts.size(); j++) {
 
@@ -284,9 +288,71 @@ public class BaseVisitor implements GJNoArguVisitor<Object> {
 
                         nlo.addNode(node);
 
+                        //OGB, en caso de haber un include dentro de otro include se procesa pero se hace con respecto a stmt original
+                        include_statement inclstmt = (include_statement) stmt.f0.choice;
+                        
+                        statement stmt2 = (statement) node;
+                        
+                        
+                        //OGB, si include tiene <OF> se agrega a vector de variables, ya que condicion puede estar anidada
+                        //despues se remueve del vector.
+                        Boolean flagR = false;
+                        
+                        
+                        if (inclstmt.f1.present()) { // [ identifier_list() <OF> ]
+
+                            NodeSequence    ns    = (NodeSequence) inclstmt.f1.node;
+                            identifier_list il    = (identifier_list) ns.elementAt(0);
+                            String          ident = il.f0.tokenImage;
+                            if (!symbolsTable.containsKey(ident.toUpperCase())) {
+                            	flagR = true;
+                            	symbolsTable.put(ident.toUpperCase(), Boolean.TRUE); // <IDENTIFIER>
+                            }
+
+                        }
+                        
+                        
+                        //OGB, Se procesa include sobre include.
+                        if (stmt2.f0.which == 3) {
+                        	
+                        	include_statement inclstmtSec    = (include_statement) stmt2.f0.choice;
+
+                        	stmts2 = getStatementsFromInclude((include_statement) stmt.f0.choice, inclstmtSec.f2.tokenImage );
+                        	
+                            for (int j2 = 0; j2 < stmts2.size(); j2++) {
+
+                                statement_list sl2 = stmts2.get(j2);
+
+                                for (Enumeration<Node> e2 = sl2.f0.elements(); e2.hasMoreElements(); ) {
+                                    Node node2 = e2.nextElement();
+                                    nlo.addNode(node2);
+                                    node2.accept(this);
+                                }
+                            }                            
+                        }
+                        
                         logger.debug("ejecutando " + node.accept(tokenVisitor).toString().trim());
 
                         node.accept(this);
+                        
+                        if (inclstmt.f1.present()) { // [ identifier_list() <OF> ]
+
+                            NodeSequence    ns    = (NodeSequence) inclstmt.f1.node;
+                            identifier_list il    = (identifier_list) ns.elementAt(0);
+                            String          ident = il.f0.tokenImage;
+
+                            if (flagR)
+                            	symbolsTable.remove(ident.toUpperCase()); // <IDENTIFIER>
+                        }
+                        else {
+                        	
+                        	String keyinclude = inclstmt.f2.tokenImage;
+                        	if (symbolsTable.containsKey(unquote(keyinclude)))
+                        		symbolsTable.remove(unquote(keyinclude));
+                        	
+                        	
+                        }
+                        
                     }
                 }
 
@@ -500,9 +566,13 @@ public class BaseVisitor implements GJNoArguVisitor<Object> {
                 }
 
                 ((statement_list) ns.elementAt(7)).accept(this); // statement_list()
+                
+                symbolsTable.remove(ident);
 
                 putSymbol(ident, new Long(val + step));
             }
+            
+            symbolsTable.remove(ident);
 
             break;
         }
@@ -527,7 +597,16 @@ public class BaseVisitor implements GJNoArguVisitor<Object> {
      *
      */
     public Object visit(include_statement n) {
-        throw new RuntimeException("no deberia estar visitando un include_statement.");
+
+        if (n.f1.present()) { // [ identifier_list() <OF> ]
+
+            throw new RuntimeException("no deberia estar visitando un include_statement.");
+        }
+
+
+        return null;
+       
+        
     }
 
     /******************************************************************************
@@ -892,7 +971,21 @@ public class BaseVisitor implements GJNoArguVisitor<Object> {
 
                     return new Boolean(!((String) _ret).equals((String) op2));
                 }
-            }
+            //OGB, en include de codigo adicional externo (ej PFSALLALL) existen IF donde se comparan
+            //     variables tipo Long y la respuesta es Boolean
+	        } else if (_ret instanceof Boolean  && op2 instanceof Long) {
+	
+	            switch (nch.which) {
+	
+	            case 0 : // <EQUAL>
+	
+                    return new Boolean(((Boolean) _ret).booleanValue());
+	
+	            case 1 : // <NE>
+	
+                    return new Boolean(((Boolean) _ret).booleanValue());
+	            }
+	        } 
             else {
                 throw new RuntimeException("error de tipos en (des)igualdad '" + _ret + "' (" + _ret.getClass().getSimpleName() + ") y '" + op2 + "' (" + op2.getClass().getSimpleName() + ")");
             }
@@ -1343,19 +1436,25 @@ public class BaseVisitor implements GJNoArguVisitor<Object> {
      * @return TODO_javadoc.
      *
      */
-    private ArrayList<statement_list> getStatementsFromInclude(include_statement n) {
+    protected ArrayList<statement_list> getStatementsFromInclude(include_statement n, String auxname) {
 
       //logger.debug(prefix + "entrando a 'getStatementsFromInclude(" + n.accept(tokenVisitor).toString().trim() + ")' ...");
 
+    	//OGB, se quita symbolsTable clonado ya que variables incontradas dentro los include si influyen en el codigo base.
         HashMap<String, Object> sym_include = cloner.deepClone(symbolsTable); //new HashMap<String, Object>();
 
+        Boolean indDel = false;
+        
         if (n.f1.present()) { // [ identifier_list() <OF> ]
 
             NodeSequence    ns    = (NodeSequence) n.f1.node;
             identifier_list il    = (identifier_list) ns.elementAt(0);
             String          ident = il.f0.tokenImage;
 
-            sym_include.put(ident.toUpperCase(), Boolean.TRUE); // <IDENTIFIER>
+            if (!symbolsTable.containsKey(ident.toUpperCase())) {
+            	symbolsTable.put(ident.toUpperCase(), Boolean.TRUE); // <IDENTIFIER>
+            	indDel = true;
+            }
 
             for (int i = 0; i < il.f1.size(); i++) {
 
@@ -1363,13 +1462,17 @@ public class BaseVisitor implements GJNoArguVisitor<Object> {
 
                 ident = ((NodeToken) ns1.elementAt(i)).tokenImage;
 
-                sym_include.put(ident.toUpperCase(), Boolean.TRUE); // <IDENTIFIER>
+                symbolsTable.put(ident.toUpperCase(), Boolean.TRUE); // <IDENTIFIER>
             }
         }
 
         //
 
         String filename = unquote(n.f2.tokenImage);
+        
+        if (auxname != null)
+        	filename = unquote(auxname);
+        
 
         if (filename.indexOf('.') == -1) {
             filename += ".SRC";
@@ -1392,18 +1495,45 @@ public class BaseVisitor implements GJNoArguVisitor<Object> {
 
             logger.info(prefix + "utilizando '" + pathname + "' en [" + n.accept(tokenVisitor).toString().trim() + "].");
 
-            PrepTex parser = new PrepTex(new PrepTexStream(pathname, control, symbolsTable));
+            PrepTex parser = new PrepTex(new PrepTexStream(pathname, control, symbolsTable, false));
             Node    root   = parser.specification();
 
-            IncludeVisitor vis = new IncludeVisitor(pathname, sym_include, control, country, client, system, logging, !n.f1.present()/* f1 -> [ identifier_list() <OF> ]*/);
+            IncludeVisitor vis = new IncludeVisitor(pathname, symbolsTable, control, country, client, system, logging, !n.f1.present()/* f1 -> [ identifier_list() <OF> ]*/);
 
             ArrayList<statement_list> stmts = (ArrayList<statement_list>) root.accept(vis);
 
+            
+            if (n.f1.present()) { // [ identifier_list() <OF> ]
+
+                NodeSequence    ns    = (NodeSequence) n.f1.node;
+                identifier_list il    = (identifier_list) ns.elementAt(0);
+                String          ident = il.f0.tokenImage;
+
+                if (symbolsTable.containsKey(ident.toUpperCase())) {
+
+                	if (indDel)
+                		symbolsTable.remove(ident.toUpperCase()); // <IDENTIFIER>
+                }
+
+
+                for (int i = 0; i < il.f1.size(); i++) {
+
+                    NodeSequence ns1 = (NodeSequence) il.f1.elementAt(i);
+
+                    ident = ((NodeToken) ns1.elementAt(i)).tokenImage;
+
+                    symbolsTable.remove(ident.toUpperCase()); // <IDENTIFIER>
+                }
+            }
+
+            
             return stmts;
         }
         catch (Exception e) {
             throw new RuntimeException(e.getMessage());
         }
+        
+        
     }
 
     /******************************************************************************
@@ -1496,6 +1626,19 @@ public class BaseVisitor implements GJNoArguVisitor<Object> {
         }
 
         symbolsTable.put(name.toUpperCase(), value);
+
+    }
+    
+    
+    public static boolean isNumeric(final String str) {
+
+        // null or empty
+        if (str == null || str.length() == 0) {
+            return false;
+        }
+
+        return str.chars().allMatch(Character::isDigit);
+
     }
 
     /******************************************************************************
@@ -1535,9 +1678,9 @@ public class BaseVisitor implements GJNoArguVisitor<Object> {
      * @since 1.0
      *
      */
-    protected String replace(String text) throws Exception {
+    protected String replace(String text, boolean pro_numassing) throws Exception {
 
-      //logger.debug(prefix + "entrando a 'replace(" + text + ")' ...");
+       // logger.debug(prefix + "entrando a 'replace(" + text + ")' ...");
 
         StringBuffer sb    = null;
         StringBuffer ident = null;
@@ -1583,6 +1726,13 @@ public class BaseVisitor implements GJNoArguVisitor<Object> {
                             }
                             else {
                                 value = symbolsTable.get(ident.toString().toUpperCase());
+                                
+                                if (!next)
+	                                if (!pro_numassing)
+		                                if (value instanceof Number) {
+		                                	value = "{" + ident.toString() + "}";
+		                                }
+                                
                             }
 
                             /*

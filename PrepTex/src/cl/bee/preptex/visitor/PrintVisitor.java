@@ -36,6 +36,8 @@ public class PrintVisitor extends BaseVisitor implements GJNoArguVisitor<Object>
 
     /** TODO_javadoc. */
     private PrintStream gen = null;
+    
+    private Boolean pro_numassign = true;
 
     /******************************************************************************
      * PrintVisitor
@@ -56,11 +58,13 @@ public class PrintVisitor extends BaseVisitor implements GJNoArguVisitor<Object>
      * @since 1.0
      *
      */
-    public PrintVisitor(String filename, HashMap<String, Object> symbolsTable, String control, String country, String client, String system, boolean logging, PrintStream gen) {
+    public PrintVisitor(String filename, HashMap<String, Object> symbolsTable, String control, String country, String client, String system, boolean logging, PrintStream gen, boolean pro_numassign) {
 
         super(filename, symbolsTable, control, country, client, system, logging);
 
         this.gen = gen;
+        
+        this.pro_numassign = pro_numassign;
     }
 
     /******************************************************************************
@@ -83,11 +87,9 @@ public class PrintVisitor extends BaseVisitor implements GJNoArguVisitor<Object>
         String s = trimLines(n.f0.tokenImage);
 
         try {
-            gen.print(replace(s.substring(6, s.length() - 2))); // TEXT[::]
-            //ogb-ini
-            logger.debug("PrintVisitor.java - OGB");
-            logger.debug(replace(s.substring(6, s.length() - 2)));
-            //ogb-fin
+        	
+            gen.print(replace(s.substring(6, s.length() - 2), this.pro_numassign));   // TEXT[::]
+
         }
         catch (Exception e) {
             throw new RuntimeException(e.getMessage());

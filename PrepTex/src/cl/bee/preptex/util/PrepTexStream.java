@@ -53,7 +53,7 @@ public class PrepTexStream extends FileInputStream {
      * @since 1.0
      *
      */ 
-    public PrepTexStream(String name, String ctrl, HashMap<String, Object> symbolsTable) throws FileNotFoundException {
+    public PrepTexStream(String name, String ctrl, HashMap<String, Object> symbolsTable, Boolean onlyVars) throws FileNotFoundException {
 
         super(name);
 
@@ -73,36 +73,38 @@ public class PrepTexStream extends FileInputStream {
             while ((line = fp_in.readLine()) != null) {
 
               //logger.debug("[" + line + "]");
-            	
-             //OGB, definicion de variables se deja sin cambios para despues ser procesadas por preptex
-            	if (defpattern.matcher(line).find()){
-                    fp_out.println(line.substring(2));
-            	}
-            	else {
+            	            		
+            		if (!onlyVars) {
             		
-                    if (line.startsWith(control)) {
-
-                        if (text != null) {
-
-                            fp_out.println("TEXT[:" + rtrim(text));
-                            fp_out.println(":]");
-
-                            text = null;
-                        }
-
-                        if (endpattern.matcher(line.substring(ctrl_len)).find()) {
-                            fp_out.println("END");
-                        }
-                        else {
-                        fp_out.println(replace(line.substring(ctrl_len), symbolsTable));
-                        }
-                    }
-                    else {
-                        text = text != null ? text += (ls + line) : line;
-                    }
+	                    if (line.startsWith(control)) {
+	
+	                        if (text != null) {
+	
+	                            fp_out.println("TEXT[:" + rtrim(text));
+	                            fp_out.println(":]");
+	
+	                            text = null;
+	                        }
+	
+	                        if (endpattern.matcher(line.substring(ctrl_len)).find()) {
+	                            fp_out.println("END");
+	                        }
+	                        else {
+	                        fp_out.println(replace(line.substring(ctrl_len), symbolsTable));
+	                        }
+	                    }
+	                    else {
+	                        text = text != null ? text += (ls + line) : line;
+	                    }
+            		}
+            		else {
+	                    if (line.startsWith(control)) {
+	                        if (defpattern.matcher(line).find()) {
+		                        fp_out.println(replace(line.substring(ctrl_len), symbolsTable));
+	                        }
+	                    }
+            		}
             		
-            	}
-
 
             }
 

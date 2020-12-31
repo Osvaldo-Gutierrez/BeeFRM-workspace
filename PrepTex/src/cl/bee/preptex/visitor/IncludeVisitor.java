@@ -91,8 +91,20 @@ public class IncludeVisitor extends BaseVisitor implements GJNoArguVisitor<Objec
 
                 statement stmt = (statement) n.f0.f0.elementAt(i);
 
+                //OGB, si una asignacion de variable, se procesa ya que puede afectar al codigo adicional
+                if (stmt.f0.which == 0 /*include_statement*/) {
+                	stmt.accept(this);
+                                        
+                }
+                
                 if (stmt.f0.which == 1 /*selection_statement*/) {
                     stmt.accept(this);
+                }
+                
+                //OGB, si hay include sin condicion, entonces se procesa
+                if (stmt.f0.which == 3 /*include_statement*/) {
+                    stmts = getStatementsFromInclude((include_statement) stmt.f0.choice, null);
+                                        
                 }
             }
         }

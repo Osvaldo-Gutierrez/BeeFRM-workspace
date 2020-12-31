@@ -159,7 +159,7 @@ public class BeePgm {
                 symbolsTable.put("AUT", (value = rpf.getProperty(rpf_name + "/A"))  != null ? value.substring(0, 53).trim() : "BEE");
 
                 symbolsTable.put("SIO", (value = rpf.getProperty(rpf_name + "/B"))  != null ? value.substring(0,  3)        : system);
-                symbolsTable.put("REG", (value = rpf.getProperty(rpf_name + "/B"))  != null ? value.substring(3,  6)        : system);
+                symbolsTable.put("REG", (value = rpf.getProperty(rpf_name + "/B"))  != null ? value.substring(3,  6)        : entity);
 
                 symbolsTable.put("BIF", (value = rpf.getProperty(rpf_name + "/P0")) != null ? value.substring(0,  9)        : system);
                 symbolsTable.put("SFR", (value = rpf.getProperty(rpf_name + "/P0")) != null ? value.substring(0,  3)        : system);
@@ -207,22 +207,34 @@ public class BeePgm {
                         }
                     }
                 }
-                
+
+
                 //---------------------------------------------------------------------
-                //OGB, se procesa codigo adicional para obtener variables para symbolsTable
+                //OGB, se procesa esqueleto para obtener variables de entorno
+                logger.debug("VARIABLES DE ENTORNO 1");
                 
-                gen = new PrintStream("temp");
+                String filetemp = "temp";
                 
+                gen = new PrintStream(filetemp); 
                 try {
                 	
                 	control = "*%";
                 	
-                	String path_file = findFile(country, client, system, rpf_name + ".TXT");
+                    String skeleton_filename = null;
+
+                    switch (action) {
+                    case PQ_ACTION :
+                        skeleton_filename = pq_skeleton;
+                        break;
+                    case PU_ACTION :
+                        skeleton_filename = pu_skeleton;
+                        break;
+                    }
                 	
-                    PrepTex parser = new PrepTex(new PrepTexStream(path_file, control, symbolsTable));
+                    PrepTex parser = new PrepTex(new PrepTexStream(skeleton_filename, control, symbolsTable, true));
                     Node root = parser.specification();
                     
-                    PrintVisitor vis = new PrintVisitor(path_file, symbolsTable, control, country, client, system, false/*logging*/, gen);
+                    PrintVisitor vis = new PrintVisitor(skeleton_filename, symbolsTable, control, country, client, system, false/*logging*/, gen, true);
                     
                     root.accept(vis);
                     
@@ -249,7 +261,58 @@ public class BeePgm {
                 } catch (Exception e) {
 
                     logger.fatal("Exception: " + printStackTrace(e));
-                }
+                } 
+                gen.close();
+                (new File(filetemp)).delete();
+                   
+                //---------------------------------------------------------------------
+                //OGB, se procesa codigo adicional para obtener variables para symbolsTable
+                
+                gen = new PrintStream(filetemp);
+                logger.debug("VARIABLES DE ENTORNO 2");
+
+                try {
+
+                	control = "*%";
+                	String path_file = findFile(country, client, system, rpf_name + ".TXT");
+                	
+                    PrepTex parser = new PrepTex(new PrepTexStream(path_file, control, symbolsTable, false));
+                    Node root = parser.specification();
+                    
+                    PrintVisitor vis = new PrintVisitor(path_file, symbolsTable, control, country, client, system, false/*logging*/, gen, true);
+                    
+                    root.accept(vis);
+                    
+                    gen.close();
+                    
+                    
+                    //fix OP2/OP3
+                    if(symbolsTable.containsKey("PGM_OP2")) {
+                    	if(action == PQ_ACTION) {
+                    		symbolsTable.put("PGM_OP2", false);
+                    	}
+                    }
+                    if(symbolsTable.containsKey("PGM_OP3")) {
+                    	if(action == PQ_ACTION) {
+                    		symbolsTable.put("PGM_OP3", false);
+                    	}
+                    }
+                    
+                	
+                } catch (cl.bee.preptex.ParseException e) {
+
+                    logger.fatal("ParseException: " + printStackTrace(e));
+
+                } catch (Exception e) {
+
+                    logger.fatal("Exception: " + printStackTrace(e));
+                } 
+                
+                gen.close();
+                
+                (new File(filetemp)).delete();
+                
+                
                 
                 //
                 //---------------------------------------------------------------------
@@ -259,9 +322,8 @@ public class BeePgm {
                 // =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
                 control = "%";
-
                 logger.debug("control: " + control);
-
+                logger.debug(".SRCSOP --> .TEM");
                 gen = new PrintStream(new FileOutputStream("working/" + system + action_names[action] + entity + ".TEM"));
 
                 try {
@@ -277,13 +339,13 @@ public class BeePgm {
                         break;
                     }
 
-                    PrepTex parser = new PrepTex(new PrepTexStream(skeleton_filename, control, symbolsTable));
+                    PrepTex parser = new PrepTex(new PrepTexStream(skeleton_filename, control, symbolsTable, false));
                     
                   //parser.disable_tracing();
 
                     Node root = parser.specification();
  
-                    PrintVisitor vis = new PrintVisitor(skeleton_filename, symbolsTable, control, country, client, system, false/*logging*/, gen);
+                    PrintVisitor vis = new PrintVisitor(skeleton_filename, symbolsTable, control, country, client, system, false/*logging*/, gen,  false);
 
                     root.accept(vis);
                     
@@ -299,11 +361,12 @@ public class BeePgm {
                 }
 
                 gen.close();
+                
 
                 // =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
                 // .TMP --> .PGD
                 // =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-
+                logger.debug(".TMP --> .PGD");
                 control = "*%";
                 gen     = new PrintStream(new FileOutputStream("working/" + system + action_names[action] + entity + ".PGD"));
 
@@ -315,13 +378,13 @@ public class BeePgm {
 
                     filename = "working/" + system + action_names[action] + entity + ".TEM";
 
-                    PrepTex parser = new PrepTex(new PrepTexStream(filename, control, symbolsTable));
+                    PrepTex parser = new PrepTex(new PrepTexStream(filename, control, symbolsTable, false));
 
                   //parser.disable_tracing();
 
                     Node root = parser.specification();
 
-                    PrintVisitor vis = new PrintVisitor(filename, symbolsTable, control, country, client, system, false/*logging*/, gen);
+                    PrintVisitor vis = new PrintVisitor(filename, symbolsTable, control, country, client, system, false/*logging*/, gen, true);
 
                     root.accept(vis);
 
