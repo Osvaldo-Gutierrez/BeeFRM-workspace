@@ -971,20 +971,6 @@ public class BaseVisitor implements GJNoArguVisitor<Object> {
 
                     return new Boolean(!((String) _ret).equals((String) op2));
                 }
-            //OGB, en include de codigo adicional externo (ej PFSALLALL) existen IF donde se comparan
-            //     variables tipo Long y la respuesta es Boolean
-	        } else if (_ret instanceof Boolean  && op2 instanceof Long) {
-	
-	            switch (nch.which) {
-	
-	            case 0 : // <EQUAL>
-	
-                    return new Boolean(((Boolean) _ret).booleanValue());
-	
-	            case 1 : // <NE>
-	
-                    return new Boolean(((Boolean) _ret).booleanValue());
-	            }
 	        } 
             else {
                 throw new RuntimeException("error de tipos en (des)igualdad '" + _ret + "' (" + _ret.getClass().getSimpleName() + ") y '" + op2 + "' (" + op2.getClass().getSimpleName() + ")");
