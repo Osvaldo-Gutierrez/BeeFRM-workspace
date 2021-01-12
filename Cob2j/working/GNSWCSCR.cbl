@@ -1,0 +1,23 @@
+       01  SCR-CTTS.                                                    00000010
+           03 SCR-INST-INI                PIC X(03) VALUE 'INI'.        00000020
+           03 SCR-INST-HCM                PIC X(03) VALUE 'HCM'.        00000030
+           03 SCR-INST-GCM                PIC X(03) VALUE 'GCM'.        00000040
+           03 SCR-INST-HKY                PIC X(03) VALUE 'HKY'.        00000050
+           03 SCR-INST-GKY                PIC X(03) VALUE 'GKY'.        00000060
+           03 SCR-INST-HFL                PIC X(03) VALUE 'HFL'.        00000070
+           03 SCR-INST-GFL                PIC X(03) VALUE 'GFL'.        00000080
+           03 SCR-INST-GCS                PIC X(03) VALUE 'GCS'.        00000090
+           03 SCR-INST-GAB                PIC X(03) VALUE 'GAB'.        00000100
+           03 SCR-INST-GCF                PIC X(03) VALUE 'GCF'.        00000110
+           03 SCR-INST-SIS                PIC X(03) VALUE 'SIS'.        00000120
+           03 SCR-INST-BRW                PIC X(03) VALUE 'BRW'.        00000130
+           03 SCR-STAT-CON                PIC X(01) VALUE 'C'.          00000140
+           03 SCR-STAT-ABT                PIC X(01) VALUE 'K'.          00000150
+           03 SCR-STAT-MOD                PIC X(01) VALUE 'M'.          00000160
+           03 SCR-STAT-SON                PIC X(01) VALUE 'A'.          00000170
+           03 SCR-ACTU-MOD                PIC X(03) VALUE 'MOD'.        00000180
+           03 SCR-ACTU-ING                PIC X(03) VALUE 'ING'.        00000190
+           03 SCR-VFLD-NOT                PIC X(01) VALUE 'N'.          00000200
+           03 SCR-VFLD-YES                PIC X(01) VALUE 'S'.          00000210
+           03 SCR-MFLD-NOT                PIC X(01) VALUE 'N'.          00000220
+           03 SCR-MFLD-YES                PIC X(01) VALUE 'S'.          00000230
