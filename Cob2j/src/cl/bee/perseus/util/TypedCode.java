@@ -113,7 +113,38 @@ public class TypedCode {
     public boolean sign = false;
 
     /** TODO_javadoc. */
+    //JRL
+    public String info = null;
+
+    /** TODO_javadoc. */
     private HashMap<String, Object> hash = new HashMap<String, Object>();
+
+    /******************************************************************************
+     * TypedCode
+     ******************************************************************************/
+    /**
+     *
+     * TODO_javadoc.
+     *
+     * @param type TODO_javadoc.
+     * @param code TODO_javadoc.
+     * @param aggregation TODO_javadoc.
+     * @param size TODO_javadoc.
+     * @param sign TODO_javadoc.
+     * @param info TODO_javadoc.
+     * @param hash TODO_javadoc.
+     *
+     */
+    public TypedCode(int type, String code, int aggregation, int size, boolean sign, String info, HashMap<String, Object> hash) {
+
+        this.type        = type;
+        this.code        = code;
+        this.aggregation = aggregation;
+        this.size        = size;
+        this.sign        = sign;
+        this.info        = info;
+        this.hash        = hash;
+    }
 
     /******************************************************************************
      * TypedCode
@@ -130,12 +161,7 @@ public class TypedCode {
      *
      */
     public TypedCode(int type, String code, int aggregation, int size, HashMap<String, Object> hash) {
-
-        this.type        = type;
-        this.code        = code;
-        this.aggregation = aggregation;
-        this.size        = size;
-        this.hash        = hash;
+        this(type, code, aggregation, size, false, null, hash);
     }
 
     /******************************************************************************
@@ -152,7 +178,7 @@ public class TypedCode {
      *
      */
     public TypedCode(int type, String code, int aggregation) {
-        this(            type,        code,     aggregation, UNDEF, new HashMap<String, Object>());
+        this(            type,        code,     aggregation, UNDEF, false, null, new HashMap<String, Object>());
     }
 
     /******************************************************************************
@@ -169,7 +195,7 @@ public class TypedCode {
      *
      */
     public TypedCode(int type, String code, int aggregation, int size) {
-        this(            type,        code,     aggregation,     size, new HashMap<String, Object>());
+        this(            type,        code,     aggregation,     size, false, null,new HashMap<String, Object>());
     }
 
     /******************************************************************************
@@ -311,6 +337,10 @@ public class TypedCode {
         s += "[code : " + (code == null ? "(NULL)" : code) + "]";
         s += "[aggregation : " + (aggregation == UNDEF ? "(UNDEF)" : aggregationsNames[aggregation]) + "]";
         s += "[size : " + (size == UNDEF ? "(UNDEF)" : size) + "]";
+        //JRL
+        s += "[sign : " + sign + "]";
+        s += "[info : " + (info == null ? "(NULL)" : info) + "]";
+
         s += "[hash : " + hash + "]";
 
         return s;

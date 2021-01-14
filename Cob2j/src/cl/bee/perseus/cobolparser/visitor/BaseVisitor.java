@@ -99,6 +99,9 @@ public class BaseVisitor extends GJDepthFirst<TypedCode, HashMap<String, Object>
     protected ArrayList<DataEntryDesc> entryArray = null;
 
     /** TODO_javadoc. */
+    protected ArrayList<DataEntryDesc> entryArrayRes = null;
+
+    /** TODO_javadoc. */
     protected ArrayList<DataEntryDesc> usedBases = null;
 
     /** TODO_javadoc. */
@@ -768,7 +771,7 @@ public class BaseVisitor extends GJDepthFirst<TypedCode, HashMap<String, Object>
 
                 //
 
-                TypedCode result = new TypedCode(entry.mode == DataEntryDesc.CONDITION ? TypedCode.BOOLEAN : entry.type, getGetterSetterSequence(stack, subscript, mode, is_base, is_primitive, substring_suffix), TypedCode.SIMPLE, entry.totalLen, hash);
+                TypedCode result = new TypedCode(entry.mode == DataEntryDesc.CONDITION ? TypedCode.BOOLEAN : entry.type, getGetterSetterSequence(stack, subscript, mode, is_base, is_primitive, substring_suffix), TypedCode.SIMPLE, entry.totalLen, entry.sign, null, hash);
 
                 result.sign = entry.sign;
 
@@ -794,7 +797,7 @@ public class BaseVisitor extends GJDepthFirst<TypedCode, HashMap<String, Object>
                 logger.debug("[" + filename + "] ============================================================================================");
                 */
 
-                return new TypedCode(entry.type, getGetterSetterSequence(stack, subscript, mode, is_base, is_primitive, substring_suffix), TypedCode.SIMPLE, entry.totalLen, hash);
+                return new TypedCode(entry.type, getGetterSetterSequence(stack, subscript, mode, is_base, is_primitive, substring_suffix), TypedCode.SIMPLE, entry.totalLen, entry.sign, entry.addendum2, hash);
             }
 
             break;
@@ -960,7 +963,6 @@ public class BaseVisitor extends GJDepthFirst<TypedCode, HashMap<String, Object>
             return c;
         }
     }
-
     /******************************************************************************
      * getGetterSetterSequence
      ******************************************************************************/
@@ -1013,6 +1015,12 @@ public class BaseVisitor extends GJDepthFirst<TypedCode, HashMap<String, Object>
                 if (elem.childs != null && !ModelUtil.isConditionalStruct(elem.childs)) {
                     sb.append(".getValue()");
                 }
+                //JRL
+/*
+                if (elem.addendum2 != null && elem.addendum2.equals("LENGTH OF")) {
+                    sb.append(".length()");
+                }
+*/
 
                 if (substring_suffix != null) {
 
@@ -1067,6 +1075,14 @@ public class BaseVisitor extends GJDepthFirst<TypedCode, HashMap<String, Object>
                 if (elem.childs != null && !ModelUtil.isConditionalStruct(elem.childs)) {
                     sb.append(".getValue()");
                 }
+
+                //JRL
+/*
+                if (elem.addendum2 != null && elem.addendum2.equals("LENGTH OF")) {
+                    sb.append(".length()");
+                }
+*/
+
 
                 if (substring_suffix != null) {
 
@@ -1446,7 +1462,13 @@ public class BaseVisitor extends GJDepthFirst<TypedCode, HashMap<String, Object>
                     DataEntryDesc entry  = stack.elementAt(stack.size() - 1);
 
                                                // level,               name, occurs, value,                            redefining, indexer, type,                  ints, decs, totalLen, sign,  mode,                           offset
-                    result.push(new DataEntryDesc(DataEntryDesc.UNDEF, null, 1,      Integer.toString(entry.totalLen), null,       null,    DataEntryDesc.INTEGER, 0,    0,    0,        false, DataEntryDesc.SPECIAL, DataEntryDesc.UNDEF));
+                    //JRL
+                    //result.push(new DataEntryDesc(DataEntryDesc.UNDEF, null, 1,      Integer.toString(entry.totalLen), null,       null,    DataEntryDesc.INTEGER, 0,    0,    0,        false, DataEntryDesc.SPECIAL, DataEntryDesc.UNDEF));
+                    entry.mode = DataEntryDesc.SPECIAL;
+                    entry.totalLen = 4;
+                    entry.type = DataEntryDesc.INTEGER;
+                    entry.addendum2 = "LENGTH OF";
+                    result.push(entry);
 
                     return result;
                 }

@@ -52,6 +52,8 @@ public class ModelVisitor extends BaseVisitor implements GJVisitor<TypedCode, Ha
     /** TODO_javadoc. */
     private ArrayList<DataEntryDesc> entryArray = null;
 
+    private int lastEntryArrayVisited = 0;
+
     //
 
     /** TODO_javadoc. */
@@ -106,7 +108,7 @@ public class ModelVisitor extends BaseVisitor implements GJVisitor<TypedCode, Ha
 
         ArrayList<DataEntryDesc> autom = new ArrayList<DataEntryDesc>();
 
-        for (idx = 0; idx < dataDescriptionEntryArray.size(); ) {
+        for (idx = lastEntryArrayVisited; idx < dataDescriptionEntryArray.size(); ) {
 
             DataEntryDesc ded = makeEntryTree(autom); // modifica el idx
 
@@ -119,7 +121,7 @@ public class ModelVisitor extends BaseVisitor implements GJVisitor<TypedCode, Ha
 
         Result res = null;
 
-        for (int i = 0; i < entryArray.size(); i++) {
+        for (int i = lastEntryArrayVisited; i < entryArray.size(); i++) {
 
             entryArray.get(i).offset = 0;
 
@@ -134,17 +136,19 @@ public class ModelVisitor extends BaseVisitor implements GJVisitor<TypedCode, Ha
         }
 
         verifyUndefinedTypes     (entryArray);
-        verifyStructsStringValues( entryArray);
+        verifyStructsStringValues(entryArray);
         verifyFigurativesValues  (entryArray);
 
         //
 
-        for (int i = 0; i < autom.size(); i++) {
+        for (int i = lastEntryArrayVisited; i < autom.size(); i++) {
 
           //logger.debug("[" + filename + "] " + autom.get(i).name);
 
             entryArray.add(autom.get(i));
         }
+
+        lastEntryArrayVisited = dataDescriptionEntryArray.size();
 
         //
 
@@ -174,6 +178,7 @@ public class ModelVisitor extends BaseVisitor implements GJVisitor<TypedCode, Ha
 
         return null;
     }
+
 
     /******************************************************************************
      * visit
@@ -342,7 +347,6 @@ public class ModelVisitor extends BaseVisitor implements GJVisitor<TypedCode, Ha
                         hijo.totalLen = res.size * hijo.occurs;
                         hijo_totalLen = hijo.totalLen;
                     }
-                    
                 }
                 else {
 
@@ -448,8 +452,7 @@ public class ModelVisitor extends BaseVisitor implements GJVisitor<TypedCode, Ha
                 	entry.value = "\"" + str.substring(1, entry.totalLen + 1) + "\"";
                 	
                 }
-                //OGB-fin
-                  
+                //OGB-fin     
                 
             }
 

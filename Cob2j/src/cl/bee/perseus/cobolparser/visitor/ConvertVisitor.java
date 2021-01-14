@@ -14,6 +14,7 @@ import java.text.*;
 
 import java.util.*;
 
+import cl.bee.beebank.cloud.core.gns.Util;
 import cl.bee.perseus.cobolparser.*;
 
 import cl.bee.perseus.cobolparser.syntaxtree.*;
@@ -24,6 +25,7 @@ import cl.bee.perseus.util.*;
 
 import com.rits.cloning.*;
 
+import org.apache.commons.lang.SerializationUtils;
 import org.apache.log4j.*;
 
 
@@ -463,10 +465,16 @@ public class ConvertVisitor extends BaseVisitor implements GJVisitor<TypedCode, 
      *
      */
     public TypedCode visit(Literal n, HashMap<String, Object> argu) {
-
+    	
+    	//OGB-ini
+    	/*
         if (n.f0.present()) {
+
             throw new RuntimeException("[" + filename + "/" + sectionName + "] Literal:: [ <ALL> ] no implementada aun {" + n.accept(tokenVisitor).toString().trim() + "}");
         }
+    	 */
+    	//OGB-fin
+    	 
 
         return n.f1.accept(this, argu);
     }
@@ -1328,7 +1336,7 @@ public class ConvertVisitor extends BaseVisitor implements GJVisitor<TypedCode, 
                 sb.append(" " + typedCode.code);
             }
 
-            return new TypedCode(type_expected, sb.toString(), TypedCode.COMPLEX);
+            return new TypedCode(type_expected, sb.toString(), TypedCode.COMPLEX, typedCode.size, typedCode.sign, null, typedCode.getHash());
         }
     }
 
@@ -1408,7 +1416,7 @@ public class ConvertVisitor extends BaseVisitor implements GJVisitor<TypedCode, 
             }
         }
 
-        return new TypedCode(typmax, sb.toString(), TypedCode.COMPLEX);
+        return new TypedCode(typmax, sb.toString(), TypedCode.COMPLEX, typedCode.size, typedCode.sign, null, typedCode.getHash());
     }
 
     /******************************************************************************
@@ -1455,6 +1463,26 @@ public class ConvertVisitor extends BaseVisitor implements GJVisitor<TypedCode, 
 
             typedCode = getLiteral((Literal) n.f0.choice, ((Integer) argu.get(TypedCode.TYPE_EXPECTED)).intValue());
 
+            
+          //OGB-ini
+            
+            if (((Literal)((NodeChoice)n.f0).choice).f0.present()){
+            	
+                ArrayList<TypedCode> settervars = (ArrayList<TypedCode>) argu.get(SETTER_VARIABLES);
+                for(int i=0; i < settervars.size();i++) {
+                		
+                	TypedCode tcode = settervars.get(i);
+                	int size = tcode.size;
+                		
+                	String newstring = Util.repeat(typedCode.code.substring(1,typedCode.code.length() - 1), size);
+                    return new TypedCode(typedCode.type, "\"" + newstring + "\"", TypedCode.SIMPLE);
+               }
+                
+            }
+            
+          //OGB-fin
+            
+            
           //logger.debug("typedCode: " + typedCode);
 
             return typedCode;
@@ -1984,14 +2012,18 @@ public class ConvertVisitor extends BaseVisitor implements GJVisitor<TypedCode, 
         boolean    gen_exit = false;
         NodeChoice nch      = null;
 
+        //jrl
+        int jrl_last_case = 3;
+
         for (int i = 0; i < n.f2.size(); i++) {
 
             nch = (NodeChoice) n.f2.elementAt(i);
 
+
             switch (nch.which) {
 
             case 0 : // ExitStatement()
-
+            	jrl_last_case = 0;
                 if (!gen_exit) {
 
                     if (params.path("logger_in_out_methods").asBoolean(false)) {
@@ -2009,7 +2041,7 @@ public class ConvertVisitor extends BaseVisitor implements GJVisitor<TypedCode, 
                 break;
 
             case 1 : // AlteredGoto()
-
+            	jrl_last_case = 1;
                 gen.println();
                 gen.println(indent(indent) + "// " + nch.choice.accept(tokenVisitor).toString().trim());
 
@@ -2018,12 +2050,13 @@ public class ConvertVisitor extends BaseVisitor implements GJVisitor<TypedCode, 
                 break;
 
             case 2 : // Sentence()
-
+            	jrl_last_case = 2;
                 nch.accept(this, argu);
             }
+
         }
 
-        if (!gen_exit && !flowInterruption(n) && nextParagraph.containsKey(paragraphName + "/" + sectionName)) {
+        if (!gen_exit && !flowInterruption(n) && nextParagraph.containsKey(paragraphName + "/" + sectionName) && jrl_last_case != 0) {
 
             if (params.path("logger_in_out_methods").asBoolean(false)) {
 
@@ -2033,9 +2066,11 @@ public class ConvertVisitor extends BaseVisitor implements GJVisitor<TypedCode, 
 
             gen.println();
             gen.println(indent(indent) + "return \"" + lowerCamelCase(sectionName) + "_" + lowerCamelCase(nextParagraph.get(paragraphName + "/" + sectionName)) + "\";");
+            jrl_last_case = 3;
+
         }
 
-        if (!gen_exit && systemExit(n)) {
+        if (!gen_exit && systemExit(n) && jrl_last_case != 3) {
 
             if (params.path("logger_in_out_methods").asBoolean(false)) {
 
@@ -2045,7 +2080,16 @@ public class ConvertVisitor extends BaseVisitor implements GJVisitor<TypedCode, 
 
             gen.println();
             gen.println(indent(indent) + "return null;");
+            jrl_last_case = 0;
         }
+
+        //jrl
+        if (!gen_exit && n.f2.present() && !systemExit(n) &&  jrl_last_case == 2 && !flowInterruption(n)) {
+            gen.println();
+            gen.println(indent(indent) + "return null;");
+
+        }
+
 
         indent--;
 
@@ -3926,7 +3970,7 @@ public class ConvertVisitor extends BaseVisitor implements GJVisitor<TypedCode, 
             TypedCode ident = getIdentifier((Identifier) ns.elementAt(2), SETTER, varspaths, entryArray, usedBases, argu);
 
           //logger.debug("ident: " + ident);
-
+            entryArrayRes = (ArrayList<DataEntryDesc>) SerializationUtils.clone(entryArray);
             argu.put(TypedCode.TYPE_EXPECTED, new Integer(ident.type));
 
             TypedCode value = ((ArithmeticExpression) ns.elementAt(0)).accept(this, argu); // ArithmeticExpression()
@@ -3934,7 +3978,7 @@ public class ConvertVisitor extends BaseVisitor implements GJVisitor<TypedCode, 
           //logger.debug("value: " + value);
 
             block.println(indent(indent) + ident.code + setterCasting(ident, value) + (ident.getBool("is_primitive") ? "" : ")") + ";");
-
+            entryArray = (ArrayList<DataEntryDesc>) SerializationUtils.clone(entryArrayRes);
             //
 
             NodeListOptional nlo = (NodeListOptional) ns.elementAt(3);
@@ -5870,9 +5914,9 @@ public class ConvertVisitor extends BaseVisitor implements GJVisitor<TypedCode, 
         }
         else {
         }
-
-        gen.println(indent(indent) + "logger.debug(\"%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%\");");
-        gen.println(indent(indent) + "logger.debug(\"%%%% cobol %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%\");");
+        //JRL
+        //gen.println(indent(indent) + "logger.debug(\"%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%\");");
+        //gen.println(indent(indent) + "logger.debug(\"%%%% cobol %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%\");");
 
         StringBuffer sb = new StringBuffer();
 
@@ -5881,7 +5925,8 @@ public class ConvertVisitor extends BaseVisitor implements GJVisitor<TypedCode, 
         }
 
         gen.println(indent(indent) + "logger.debug(\"" + scape(sb.toString().trim()) + "\");");
-        gen.println(indent(indent) + "logger.debug(\"%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%\");");
+        //JRL
+        //gen.println(indent(indent) + "logger.debug(\"%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%\");");
     }
 
     /******************************************************************************
@@ -5902,8 +5947,9 @@ public class ConvertVisitor extends BaseVisitor implements GJVisitor<TypedCode, 
         if (getterVariables.size() > 0) {
 
             gen.println();
-            gen.println(indent(indent) + "logger.debug(\"%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%\");");
-            gen.println(indent(indent) + "logger.debug(\"%%%% getter %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%\");");
+            //JRL
+            //gen.println(indent(indent) + "logger.debug(\"%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%\");");
+            //gen.println(indent(indent) + "logger.debug(\"%%%% getter %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%\");");
 
             TypedCode ident = null;
 
@@ -5913,8 +5959,8 @@ public class ConvertVisitor extends BaseVisitor implements GJVisitor<TypedCode, 
 
                 gen.println(indent(indent) + "logger.debug(\"" + ident.code + " :\" + " + ident.code + ");");
             }
-
-            gen.println(indent(indent) + "logger.debug(\"%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%\");");
+            //JRL
+            //gen.println(indent(indent) + "logger.debug(\"%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%\");");
         }
     }
 
@@ -6320,6 +6366,10 @@ public class ConvertVisitor extends BaseVisitor implements GJVisitor<TypedCode, 
     private String setterCasting(TypedCode ident, TypedCode value) {
 
       //logger.debug("[" + filename + "/" + sectionName + "] entrando a 'setterCasting(ident.type: " + TypedCode.typesNames[ident.type] + ", value.type: " + TypedCode.typesNames[value.type] + ")' ...");
+        if (value.info != null && value.info.equals("LENGTH OF")) {
+            value.info = "";
+            return value.code + ".length()";
+        }
 
         if (ident.isNumeric() != value.isNumeric()) {
 
@@ -6328,7 +6378,6 @@ public class ConvertVisitor extends BaseVisitor implements GJVisitor<TypedCode, 
             case TypedCode.INTEGER :
 
                 switch (value.type) {
-
                 case TypedCode.BOOLEAN :
 
                     if (value.aggregation == TypedCode.COMPLEX) {

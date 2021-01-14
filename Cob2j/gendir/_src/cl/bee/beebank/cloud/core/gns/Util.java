@@ -43,7 +43,40 @@ public class Util {
 
         return new String(arr);
     }
+    
+    /*******************************************************************************************************
+     * repeat
+     *******************************************************************************************************/
+    /**
+     *
+     * @param txt TODO_javadoc.
+     * @param size TODO_javadoc.
+     *
+     * @return TODO_javadoc.
+     *
+     */
+    /*OGB-ini*/
+    public static String repeat(String txt, int size) {
 
+        char[] arr = new char[size];
+
+        int i = 0;
+        int j = 0;
+        while (i  < size) {
+
+        	arr[i] = txt.charAt(j); 
+			
+        	i++;
+        	j++;
+        	
+        	if(j == txt.length())
+        		j=0;
+
+        }
+               
+        return new String(arr);
+    }
+    /*OGB-fin*/
     /*******************************************************************************************************
      * intToString
      *******************************************************************************************************/
@@ -56,7 +89,22 @@ public class Util {
      *
      */
     public static String intToString(int i, int size) {
-        throw new RuntimeException("intToString:: implementar.");
+    	
+        /*OGB-ini*/
+        char[] arr = new char[size];
+    	
+        int r = 0;
+        while (r  < size) {
+
+        	arr[r] = String.valueOf(i).charAt(r); 
+        	r++;
+
+        }
+		
+        return new String(arr);
+
+        //  throw new RuntimeException("intToString:: implementar.");
+        /*OGB-fin*/
     }
 
     /*******************************************************************************************************
@@ -71,7 +119,22 @@ public class Util {
      *
      */
     public static String longToString(long l, int size) {
-        throw new RuntimeException("longToString:: implementar.");
+    	
+        /*OGB-ini*/
+        char[] arr = new char[size];
+    	
+        int r = 0;
+        while (r  < size) {
+
+        	arr[r] = Long.toString(l).charAt(r); 
+        	r++;
+
+        }
+		
+        return new String(arr);
+
+        // throw new RuntimeException("longToString:: implementar.");
+        /*OGB-fin*/
     }
 
     /*******************************************************************************************************
@@ -86,7 +149,50 @@ public class Util {
      *
      */
     public static String doubleToString(double d, int size) {
-        throw new RuntimeException("doubleToString:: implementar.");
+        /*OGB-ini*/
+        char[] arr = new char[size];
+    	
+        int r = 0;
+	while (r  < size) {
+
+		arr[r] = String.valueOf(d).charAt(r); 
+                r++;
+
+        }
+		
+		
+        return new String(arr);
+    	
+        // throw new RuntimeException("doubleToString:: implementar.");
+        /*OGB-fin*/
+    }
+    
+    /*******************************************************************************************************
+     * lowValueString
+     *******************************************************************************************************/
+    /**
+     *
+     * @param d TODO_javadoc.
+     * @param size TODO_javadoc.
+     *
+     * @return TODO_javadoc.
+     *
+     */
+    public static String lowValueString(int size) {
+        /*OGB-ini*/
+        char[] arr = new char[size];
+    	
+        int i = 0;
+	while (i  < size) {
+
+		arr[i] = (char) 00; 
+        	i++;
+
+        }
+        	
+	return new String(arr);
+        // throw new RuntimeException("lowValueString:: implementar.");
+        /*OGB-fin*/
     }
 
 }

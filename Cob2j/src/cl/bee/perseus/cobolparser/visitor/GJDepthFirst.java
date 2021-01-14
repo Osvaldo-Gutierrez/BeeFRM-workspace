@@ -151,6 +151,7 @@ public class GJDepthFirst<R,A> implements GJVisitor<R,A> {
      *
      */
     public R visit(NodeToken n, A argu) {
+    	
         return null;
     }
 

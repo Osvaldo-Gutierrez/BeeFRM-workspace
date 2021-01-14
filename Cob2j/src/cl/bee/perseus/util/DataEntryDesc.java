@@ -127,6 +127,10 @@ public class DataEntryDesc implements Serializable  {
     public String addendum = null;
 
     /** TODO_javadoc. */
+    //JRL
+    public String addendum2 = null;
+
+    /** TODO_javadoc. */
     private HashMap<String, Object> hash = new HashMap<String, Object>();
 
     /******************************************************************************
@@ -273,6 +277,7 @@ public class DataEntryDesc implements Serializable  {
         s += ", \"mode\" : \""       + (mode       != UNDEF ? modesNames[mode]             : "UNDEF") + "\"";
         s += ", \"offset\" : "       + offset;
         s += ", \"addendum\" : \""   + (addendum   != null  ? addendum                     : "NULL")  + "\"";
+        s += ", \"addendum2\" : \""   + (addendum2   != null  ? addendum2                     : "NULL")  + "\"";
         s += ", \"hash\" : \""       + (hash       != null  ? hash                         : "NULL")  + "\"";
 
         if (childs != null) {
